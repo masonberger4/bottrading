@@ -1,0 +1,140 @@
+"""Backtest the 2023 Mentorship model on SPY (QQQ as the SMT partner) or on a random walk."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from claude_hf.daytypes import JOBS, is_trading_day
+from .strategy import Params, run_day
+
+DATA = Path("data/mentorship2023")
+NY = "America/New_York"
+
+
+def load(symbol: str, minutes: int) -> pd.DataFrame:
+    df = pd.read_csv(DATA / f"{symbol}_{minutes}min.csv", index_col=0)
+    df.index = pd.to_datetime(df.index, utc=True).tz_convert(NY)
+    return df[["open", "high", "low", "close", "volume"]].sort_index()
+
+
+def fetch(symbols=("SPY", "QQQ"), c=None) -> None:
+    """Schwab price history with extended hours (pre-market gives the 04:00 'midnight' proxy).
+    Schwab returns ~6.5 months of 5-minute and ~6 weeks of 1-minute bars this way."""
+    import time
+    from claude_hf.data import client
+    from silver_bullet.data import schwab_history
+    c = c or client()
+    DATA.mkdir(parents=True, exist_ok=True)
+    for m, d in ((5, 280), (1, 50)):
+        for s in symbols:
+            df = schwab_history(c, s, days=d, minutes=m, extended_hours=True)
+            df.to_csv(DATA / f"{s}_{m}min.csv")
+            print(s, m, len(df), df.index[0], df.index[-1])
+            time.sleep(5)
+
+
+def days(df: pd.DataFrame, tf: int, partial_last: bool = False) -> list[pd.DataFrame]:
+    """Complete sessions only: 04:00-16:00 bars of days whose regular session is >= 90%
+    present and runs to the last bar before 16:00 (the final day may be partial with
+    `partial_last`, as in live trading)."""
+    t = df.index.hour * 60 + df.index.minute
+    df = df[(t >= 240) & (t < 960)]
+    out = []
+    groups = list(df.groupby(df.index.date))
+    for k, (d, g) in enumerate(groups):
+        tt = g.index.hour * 60 + g.index.minute
+        rth = g[tt >= 570]
+        if len(rth) >= 0.9 * 390 / tf and (rth.index[-1].hour * 60 + rth.index[-1].minute) >= 960 - tf:
+            out.append(g)
+        elif partial_last and k == len(groups) - 1 and len(rth):
+            out.append(g)
+    return out
+
+
+def rth(g: pd.DataFrame) -> pd.DataFrame:
+    return g[(g.index.hour * 60 + g.index.minute) >= 570]
+
+
+def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
+        partner: pd.DataFrame | None = None, warmup: int = 3, partial_last: bool = False) -> pd.DataFrame:
+    p = p or Params()
+    ds = days(df, tf, partial_last)
+    pmap = {g.index[0].date(): g for g in days(partner, tf, partial_last)} if partner is not None else {}
+    hist_p: list[pd.DataFrame] = []
+    rows = []
+    for k, g in enumerate(ds):
+        d = g.index[0].date()
+        pa = None
+        if d in pmap and len(hist_p) >= warmup:
+            pa = (pmap[d], hist_p)
+        if k >= warmup:
+            for tr in run_day(g, [rth(x) for x in ds[max(0, k - 21):k]], symbol, p, tf, pa):
+                rows.append(tr.row(p.cost_per_share))
+        if d in pmap:
+            hist_p = (hist_p + [rth(pmap[d])])[-21:]
+    out = pd.DataFrame(rows)
+    if len(out):
+        out.attrs["days"] = len(ds) - warmup
+    return out
+
+
+def stats(t: pd.DataFrame, account: float = 100_000.0) -> dict:
+    if t is None or not len(t):
+        return {"trades": 0}
+    eq = t.sort_values("entry_time").net.cumsum()
+    dd = float((eq.cummax().clip(lower=0) - eq).max())
+    wins, losses = t.net[t.net > 0].sum(), -t.net[t.net < 0].sum()
+    return {"trades": int(len(t)), "win_rate": round(float((t.net > 0).mean()), 3),
+            "profit_factor": round(float(wins / losses), 2) if losses else float("inf"),
+            "avg_R": round(float(t.R.mean()), 3), "net": round(float(t.net.sum()), 2),
+            "gross": round(float(t.gross.sum()), 2), "costs": round(float(t.costs.sum()), 2),
+            "max_dd": round(dd, 2), "max_dd_pct": round(100 * dd / account, 2)}
+
+
+def report(t: pd.DataFrame) -> dict:
+    out = {"all": stats(t)}
+    if not len(t):
+        return out
+    for col in ("setup", "side", "day_type", "unicorn", "smt", "swept", "exit_reason"):
+        out[f"by_{col}"] = {str(k): stats(g) for k, g in t.groupby(t[col].astype(str))}
+    t = t.assign(month=pd.to_datetime(t.entry_time.astype(str).str[:10]).dt.strftime("%Y-%m"))
+    out["by_month"] = {k: stats(g) for k, g in t.groupby("month")}
+    return out
+
+
+def synthetic(start="2026-03-30", end="2026-10-14", tf=5, seed=0, price=700.0,
+              partner_price=600.0, rho=0.9) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Two correlated random walks on the 04:00-16:00 grid of each trading day, with a
+    U-shaped intraday volatility profile. There is nothing to find here, so a sound
+    backtest should lose roughly its costs."""
+    rng = np.random.default_rng(seed)
+    a, b = [], []
+    pa, pb = price, partner_price
+    for d in pd.bdate_range(start, end):
+        if not is_trading_day(d.date()):
+            continue
+        idx = pd.date_range(pd.Timestamp(d, tz=NY) + pd.Timedelta(hours=4), periods=720 // tf,
+                            freq=f"{tf}min")
+        m = idx.hour * 60 + idx.minute
+        vol = np.where(m < 570, 0.35, 1.0) * np.where((m >= 570) & (m < 630) | (m >= 900), 1.5, 1.0)
+        vol = vol * 0.0006 * np.sqrt(tf)
+        z1 = rng.standard_t(4, len(idx)) / np.sqrt(2)
+        z2 = rho * z1 + np.sqrt(1 - rho ** 2) * rng.standard_t(4, len(idx)) / np.sqrt(2)
+        for z, out, p0 in ((z1, a, pa), (z2, b, pb)):
+            c = p0 * np.exp(np.cumsum(z * vol))
+            o = np.concatenate([[p0], c[:-1]])
+            w = np.abs(rng.normal(0, 0.5, (2, len(idx)))) * vol * p0
+            out.append(pd.DataFrame({"open": o, "high": np.maximum(o, c) + w[0],
+                                     "low": np.minimum(o, c) - w[1], "close": c,
+                                     "volume": 1000.0}, index=idx).round(2))
+        pa, pb = float(a[-1].close.iloc[-1]), float(b[-1].close.iloc[-1])
+    return pd.concat(a), pd.concat(b)
+
+
+def save(t: pd.DataFrame, rep: dict, out: str) -> None:
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    t.to_csv(out, index=False)
+    Path(out).with_suffix(".json").write_text(json.dumps(rep, indent=1, default=str))

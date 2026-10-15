@@ -49,3 +49,24 @@ mutation step sizes and operator choice from what worked. Every generation is lo
     .venv\Scripts\python -m claude_hf paper                  # simulated fills, never sends orders
 
 Paper trades go to `runs/claude_hf/paper_trades.csv`. There is no live mode.
+
+## 2023 Mentorship bot (`mentorship2023/`)
+
+The ICT 2023 Mentorship rules in `mentorship2023_rules.md`, implemented bar-by-bar with no
+lookahead (New York time). Paper/backtest only: it has no order-sending code.
+
+- `levels.py`: PD arrays: FVG (BISI/SIBI) with CE, order blocks with mean threshold, breakers,
+  volume imbalances, swing pivots, relative equal highs/lows, midnight/08:30/09:30/13:30 opens.
+- `strategy.py`: AM (09:30-11:00) and PM (13:30-15:50, last hour 15:15-15:45 tagged) market
+  maker models: sweep of previous-3-day / pre-market / AM-session liquidity or relative equal
+  levels, structure shift with an FVG, limit at the FVG (unicorn preferred), longs below the
+  midnight open (PM: 13:30 open), stop beyond the order block's mean threshold, targets at the
+  next liquidity 0.5 ES pt early, half off at T1, flat by 16:00. One AM + one PM trade, no
+  reversal after a loss, NFP/FOMC day filter. QQQ is the SMT partner (tagged, not a filter).
+- SPY has no overnight bars, so the first pre-market bar (04:00) stands in for the midnight
+  open, and previous-day highs/lows are regular-session. 1 ES point = 0.10 SPY.
+
+    .venv\Scripts\python -m mentorship2023 fetch
+    .venv\Scripts\python -m mentorship2023 backtest --minutes 5
+    .venv\Scripts\python -m mentorship2023 synthetic --seeds 5
+    .venv\Scripts\python -m pytest -q tests\test_mentorship2023.py
