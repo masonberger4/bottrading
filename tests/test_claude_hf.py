@@ -76,8 +76,10 @@ def test_day_types():
     assert day_type(date(2026, 9, 18)) == "quad_witching"
     assert day_type(date(2026, 8, 21)) == "opex"
     assert day_type(date(2026, 9, 30)) == "quarter_end"
-    assert day_type(date(2026, 9, 1)) == "month_start"
-    assert day_type(date(2026, 9, 10)) == "roll_week"
+    assert day_type(date(2026, 9, 2)) == "month_start"
+    assert day_type(date(2026, 9, 1)) == "ism_manufacturing"   # outranks JOLTS that day
+    assert day_type(date(2026, 10, 15)) == "ppi"
+    assert day_type(date(2026, 9, 9)) == "roll_week"
     assert day_type(date(2026, 8, 18)) == "tue"
 
 
