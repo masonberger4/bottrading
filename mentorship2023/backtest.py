@@ -14,25 +14,39 @@ DATA = Path("data/mentorship2023")
 NY = "America/New_York"
 
 
-def load(symbol: str, minutes: int) -> pd.DataFrame:
-    df = pd.read_csv(DATA / f"{symbol}_{minutes}min.csv", index_col=0)
+def _read(path: Path) -> pd.DataFrame:
+    df = pd.read_csv(path, index_col=0)
     df.index = pd.to_datetime(df.index, utc=True).tz_convert(NY)
     return df[["open", "high", "low", "close", "volume"]].sort_index()
 
 
+def load(symbol: str, minutes: int, rth_history: bool = True) -> pd.DataFrame:
+    """Extended-hours bars, extended back with regular-session-only bars (`*_rth.csv`)
+    for the days the extended pull doesn't reach. Those days have no pre-market, so their
+    'midnight open' falls back to the 09:30 open and they have no pre-market high/low."""
+    df = _read(DATA / f"{symbol}_{minutes}min.csv")
+    extra = DATA / f"{symbol}_{minutes}min_rth.csv"
+    if rth_history and extra.exists():
+        old = _read(extra)
+        old = old[old.index.normalize() < df.index[0].normalize()]
+        df = pd.concat([old, df])
+    return df
+
+
 def fetch(symbols=("SPY", "QQQ"), c=None) -> None:
     """Schwab price history with extended hours (pre-market gives the 04:00 'midnight' proxy).
-    Schwab returns ~6.5 months of 5-minute and ~6 weeks of 1-minute bars this way."""
+    Schwab returns ~6.5 months of 5-minute and ~6 weeks of 1-minute bars this way, plus
+    regular-session-only 5-minute bars back to late January."""
     import time
     from claude_hf.data import client
     from silver_bullet.data import schwab_history
     c = c or client()
     DATA.mkdir(parents=True, exist_ok=True)
-    for m, d in ((5, 280), (1, 50)):
+    for m, d, ext, tag in ((5, 280, True, ""), (1, 50, True, ""), (5, 400, False, "_rth")):
         for s in symbols:
-            df = schwab_history(c, s, days=d, minutes=m, extended_hours=True)
-            df.to_csv(DATA / f"{s}_{m}min.csv")
-            print(s, m, len(df), df.index[0], df.index[-1])
+            df = schwab_history(c, s, days=d, minutes=m, extended_hours=ext)
+            df.to_csv(DATA / f"{s}_{m}min{tag}.csv")
+            print(s, m, tag, len(df), df.index[0], df.index[-1])
             time.sleep(5)
 
 
@@ -138,3 +152,14 @@ def save(t: pd.DataFrame, rep: dict, out: str) -> None:
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     t.to_csv(out, index=False)
     Path(out).with_suffix(".json").write_text(json.dumps(rep, indent=1, default=str))
+
+
+def combine(*runs: pd.DataFrame) -> pd.DataFrame:
+    """Trade one instrument per session (watch one market, rules Ep 05): of the setups the
+    instruments produced, keep the first to fill. On a tie, keep the one whose SMT check
+    didn't show its partner holding stronger. Uses only what was known at the fill."""
+    t = pd.concat([r for r in runs if len(r)], ignore_index=True)
+    if not len(t):
+        return t
+    t = t.assign(_weak=t.smt.eq(True)).sort_values(["entry_time", "_weak"])
+    return t.groupby(["date", "session"], sort=False).head(1).drop(columns="_weak").sort_values("entry_time")

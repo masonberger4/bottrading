@@ -66,7 +66,20 @@ lookahead (New York time). Paper/backtest only: it has no order-sending code.
 - SPY has no overnight bars, so the first pre-market bar (04:00) stands in for the midnight
   open, and previous-day highs/lows are regular-session. 1 ES point = 0.10 SPY.
 
+- Optional rules, each a `Params` switch (off by default): `require_htf` (sweep into an open
+  15m/60m FVG; always tagged), `trail` (stop under each new FVG), `adds` (pyramid smaller
+  units on new FVGs, 2% total risk cap), `weekly_bias`, `sd_targets` (standard-deviation
+  projections of the manipulation leg), `wick_levels` (50% of yesterday's wicks).
+  `levels.py` also has rejection blocks and balanced price ranges.
+- `backtest.combine` trades one instrument per session (first SPY/QQQ setup to fill).
+  `study.py` runs every rule alone and together on SPY, QQQ, the combination and the
+  random-walk control. `paper.py` runs on live Schwab bars and logs simulated fills only.
+- 5-minute history: extended hours from late March, regular session only back to late
+  January (09:30 open stands in for midnight there).
+
     .venv\Scripts\python -m mentorship2023 fetch
     .venv\Scripts\python -m mentorship2023 backtest --minutes 5
     .venv\Scripts\python -m mentorship2023 synthetic --seeds 5
+    .venv\Scripts\python -m mentorship2023.study
+    .venv\Scripts\python -m mentorship2023 paper --minutes 1
     .venv\Scripts\python -m pytest -q tests\test_mentorship2023.py

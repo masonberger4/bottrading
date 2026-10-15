@@ -97,3 +97,45 @@ def test_backtest_does_not_look_ahead():
         a = full[full.entry_time <= c][cols].reset_index(drop=True)
         b = part[part.entry_time <= c][cols].reset_index(drop=True)
         pd.testing.assert_frame_equal(a, b)
+
+
+def test_rejection_block_at_swing_high():
+    o, h, l, c = arr((10, 10.5, 9.9, 10.4), (10.4, 10.9, 10.3, 10.8), (10.8, 12.0, 10.7, 10.9),
+                     (10.9, 11.0, 10.2, 10.3), (10.3, 10.4, 9.8, 9.9))
+    rb = [z for z in L.rejection_blocks(o, h, l, c, 2) if z.kind == "bear"]
+    assert rb == [L.Zone("bear", 12.0, 10.9, 4, 2)]
+
+
+def test_balanced_price_range():
+    # up gap (bull FVG 11-12), then a down gap through the same prices (bear FVG)
+    h = np.array([11, 13, 14, 13.5, 11.5, 10], float)
+    l = np.array([10, 11, 12, 11.8, 10.5, 9], float)
+    bpr = L.balanced_ranges(h, l)
+    assert bpr and bpr[0].kind == "bear" and bpr[0].top <= 12 and bpr[0].bottom >= 11
+
+
+def test_wick_midpoints_and_weekly_bias():
+    assert L.wick_midpoints(10, 12, 8, 9) == {"upper": 11.0, "lower": 8.5}
+    from mentorship2023.strategy import weekly_bias
+    hist = []
+    for k, d in enumerate(pd.bdate_range("2026-06-01", "2026-06-16")):
+        idx = pd.date_range(d + pd.Timedelta(hours=9.5), periods=2, freq="195min", tz="America/New_York")
+        o, hh, ll, cc = (100, 101, 99, 100.5) if d.day != 16 else (100, 100.5, 94, 94.5)
+        hist.append(pd.DataFrame({"open": [o, cc], "high": [hh, hh], "low": [ll, ll], "close": [o, cc]}, idx))
+    assert weekly_bias(hist, date(2026, 6, 17)) == -1     # strong down Tuesday
+    assert weekly_bias(hist, date(2026, 6, 22)) == 0      # next week
+
+
+def test_no_look_ahead_with_every_optional_rule_on():
+    x, y = B.synthetic(start="2026-06-01", end="2026-07-31", tf=5, seed=5)
+    p = Params(es_pt=0.09, use_bias=False, trail=True, adds=(0.5, 0.33), weekly_bias=True,
+               sd_targets=True, wick_levels=True)
+    full = B.run(x, 5, "RW", p, y)
+    assert len(full) > 0
+    cols = ["entry_time", "entry", "stop", "t1", "shares", "htf"]
+    for cut in full.entry_time.iloc[::2]:
+        c = cut + pd.Timedelta(minutes=2)
+        part = B.run(x[x.index <= c], 5, "RW", p, y[y.index <= c], partial_last=True)
+        a = full[full.entry_time <= c][cols].reset_index(drop=True)
+        b = part[part.entry_time <= c][cols].reset_index(drop=True)
+        pd.testing.assert_frame_equal(a, b)

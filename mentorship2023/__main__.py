@@ -4,6 +4,7 @@
   python -m mentorship2023 backtest --minutes 5      # SPY with QQQ as the SMT partner
   python -m mentorship2023 backtest --minutes 1 --symbol QQQ --partner SPY
   python -m mentorship2023 synthetic --seeds 5       # random-walk sanity check
+  python -m mentorship2023 paper --minutes 1         # live Schwab bars, simulated fills only
 """
 from __future__ import annotations
 
@@ -40,6 +41,11 @@ def cmd_synthetic(a):
     print("all seeds", B.stats(t))
 
 
+def cmd_paper(a):
+    from . import paper
+    paper.run(a.symbol, a.partner, a.minutes)
+
+
 def main():
     ap = argparse.ArgumentParser(prog="mentorship2023")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -54,6 +60,11 @@ def main():
     s.add_argument("--minutes", type=int, default=5)
     s.add_argument("--seeds", type=int, default=5)
     s.set_defaults(fn=cmd_synthetic)
+    pp = sub.add_parser("paper")
+    pp.add_argument("--minutes", type=int, default=1)
+    pp.add_argument("--symbol", default="SPY")
+    pp.add_argument("--partner", default="QQQ")
+    pp.set_defaults(fn=cmd_paper)
     a = ap.parse_args()
     a.fn(a)
 

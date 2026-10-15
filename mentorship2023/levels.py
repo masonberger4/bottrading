@@ -140,3 +140,39 @@ def opens(index, o) -> dict[str, float]:
         if len(k):
             out[name] = float(o[k[0]])
     return out
+
+
+def rejection_blocks(o, h, l, c, n: int = 2) -> list[Zone]:
+    """Wicks at a swing high (low): from the highest candle body to the high (lowest body to
+    the low) of the swing candle and its neighbours. A bearish rejection block sits at a
+    swing high. Known when the swing is confirmed."""
+    ph, pl = pivots(h, l, n)
+    out = []
+    for p in ph:
+        a, b = max(0, p.i - 1), p.i + 2
+        body = max(max(o[k], c[k]) for k in range(a, b))
+        if body < p.price:
+            out.append(Zone("bear", p.price, float(body), p.known, p.i))
+    for p in pl:
+        a, b = max(0, p.i - 1), p.i + 2
+        body = min(min(o[k], c[k]) for k in range(a, b))
+        if body > p.price:
+            out.append(Zone("bull", float(body), p.price, p.known, p.i))
+    return sorted(out, key=lambda z: z.i)
+
+
+def balanced_ranges(h, l) -> list[Zone]:
+    """Balanced price range: where a bullish and a bearish FVG overlap, price has been
+    delivered both ways. Kind follows the later gap; known when the later gap forms."""
+    g = fvgs(h, l)
+    out = []
+    for k, b in enumerate(g):
+        for a in g[:k]:
+            if a.kind != b.kind and a.overlaps(b):
+                out.append(Zone(b.kind, min(a.top, b.top), max(a.bottom, b.bottom), b.i, a.i))
+    return out
+
+
+def wick_midpoints(o: float, h: float, l: float, c: float) -> dict[str, float]:
+    """50% of a daily candle's upper and lower wicks."""
+    return {"upper": max(o, c) + (h - max(o, c)) / 2, "lower": min(o, c) - (min(o, c) - l) / 2}
