@@ -3,3 +3,4 @@ __pycache__/
 schwab_token.json
 *.csv
 .venv/
+runs/
