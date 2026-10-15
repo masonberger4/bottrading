@@ -37,6 +37,7 @@ class Features:
     dayret: np.ndarray       # return since today's open
     gap: np.ndarray          # overnight gap
     day_type: list           # daytypes.day_type of each day
+    earn: np.ndarray         # (days x symbols) True on a stock's earnings reaction day
 
     @property
     def days(self) -> int:
@@ -47,7 +48,8 @@ def _clean(a):
     return np.clip(np.nan_to_num(a, nan=0.0, posinf=0.0, neginf=0.0), -5, 5)
 
 
-def build(panel: dict) -> Features:
+def build(panel: dict, earnings_days: set | None = None) -> Features:
+    """earnings_days: {(symbol, date)} reaction days; read from the earnings file if None."""
     o, h, l, c, v = (panel[k].to_numpy(float) for k in ("open", "high", "low", "close", "volume"))
     idx = panel["close"].index
     n = len(idx)
@@ -58,6 +60,9 @@ def build(panel: dict) -> Features:
     day = np.repeat(np.arange(n // bpd), bpd)
     first = bar == 0
     lc, lo = np.log(c), np.log(o)
+    if earnings_days is None:
+        from .earnings import reaction_days
+        earnings_days = reaction_days()
 
     r1 = np.vstack([np.zeros((1, c.shape[1])), np.diff(lc, axis=0)])
     r1[first] = (lc - lo)[first]                      # no overnight jump in the 1-bar series
@@ -102,4 +107,6 @@ def build(panel: dict) -> Features:
 
     return Features(idx, list(panel["close"].columns), o, c, bm, bpd, day, bar, z, idio,
                     _clean(vwap_dev), _clean(orb), _clean(volshock), _clean(dayret), _clean(gap),
-                    [day_type(d) for d in idx[::bpd].date])
+                    [day_type(d) for d in idx[::bpd].date],
+                    np.array([[(s, d) in earnings_days for s in panel["close"].columns]
+                              for d in idx[::bpd].date], dtype=bool).reshape(-1, c.shape[1]))

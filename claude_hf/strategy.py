@@ -6,8 +6,12 @@ stock as a weighted sum of signals, takes up to `slots` positions whose score cl
 It runs on 1-minute or 5-minute bars (holds shorter than a bar round up to one bar).
 
 The genome carries two playbooks, A and B, each a full set of the genes above, plus a route
-for every day type (FOMC, CPI, jobs, opex, quad witching, month/quarter turns, futures roll,
-and plain weekdays): trade playbook A, trade playbook B, or sit the day out.
+for every group of day types (top-tier news, second-tier news, minor news, expirations,
+month/quarter turns, futures roll week, plain days): trade playbook A, trade playbook B, or
+sit the day out. Routes are per group rather than per day type because single event types
+have too few days to learn from. Each playbook also decides what to do with stocks on their
+earnings reaction day: trade them like the rest, leave them alone, or trade only them, and
+how much weight to give the earnings gap.
 Each position is 1/slots of capital, and every round trip pays `cost_bps` per side plus the
 SEC fee on the sell. Nothing is held overnight.
 """
@@ -23,10 +27,22 @@ from .features import LOOKBACKS, Features
 
 HOLDS = (1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120)      # minutes
 MODES = ("neutral", "directional", "long", "short")
-WEIGHTS = ("w_rev", "w_mom", "w_vwap", "w_orb", "w_vol", "w_day", "w_gap")
+WEIGHTS = ("w_rev", "w_mom", "w_vwap", "w_orb", "w_vol", "w_day", "w_gap", "w_earn")
+EARNINGS = ("include", "exclude", "only")
 SEC_FEE_BPS = 0.278       # $27.80 per $1M sold
 
 ROUTES = ("skip", "A", "B")
+DAY_GROUPS = {
+    "top_news": ("fomc", "cpi", "jobs"),
+    "news": ("pce", "ppi", "retail_sales", "gdp"),
+    "minor_news": ("ism_manufacturing", "ism_services", "jolts", "sentiment"),
+    "expiration": ("quad_witching", "opex"),
+    "month_turn": ("quarter_end", "month_end", "quarter_start", "month_start"),
+    "roll_week": ("roll_week",),
+    "plain": ("mon", "tue", "wed", "thu", "fri"),
+}
+GROUP_OF = {t: grp for grp, ts in DAY_GROUPS.items() for t in ts}
+assert set(GROUP_OF) == set(DAY_TYPES)
 
 # gene -> (kind, low, high); "f" = float, "i" = int, "c" = index into a choice list
 PLAYBOOK = {
@@ -39,9 +55,10 @@ PLAYBOOK = {
     "start": ("i", 0, 330),       # minutes after 09:30
     "length": ("i", 30, 390),     # minutes
     "mode": ("c", 0, len(MODES) - 1),
+    "earnings": ("c", 0, len(EARNINGS) - 1),
 }
 GENES = {**{f"{p}.{k}": v for p in "AB" for k, v in PLAYBOOK.items()},
-         **{f"r.{t}": ("c", 0, len(ROUTES) - 1) for t in DAY_TYPES}}
+         **{f"r.{grp}": ("c", 0, len(ROUTES) - 1) for grp in DAY_GROUPS}}
 
 
 def playbook(g: dict, p: str) -> dict:
@@ -49,7 +66,7 @@ def playbook(g: dict, p: str) -> dict:
 
 
 def route(g: dict, day_type: str) -> str:
-    return ROUTES[g[f"r.{day_type}"]]
+    return ROUTES[g[f"r.{GROUP_OF[day_type]}"]]
 
 
 def random_genome(rng: random.Random) -> dict:
@@ -60,7 +77,7 @@ def random_genome(rng: random.Random) -> dict:
 
 
 def describe(g: dict, bar_minutes: int = 1) -> str:
-    used = {p: [t for t in DAY_TYPES if route(g, t) == p] for p in ROUTES}
+    used = {p: [grp for grp in DAY_GROUPS if ROUTES[g[f"r.{grp}"]] == p] for p in ROUTES}
     parts = [f"playbook {p} ({', '.join(used[p])}): {describe_playbook(playbook(g, p), bar_minutes)}"
              for p in "AB" if used[p]]
     return "; ".join(parts + [f"sits out: {', '.join(used['skip']) or 'nothing'}"])
@@ -74,7 +91,8 @@ def describe_playbook(g: dict, bar_minutes: int = 1) -> str:
     lb = lambda k: f"{LOOKBACKS[k] * bar_minutes} min"
     return (f"{MODES[g['mode']]}, hold {max(HOLDS[g['hold']], bar_minutes)} min, "
             f"{g['slots']} slots, threshold {g['threshold']:.2f}, entries {hm(start)}-{hm(end)}, "
-            f"rev lookback {lb(g['k_rev'])}, mom lookback {lb(g['k_mom'])}; weights: {w or 'none'}")
+            f"rev lookback {lb(g['k_rev'])}, mom lookback {lb(g['k_mom'])}, "
+            f"earnings-day stocks: {EARNINGS[g['earnings']]}; weights: {w or 'none'}")
 
 
 def hold_bars(g: dict, bar_minutes: int) -> int:
@@ -82,14 +100,22 @@ def hold_bars(g: dict, bar_minutes: int) -> int:
 
 
 def score(g: dict, f: Features, rows: np.ndarray) -> np.ndarray:
-    """Composite score (rows x symbols). Positive = expect the stock to rise."""
-    return (g["w_rev"] * -f.idio[LOOKBACKS[g["k_rev"]]][rows]
+    """Composite score (rows x symbols). Positive = expect the stock to rise. Stocks the
+    playbook won't trade today score 0, which never clears the threshold."""
+    s = (g["w_rev"] * -f.idio[LOOKBACKS[g["k_rev"]]][rows]
             + g["w_mom"] * f.z[LOOKBACKS[g["k_mom"]]][rows]
             + g["w_vwap"] * -f.vwap[rows]
             + g["w_orb"] * f.orb[rows]
             + g["w_vol"] * f.volshock[rows]
             + g["w_day"] * f.dayret[rows]
-            + g["w_gap"] * f.gap[rows])
+            + g["w_gap"] * f.gap[rows]
+            + g["w_earn"] * f.gap[rows] * f.earn[f.day[rows]])
+    rule = EARNINGS[g.get("earnings", 0)]
+    if rule == "exclude":
+        s = np.where(f.earn[f.day[rows]], 0.0, s)
+    elif rule == "only":
+        s = np.where(f.earn[f.day[rows]], s, 0.0)
+    return s
 
 
 def decision_bars(g: dict, f: Features) -> np.ndarray:

@@ -26,12 +26,12 @@ def panel(days=12, minutes=5, n=8, seed=0):
 
 def test_features_never_look_ahead():
     p = panel()
-    f1 = features.build(p)
+    f1 = features.build(p, set())
     cut = 5 * 78 + 40
     q = {k: v.copy() for k, v in p.items()}
     for v in q.values():
         v.iloc[cut + 1:] *= 1.37            # rewrite the future
-    f2 = features.build(q)
+    f2 = features.build(q, set())
     for name in ("vwap", "orb", "volshock", "dayret", "gap"):
         assert np.allclose(getattr(f1, name)[:cut + 1], getattr(f2, name)[:cut + 1]), name
     for k in features.LOOKBACKS:
@@ -39,9 +39,10 @@ def test_features_never_look_ahead():
 
 
 def test_flipping_weights_flips_gross_pnl():
-    f = features.build(panel())
+    f = features.build(panel(), set())
     g = S.random_genome(random.Random(3))
-    g.update({"A.mode": 0, "A.slots": 4, "A.threshold": 0.0},
+    g.update({"A.mode": 0, "A.slots": 4, "A.threshold": 0.0, "A.earnings": 0,
+              "A.start": 0, "A.length": 390},
              **{k: 1 for k in g if k.startswith("r.")})
     h = dict(g, **{f"A.{w}": -g[f"A.{w}"] for w in S.WEIGHTS})
     a = S.backtest(g, f, range(f.days), cost_bps=-S.SEC_FEE_BPS / 2)   # zero total cost
@@ -51,7 +52,7 @@ def test_flipping_weights_flips_gross_pnl():
 
 
 def test_positions_close_before_the_session_ends():
-    f = features.build(panel())
+    f = features.build(panel(), set())
     g = S.playbook(S.random_genome(random.Random(1)), "A")
     g.update(start=300, length=90, hold=S.HOLDS.index(60))
     bars = S.decision_bars(g, f)
@@ -59,7 +60,7 @@ def test_positions_close_before_the_session_ends():
 
 
 def test_search_runs_and_logs(tmp_path):
-    f = features.build(panel(days=20))
+    f = features.build(panel(days=20), set())
     s = Search(f, seed=1, batch=6, out=tmp_path)
     s.run(generations=5, init=20, quiet=True)
     r = s.report()
@@ -84,8 +85,21 @@ def test_day_types():
 
 
 def test_skipped_days_are_flat():
-    f = features.build(panel())
+    f = features.build(panel(), set())
     g = S.random_genome(random.Random(4))
     g.update({k: 0 for k in g if k.startswith("r.")})
     st = S.backtest(g, f, range(f.days))
     assert st["trades"] == 0 and not st["daily"].any()
+
+
+def test_earnings_rule_limits_which_stocks_trade():
+    p = panel()
+    d = p["close"].index[78 * 3].date()
+    f = features.build(p, {("S2", d)})
+    g = S.random_genome(random.Random(7))
+    g.update({"A.mode": 0, "A.slots": 6, "A.threshold": 0.0, "A.earnings": S.EARNINGS.index("only")},
+             **{k: 1 for k in g if k.startswith("r.")})
+    rows = np.arange(f.days * f.bars_per_day)
+    pos = S.select(S.playbook(g, "A"), S.score(S.playbook(g, "A"), f, rows))
+    traded = np.flatnonzero(np.abs(pos).sum(axis=0))
+    assert set(traded) <= {2} and set(f.day[rows[np.abs(pos).sum(axis=1) > 0]]) <= {3}

@@ -1,9 +1,12 @@
 """The recursive self-improvement loop.
 
-Days are split in time order into train / validation / test. Each generation mutates the
-current champion into a batch of candidates. A candidate replaces the champion only if it
-beats it on training days AND on validation days, after costs. The test days are never
-looked at during the search; they are scored once, at the end.
+Days are split in time order into train / validation / test, and the training days into
+four consecutive periods. Each generation mutates the current champion into a batch of
+candidates. A candidate replaces the champion only if, after costs, it beats it on average
+over the training periods, does at least as well in at least three of the four, AND beats
+it on the validation days. A small penalty per active signal weight favors simpler
+strategies. The test days are never looked at during the search; they are scored once, at
+the end.
 
 The loop also improves how it searches. It keeps a step size and a mutation rate for every
 gene and a success score for every mutation operator; changes that led to an accepted
@@ -22,7 +25,9 @@ import numpy as np
 from . import strategy as S
 from .features import Features
 
-OPERATORS = ("tweak", "reset_gene", "cross_random", "cross_archive")
+OPERATORS = ("tweak", "reset_gene", "cross_random", "cross_archive", "prune")
+FOLDS = 4
+COMPLEXITY = 0.05      # fitness cost per active signal weight in a playbook that trades
 
 
 class Search:
@@ -33,6 +38,8 @@ class Search:
         n = f.days
         a, b = int(n * split[0]), int(n * (split[0] + split[1]))
         self.train, self.val, self.test = range(0, a), range(a, b), range(b, n)
+        edges = np.linspace(0, a, FOLDS + 1).astype(int)
+        self.folds = [range(edges[i], edges[i + 1]) for i in range(FOLDS)]
         self.step = {g: (hi - lo) * (0.15 if k == "f" else 0.1) for g, (k, lo, hi) in S.GENES.items()}
         self.rate = {g: 1.5 / len(S.GENES) for g in S.GENES}
         self.op_score = {o: 1.0 for o in OPERATORS}
@@ -45,7 +52,11 @@ class Search:
     # --- evaluation -------------------------------------------------------------------
     def fit(self, g: dict, days: range) -> tuple[float, dict]:
         st = S.backtest(g, self.f, days, self.cost)
-        return S.fitness(st, len(days)), st
+        return S.fitness(st, len(days)) - COMPLEXITY * complexity(g), st
+
+    def fit_train(self, g: dict) -> tuple[float, list]:
+        per = [self.fit(g, r)[0] for r in self.folds]
+        return float(np.mean(per)), per
 
     # --- mutation operators -----------------------------------------------------------
     def _clip(self, name, x):
@@ -57,6 +68,13 @@ class Search:
         ops, w = zip(*self.op_score.items())
         op = self.rng.choices(ops, weights=w)[0]
         c = copy.deepcopy(g)
+        if op == "prune":
+            active = [f"{p}.{w}" for p in "AB" for w in S.WEIGHTS if c[f"{p}.{w}"] != 0]
+            if active:
+                name = self.rng.choice(active)
+                c[name] = 0.0
+                return c, op, [name]
+            op = "tweak"
         if op == "cross_random" or (op == "cross_archive" and not self.archive):
             op, donor = "cross_random", S.random_genome(self.rng)
         elif op == "cross_archive":
@@ -95,28 +113,31 @@ class Search:
     def run(self, generations: int = 300, init: int = 400, patience: int = 120, quiet=False):
         t0 = time.time()
         seeds = [S.random_genome(self.rng) for _ in range(init)]
-        scored = sorted(((self.fit(g, self.train)[0], g) for g in seeds), key=lambda x: -x[0])
+        scored = sorted(((self.fit_train(g), g) for g in seeds), key=lambda x: -x[0][0])
         champ = scored[0][1]
-        champ_tr, champ_va = scored[0][0], self.fit(champ, self.val)[0]
+        (champ_tr, champ_folds), champ_va = scored[0][0], self.fit(champ, self.val)[0]
         self.archive.append(champ)
         self._write({"gen": 0, "accepted": True, "train": champ_tr, "val": champ_va, "genome": champ})
         stale = 0
         for gen in range(1, generations + 1):
             cands = [self.mutate(champ) for _ in range(self.batch)]
-            evals = sorted(((self.fit(c, self.train)[0], c, op, ch) for c, op, ch in cands),
+            evals = sorted(((*self.fit_train(c), c, op, ch) for c, op, ch in cands),
                            key=lambda x: -x[0])
             accepted = None
-            for tr, c, op, ch in evals:
+            for tr, folds, c, op, ch in evals:
                 if tr <= champ_tr:
                     break
+                if sum(x >= y for x, y in zip(folds, champ_folds)) < FOLDS - 1:
+                    continue
                 va = self.fit(c, self.val)[0]
                 if va > champ_va:
-                    accepted = (tr, va, c, op, ch)
+                    accepted = (tr, va, c, op, ch, folds)
                     break
-            for tr, c, op, ch in evals:
+            for tr, folds, c, op, ch in evals:
                 self._learn(op, ch, accepted is not None and c is accepted[2])
             if accepted:
-                champ_tr, champ_va, champ = accepted[0], accepted[1], accepted[2]
+                champ_tr, champ_va, champ, champ_folds = (accepted[0], accepted[1], accepted[2],
+                                                          accepted[5])
                 self.archive.append(champ)
                 stale = 0
             else:
@@ -148,6 +169,9 @@ class Search:
             out[name] = {k: v for k, v in st.items() if k != "daily"}
             out[name]["daily_bps"] = [round(x * 1e4, 1) for x in st["daily"]]
             out[name]["sharpe_at_2x_cost"] = stress["sharpe"]
+            d = st["daily"]
+            out[name]["t_stat"] = (float(d.mean() / d.std(ddof=1) * np.sqrt(len(d)))
+                                   if d.std(ddof=1) > 0 else 0.0)
             out[name]["mean_bps_day_at_2x_cost"] = stress["mean_bps_day"]
         # how each kind of day did outside the training period
         held = np.r_[np.asarray(self.val), np.asarray(self.test)]
@@ -163,6 +187,12 @@ class Search:
         if self.out:
             self.log.write(json.dumps(rec, default=float) + "\n")
             self.log.flush()
+
+
+def complexity(g: dict) -> int:
+    """Active signal weights in the playbooks that some day group actually trades."""
+    used = {S.ROUTES[g[f"r.{grp}"]] for grp in S.DAY_GROUPS}
+    return sum(abs(g[f"{p}.{w}"]) >= 0.05 for p in "AB" if p in used for w in S.WEIGHTS)
 
 
 def random_baseline(f: Features, days: range, n: int = 300, seed: int = 99, cost_bps=1.5):
