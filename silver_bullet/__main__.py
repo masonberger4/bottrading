@@ -76,15 +76,23 @@ def cmd_paper(a):
     hist = data.schwab_history(client, a.symbol, days=8, minutes=1)
     warm = PaperBroker(inst, params)
     now = datetime.now(ZoneInfo(NY))
-    for bar in data.iter_bars(hist[hist.index < now.replace(second=0, microsecond=0) - timedelta(minutes=1)]):
-        step(strat, warm, bar)
+    closed = hist[hist.index + timedelta(minutes=1) <= now]
+    level = log.level
+    log.setLevel(logging.WARNING)   # replayed trades aren't paper trades; keep them out of the log
+    try:
+        for bar in data.iter_bars(closed):
+            step(strat, warm, bar)
+    finally:
+        log.setLevel(level)
+    # warm-up only builds levels and structure: it must not leave orders or use up a window
     strat.pending, strat.armed = None, None
-    last_ts = hist.index[-1]
+    strat.trades_in_window = {}
+    last_ts = closed.index[-1]
     broker = SchwabBroker(client, inst, params, a.qty, dry_run=not a.live)
     journal = open(a.journal, "a", newline="")
     jw = csv.writer(journal)
     seen = 0
-    log.info("paper trading %s %s, warm-up through %s", a.symbol,
+    log.info("paper trading %s %s, warm-up through bar %s", a.symbol,
              "LIVE ORDERS" if a.live else "(simulated fills)", last_ts)
     while True:
         now = datetime.now(ZoneInfo(NY))
@@ -131,6 +139,7 @@ def main():
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO if (a.cmd == "paper" or a.verbose) else logging.WARNING,
                         format="%(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)   # one GET per minute is just noise
     {"backtest": cmd_backtest, "paper": cmd_paper}[a.cmd](a)
 
 
