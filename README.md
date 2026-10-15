@@ -24,3 +24,28 @@ The Schwab commands need SCHWAB_APP_KEY and SCHWAB_APP_SECRET from a developer.s
 app with the callback URL https://127.0.0.1:8182. The first run opens a browser so you can log in.
 
 Not financial advice.
+
+# Claude HF: intraday stock bot found by a self-improving search
+
+Package `claude_hf`. Trades 40 liquid large-cap stocks (no ETFs) on 1- or 5-minute bars,
+holds for minutes, and is flat every night. A retail Schwab API can't do true
+microsecond HFT, so this is the fastest version it supports.
+
+The strategy is a genome: two playbooks (signal weights for short-term reversal, momentum,
+VWAP distance, opening-range breakout, volume shocks, day return and overnight gap, plus
+hold time, slots, threshold, entry window and long/short mode) and a route for every kind
+of day (FOMC, CPI, jobs, PCE, PPI, retail sales, GDP, quad witching, ISM, JOLTS, sentiment,
+opex, month/quarter turns, futures roll week, weekdays): playbook A, playbook B, or sit out.
+Event dates live in `claude_hf/daytypes.py`; extend them each year.
+
+`evolve` splits days in time order into train / validation / test. Each generation mutates
+the champion; a change is kept only if it beats the champion on training AND validation
+days after 1.5 bps per side of spread/slippage plus the SEC fee. The loop also tunes its own
+mutation step sizes and operator choice from what worked. Every generation is logged to
+`runs/claude_hf/<N>min/seed<k>/generations.jsonl`. Test days are scored once, at the end.
+
+    .venv\Scripts\python -m claude_hf fetch --minutes 5      # ~9 months of 5-minute bars
+    .venv\Scripts\python -m claude_hf evolve --minutes 5 --seeds 5 --save claude_hf\champion.json
+    .venv\Scripts\python -m claude_hf paper                  # simulated fills, never sends orders
+
+Paper trades go to `runs/claude_hf/paper_trades.csv`. There is no live mode.
