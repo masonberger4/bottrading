@@ -17,10 +17,10 @@ from .strategy import Params
 
 def cmd_backtest(a):
     p = Params(es_pt=a.es_pt) if a.es_pt else Params()
-    df = B.load(a.symbol, a.minutes)
-    partner = B.load(a.partner, a.minutes) if a.partner else None
+    df = B.load(a.symbol, a.minutes, source=a.source)
+    partner = B.load(a.partner, a.minutes, source=a.source) if a.partner else None
     if a.symbol != "SPY" and not a.es_pt:   # scale ES points by price relative to SPY
-        spy = B.load("SPY", a.minutes)
+        spy = B.load("SPY", a.minutes, source=a.source)
         p.es_pt = round(0.10 * df.close.median() / spy.close.median(), 4)
     t = B.run(df, a.minutes, a.symbol, p, partner)
     rep = B.report(t)
@@ -55,6 +55,7 @@ def main():
     b.add_argument("--symbol", default="SPY")
     b.add_argument("--partner", default="QQQ")
     b.add_argument("--es-pt", type=float, default=None)
+    b.add_argument("--source", default="schwab", choices=("schwab", "alpaca"))
     b.set_defaults(fn=cmd_backtest)
     s = sub.add_parser("synthetic")
     s.add_argument("--minutes", type=int, default=5)

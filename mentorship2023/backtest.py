@@ -20,10 +20,12 @@ def _read(path: Path) -> pd.DataFrame:
     return df[["open", "high", "low", "close", "volume"]].sort_index()
 
 
-def load(symbol: str, minutes: int, rth_history: bool = True) -> pd.DataFrame:
+def load(symbol: str, minutes: int, rth_history: bool = True, source: str = "schwab") -> pd.DataFrame:
     """Extended-hours bars, extended back with regular-session-only bars (`*_rth.csv`)
     for the days the extended pull doesn't reach. Those days have no pre-market, so their
     'midnight open' falls back to the 09:30 open and they have no pre-market high/low."""
+    if source == "alpaca":                       # see alpaca_data.py: years, with extended hours
+        return _read(DATA / f"{symbol}_{minutes}min_alpaca.csv")
     df = _read(DATA / f"{symbol}_{minutes}min.csv")
     extra = DATA / f"{symbol}_{minutes}min_rth.csv"
     if rth_history and extra.exists():
