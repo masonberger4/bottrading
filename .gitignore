@@ -4,3 +4,4 @@ schwab_token.json
 *.csv
 .venv/
 runs/
+data/mentorship2023/

@@ -24,6 +24,8 @@ def load(symbol: str, minutes: int, rth_history: bool = True, source: str = "sch
     """Extended-hours bars, extended back with regular-session-only bars (`*_rth.csv`)
     for the days the extended pull doesn't reach. Those days have no pre-market, so their
     'midnight open' falls back to the 09:30 open and they have no pre-market high/low."""
+    if source == "histdata":                     # index CFDs, see histdata.py (SPX, NDX)
+        return _read(DATA / f"{symbol}_{minutes}min_hd.csv")
     if source == "alpaca":                       # see alpaca_data.py: years, with extended hours
         return _read(DATA / f"{symbol}_{minutes}min_alpaca.csv")
     df = _read(DATA / f"{symbol}_{minutes}min.csv")
@@ -53,11 +55,11 @@ def fetch(symbols=("SPY", "QQQ"), c=None) -> None:
 
 
 def days(df: pd.DataFrame, tf: int, partial_last: bool = False) -> list[pd.DataFrame]:
-    """Complete sessions only: 04:00-16:00 bars of days whose regular session is >= 90%
+    """Complete sessions only: 00:00-16:00 bars of days whose regular session is >= 90%
     present and runs to the last bar before 16:00 (the final day may be partial with
     `partial_last`, as in live trading)."""
     t = df.index.hour * 60 + df.index.minute
-    df = df[(t >= 240) & (t < 960)]
+    df = df[t < 960]                                  # midnight (SPY: 04:00) to 16:00
     out = []
     groups = list(df.groupby(df.index.date))
     for k, (d, g) in enumerate(groups):

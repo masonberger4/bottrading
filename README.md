@@ -74,6 +74,12 @@ lookahead (New York time). Paper/backtest only: it has no order-sending code.
 - `backtest.combine` trades one instrument per session (first SPY/QQQ setup to fill).
   `study.py` runs every rule alone and together on SPY, QQQ, the combination and the
   random-walk control. `paper.py` runs on live Schwab bars and logs simulated fills only.
+- Free long history: `histdata.py` downloads SPX/NDX index CFD 1-minute bars from
+  HistData.com (2019 onward, no account; same feed as Dukascopy's, whose public datafeed
+  `dukascopy.py` also reads but throttles hard). They trade almost around the clock, so
+  the real midnight open is used and prices are ES/NQ-style points. `calendar.py` adds the
+  2019-2025 NFP/CPI/PPI/FOMC dates. `python -m mentorship2023.study --index` sizes in MES
+  ($5/pt) and MNQ ($2/pt) with a tick of slippage plus commission per side.
 - 5-minute history: extended hours from late March, regular session only back to late
   January (09:30 open stands in for midnight there).
 

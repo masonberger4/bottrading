@@ -132,11 +132,11 @@ def equal_levels(prices, tol: float) -> list[float]:
 
 def opens(index, o) -> dict[str, float]:
     """Opening prices for one day: midnight, 08:30, 09:30, 13:30 (first bar at or after).
-    SPY has no bars at midnight, so the first pre-market bar (04:00) stands in for it."""
+    SPY has no bars at midnight, so its first pre-market bar (04:00) stands in for it."""
     t = index.hour * 60 + index.minute
     out = {}
     for name, m in (("midnight", 0), ("0830", 510), ("0930", 570), ("1330", 810)):
-        k = np.flatnonzero(t >= max(m, 240))
+        k = np.flatnonzero(t >= m)
         if len(k):
             out[name] = float(o[k[0]])
     return out

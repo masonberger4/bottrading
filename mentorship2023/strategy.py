@@ -40,6 +40,7 @@ import numpy as np
 import pandas as pd
 
 from claude_hf.daytypes import JOBS, day_type, events
+from . import calendar as _calendar  # noqa: F401  (loads 2019-2025 event dates)
 from . import levels as L
 
 NEWS_1000 = {"ism_manufacturing", "ism_services", "jolts", "sentiment"}
@@ -81,6 +82,12 @@ class Params:
     sd_targets: bool = False
     sd_levels: tuple = (1.0, 1.5, 2.0, 2.5)
     wick_levels: bool = False
+    lot: int = 1                   # units per contract: 1 for shares; 5 for MES, 2 for MNQ
+                                   # (a unit is $1 per point, so P&L = points x units)
+
+
+def _lots(x: float, lot: int) -> int:
+    return int(x // lot) * lot
 
 
 def blocked(d: date, session: str) -> str | None:
@@ -217,7 +224,7 @@ class DayCtx:
                           float(prev.close.iloc[-1]))
         self.wick = L.wick_midpoints(po, ph, pl, pc)
         tt = df.index.hour * 60 + df.index.minute
-        pre = df[(tt >= 240) & (tt < 570)]
+        pre = df[tt < 570]                         # overnight: midnight (SPY: 04:00) to 09:30
         if len(pre):
             self.pd["pmh"], self.pd["pml"] = float(pre.high.max()), float(pre.low.min())
         am = df[(tt >= 570) & (tt < 810)]
@@ -352,7 +359,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 tr.exits.append((ts, sd.x(stop), pos["left"], "be" if pos["t1_done"] else "stop")); pos["left"] = 0
             else:
                 if not pos["t1_done"] and h >= pos["t1"]:
-                    q = pos["left"] if pos["t2"] is None else max(1, int(pos["left"] * p.partial))
+                    q = pos["left"] if pos["t2"] is None else max(p.lot, _lots(pos["left"] * p.partial, p.lot))
+                    q = min(q, pos["left"])
                     tr.exits.append((ts, sd.x(pos["t1"]), q, "t1")); pos["left"] -= q
                     pos["t1_done"] = True
                     pos["stop"] = max(pos["stop"], pos["basis"] / pos["n"])
@@ -371,7 +379,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                         pos["stop"] = max(pos["stop"], g.bottom - p.stop_buffer)
                     k = len(tr.adds)
                     if (p.adds and k < len(p.adds) and not pos["t1_done"] and pos["add"] is None):
-                        q = int(tr.shares * p.adds[k])
+                        q = _lots(tr.shares * p.adds[k], p.lot)
                         at_risk = pos["basis"] - pos["stop"] * pos["n"]
                         if q >= 1 and at_risk + (g.top - pos["stop"]) * q <= p.max_total_risk:
                             pos["add"] = dict(px=g.top, q=q, i=i)
@@ -513,7 +521,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos):
     lv = [v for v in lv if v - entry >= p.min_rr * risk]
     if not lv:
         return None
-    shares = int(min(p.risk_dollars / risk, p.max_notional / abs(entry)))
+    shares = _lots(min(p.risk_dollars / risk, p.max_notional / abs(entry)), p.lot)
     if shares < 1:
         return None
     t = ctx.t[i]

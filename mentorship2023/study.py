@@ -1,7 +1,8 @@
 """Rule-by-rule study: each optional rule switched on alone and all together, on SPY, QQQ
 and the one-instrument-per-session combination, plus the random-walk control.
 
-    python -m mentorship2023.study
+    python -m mentorship2023.study            # SPY/QQQ (Schwab)
+    python -m mentorship2023.study --index    # SPX/NDX index CFDs since 2019 (HistData)
 """
 from __future__ import annotations
 
@@ -71,7 +72,60 @@ def main(out="runs/mentorship2023"):
     return rep
 
 
+
+# --- index CFD study (HistData SPX / NDX, 2019 onward; see histdata.py) -----------------
+# Sizing is in micro futures: MES $5/pt (lot 5 units), MNQ $2/pt (lot 2 units). Costs per
+# side are one tick of slippage plus $0.62 commission per contract, in points per unit.
+INDEX = {"SPX": dict(es_pt=1.0, lot=5, cost_per_share=round((0.25 * 5 + 0.62) / 5, 4)),
+         "NDX": dict(lot=2, cost_per_share=round((0.25 * 2 + 0.62) / 2, 4))}
+IVARIANTS = dict(VARIANTS, no_bias=dict(use_bias=False), no_day_filter=dict(day_filter=False))
+
+
+def _index_job(job):
+    tf, sym, name, year = job
+    other = "NDX" if sym == "SPX" else "SPX"
+    df, pa = B.load(sym, tf, source="histdata"), B.load(other, tf, source="histdata")
+    kw = dict(INDEX[sym], max_notional=1e12)
+    if sym == "NDX":   # NQ handles: scale the ES-point tolerances by the NDX/SPX price ratio
+        spx = pa if other == "SPX" else df
+        kw["es_pt"] = round(float(df.close.median() / spx.close.median()), 2)
+    a, b = pd.Timestamp(f"{year}-01-01", tz=B.NY), pd.Timestamp(f"{year + 1}-01-01", tz=B.NY)
+    lo = a - pd.Timedelta(days=45)                  # warm-up: prior days' levels and history
+    t = B.run(df[(df.index >= lo) & (df.index < b)], tf, sym, replace(Params(), **kw, **IVARIANTS[name]),
+              pa[(pa.index >= lo) & (pa.index < b)])
+    if len(t):
+        t = t[pd.to_datetime(t.entry_time.astype(str).str[:10]) >= f"{year}-01-01"].copy()
+        t["variant"], t["tf"], t["year"] = name, tf, year
+    return t
+
+
+def main_index(out="runs/mentorship2023", variants=None, tfs=(5, 1), workers=6):
+    variants = variants or list(IVARIANTS)
+    years = range(2019, 2027)
+    jobs = [(tf, s, v, y) for tf in tfs for v in variants for s in INDEX for y in years]
+    with ProcessPoolExecutor(workers) as ex:
+        t = pd.concat([x for x in ex.map(_index_job, jobs) if len(x)], ignore_index=True)
+    books = []
+    for (tf, v), g in t.groupby(["tf", "variant"]):
+        books.append(B.combine(g[g.symbol == "SPX"], g[g.symbol == "NDX"]).assign(book="combined"))
+    t = pd.concat([t.assign(book=t.symbol)] + books, ignore_index=True)
+    t.to_csv(f"{out}/index_trades.csv", index=False)
+    rep = {"all": {f"{tf}m/{b}/{v}": B.stats(g) for (tf, b, v), g in t.groupby(["tf", "book", "variant"])}}
+    base = t[(t.variant == "base") & (t.book != "combined")]
+    for col in ("setup", "day_type", "news", "macro", "htf", "unicorn", "smt", "wbias", "side", "year", "swept"):
+        rep[f"base_by_{col}"] = {f"{tf}m/{k}": B.stats(g) for (tf, k), g in base.groupby(["tf", base[col].astype(str)])}
+    with open(f"{out}/index_study.json", "w") as f:
+        json.dump(rep, f, indent=1, default=str)
+    return t, rep
+
+
 if __name__ == "__main__":
+    import sys
+    if "--index" in sys.argv:
+        _, rep = main_index()
+        for k, v in rep["all"].items():
+            print(k, v)
+        raise SystemExit
     rep = main()
     for k, v in rep["real"].items():
         print(k, v)
