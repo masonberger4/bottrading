@@ -7,7 +7,8 @@ and the one-instrument-per-session combination, plus the random-walk control.
 from __future__ import annotations
 
 import json
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
 from dataclasses import replace
 
 import pandas as pd
@@ -103,8 +104,19 @@ def main_index(out="runs/mentorship2023", variants=None, tfs=(5, 1), workers=6):
     variants = variants or list(IVARIANTS)
     years = range(2019, 2027)
     jobs = [(tf, s, v, y) for tf in tfs for v in variants for s in INDEX for y in years]
+    jobs.sort(key=lambda j: (j[0] == 1, j[2] != "base"))     # quick 5-min first, then 1-min base
+    cache = Path(out) / "index_jobs"                          # one file per job: resumable
+    cache.mkdir(parents=True, exist_ok=True)
+    path = lambda j: cache / "{}m_{}_{}_{}.csv".format(*j)
+    todo = [j for j in jobs if not path(j).exists()]
     with ProcessPoolExecutor(workers) as ex:
-        t = pd.concat([x for x in ex.map(_index_job, jobs) if len(x)], ignore_index=True)
+        futs = {ex.submit(_index_job, j): j for j in todo}
+        for k, f in enumerate(as_completed(futs), 1):
+            j = futs[f]
+            f.result().to_csv(path(j), index=False)
+            print(f"{k}/{len(todo)} {j}", flush=True)
+    parts = [pd.read_csv(path(j)) for j in jobs if path(j).exists() and path(j).stat().st_size > 2]
+    t = pd.concat([x for x in parts if len(x)], ignore_index=True)
     books = []
     for (tf, v), g in t.groupby(["tf", "variant"]):
         books.append(B.combine(g[g.symbol == "SPX"], g[g.symbol == "NDX"]).assign(book="combined"))
@@ -131,3 +143,32 @@ if __name__ == "__main__":
         print(k, v)
     for k, v in rep["random_walk"].items():
         print("RW", k, v)
+
+
+# --- AM model on S&P 500 levels, traded as SPY ------------------------------------------
+# Signals from the SPX index CFD (real midnight open), P&L as SPY: a unit is $1 per SPX
+# point = 10 SPY shares, so 1 cent per share each way = 0.10 points per unit per side,
+# commission $0, buying power $400k (4x a $100k account).
+AM_SPY = dict(es_pt=1.0, lot=1, cost_per_share=0.10, max_notional=400_000.0, pm=(0, 0),
+              skip_news=True)
+
+
+def _am_job(job):
+    tf, year = job
+    df, pa = B.load("SPX", tf, source="histdata"), B.load("NDX", tf, source="histdata")
+    a, b = pd.Timestamp(f"{year}-01-01", tz=B.NY), pd.Timestamp(f"{year + 1}-01-01", tz=B.NY)
+    lo = a - pd.Timedelta(days=45)
+    t = B.run(df[(df.index >= lo) & (df.index < b)], tf, "SPX", replace(Params(), **AM_SPY),
+              pa[(pa.index >= lo) & (pa.index < b)])
+    if len(t):
+        t = t[pd.to_datetime(t.entry_time.astype(str).str[:10]) >= f"{year}-01-01"].copy()
+        t["tf"], t["year"] = tf, year
+    return t
+
+
+def main_am_spy(out="runs/mentorship2023", workers=6):
+    jobs = [(tf, y) for tf in (1, 5) for y in range(2019, 2027)]
+    with ProcessPoolExecutor(workers) as ex:
+        t = pd.concat([x for x in ex.map(_am_job, jobs) if len(x)], ignore_index=True)
+    t.to_csv(f"{out}/am_spy_trades.csv", index=False)
+    return t

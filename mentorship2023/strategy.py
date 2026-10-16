@@ -82,6 +82,7 @@ class Params:
     sd_targets: bool = False
     sd_levels: tuple = (1.0, 1.5, 2.0, 2.5)
     wick_levels: bool = False
+    skip_news: bool = False        # no trades at all on 08:30 / 10:00 release days
     lot: int = 1                   # units per contract: 1 for shares; 5 for MES, 2 for MNQ
                                    # (a unit is $1 per point, so P&L = points x units)
 
@@ -417,7 +418,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             continue
         if t < w0 or done[session] or pos is not None:
             continue
-        if p.day_filter and blocked(day, session):
+        if (p.day_filter and blocked(day, session)) or (p.skip_news and news(day) != "none"):
             continue
         for sd in sides:
             sname = "long" if sd.sign > 0 else "short"
