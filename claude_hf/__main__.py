@@ -5,6 +5,8 @@
   python -m claude_hf evolve --minutes 5 --seeds 5 # run the self-improvement loop
   python -m claude_hf paper                        # paper trade the saved champion
   python -m claude_hf record                       # record live quotes + order book daily
+  python -m claude_hf fetch --minutes 1 --days 10  # top up the bar cache (older bars are kept)
+  python -m claude_hf evolve --minutes 1 --book-only   # search only days with book recordings
 """
 from __future__ import annotations
 
@@ -22,7 +24,14 @@ def cmd_fetch(a):
 def cmd_evolve(a):
     from . import data, features
     from .evolve import Search, random_baseline
-    f = features.build(data.load_panel(a.minutes))
+    panel = data.load_panel(a.minutes)
+    if a.book_only:
+        from .book import ROOT
+        recorded = {p.name for p in ROOT.glob("*") if (p / "l1.csv.gz").exists()}
+        keep = [str(d) in recorded for d in panel["close"].index.date]
+        panel = {k: v[keep] for k, v in panel.items()}
+        print(f"{len(panel['close']) // (390 // a.minutes)} days with order-book recordings")
+    f = features.build(panel)
     out = Path(a.out) / f"{a.minutes}min"
     best = None
     for seed in range(1, a.seeds + 1):
@@ -70,6 +79,8 @@ def main():
     p.add_argument("--cost", type=float, default=1.5, help="bps per side for spread + slippage")
     p.add_argument("--out", default="runs/claude_hf")
     p.add_argument("--save", help="write the validation-picked champion here")
+    p.add_argument("--book-only", action="store_true",
+                   help="search only the days the recorder captured order-book data for")
     p = sub.add_parser("paper")
     p.add_argument("--champion", default="claude_hf/champion.json")
     p.add_argument("--journal", default="runs/claude_hf/paper_trades.csv")

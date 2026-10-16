@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+tmp_book = "__no_book_data__"
+
 from claude_hf import features, strategy as S
 from claude_hf.evolve import Search
 
@@ -26,12 +28,12 @@ def panel(days=12, minutes=5, n=8, seed=0):
 
 def test_features_never_look_ahead():
     p = panel()
-    f1 = features.build(p, set())
+    f1 = features.build(p, set(), tmp_book)
     cut = 5 * 78 + 40
     q = {k: v.copy() for k, v in p.items()}
     for v in q.values():
         v.iloc[cut + 1:] *= 1.37            # rewrite the future
-    f2 = features.build(q, set())
+    f2 = features.build(q, set(), tmp_book)
     for name in ("vwap", "orb", "volshock", "dayret", "gap"):
         assert np.allclose(getattr(f1, name)[:cut + 1], getattr(f2, name)[:cut + 1]), name
     for k in features.LOOKBACKS:
@@ -39,7 +41,7 @@ def test_features_never_look_ahead():
 
 
 def test_flipping_weights_flips_gross_pnl():
-    f = features.build(panel(), set())
+    f = features.build(panel(), set(), tmp_book)
     g = S.random_genome(random.Random(3))
     g.update({"A.mode": 0, "A.slots": 4, "A.threshold": 0.0, "A.earnings": 0,
               "A.start": 0, "A.length": 390},
@@ -52,7 +54,7 @@ def test_flipping_weights_flips_gross_pnl():
 
 
 def test_positions_close_before_the_session_ends():
-    f = features.build(panel(), set())
+    f = features.build(panel(), set(), tmp_book)
     g = S.playbook(S.random_genome(random.Random(1)), "A")
     g.update(start=300, length=90, hold=S.HOLDS.index(60))
     bars = S.decision_bars(g, f)
@@ -60,7 +62,7 @@ def test_positions_close_before_the_session_ends():
 
 
 def test_search_runs_and_logs(tmp_path):
-    f = features.build(panel(days=20), set())
+    f = features.build(panel(days=20), set(), tmp_book)
     s = Search(f, seed=1, batch=6, out=tmp_path)
     s.run(generations=5, init=20, quiet=True)
     r = s.report()
@@ -85,7 +87,7 @@ def test_day_types():
 
 
 def test_skipped_days_are_flat():
-    f = features.build(panel(), set())
+    f = features.build(panel(), set(), tmp_book)
     g = S.random_genome(random.Random(4))
     g.update({k: 0 for k in g if k.startswith("r.")})
     st = S.backtest(g, f, range(f.days))
@@ -95,7 +97,7 @@ def test_skipped_days_are_flat():
 def test_earnings_rule_limits_which_stocks_trade():
     p = panel()
     d = p["close"].index[78 * 3].date()
-    f = features.build(p, {("S2", d)})
+    f = features.build(p, {("S2", d)}, tmp_book)
     g = S.random_genome(random.Random(7))
     g.update({"A.mode": 0, "A.slots": 6, "A.threshold": 0.0, "A.earnings": S.EARNINGS.index("only")},
              **{k: 1 for k in g if k.startswith("r.")})
@@ -103,3 +105,18 @@ def test_earnings_rule_limits_which_stocks_trade():
     pos = S.select(S.playbook(g, "A"), S.score(S.playbook(g, "A"), f, rows))
     traded = np.flatnonzero(np.abs(pos).sum(axis=0))
     assert set(traded) <= {2} and set(f.day[rows[np.abs(pos).sum(axis=1) > 0]]) <= {3}
+
+
+def test_book_signals_only_use_data_up_to_the_bar_close():
+    from claude_hf import book
+    starts = pd.date_range(pd.Timestamp("2026-10-16 09:30", tz="America/New_York"),
+                           periods=3, freq="5min")
+    ms = lambda s: int(pd.Timestamp(s, tz="America/New_York").value // 10**6)
+    l1 = pd.DataFrame({"ts_ms": [ms("2026-10-16 09:31"), ms("2026-10-16 09:35:01")],
+                       "symbol": "X", "bid_price": [10.0, 10.0], "ask_price": [10.02, 10.02],
+                       "bid_size": [300, 100], "ask_size": [100, 300], "last_price": [10.02, 10.0],
+                       "last_size": [100, 100], "total_volume": [1000, 1100]})
+    f = book.day_features(l1, None, starts, 5, ["X"])
+    assert f["imb"][0, 0] == pytest.approx(0.5)          # the 09:35:01 update isn't in bar 0
+    assert f["imb"][1, 0] == pytest.approx(-0.5)
+    assert f["flow"][0, 0] == 0 and f["flow"][1, 0] == pytest.approx(-1.0)

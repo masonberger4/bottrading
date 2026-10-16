@@ -65,7 +65,12 @@ def fetch(symbols=UNIVERSE, minutes: int = 1, days: int | None = None, c=None) -
     for i, s in enumerate(symbols):
         try:
             df = regular_session(schwab_history(c, s, days=days, minutes=minutes, extended_hours=False))
-            df.to_csv(out / f"{s}.csv")
+            path = out / f"{s}.csv"
+            if path.exists():                       # keep older bars Schwab no longer serves
+                old = pd.read_csv(path, index_col=0)
+                old.index = pd.to_datetime(old.index, utc=True).tz_convert("America/New_York")
+                df = pd.concat([old[old.index < df.index[0]], df])
+            df.to_csv(path)
             print(f"[{i + 1}/{len(symbols)}] {s}: {len(df)} bars, "
                   f"{df.index[0].date()} -> {df.index[-1].date()}")
         except Exception as e:  # one bad symbol shouldn't stop the pull

@@ -38,6 +38,11 @@ class Features:
     gap: np.ndarray          # overnight gap
     day_type: list           # daytypes.day_type of each day
     earn: np.ndarray         # (days x symbols) True on a stock's earnings reaction day
+    imb: np.ndarray          # top-of-book size imbalance (0 on days with no recording)
+    depth: np.ndarray        # top-5-level book size imbalance
+    flow: np.ndarray         # signed trade flow inside the bar
+    spread: np.ndarray       # quoted spread, bps
+    has_book: np.ndarray     # (days,) True where order-book data was recorded
 
     @property
     def days(self) -> int:
@@ -48,7 +53,7 @@ def _clean(a):
     return np.clip(np.nan_to_num(a, nan=0.0, posinf=0.0, neginf=0.0), -5, 5)
 
 
-def build(panel: dict, earnings_days: set | None = None) -> Features:
+def build(panel: dict, earnings_days: set | None = None, book_root=None) -> Features:
     """earnings_days: {(symbol, date)} reaction days; read from the earnings file if None."""
     o, h, l, c, v = (panel[k].to_numpy(float) for k in ("open", "high", "low", "close", "volume"))
     idx = panel["close"].index
@@ -105,8 +110,12 @@ def build(panel: dict, earnings_days: set | None = None) -> Features:
     gap_d = (lo - np.log(prev_close))[first] / (vol[first] * np.sqrt(bpd))
     gap = np.repeat(gap_d, bpd, axis=0)
 
+    from . import book
+    bk = book.build(idx, bpd, bm, list(panel["close"].columns),
+                    **({"root": book_root} if book_root is not None else {}))
     return Features(idx, list(panel["close"].columns), o, c, bm, bpd, day, bar, z, idio,
                     _clean(vwap_dev), _clean(orb), _clean(volshock), _clean(dayret), _clean(gap),
                     [day_type(d) for d in idx[::bpd].date],
                     np.array([[(s, d) in earnings_days for s in panel["close"].columns]
-                              for d in idx[::bpd].date], dtype=bool).reshape(-1, c.shape[1]))
+                              for d in idx[::bpd].date], dtype=bool).reshape(-1, c.shape[1]),
+                    2 * bk["imb"], 2 * bk["depth"], 2 * bk["flow"], bk["spread"], bk["has_book"])

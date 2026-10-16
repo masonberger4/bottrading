@@ -27,7 +27,8 @@ from .features import LOOKBACKS, Features
 
 HOLDS = (1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120)      # minutes
 MODES = ("neutral", "directional", "long", "short")
-WEIGHTS = ("w_rev", "w_mom", "w_vwap", "w_orb", "w_vol", "w_day", "w_gap", "w_earn")
+WEIGHTS = ("w_rev", "w_mom", "w_vwap", "w_orb", "w_vol", "w_day", "w_gap", "w_earn",
+           "w_imb", "w_depth", "w_flow")      # the last three use recorded order-book data
 EARNINGS = ("include", "exclude", "only")
 SEC_FEE_BPS = 0.278       # $27.80 per $1M sold
 
@@ -109,7 +110,10 @@ def score(g: dict, f: Features, rows: np.ndarray) -> np.ndarray:
             + g["w_vol"] * f.volshock[rows]
             + g["w_day"] * f.dayret[rows]
             + g["w_gap"] * f.gap[rows]
-            + g["w_earn"] * f.gap[rows] * f.earn[f.day[rows]])
+            + g["w_earn"] * f.gap[rows] * f.earn[f.day[rows]]
+            + g["w_imb"] * f.imb[rows]
+            + g["w_depth"] * f.depth[rows]
+            + g["w_flow"] * f.flow[rows])
     rule = EARNINGS[g.get("earnings", 0)]
     if rule == "exclude":
         s = np.where(f.earn[f.day[rows]], 0.0, s)
