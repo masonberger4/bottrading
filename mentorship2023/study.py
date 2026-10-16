@@ -166,9 +166,9 @@ def _am_job(job):
     return t
 
 
-def main_am_spy(out="runs/mentorship2023", workers=6):
-    jobs = [(tf, y) for tf in (1, 5) for y in range(2019, 2027)]
+def main_am_spy(out="runs/mentorship2023", workers=6, tfs=(1, 5)):
+    jobs = [(tf, y) for tf in tfs for y in range(2019, 2027)]
     with ProcessPoolExecutor(workers) as ex:
         t = pd.concat([x for x in ex.map(_am_job, jobs) if len(x)], ignore_index=True)
-    t.to_csv(f"{out}/am_spy_trades.csv", index=False)
+    t.to_csv(f"{out}/am_spy_trades{'' if tuple(tfs) == (1, 5) else '_' + '_'.join(map(str, tfs))}.csv", index=False)
     return t
