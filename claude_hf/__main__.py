@@ -4,6 +4,7 @@
   python -m claude_hf fetch --minutes 1            # ~7 weeks of 1-minute bars
   python -m claude_hf evolve --minutes 5 --seeds 5 # run the self-improvement loop
   python -m claude_hf paper                        # paper trade the saved champion
+  python -m claude_hf record                       # record live quotes + order book daily
 """
 from __future__ import annotations
 
@@ -50,6 +51,11 @@ def cmd_paper(a):
     paper.run(a.champion, a.journal, a.cost)
 
 
+def cmd_record(a):
+    from . import recorder
+    recorder.run(days=a.days)
+
+
 def main():
     ap = argparse.ArgumentParser(prog="claude_hf")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -68,10 +74,12 @@ def main():
     p.add_argument("--champion", default="claude_hf/champion.json")
     p.add_argument("--journal", default="runs/claude_hf/paper_trades.csv")
     p.add_argument("--cost", type=float, default=1.5)
+    p = sub.add_parser("record")
+    p.add_argument("--days", type=int, help="stop after this many sessions (default: run on)")
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    {"fetch": cmd_fetch, "evolve": cmd_evolve, "paper": cmd_paper}[a.cmd](a)
+    {"fetch": cmd_fetch, "evolve": cmd_evolve, "paper": cmd_paper, "record": cmd_record}[a.cmd](a)
 
 
 if __name__ == "__main__":
