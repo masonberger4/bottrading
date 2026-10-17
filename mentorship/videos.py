@@ -85,8 +85,8 @@ def frames(idx: int, vid: str, every: int = 20, prefix: str = "") -> Path | None
     import time
     for attempt in range(4):        # YouTube sometimes answers 403; a pause and retry usually works
         # H.264 decodes several times faster than AV1/VP9 on this laptop's CPU
-        r = ytdlp("-f", "bv*[height=720][vcodec^=avc1]/bv*[height<=720][vcodec^=avc1]/bv*[height<=720]",
-                  "-S", "+size",
+        # prefer H.264, then the highest resolution up to 720p, then the smallest file
+        r = ytdlp("-f", "bv*[height<=720]", "-S", "vcodec:h264,res:720,+size",
                   "-o", str(tmp / "v.%(ext)s"), f"https://www.youtube.com/watch?v={vid}")
         vids = [p for p in tmp.glob("v.*") if p.suffix in (".mp4", ".webm", ".mkv")]
         if vids:
@@ -147,6 +147,9 @@ def work(playlists: list[tuple[str, str]], every: int = 20) -> None:
                 n = len(list(f.iterdir())) if f else 0
                 print(f"{prefix}{idx:03d} {vid} {dur // 60}m captions={'yes' if c else 'NONE'} frames={n} | {title}",
                       flush=True)
+            except Exception as e:                 # one bad video must not stop the worker
+                print(f"{prefix}{idx:03d} {vid} FAILED {type(e).__name__}: {str(e)[-200:]}", flush=True)
+                shutil.rmtree(FRAMES / f"{prefix}{idx:03d}_{vid}.part", ignore_errors=True)
             finally:
                 lock.unlink(missing_ok=True)
 
