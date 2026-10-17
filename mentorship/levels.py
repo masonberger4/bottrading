@@ -18,6 +18,7 @@ class Zone:
     bottom: float
     i: int          # bar index at which the zone is known (the bar that completes it)
     src: int = -1   # index of the candle the zone is built from (blocks), or the gap's middle candle
+    mt: float = float("nan")   # blocks: body mean threshold (see order_block_blend)
 
     @property
     def mid(self) -> float:
@@ -78,6 +79,28 @@ def order_block(o, h, l, c, start: int, end: int, kind: str) -> Zone | None:
     for k in range(min(end, len(o) - 1), max(start, 0) - 1, -1):
         if (kind == "bull" and c[k] < o[k]) or (kind == "bear" and c[k] > o[k]):
             return Zone(kind, float(h[k]), float(l[k]), end, k)
+    return None
+
+
+def order_block_blend(o, h, l, c, start: int, end: int, kind: str) -> Zone | None:
+    """ICT order block: the last down-close candle in [start, end] (bullish; up-close for
+    bearish) together with the consecutive same-colour candles right before it, blended into
+    one block (002 ~4:14; 029 ~29:28; 032 ~23:06). Zone = the series' full range; `mt` = the
+    body mean threshold, midway between the series' highest body and lowest body
+    (bullish: (max open + min close) / 2). `src` = the first (anchor) candle."""
+    down = (lambda k: c[k] < o[k]) if kind == "bull" else (lambda k: c[k] > o[k])
+    start = max(start, 0)
+    for k in range(min(end, len(o) - 1), start - 1, -1):
+        if down(k):
+            j = k
+            while j - 1 >= start and down(j - 1):
+                j -= 1
+            hi, lo = float(max(h[j:k + 1])), float(min(l[j:k + 1]))
+            if kind == "bull":
+                mt = (max(o[j:k + 1]) + min(c[j:k + 1])) / 2
+            else:
+                mt = (min(o[j:k + 1]) + max(c[j:k + 1])) / 2
+            return Zone(kind, hi, lo, end, j, float(mt))
     return None
 
 

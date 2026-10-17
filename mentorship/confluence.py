@@ -4,11 +4,12 @@ PD arrays are fractal, so the same detectors run on every timeframe from 1m to m
 
 Arrays per timeframe (bullish shown; bearish mirrors):
   FVG   3-candle gap; valid until a close below its bottom.
-  OB    last down-close candle (within 3 bars) before the displacement candle of a bullish
-        FVG, if that candle closed above the OB's high; valid until a close below its mean
-        threshold (body midpoint).
-  gap   daily: 16:14 close -> 18:00 reopen (NDOG); weekly: Friday close -> Sunday reopen
-        (NWOG); valid until a close below the gap's bottom. (Daily and weekly only.)
+  OB    the last down-close candle(s), blended (levels.order_block_blend), within 3 bars
+        before the displacement candle of a bullish FVG, if that candle closed above the
+        block's high; valid until a close below its body mean threshold.
+  gap   ICT's opening gaps (htf.opening_gaps): NDOG (17:00 close -> 18:00 reopen, Mon-Thu,
+        > 1 handle) on the daily timeframe through the end of its week; NWOG (Friday close ->
+        Sunday 18:00) on the weekly until 5 newer exist. Gaps are never retired by a fill.
 Each array is usable from the close of the bar that completes it and for a limited life
 (LIFE). "Aligned at price P" = P within the array (plus a small tolerance).
 
@@ -29,7 +30,7 @@ NY = "America/New_York"
 TFS = ("1m", "5m", "15m", "30m", "1h", "4h", "D", "W", "M")
 MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240}
 LIFE = {"1m": "1D", "5m": "2D", "15m": "5D", "30m": "10D", "1h": "20D", "4h": "60D",
-        "D": "365D", "W": "1100D", "M": "3700D"}
+        "D": "90D", "W": "1100D", "M": "3700D"}   # D: ~60 trading days, as htf.py
 
 
 def _zones(o, h, l, c, end_times, gaps=None, max_bars=None):
@@ -40,12 +41,11 @@ def _zones(o, h, l, c, end_times, gaps=None, max_bars=None):
     for z in L.fvgs(h, l):
         s = 1 if z.kind == "bull" else -1
         rows.append((s, z.top, z.bottom, z.bottom if s > 0 else z.top, z.i))
-        ob = L.order_block(o, h, l, c, z.i - 4, z.i - 2, z.kind)
+        ob = L.order_block_blend(o, h, l, c, z.i - 4, z.i - 2, z.kind)
         if ob is not None:
-            k = ob.src
             disp = c[z.i - 1]
-            if (s > 0 and disp > h[k]) or (s < 0 and disp < l[k]):
-                rows.append((s, h[k], l[k], (o[k] + c[k]) / 2, z.i))
+            if (s > 0 and disp > ob.top) or (s < 0 and disp < ob.bottom):
+                rows.append((s, ob.top, ob.bottom, ob.mt, z.i))
     for s, top, bottom, k in gaps or ():
         rows.append((s, top, bottom, bottom if s > 0 else top, k))
     if not rows:

@@ -69,12 +69,11 @@ def _arrays(o, h, l, c, tf: str, known_of) -> list[Arr]:
         out.append(Arr(z.kind, "fvg", tf, z.top, z.bottom, z.mid, known_of(z.i)))
         # order block: last opposite-close candle before the displacement candle
         kind = "bull" if z.kind == "bull" else "bear"
-        ob = L.order_block(o, h, l, c, z.i - 4, z.i - 2, kind)
+        ob = L.order_block_blend(o, h, l, c, z.i - 4, z.i - 2, kind)
         if ob is not None:
-            k = ob.src
             disp = c[z.i - 1]
-            if (kind == "bull" and disp > h[k]) or (kind == "bear" and disp < l[k]):
-                out.append(Arr(kind, "ob", tf, h[k], l[k], (o[k] + c[k]) / 2, known_of(z.i)))
+            if (kind == "bull" and disp > ob.top) or (kind == "bear" and disp < ob.bottom):
+                out.append(Arr(kind, "ob", tf, ob.top, ob.bottom, ob.mt, known_of(z.i)))
     return out
 
 
@@ -228,6 +227,9 @@ def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0
         weekend = (t[k] - t[k - 1]) > pd.Timedelta(hours=30)
         if not weekend and abs(b - a) <= ndog_min_pts * es_pt:
             continue
+        pm = t[k - 1].hour * 60 + t[k - 1].minute
+        if not weekend and not (960 <= pm < 1020):
+            continue                                  # holiday early close: not a 17:00 close
         day = (t[k] + pd.Timedelta(hours=7)).normalize().tz_localize(None)
         rows.append(dict(kind="nwog" if weekend else "ndog", high=max(a, b), low=min(a, b),
                          ce=(a + b) / 2, up=b > a, known=t[k], week=day.to_period("W-FRI")))

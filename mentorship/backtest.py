@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -16,9 +17,21 @@ NY = "America/New_York"
 
 
 def _read(path: Path) -> pd.DataFrame:
+    """CSV bars in New York time. A parquet copy next to the CSV (rebuilt whenever the CSV
+    is newer) makes repeat loads ~50x faster."""
+    pq = path.with_suffix(".parquet")
+    if pq.exists() and pq.stat().st_mtime >= path.stat().st_mtime:
+        return pd.read_parquet(pq)
     df = pd.read_csv(path, index_col=0)
     df.index = pd.to_datetime(df.index, utc=True).tz_convert(NY)
-    return df[["open", "high", "low", "close", "volume"]].sort_index()
+    df = df[["open", "high", "low", "close", "volume"]].sort_index()
+    try:
+        tmp = pq.with_suffix(f".{os.getpid()}.tmp")
+        df.to_parquet(tmp)
+        os.replace(tmp, pq)                     # atomic: parallel workers never see half a file
+    except OSError:
+        pass
+    return df
 
 
 def load(symbol: str, minutes: int, rth_history: bool = True, source: str = "schwab") -> pd.DataFrame:

@@ -51,7 +51,12 @@ NEWS_0830 = {"cpi", "jobs", "ppi", "pce", "retail_sales", "gdp"}
 
 @dataclass
 class Params:
-    pivot_n: int = 2               # swing confirmation, bars each side
+    pivot_n: int = 1               # swing = 3-candle pivot (ICT, cc01_005 "not the Williams
+                                   # 5-candle fractal"); 2 = the old 5-candle swing (D17)
+    min_fvg_pts: float = 0.25      # an FVG must be at least one ES tick wide (in ES points)
+    fvg_pick: str = "last"         # entry FVG among the open ones after the MSS: "last" or "first"
+    extra_pools: bool = True       # London 02:00-05:00, prior PM 13:30-16:00 and lunch 12:00-13:30
+                                   # highs/lows as sweep pools and targets (067)
     es_pt: float = 0.10            # instrument price units per ES point (SPY ~ ES / 10)
     eq_tol_pts: float = 0.5        # relative equal highs/lows tolerance, ES points
     exit_before_pts: float = 0.5   # exit this far in front of a liquidity target
@@ -233,14 +238,14 @@ class Trade:
 class Side:
     """One direction of one day, in bullish terms (mirrored prices for shorts)."""
 
-    def __init__(self, sign, o, h, l, c, n):
+    def __init__(self, sign, o, h, l, c, n, min_gap: float = 0.0):
         self.sign = sign
         if sign > 0:
             self.o, self.h, self.l, self.c = o, h, l, c
         else:
             self.o, self.h, self.l, self.c = -o, -l, -h, -c
         self.ph, self.pl = L.pivots(self.h, self.l, n)
-        self.gaps = [z for z in L.fvgs(self.h, self.l) if z.kind == "bull"]
+        self.gaps = [z for z in L.fvgs(self.h, self.l) if z.kind == "bull" and z.top - z.bottom >= min_gap]
         self.sweep = None
         self.n = n
 
@@ -272,8 +277,14 @@ class DayCtx:
         self.start = len(prev)
         self.opens = L.opens(df.index, df.open.values)
         self.pd = {}
-        for k, hd in enumerate(reversed(hist[-3:]), 1):
-            self.pd[f"pdh{k}"], self.pd[f"pdl{k}"] = float(hd.high.max()), float(hd.low.min())
+        last3 = hist[-3:]
+        for k, hd in enumerate(reversed(last3), 1):
+            later = last3[len(last3) - k + 1:]          # days after this one (already traded)
+            hi, lo = float(hd.high.max()), float(hd.low.min())
+            if not later or max(float(x.high.max()) for x in later) < hi:
+                self.pd[f"pdh{k}"] = hi                  # only highs no later day has taken
+            if not later or min(float(x.low.min()) for x in later) > lo:
+                self.pd[f"pdl{k}"] = lo
         po, ph, pl, pc = (float(prev.open.iloc[0]), float(prev.high.max()), float(prev.low.min()),
                           float(prev.close.iloc[-1]))
         self.wick = L.wick_midpoints(po, ph, pl, pc)
@@ -283,6 +294,19 @@ class DayCtx:
             self.pd["pmh"], self.pd["pml"] = float(pre.high.max()), float(pre.low.min())
         am = df[(tt >= 570) & (tt < 810)]
         self.am_hl = (float(am.high.max()), float(am.low.min())) if len(am) else None
+        # session pools (067): London 02:00-05:00 and prior PM 13:30-16:00 for the AM; lunch
+        # 12:00-13:30 for the PM. Each with the bar index from which it is complete.
+        self.sess = {}
+        lon = df[(tt >= 120) & (tt < 300)]
+        if len(lon):
+            self.sess["london"] = (float(lon.high.max()), float(lon.low.min()), 300)
+        pt = prev.index.hour * 60 + prev.index.minute
+        ppm = prev[(pt >= 810) & (pt < 960)]
+        if len(ppm):
+            self.sess["prev_pm"] = (float(ppm.high.max()), float(ppm.low.min()), 0)
+        lun = df[(tt >= 720) & (tt < 810)]
+        if len(lun):
+            self.sess["lunch"] = (float(lun.high.max()), float(lun.low.min()), 810)
         self.nwog = []
         for a, b in zip(hist[-21:], hist[-20:] + [df]):
             if (b.index[0].date() - a.index[-1].date()).days >= 3 or b.index[0].weekday() < a.index[-1].weekday():
@@ -338,25 +362,32 @@ def _htf_tag(ctx: DayCtx, sd: Side, i: int, price: float, tol: float) -> bool | 
 
 
 def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Params,
-             leg: tuple | None = None) -> list[tuple[float, str]]:
+             leg: tuple | None = None, ext_i: int | None = None) -> list[tuple[float, str]]:
     """Buy-side liquidity (in side terms) above `above`, known at bar i, each with its kind:
-    "pool" (old highs, equal highs, session highs) or "array" (gaps, wick CE, projections)."""
+    "pool" (old highs, equal highs, session highs) or "array" (gaps, wick CE, projections).
+    A pool already traded through today before the sweep (bars start..ext_i) is spent (L14);
+    gap levels are never retired (039)."""
     pdk = ("pdh1", "pdh2", "pdh3", "pmh") if sd.sign > 0 else ("pdl1", "pdl2", "pdl3", "pml")
-    lv = [(sd.x(ctx.pd[k]), "pool") for k in pdk if k in ctx.pd]
-    lv += [(v, "pool") for v in eq]
+    pools = [sd.x(ctx.pd[k]) for k in pdk if k in ctx.pd] + list(eq)
+    if p.extra_pools:
+        for name, (hi, lo, ready) in ctx.sess.items():
+            if name != "lunch" or ctx.t[i] >= ready:
+                pools.append(sd.x(hi if sd.sign > 0 else lo))
+    if ctx.or_hl is not None and ctx.t[i] >= ctx.or_end:
+        pools.append(sd.x(ctx.or_hl[0] if sd.sign > 0 else ctx.or_hl[1]))
+    if ctx.t[i] >= 810 and ctx.am_hl:
+        pools.append(sd.x(ctx.am_hl[0] if sd.sign > 0 else ctx.am_hl[1]))
+    seen = sd.h[ctx.start:ext_i].max() if ext_i is not None and ext_i > ctx.start else -np.inf
+    lv = [(v, "pool") for v in pools if v > seen]
     if getattr(ctx, "gaps", None) is not None:
         for _, hi, lo, ce in ctx.gaps:
             lv += [(sd.x(hi), "array"), (sd.x(ce), "array"), (sd.x(lo), "array")]
     else:
         for a, b in ctx.nwog:
             lv += [(sd.x(a), "array"), (sd.x(b), "array")]
-    if ctx.or_hl is not None and ctx.t[i] >= ctx.or_end:
-        lv.append((sd.x(ctx.or_hl[0] if sd.sign > 0 else ctx.or_hl[1]), "pool"))
-    if ctx.t[i] >= 810 and ctx.am_hl:
-        lv.append((sd.x(ctx.am_hl[0] if sd.sign > 0 else ctx.am_hl[1]), "pool"))
     if p.org_days:
         for a, b in ctx.org[-p.org_days:]:
-            lv += [(sd.x(a + q * (b - a)), "array") for q in (0.0, 0.5, 1.0)]   # edges, CE
+            lv += [(sd.x(a + q * (b - a)), "array") for q in (0.0, 0.25, 0.5, 0.75, 1.0)]
     if p.wick_levels:
         lv.append((sd.x(ctx.wick["upper"] if sd.sign > 0 else ctx.wick["lower"]), "array"))
     if p.sd_targets and leg is not None:
@@ -417,11 +448,12 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
     ctx.conf = conf
     ctx.gaps = gaps if (p.gap_mode == "ict" and gaps is not None) else None
     pctx = DayCtx(partner[0], day, partner[1], tf) if partner is not None else None
-    sides = [Side(1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n), Side(-1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n)]
+    mg = p.min_fvg_pts * p.es_pt
+    sides = [Side(1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, mg), Side(-1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, mg)]
     psides = ppos = None
     if pctx is not None:
-        psides = {1: Side(1, pctx.o, pctx.h, pctx.l, pctx.c, p.pivot_n),
-                  -1: Side(-1, pctx.o, pctx.h, pctx.l, pctx.c, p.pivot_n)}
+        psides = {1: Side(1, pctx.o, pctx.h, pctx.l, pctx.c, p.pivot_n, mg),
+                  -1: Side(-1, pctx.o, pctx.h, pctx.l, pctx.c, p.pivot_n, mg)}
         ppos = pd.Series(np.arange(len(pctx.idx)), index=pctx.idx)
     tags = events(day)
     am_start = 600 if tags & NEWS_1000 else p.am[0]
@@ -568,17 +600,26 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
     return trades
 
 
-def _sell_side(ctx: DayCtx, sd: Side, session: str, i: int | None = None) -> dict[str, float]:
+def _sell_side(ctx: DayCtx, sd: Side, session: str, i: int | None = None,
+               extra: bool = False) -> dict[str, float]:
     keys = ("pdl1", "pdl2", "pdl3") if sd.sign > 0 else ("pdh1", "pdh2", "pdh3")
     out = {k: sd.x(ctx.pd[k]) for k in keys if k in ctx.pd}
     if session == "AM":
         k = "pml" if sd.sign > 0 else "pmh"
         if k in ctx.pd:
             out["premarket"] = sd.x(ctx.pd[k])
+        if extra:
+            for name in ("london", "prev_pm"):
+                if name in ctx.sess:
+                    hi, lo, _ = ctx.sess[name]
+                    out[name] = sd.x(lo if sd.sign > 0 else hi)
         if ctx.or_hl is not None and i is not None and ctx.t[i] >= ctx.or_end:
             out["opening_range"] = sd.x(ctx.or_hl[1] if sd.sign > 0 else ctx.or_hl[0])
     elif ctx.am_hl:
         out["am_session"] = sd.x(ctx.am_hl[1] if sd.sign > 0 else ctx.am_hl[0])
+        if extra and "lunch" in ctx.sess and i is not None and ctx.t[i] >= ctx.sess["lunch"][2]:
+            hi, lo, _ = ctx.sess["lunch"]
+            out["lunch"] = sd.x(lo if sd.sign > 0 else hi)
     return out
 
 
@@ -594,9 +635,10 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
     """Advance this side's sweep -> MSS -> FVG machine at bar i; return an order or None."""
     l, h, c = sd.l, sd.h, sd.c
     tol = p.eq_tol_pts * p.es_pt
-    lv = _sell_side(ctx, sd, session, i)
+    lv = _sell_side(ctx, sd, session, i, p.extra_pools)
     created = ctx.start if session == "AM" else ctx.start + int(np.searchsorted(ctx.t[ctx.start:], 810))
     or_made = ctx.start + int(np.searchsorted(ctx.t[ctx.start:], ctx.or_end))
+    lon_made = ctx.start + int(np.searchsorted(ctx.t[ctx.start:], 300))
     for k, eq in enumerate(_eq_levels(sd, i - 1, tol, lows=True)):
         lv[f"rel_eq_lows{k}"] = eq
     sw = sd.sweep
@@ -604,7 +646,8 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         sw = sd.sweep = None
 
     def intact(k, v):   # not traded through between the level's creation and bar i-1
-        a = created if k == "am_session" else (or_made if k == "opening_range" else ctx.start)
+        a = {"am_session": created, "lunch": created, "opening_range": or_made,
+             "london": lon_made}.get(k, ctx.start)
         return k.startswith("rel_eq") or i <= a or l[a:i].min() >= v
     hit = [(k, v) for k, v in lv.items() if l[i] < v and intact(k, v)]
     if sw is None and hit:
@@ -640,18 +683,30 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         return None
     sd.sweep = None   # this sweep is consumed whether or not the order passes the filters
     _f("3_fvg")
-    bz = L.order_block(sd.o, h, l, c, ref_i - p.pivot_n, ref_i, "bear")   # breaker candle
-    if bz is not None and p.breaker_zone == "body":   # body of the highest-body up-close candle
-        ups = [k for k in range(max(0, ref_i - p.pivot_n), ref_i + 1) if c[k] > sd.o[k]]
-        if ups:
-            k = max(ups, key=lambda k: c[k])
-            bz = L.Zone("bear", float(c[k]), float(sd.o[k]), bz.i, k)
-    uni = [g for g in gaps if bz is not None and g.overlaps(bz)]
-    g = (uni or gaps)[-1]
+    # breaker: the highest up-close candle (by body) between the swing low before the reference
+    # high (L1) and the sweep extreme (L2) (029 ~24:13; 048)
+    l1 = [q for q in sd.pl if q.i < ref_i and q.known <= i]
+    a0 = l1[-1].i if l1 else max(0, ref_i - p.pivot_n)
+    ups = [k for k in range(a0, sw["ext_i"] + 1) if c[k] > sd.o[k]]
+    bz = None
+    if ups:
+        k = max(ups, key=lambda k: c[k])
+        bz = (L.Zone("bear", float(c[k]), float(sd.o[k]), i, k) if p.breaker_zone == "body"
+              else L.Zone("bear", float(h[k]), float(l[k]), i, k))
+    # the entry FVG must still be open: no close below its bottom since it formed (021; 050)
+    gaps = [g for g in gaps if c[g.i + 1:i + 1].min(initial=np.inf) >= g.bottom]
+    if not gaps:
+        _f("x_fvg_closed_through")
+        return None
+    fresh = [g for g in gaps if l[g.i + 1:i + 1].min(initial=np.inf) > g.top] or gaps
+    uni = [g for g in fresh if bz is not None and g.overlaps(bz)]
+    pick = uni or fresh
+    g = pick[-1] if p.fvg_pick == "last" else pick[0]
     entry = g.top if p.entry == "edge" else g.mid
-    ob = L.order_block(sd.o, h, l, c, sw["ext_i"] - 3, g.src - 1, "bull")
+    # order block: the blended last down-close candle(s) before the structure break (A12)
+    ob = L.order_block_blend(sd.o, h, l, c, sw["ext_i"] - 3, sw["broke"] - 1, "bull")
     stop = g.bottom - p.stop_buffer
-    mt = None if ob is None else ((sd.o[ob.src] + c[ob.src]) / 2 if p.mt_mode == "body" else ob.mid)
+    mt = None if ob is None else (ob.mt if p.mt_mode == "body" else ob.mid)
     if p.stop_mode == "ob_mt" and mt is not None and mt < entry - p.min_risk_pts * p.es_pt:
         stop = min(stop, mt - p.stop_buffer)
     risk = entry - stop
@@ -682,7 +737,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
     elif p.conf_min_n or p.conf_min_top:
         return None
     eq_hi = _eq_levels(sd, i, tol, lows=False)
-    lv = _targets(ctx, sd, i, max(leg_hi, entry), eq_hi, p, (sw["ext"], leg_hi))
+    lv = _targets(ctx, sd, i, max(leg_hi, entry), eq_hi, p, (sw["ext"], leg_hi), sw["ext_i"])
     kinds = [kind for v, kind in lv]
     lv = [v + p.pool_beyond_pts * p.es_pt if (p.exit_mode == "split" and kind == "pool")
           else v - p.exit_before_pts * p.es_pt for v, kind in lv]
