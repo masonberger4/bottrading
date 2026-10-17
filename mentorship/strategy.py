@@ -92,6 +92,8 @@ class Params:
     pool_beyond_pts: float = 0.25  # ES pts beyond a liquidity pool (one tick)
     min_draw_pts: float = 10.0     # L15: T2 (else T1) at least this many ES pts from entry
     leg_pd: float = 0.5            # D12: entry at/below this fraction of the displacement leg; 0 off
+    leg_pd_at: str = "fill"        # check it when the order is armed ("arm") or, as ICT waits for
+                                   # the retrace, against the leg high reached before the fill ("fill")
     am_exit: int = 720             # D16: AM leftovers out at 12:00 (minutes); 0 = hold to flatten
     pm_done_by: int = 0            # D16 test: PM out at this time once T1 filled (900 = 15:00)
     breaker_zone: str = "body"     # D6: unicorn test against the breaker "body" or "range"
@@ -478,6 +480,9 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 pending = None                       # ran to target without us
             elif p.sb_only and t < sb_a:
                 pass                                 # armed before the window: wait for it
+            elif (p.leg_pd and p.leg_pd_at == "fill" and pending["entry"] >
+                  pending["ext"] + p.leg_pd * (sd.h[pending["ext_i"]:i].max() - pending["ext"])):
+                pass                                 # not yet in the leg's discount: wait
             elif sd.l[i] < pending["entry"] and pos is None:
                 o = pending
                 fill = min(o["entry"], sd.o[i])      # a gap through the limit fills at the open
@@ -624,7 +629,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
             _f("x_wrong_side_of_open")
             return None
     leg_hi = h[sw["ext_i"]:i + 1].max()
-    if p.leg_pd and entry > sw["ext"] + p.leg_pd * (leg_hi - sw["ext"]):
+    if p.leg_pd and p.leg_pd_at == "arm" and entry > sw["ext"] + p.leg_pd * (leg_hi - sw["ext"]):
         _f("x_leg_premium")
         return None                                   # entry FVG not in the leg's discount
     htf = _htf_tag(ctx, sd, i, sw["ext"], tol)
@@ -661,6 +666,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
                                               else "pm_sb" if 840 <= t < 900 else "pm")
     return dict(side=sd, session=session, setup=setup, swept=sw["name"], unicorn=bool(uni),
                 smt=sw["smt"], i=i, entry=entry, stop=stop, t1=lv[0], fvg_bottom=g.bottom,
+                ext=sw["ext"], ext_i=sw["ext_i"],
                 t2=lv[1] if len(lv) > 1 else None, shares=shares, htf=htf,
                 conf_n=None if cf is None else len(cf), conf_top=(cf[-1] if cf else ""),
                 conf_tfs="|".join(cf or []),

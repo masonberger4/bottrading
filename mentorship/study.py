@@ -232,6 +232,12 @@ DECISIONS = {
     "X9_time_stop_10": dict(time_stop_min=10),
     "combo_sb_mt_range": dict(sb_only=True, mt_mode="range"),
     "combo_sb_mt_range_nfp_thu": dict(sb_only=True, mt_mode="range", nfp_thu=True),
+    "D12_leg_at_arm": dict(leg_pd_at="arm"),
+    "conf_2tf": dict(conf_min_n=2),
+    "conf_3tf": dict(conf_min_n=3),
+    "conf_4tf": dict(conf_min_n=4),
+    "conf_4h_up": dict(conf_min_top="4h"),
+    "conf_daily_up": dict(conf_min_top="D"),
     "bias_react": dict(htf_bias="react"),
     "bias_draw": dict(htf_bias="draw"),
     "bias_pd": dict(htf_bias="pd"),
@@ -264,13 +270,13 @@ def _dec_job(job):
     return t
 
 
-def main_decisions(out="runs/mentorship", workers=6, tfs=(5, 1), variants=None):
+def main_decisions(out="runs/mentorship", workers=6, tfs=(5, 1), variants=None, tag="dec"):
     variants = variants or list(DECISIONS)
     for tf in tfs:
         _bias_cache(tf)
     jobs = [(tf, y, v) for tf in tfs for v in variants for y in range(2019, 2027)]
     jobs.sort(key=lambda j: (j[0] == 1, j[2] not in ("current", "defaults")))
-    cache = Path(out) / "dec_jobs"
+    cache = Path(out) / f"{tag}_jobs"
     cache.mkdir(parents=True, exist_ok=True)
     path = lambda j: cache / "{}m_{}_{}.csv".format(*j)
     todo = [j for j in jobs if not path(j).exists()]
@@ -282,5 +288,5 @@ def main_decisions(out="runs/mentorship", workers=6, tfs=(5, 1), variants=None):
             print(f"{k}/{len(todo)} {j}", flush=True)
     parts = [pd.read_csv(path(j)) for j in jobs if path(j).exists() and path(j).stat().st_size > 2]
     t = pd.concat([x for x in parts if len(x)], ignore_index=True)
-    t.to_csv(f"{out}/decision_trades.csv", index=False)
+    t.to_csv(f"{out}/{tag}_trades.csv", index=False)
     return t
