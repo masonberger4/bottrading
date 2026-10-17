@@ -2,9 +2,10 @@
 18:00 reopen that ICT's NDOG / NWOG need. Market data only; the paid download needs the
 account owner's go-ahead because it spends Databento credit (cost is quoted first).
 
-Continuous front contract rolled by volume (ES.v.0 / NQ.v.0 / YM.v.0). Prices are the raw
-contract's, not back-adjusted, as on ICT's charts; `instrument_id` changes on roll days so
-those can be flagged.
+Continuous front contract rolled by volume (ES.v.0 / NQ.v.0 / YM.v.0). <S>_1min_dbraw.csv keeps
+the raw contract prices; <S>_1min_db.csv (used by the backtests) is difference back-adjusted at
+each roll so old levels line up with the current contract (the roll jump is measured from the
+old contract's last close to the new one's first open, so it also absorbs that bar's move).
 
 The API key is read from the DATABENTO_API_KEY user environment variable (never printed).
 
@@ -61,6 +62,24 @@ def buy(symbols=("ES", "NQ"), end: str | None = None) -> None:
         build(s)
 
 
+def back_adjust(df: pd.DataFrame) -> pd.DataFrame:
+    """Difference-adjust the rolled series so a contract roll leaves no artificial gap: at
+    each change of instrument_id, everything before it is shifted by (first open of the new
+    contract - last close of the old one). The newest contract keeps its real prices, so
+    levels on recent data match the chart. `roll` marks the first bar of each new contract."""
+    df = df.copy()
+    roll = df.instrument_id.ne(df.instrument_id.shift()) & df.instrument_id.shift().notna()
+    adj = pd.Series(0.0, index=df.index)
+    for t in df.index[roll.values]:
+        k = df.index.get_loc(t)
+        jump = df.open.iloc[k] - df.close.iloc[k - 1]
+        adj.iloc[:k] += jump
+    for c in ("open", "high", "low", "close"):
+        df[c] = df[c] + adj
+    df["roll"] = roll
+    return df
+
+
 def build(s: str) -> pd.DataFrame:
     import databento as db
     raw = DATA / "databento" / f"{s}_ohlcv1m.dbn.zst"
@@ -68,11 +87,13 @@ def build(s: str) -> pd.DataFrame:
     df.index = pd.DatetimeIndex(df.index).tz_convert(NY)
     df = df[["open", "high", "low", "close", "volume", "instrument_id"]].sort_index()
     df = df[~df.index.duplicated(keep="last")]
-    df.to_csv(DATA / f"{s}_1min_db.csv")
+    df.to_csv(DATA / f"{s}_1min_dbraw.csv")
+    df = back_adjust(df)
     g = df.groupby(df.index.floor("5min"))
     five = pd.DataFrame({"open": g.open.first(), "high": g.high.max(), "low": g.low.min(),
                          "close": g.close.last(), "volume": g.volume.sum(),
                          "instrument_id": g.instrument_id.last()})
+    df.to_csv(DATA / f"{s}_1min_db.csv")
     five.to_csv(DATA / f"{s}_5min_db.csv")
     print(s, len(df), "1-min bars", df.index[0], "->", df.index[-1],
           "| contracts:", df.instrument_id.nunique())

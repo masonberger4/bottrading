@@ -248,11 +248,16 @@ DECISIONS = {
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
 
 
+import os
+SRC = os.environ.get("MENTORSHIP_SRC", "histdata")      # "histdata" (SPX/NDX CFDs) or "databento"
+SYMS = {"histdata": ("SPX", "NDX"), "merged": ("SPX", "NDX"), "databento": ("ES", "NQ")}[SRC]
+
+
 def _bias_cache(tf: int) -> pd.DataFrame:
     from . import htf
-    f = Path(f"runs/mentorship/htf_table_{tf}m.csv")
+    f = Path(f"runs/mentorship/htf_table_{SRC}_{tf}m.csv")
     if not f.exists():
-        htf.table(B.load("SPX", tf, source="histdata")).to_csv(f)
+        htf.table(B.load(SYMS[0], tf, source=SRC)).to_csv(f)
     t = pd.read_csv(f, index_col=0)
     t.index = pd.to_datetime(t.index).date
     return t
@@ -260,11 +265,11 @@ def _bias_cache(tf: int) -> pd.DataFrame:
 
 def _dec_job(job):
     tf, year, name = job
-    df, pa = B.load("SPX", tf, source="histdata"), B.load("NDX", tf, source="histdata")
+    df, pa = B.load(SYMS[0], tf, source=SRC), B.load(SYMS[1], tf, source=SRC)
     a, b = pd.Timestamp(f"{year}-01-01", tz=B.NY), pd.Timestamp(f"{year + 1}-01-01", tz=B.NY)
     lo = a - pd.Timedelta(days=45)
     p = replace(Params(), **{**DEC_BASE, **DECISIONS[name]})
-    t = B.run(df[(df.index >= lo) & (df.index < b)], tf, "SPX", p, pa[(pa.index >= lo) & (pa.index < b)],
+    t = B.run(df[(df.index >= lo) & (df.index < b)], tf, SYMS[0], p, pa[(pa.index >= lo) & (pa.index < b)],
               bias_table=_bias_cache(tf))
     if len(t):
         t = t[pd.to_datetime(t.entry_time.astype(str).str[:10]) >= f"{year}-01-01"].copy()
