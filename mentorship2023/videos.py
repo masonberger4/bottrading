@@ -24,7 +24,9 @@ CAP, FRAMES, TMP = ROOT / "captions", ROOT / "frames", ROOT / "tmp_video"
 
 
 def ytdlp(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, "-m", "yt_dlp", "--no-warnings", *args],
+    # node solves YouTube's player challenges; without a JS runtime some downloads get 403
+    js = ["--js-runtimes", "node"] if shutil.which("node") else []
+    return subprocess.run([sys.executable, "-m", "yt_dlp", "--no-warnings", "--retries", "5", *js, *args],
                           capture_output=True, text=True, encoding="utf8")
 
 
