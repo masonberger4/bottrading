@@ -127,3 +127,23 @@ def fix_sessions(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out.index = idx
     return out[~out.index.duplicated(keep="last")].sort_index()
+
+
+def merge(h: pd.DataFrame, d: pd.DataFrame, minutes: int) -> pd.DataFrame:
+    """HistData sessions, with every session whose 09:30-16:00 part is incomplete replaced by
+    the Dukascopy bars of that session when those are complete. Both come from the same feed
+    (identical where both exist); Dukascopy fills HistData's holes (e.g. Feb-Jul 2023)."""
+    need = 0.9 * 390 / minutes
+
+    def rth_count(x):
+        t = x.index.hour * 60 + x.index.minute
+        r = x[(t >= 570) & (t < 960)]
+        return r.groupby((r.index + pd.Timedelta(hours=7)).date).size()
+
+    lab_h = (h.index + pd.Timedelta(hours=7)).date
+    lab_d = (d.index + pd.Timedelta(hours=7)).date
+    nh, nd = rth_count(h), rth_count(d)
+    swap = {k for k, v in nd.items() if v >= need and nh.get(k, 0) < need}
+    out = pd.concat([h[~pd.Index(lab_h).isin(swap)], d[pd.Index(lab_d).isin(swap)]]).sort_index()
+    out.attrs["filled_sessions"] = sorted(swap)
+    return out[~out.index.duplicated(keep="first")]

@@ -91,15 +91,14 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     wl = [pos[t] + 1 for t in w["last"]]
     arrs += _arrays(*(w[k].values.astype(float) for k in ("open", "high", "low", "close")), "W",
                     lambda i: wl[i])
-    # opening gaps: prior session close -> this session's first print
-    for k in range(1, D):
-        a, b = c[k - 1], o[k]
-        if abs(b - a) < min_gap_pts * es_pt:
+    # opening gaps (ICT 039/051/052): NWOG Fri close -> Sun 18:00, NDOG 17:00 -> 18:00 Mon-Thu
+    pos_of = {t: k for k, t in enumerate(d.index)}
+    for r in opening_gaps(df, es_pt, min_gap_pts).itertuples():
+        k = pos_of.get((r.known + pd.Timedelta(hours=7)).normalize().tz_localize(None))
+        if k is None:
             continue
-        weekend = (d.index[k] - d.index[k - 1]).days >= 3 or d.index[k].weekday() < d.index[k - 1].weekday()
-        typ = "nwog" if weekend else "ndog"
-        kind = "bull" if b > a else "bear"
-        arrs.append(Arr(kind, typ, "W" if weekend else "D", max(a, b), min(a, b), (a + b) / 2, k))
+        arrs.append(Arr("bull" if r.up else "bear", r.kind, "W" if r.kind == "nwog" else "D",
+                        r.high, r.low, r.ce, k))
     arrs.sort(key=lambda a: a.known)
     piv_h, piv_l = L.pivots(h, l, 1)
 
@@ -119,10 +118,8 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         px = float(on.at[day, "last"])
         oh, ol = float(on.at[day, "high"]), float(on.at[day, "low"])
         lo_k = max(0, k - lookback)
-        live = [a for a in arrs if lo_k <= a.known - 1 and a.known <= k]
-        if any(a.typ == "nwog" for a in live):         # keep the last 5 weekly gaps only
-            nw = [a for a in live if a.typ == "nwog"][-5:]
-            live = [a for a in live if a.typ != "nwog"] + nw
+        live = [a for a in arrs if lo_k <= a.known - 1 and a.known <= k and a.typ != "nwog"]
+        live += [a for a in arrs if a.typ == "nwog" and a.known <= k][-5:]   # last 5 NWOGs
         # NDOGs live through the week they form in (Mon-Fri)
         wk = day.to_period("W-FRI")
         live = [a for a in live if a.typ != "ndog" or d.index[a.known].to_period("W-FRI") == wk]
@@ -132,11 +129,12 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
             s = a.known
             cl, hi_after, lo_after = c[s:k], h[s:k], l[s:k]
             lo_after = np.append(lo_after, ol); hi_after = np.append(hi_after, oh)
-            if a.kind == "bull":
+            gap = a.typ in ("ndog", "nwog")              # gaps are never retired by a fill (039)
+            if a.kind == "bull" and not gap:
                 lvl = a.ce if a.typ == "ob" else a.bottom
                 if len(cl) and cl.min() < lvl:
                     continue                                   # closed through: invalid
-            else:
+            elif not gap:
                 lvl = a.ce if a.typ == "ob" else a.top
                 if len(cl) and cl.max() > lvl:
                     continue
@@ -208,3 +206,45 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
 def has_overnight(df: pd.DataFrame) -> bool:
     t = df.index.hour
     return bool(((t >= 18) | (t < 4)).mean() > 0.1)
+
+
+def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0) -> pd.DataFrame:
+    """ICT's opening gaps from bars that include the evening reopen (videos 039, 051, 052):
+      NWOG  Friday's last price before the weekend close -> Sunday's first price at the 18:00
+            reopen. Levels: high, low, CE. No minimum size; never retired by a fill.
+      NDOG  a weekday's last price before the 17:00 close -> the 18:00 reopen (Mon-Thu
+            evenings). Only gaps > ~1 ES handle count; they live through the end of that week.
+    One row per gap: kind, high, low, ce, known (the reopen time), week (W-FRI period of the
+    trading day the reopen starts)."""
+    t = df.index
+    gap = t.to_series().diff() > pd.Timedelta(minutes=45)
+    m = t.hour * 60 + t.minute
+    reopen = gap.values & (m >= 17 * 60) & (m < 19 * 60)     # evening reopen after the break
+    rows = []
+    for k in np.flatnonzero(reopen):
+        if k == 0:
+            continue
+        a, b = float(df.close.iloc[k - 1]), float(df.open.iloc[k])
+        weekend = (t[k] - t[k - 1]) > pd.Timedelta(hours=30)
+        if not weekend and abs(b - a) <= ndog_min_pts * es_pt:
+            continue
+        day = (t[k] + pd.Timedelta(hours=7)).normalize().tz_localize(None)
+        rows.append(dict(kind="nwog" if weekend else "ndog", high=max(a, b), low=min(a, b),
+                         ce=(a + b) / 2, up=b > a, known=t[k], week=day.to_period("W-FRI")))
+    return pd.DataFrame(rows)
+
+
+def gaps_for_day(g: pd.DataFrame, day, nwog_keep: int = 5) -> list[tuple[str, float, float, float]]:
+    """Gaps in force at 09:30 of `day`: the last `nwog_keep` NWOGs and this week's NDOGs.
+    Returns (kind, high, low, ce)."""
+    if g is None or not len(g):
+        return []
+    cut = pd.Timestamp(day, tz=NY_TZ) + pd.Timedelta(hours=9, minutes=30)
+    k = g[g.known < cut]
+    wk = pd.Timestamp(day).to_period("W-FRI")
+    nw = k[k.kind == "nwog"].tail(nwog_keep)
+    nd = k[(k.kind == "ndog") & (k.week == wk)]
+    return [(r.kind, r.high, r.low, r.ce) for r in pd.concat([nw, nd]).itertuples()]
+
+
+NY_TZ = "America/New_York"

@@ -24,6 +24,8 @@ import pandas as pd
 from . import htf
 from . import levels as L
 
+NY = "America/New_York"
+
 TFS = ("1m", "5m", "15m", "30m", "1h", "4h", "D", "W", "M")
 MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240}
 LIFE = {"1m": "1D", "5m": "2D", "15m": "5D", "30m": "10D", "1h": "20D", "4h": "60D",
@@ -89,35 +91,42 @@ class Confluence:
         lab = (df.index + pd.Timedelta(hours=7)).normalize().tz_localize(None)
         last = pd.Series(df.index, index=df.index).groupby(lab).max()
         dend = pd.DatetimeIndex(last.reindex(d.index) + pd.Timedelta(minutes=base_minutes)).as_unit("ns").asi8.astype(float)
-        gaps = []
-        for k in range(1, len(d)):
-            a, b = d.close.iloc[k - 1], d.open.iloc[k]
-            if abs(b - a) >= 1.0 * es_pt:
-                gaps.append((1 if b > a else -1, max(a, b), min(a, b), k - 1))  # known at prior close... see below
-        # a gap is known at the reopen, i.e. before session k closes: use session k-1's end
         for tf, per in (("D", None), ("W", "W-FRI"), ("M", "M")):
             if per is None:
-                b, ends, gp = d, dend, gaps
+                b, ends = d, dend
             else:
                 grp = d.index.to_period(per)
                 g = d.groupby(grp)
                 b = pd.DataFrame({"open": g.open.first(), "high": g.high.max(), "low": g.low.min(),
                                   "close": g.close.last()})
                 ends = pd.Series(dend, index=d.index).groupby(grp).max().values
-                gp = None
-                if tf == "W":                         # NWOGs: the gap opening each week
-                    first = pd.Series(np.arange(len(d)), index=d.index).groupby(grp).min().values
-                    gp = []
-                    wk_of = {f: w for w, f in enumerate(first)}
-                    for s, top, bottom, k in gaps:
-                        w = wk_of.get(k + 1)
-                        if w is not None and w > 0:
-                            gp.append((s, top, bottom, w - 1))
             z = _zones(*(b[k].values.astype(float) for k in ("open", "high", "low", "close")),
-                       np.asarray(ends, float), gp)
+                       np.asarray(ends, float))
             if z:
-                z["life"] = pd.Timedelta(LIFE[tf]).value
+                z["life"] = np.full(len(z["kind"]), float(pd.Timedelta(LIFE[tf]).value))
                 self.z[tf] = z
+        # opening gaps as ICT defines them (htf.opening_gaps): NDOGs count on the daily
+        # timeframe through the end of their week; NWOGs on the weekly until 5 newer exist.
+        # Neither is retired by a fill.
+        og = htf.opening_gaps(df, es_pt)
+        if len(og):
+            known = pd.DatetimeIndex(og.known).as_unit("ns").asi8.astype(float)
+            nd = (og.kind == "ndog").values
+            week_end = pd.DatetimeIndex([(w.end_time + pd.Timedelta(hours=17)).tz_localize(NY)
+                                         for w in og.week]).as_unit("ns").asi8.astype(float)
+            nw_idx = np.flatnonzero(~nd)
+            nw_dead = np.full(len(og), np.inf)
+            for j, q in enumerate(nw_idx):
+                if j + 5 < len(nw_idx):
+                    nw_dead[q] = known[nw_idx[j + 5]]
+            for tf, m, dead in (("D", nd, week_end), ("W", ~nd, nw_dead)):
+                if not m.any():
+                    continue
+                add = dict(kind=np.where(og.up.values[m], 1.0, -1.0), top=og.high.values[m],
+                           bottom=og.low.values[m], known=known[m], dead=np.asarray(dead)[m],
+                           life=np.full(m.sum(), np.inf))
+                z = self.z.get(tf)
+                self.z[tf] = add if z is None else {k: np.concatenate([z[k], add[k]]) for k in add}
 
     def at(self, t: pd.Timestamp, price: float, side: int, known_by: pd.Timestamp | None = None) -> list[str]:
         """Timeframes with a valid array of the trade's side containing `price` at time t,

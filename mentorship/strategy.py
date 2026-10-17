@@ -111,6 +111,9 @@ class Params:
     reentry_half: bool = False     # D18 test: one same-direction re-entry at half risk after a loss
     conf_min_n: int = 0            # min number of timeframes (1m..monthly) with a PD array at the
     conf_min_top: str = ""         # sweep extreme / highest such timeframe (confluence.py); 0/"" off
+    gap_mode: str = "ict"          # opening-gap targets: "ict" = NWOG (Fri close -> Sun 18:00, last
+                                   # 5) + this week's NDOGs, high/CE/low; "monday" = the old
+                                   # Fri 16:00 -> Mon 09:30 edges (also the fallback without overnight bars)
     htf_bias: str = "off"          # daily HTF bias filter: off / react / draw / pd / combo (htf.py)
     bias_neutral: str = "skip"     # with a bias filter, a 0 day: "skip" it or trade "both" sides
     lot: int = 1                   # units per contract: 1 for shares; 5 for MES, 2 for MNQ
@@ -322,8 +325,12 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
     pdk = ("pdh1", "pdh2", "pdh3", "pmh") if sd.sign > 0 else ("pdl1", "pdl2", "pdl3", "pml")
     lv = [(sd.x(ctx.pd[k]), "pool") for k in pdk if k in ctx.pd]
     lv += [(v, "pool") for v in eq]
-    for a, b in ctx.nwog:
-        lv += [(sd.x(a), "array"), (sd.x(b), "array")]
+    if getattr(ctx, "gaps", None) is not None:
+        for _, hi, lo, ce in ctx.gaps:
+            lv += [(sd.x(hi), "array"), (sd.x(ce), "array"), (sd.x(lo), "array")]
+    else:
+        for a, b in ctx.nwog:
+            lv += [(sd.x(a), "array"), (sd.x(b), "array")]
     if ctx.t[i] >= 810 and ctx.am_hl:
         lv.append((sd.x(ctx.am_hl[0] if sd.sign > 0 else ctx.am_hl[1]), "pool"))
     if p.wick_levels:
@@ -378,12 +385,13 @@ def _in_sb(t: int, p: Params) -> bool:
 def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, tf: int,
             partner: tuple[pd.DataFrame, list[pd.DataFrame]] | None = None,
             log: list | None = None, live: bool = False, bias: dict | None = None,
-            conf=None) -> list[Trade]:
+            conf=None, gaps: list | None = None) -> list[Trade]:
     """Trades for one day. With `live`, a position still open at the last bar is returned
     with no exit (exit_reason "open") instead of being closed at the last price."""
     day = df.index[0].date()
     ctx = DayCtx(df, day, hist, tf, p.htf)
     ctx.conf = conf
+    ctx.gaps = gaps if (p.gap_mode == "ict" and gaps is not None) else None
     pctx = DayCtx(partner[0], day, partner[1], tf) if partner is not None else None
     sides = [Side(1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n), Side(-1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n)]
     psides = ppos = None

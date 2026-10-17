@@ -25,6 +25,13 @@ def load(symbol: str, minutes: int, rth_history: bool = True, source: str = "sch
     """Extended-hours bars, extended back with regular-session-only bars (`*_rth.csv`)
     for the days the extended pull doesn't reach. Those days have no pre-market, so their
     'midnight open' falls back to the 09:30 open and they have no pre-market high/low."""
+    if source == "databento":                    # CME ES / NQ / YM futures, see databento_data.py
+        return _read(DATA / f"{symbol}_{minutes}min_db.csv")
+    if source == "merged":                       # HistData, holes filled from Dukascopy
+        from .histdata import fix_sessions, merge
+        h = fix_sessions(_read(DATA / f"{symbol}_{minutes}min_hd.csv"))
+        dk = DATA / f"{symbol}_{minutes}min_duka.csv"
+        return merge(h, _read(dk), minutes) if dk.exists() else h
     if source == "histdata":                     # index CFDs, see histdata.py (SPX, NDX)
         from .histdata import fix_sessions
         return fix_sessions(_read(DATA / f"{symbol}_{minutes}min_hd.csv"))
@@ -83,6 +90,7 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
         bias_table: pd.DataFrame | None = None, confluence: bool = True) -> pd.DataFrame:
     p = p or Params()
     bt = bias_table if bias_table is not None else (htf.table(df, p.es_pt) if htf.has_overnight(df) else None)
+    og = htf.opening_gaps(df, p.es_pt) if htf.has_overnight(df) else None
     cf = None
     if confluence and htf.has_overnight(df):
         from .confluence import Confluence
@@ -102,7 +110,8 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             n_wk = sum(1 for r in rows if r["date"].isocalendar()[:2] == wk) if p.max_trades_week else 0
             if p.max_trades_week and n_wk >= p.max_trades_week:
                 continue
-            day_trades = run_day(g, [rth(x) for x in ds[max(0, k - 21):k]], symbol, p, tf, pa, bias=b, conf=cf)
+            day_trades = run_day(g, [rth(x) for x in ds[max(0, k - 21):k]], symbol, p, tf, pa, bias=b, conf=cf,
+                                 gaps=htf.gaps_for_day(og, d) if og is not None else None)
             if p.max_trades_week:
                 day_trades = day_trades[:p.max_trades_week - n_wk]
             for tr in day_trades:
