@@ -24,6 +24,7 @@ Optional rules (off by default, each a Params switch so its effect can be measur
                 unless a daily close gets back above (below) 50% of that day's wick
   sd_targets    standard-deviation projections of the manipulation leg as extra targets
   wick_levels   50% of the previous day's wicks as extra targets
+  htf_bias      trade only the side of the daily HTF bias (htf.py: react / draw / pd / combo)
 Tags on every trade: htf, macro (armed 09:50-10:10), news (08:30 / 10:00 release day),
 weekly bias, number of adds.
 
@@ -83,6 +84,30 @@ class Params:
     sd_levels: tuple = (1.0, 1.5, 2.0, 2.5)
     wick_levels: bool = False
     skip_news: bool = False        # no trades at all on 08:30 / 10:00 release days
+    # decisions in mentorship_rules.md section 3 (D#); defaults are the recommended ones
+    mss_mode: str = "close"        # D3: structure shift on a candle "close" or a "wick" through
+    mt_mode: str = "body"          # D4: order-block mean threshold of the "body" or full "range"
+    exit_mode: str = "split"       # D5: "split" = before arrays, just beyond pools; "before" = all
+    pool_beyond_pts: float = 0.25  # ES pts beyond a liquidity pool (one tick)
+    min_draw_pts: float = 10.0     # L15: T2 (else T1) at least this many ES pts from entry
+    leg_pd: float = 0.5            # D12: entry at/below this fraction of the displacement leg; 0 off
+    am_exit: int = 720             # D16: AM leftovers out at 12:00 (minutes); 0 = hold to flatten
+    pm_done_by: int = 0            # D16 test: PM out at this time once T1 filled (900 = 15:00)
+    breaker_zone: str = "body"     # D6: unicorn test against the breaker "body" or "range"
+    sb_only: bool = False          # D2 test: fills only inside the Silver Bullet windows
+    sb_windows: tuple = ((600, 660), (840, 900))
+    fvg_abort: bool = False        # X6: body close beyond the FVG, next bar beyond it -> out
+    time_stop_min: int = 0         # X9: no `time_stop_pts` of progress within N minutes -> out
+    time_stop_pts: float = 2.0
+    fomc_pm_from: int = 0          # D8 test: FOMC-day PM entries allowed from this time (885)
+    nfp_thu: bool = False          # D8 test: trade the Thursday of NFP week
+    skip_cpi: bool = False         # D9 test
+    skip_monday: bool = False      # D20 test (NFP / FOMC weeks still traded)
+    no_pm_after_am_win: bool = False   # D19 test
+    max_trades_week: int = 0           # D19 test (0 = no cap)
+    reentry_half: bool = False     # D18 test: one same-direction re-entry at half risk after a loss
+    htf_bias: str = "off"          # daily HTF bias filter: off / react / draw / pd / combo (htf.py)
+    bias_neutral: str = "skip"     # with a bias filter, a 0 day: "skip" it or trade "both" sides
     lot: int = 1                   # units per contract: 1 for shares; 5 for MES, 2 for MNQ
                                    # (a unit is $1 per point, so P&L = points x units)
 
@@ -91,19 +116,25 @@ def _lots(x: float, lot: int) -> int:
     return int(x // lot) * lot
 
 
-def blocked(d: date, session: str) -> str | None:
-    """Day-type rule that blocks this session, or None."""
+def blocked(d: date, session: str, p: "Params | None" = None, t: int = 0) -> str | None:
+    """Day-type rule that blocks this session (at minute t), or None."""
     tags = events(d)
     if "jobs" in tags:
         return "nfp_day"
     mon = d - timedelta(days=d.weekday())
     jd = [j for j in JOBS if mon <= j <= mon + timedelta(days=4)]
-    if jd and d.weekday() >= 3:
+    if jd and d.weekday() >= 3 and not (p is not None and p.nfp_thu and d.weekday() == 3):
         return "nfp_week_thu_fri"
     if jd and d.weekday() == 2 and session == "PM":
         return "nfp_week_wed_pm"
-    if "fomc" in tags and session == "PM":
+    if "fomc" in tags and session == "PM" and not (p is not None and p.fomc_pm_from and t >= p.fomc_pm_from):
         return "fomc_pm"
+    if p is not None and p.skip_cpi and "cpi" in tags:
+        return "cpi"
+    if p is not None and p.skip_monday and d.weekday() == 0:
+        week = [mon + timedelta(days=k) for k in range(5)]
+        if not jd and not any("fomc" in events(x) for x in week):
+            return "monday"
     return None
 
 
@@ -158,6 +189,11 @@ class Trade:
     macro: bool = False
     news: str = "none"
     wbias: int = 0
+    b_react: int | None = None
+    b_draw: int | None = None
+    b_pd: int | None = None
+    sb: bool = False
+    weekday: int = 0
 
     def pnl(self, cost: float) -> tuple[float, float]:
         s = 1 if self.side == "long" else -1
@@ -272,24 +308,25 @@ def _htf_tag(ctx: DayCtx, sd: Side, i: int, price: float, tol: float) -> bool | 
 
 
 def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Params,
-             leg: tuple | None = None) -> list[float]:
-    """Buy-side liquidity (in side terms) above `above`, known at bar i."""
+             leg: tuple | None = None) -> list[tuple[float, str]]:
+    """Buy-side liquidity (in side terms) above `above`, known at bar i, each with its kind:
+    "pool" (old highs, equal highs, session highs) or "array" (gaps, wick CE, projections)."""
     pdk = ("pdh1", "pdh2", "pdh3", "pmh") if sd.sign > 0 else ("pdl1", "pdl2", "pdl3", "pml")
-    lv = [sd.x(ctx.pd[k]) for k in pdk if k in ctx.pd]
-    lv += eq
+    lv = [(sd.x(ctx.pd[k]), "pool") for k in pdk if k in ctx.pd]
+    lv += [(v, "pool") for v in eq]
     for a, b in ctx.nwog:
-        lv += [sd.x(a), sd.x(b)]
+        lv += [(sd.x(a), "array"), (sd.x(b), "array")]
     if ctx.t[i] >= 810 and ctx.am_hl:
-        lv.append(sd.x(ctx.am_hl[0] if sd.sign > 0 else ctx.am_hl[1]))
+        lv.append((sd.x(ctx.am_hl[0] if sd.sign > 0 else ctx.am_hl[1]), "pool"))
     if p.wick_levels:
-        lv.append(sd.x(ctx.wick["upper"] if sd.sign > 0 else ctx.wick["lower"]))
+        lv.append((sd.x(ctx.wick["upper"] if sd.sign > 0 else ctx.wick["lower"]), "array"))
     if p.sd_targets and leg is not None:
         lo, hi = leg
-        lv += [hi + k * (hi - lo) for k in p.sd_levels]
+        lv += [(hi + k * (hi - lo), "array") for k in p.sd_levels]
     out = []
-    for v in sorted(v for v in set(lv) if v > above):   # merge levels within ~1 ES point
-        if not out or v - out[-1] > p.es_pt:
-            out.append(v)
+    for v, kind in sorted(x for x in set(lv) if x[0] > above):   # merge levels within ~1 ES point
+        if not out or v - out[-1][0] > p.es_pt:
+            out.append((v, kind))
     return out
 
 
@@ -314,9 +351,25 @@ def _close(pos, trades, p):
     return tr.side if gross - costs < 0 else None
 
 
+def _after_close(pos, trades, p, done, state):
+    """Record the trade; apply the session rules that depend on how it ended."""
+    lost = _close(pos, trades, p)
+    tr = pos["trade"]
+    if lost is None and tr.session == "AM" and p.no_pm_after_am_win:
+        done["PM"] = True
+    if lost is not None and p.reentry_half and not state["reentered"].get(tr.session):
+        done[tr.session] = False                      # one more try, same direction, half risk
+        state["reentered"][tr.session] = True
+    return lost
+
+
+def _in_sb(t: int, p: Params) -> bool:
+    return any(a <= t < b for a, b in p.sb_windows)
+
+
 def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, tf: int,
             partner: tuple[pd.DataFrame, list[pd.DataFrame]] | None = None,
-            log: list | None = None, live: bool = False) -> list[Trade]:
+            log: list | None = None, live: bool = False, bias: dict | None = None) -> list[Trade]:
     """Trades for one day. With `live`, a position still open at the last bar is returned
     with no exit (exit_reason "open") instead of being closed at the last price."""
     day = df.index[0].date()
@@ -332,9 +385,16 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
     am_start = 600 if tags & NEWS_1000 else p.am[0]
     trades: list[Trade] = []
     done = {"AM": False, "PM": False}
+    state = {"reentered": {}}
     pending = None    # dict with order details
     pos = None        # open Trade + live stop / remaining shares
     lost_side = None
+    btag = {f"b_{k}": (None if bias is None else int(bias[k])) for k in ("react", "draw", "pd")}
+    want = None
+    if p.htf_bias != "off":
+        want = 0 if bias is None else int(bias[p.htf_bias])
+        if want == 0 and p.bias_neutral == "skip":
+            return []
     for i in range(ctx.start, len(ctx.t)):
         t = ctx.t[i]
         ts = ctx.idx[i]
@@ -367,10 +427,24 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                     pos["stop"] = max(pos["stop"], pos["basis"] / pos["n"])
                 if pos["left"] and pos["t2"] is not None and pos["t1_done"] and h >= pos["t2"]:
                     tr.exits.append((ts, sd.x(pos["t2"]), pos["left"], "t2")); pos["left"] = 0
+            if pos["left"] and p.fvg_abort:
+                if pos["abort"] is not None and l < pos["abort"]:
+                    tr.exits.append((ts, sd.x(min(o, pos["abort"])), pos["left"], "abort")); pos["left"] = 0
+                elif max(o, c) < pos["fvg_bottom"] and i > pos["fill_i"]:
+                    pos["abort"] = l                  # body closed below the gap: arm the abort
+            if pos["left"]:
+                pos["best"] = max(pos["best"], h)
+                if (p.time_stop_min and not pos["t1_done"] and (t + tf) - pos["fill_t"] >= p.time_stop_min
+                        and pos["best"] - pos["basis"] / pos["n"] < p.time_stop_pts * p.es_pt):
+                    tr.exits.append((ts, sd.x(c), pos["left"], "time")); pos["left"] = 0
+            if pos["left"] and tr.session == "AM" and p.am_exit and t + tf >= p.am_exit:
+                tr.exits.append((ts, sd.x(c), pos["left"], "am_exit")); pos["left"] = 0
+            if pos["left"] and tr.session == "PM" and p.pm_done_by and pos["t1_done"] and t + tf >= p.pm_done_by:
+                tr.exits.append((ts, sd.x(c), pos["left"], "pm_done")); pos["left"] = 0
             if pos["left"] and t + tf >= p.flatten:
                 tr.exits.append((ts, sd.x(c), pos["left"], "eod")); pos["left"] = 0
             if not pos["left"]:
-                lost_side = _close(pos, trades, p) or lost_side
+                lost_side = _after_close(pos, trades, p, done, state) or lost_side
                 pos = None
             else:                                      # new FVG after the fill: trail / add
                 new = [g for g in sd.gaps if g.i == i and g.i - 2 > pos["fill_i"]]
@@ -388,10 +462,14 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         if pending is not None:
             sd = pending["side"]
             cut = p.am[1] if pending["session"] == "AM" else p.pm[1]
+            if p.sb_only:                               # fills only inside the session's SB window
+                sb_a, cut = p.sb_windows[0] if pending["session"] == "AM" else p.sb_windows[1]
             if t >= cut or i - pending["i"] > max(1, p.pending_minutes // tf):
                 pending = None
             elif sd.h[i] >= pending["t1"] and sd.l[i] >= pending["entry"]:
                 pending = None                       # ran to target without us
+            elif p.sb_only and t < sb_a:
+                pass                                 # armed before the window: wait for it
             elif sd.l[i] < pending["entry"] and pos is None:
                 o = pending
                 fill = min(o["entry"], sd.o[i])      # a gap through the limit fills at the open
@@ -399,15 +477,16 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                            o["swept"], o["unicorn"], o["smt"], ctx.idx[o["i"]], ts, sd.x(fill),
                            sd.x(o["stop"]), sd.x(o["t1"]), None if o["t2"] is None else sd.x(o["t2"]),
                            o["shares"], day_type=day_type(day), htf=o["htf"], macro=o["macro"],
-                           news=news(day), wbias=ctx.wbias)
+                           news=news(day), wbias=ctx.wbias, sb=_in_sb(t, p), weekday=day.weekday(), **btag)
                 pos = dict(trade=tr, side=sd, stop=o["stop"], t1=o["t1"], t2=o["t2"],
                            left=o["shares"], n=o["shares"], basis=fill * o["shares"],
-                           t1_done=False, fill_i=i, add=None)
+                           t1_done=False, fill_i=i, fill_t=t, add=None, fvg_bottom=o["fvg_bottom"],
+                           abort=None, best=fill)
                 done[o["session"]] = True
                 pending = None
                 if sd.l[i] <= pos["stop"]:           # same-bar stop (conservative)
                     tr.exits.append((ts, sd.x(pos["stop"]), pos["left"], "stop")); pos["left"] = 0
-                    lost_side = _close(pos, trades, p) or lost_side
+                    lost_side = _after_close(pos, trades, p, done, state) or lost_side
                     pos = None
         # --- 3. setup detection on the closed bar
         if p.am[0] <= t < p.am[1]:
@@ -418,7 +497,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             continue
         if t < w0 or done[session] or pos is not None:
             continue
-        if (p.day_filter and blocked(day, session)) or (p.skip_news and news(day) != "none"):
+        if (p.day_filter and blocked(day, session, p, t)) or (p.skip_news and news(day) != "none"):
             continue
         for sd in sides:
             sname = "long" if sd.sign > 0 else "short"
@@ -426,7 +505,10 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 continue                              # no reversals after a loss
             if p.weekly_bias and ctx.wbias == -sd.sign:
                 continue
-            o_ = _scan(ctx, sd, i, p, session, w0, pctx, psides, ppos)
+            if want and want != sd.sign:
+                continue
+            o_ = _scan(ctx, sd, i, p, session, w0, pctx, psides, ppos,
+                       0.5 if state["reentered"].get(session) else 1.0)
             if o_ is not None:
                 pending = o_
                 if log is not None:
@@ -452,7 +534,7 @@ def _sell_side(ctx: DayCtx, sd: Side, session: str) -> dict[str, float]:
     return out
 
 
-def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos):
+def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mult=1.0):
     """Advance this side's sweep -> MSS -> FVG machine at bar i; return an order or None."""
     l, h, c = sd.l, sd.h, sd.c
     tol = p.eq_tol_pts * p.es_pt
@@ -487,7 +569,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos):
             return None
         ref_i = a + int(np.argmax(h[a:sw["ext_i"]])); ref = h[ref_i]
     if sw["broke"] is None:
-        if i > sw["ext_i"] and c[i] > ref:
+        if i > sw["ext_i"] and (h[i] if p.mss_mode == "wick" else c[i]) > ref:
             sw["broke"] = i
         else:
             return None
@@ -498,13 +580,19 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos):
         return None
     sd.sweep = None   # this sweep is consumed whether or not the order passes the filters
     bz = L.order_block(sd.o, h, l, c, ref_i - p.pivot_n, ref_i, "bear")   # breaker candle
+    if bz is not None and p.breaker_zone == "body":   # body of the highest-body up-close candle
+        ups = [k for k in range(max(0, ref_i - p.pivot_n), ref_i + 1) if c[k] > sd.o[k]]
+        if ups:
+            k = max(ups, key=lambda k: c[k])
+            bz = L.Zone("bear", float(c[k]), float(sd.o[k]), bz.i, k)
     uni = [g for g in gaps if bz is not None and g.overlaps(bz)]
     g = (uni or gaps)[-1]
     entry = g.top if p.entry == "edge" else g.mid
     ob = L.order_block(sd.o, h, l, c, sw["ext_i"] - 3, g.src - 1, "bull")
     stop = g.bottom - p.stop_buffer
-    if p.stop_mode == "ob_mt" and ob is not None and ob.mid < entry - p.min_risk_pts * p.es_pt:
-        stop = min(stop, ob.mid - p.stop_buffer)
+    mt = None if ob is None else ((sd.o[ob.src] + c[ob.src]) / 2 if p.mt_mode == "body" else ob.mid)
+    if p.stop_mode == "ob_mt" and mt is not None and mt < entry - p.min_risk_pts * p.es_pt:
+        stop = min(stop, mt - p.stop_buffer)
     risk = entry - stop
     if not (p.min_risk_pts * p.es_pt <= risk <= p.max_risk_pts * p.es_pt):
         return None
@@ -512,23 +600,29 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos):
         ref_open = ctx.opens.get("midnight" if session == "AM" else "1330")
         if ref_open is not None and not entry < sd.x(ref_open):
             return None
+    leg_hi = h[sw["ext_i"]:i + 1].max()
+    if p.leg_pd and entry > sw["ext"] + p.leg_pd * (leg_hi - sw["ext"]):
+        return None                                   # entry FVG not in the leg's discount
     htf = _htf_tag(ctx, sd, i, sw["ext"], tol)
     if p.require_htf and not htf:
         return None
     eq_hi = _eq_levels(sd, i, tol, lows=False)
-    leg_hi = h[sw["ext_i"]:i + 1].max()
     lv = _targets(ctx, sd, i, max(leg_hi, entry), eq_hi, p, (sw["ext"], leg_hi))
-    lv = [v - p.exit_before_pts * p.es_pt for v in lv]
+    lv = [v + p.pool_beyond_pts * p.es_pt if (p.exit_mode == "split" and kind == "pool")
+          else v - p.exit_before_pts * p.es_pt for v, kind in lv]
     lv = [v for v in lv if v - entry >= p.min_rr * risk]
     if not lv:
         return None
-    shares = _lots(min(p.risk_dollars / risk, p.max_notional / abs(entry)), p.lot)
+    if p.min_draw_pts and (lv[1] if len(lv) > 1 else lv[0]) - entry < p.min_draw_pts * p.es_pt:
+        return None                                   # not enough room to the draw
+    shares = _lots(min(risk_mult * p.risk_dollars / risk, p.max_notional / abs(entry)), p.lot)
     if shares < 1:
         return None
     t = ctx.t[i]
-    setup = "am_mm" if session == "AM" else ("pm_last_hour" if p.last_hour[0] <= t < p.last_hour[1] else "pm")
+    setup = "am_mm" if session == "AM" else ("pm_last_hour" if p.last_hour[0] <= t < p.last_hour[1]
+                                              else "pm_sb" if 840 <= t < 900 else "pm")
     return dict(side=sd, session=session, setup=setup, swept=sw["name"], unicorn=bool(uni),
-                smt=sw["smt"], i=i, entry=entry, stop=stop, t1=lv[0],
+                smt=sw["smt"], i=i, entry=entry, stop=stop, t1=lv[0], fvg_bottom=g.bottom,
                 t2=lv[1] if len(lv) > 1 else None, shares=shares, htf=htf,
                 macro=bool(p.macro[0] <= t < p.macro[1]))
 

@@ -172,3 +172,113 @@ def main_am_spy(out="runs/mentorship", workers=6, tfs=(1, 5)):
         t = pd.concat([x for x in ex.map(_am_job, jobs) if len(x)], ignore_index=True)
     t.to_csv(f"{out}/am_spy_trades{'' if tuple(tfs) == (1, 5) else '_' + '_'.join(map(str, tfs))}.csv", index=False)
     return t
+
+
+# --- daily HTF bias (htf.py) on the AM-as-SPY setup ---------------------------------------
+def _bias_job(job):
+    tf, year, mode = job
+    df, pa = B.load("SPX", tf, source="histdata"), B.load("NDX", tf, source="histdata")
+    a, b = pd.Timestamp(f"{year}-01-01", tz=B.NY), pd.Timestamp(f"{year + 1}-01-01", tz=B.NY)
+    lo = a - pd.Timedelta(days=120)                 # HTF arrays look back 60 trading days
+    p = replace(Params(), **dict(AM_SPY, pm=Params().pm), htf_bias=mode)
+    t = B.run(df[(df.index >= lo) & (df.index < b)], tf, "SPX", p, pa[(pa.index >= lo) & (pa.index < b)])
+    if len(t):
+        t = t[pd.to_datetime(t.entry_time.astype(str).str[:10]) >= f"{year}-01-01"].copy()
+        t["tf"], t["year"], t["mode"] = tf, year, mode
+    return t
+
+
+def main_bias(out="runs/mentorship", workers=6, tfs=(5, 1), modes=("off", "react", "draw", "pd", "combo")):
+    jobs = [(tf, y, m) for tf in tfs for m in modes for y in range(2019, 2027)]
+    with ProcessPoolExecutor(workers) as ex:
+        t = pd.concat([x for x in ex.map(_bias_job, jobs) if len(x)], ignore_index=True)
+    t.to_csv(f"{out}/bias_trades.csv", index=False)
+    return t
+
+
+# --- the 23 decisions: recommended defaults vs each contradiction -------------------------
+# SPX signals, SPY pricing (AM_SPY costs), AM and PM sessions, 2019-2026.
+CURRENT = dict(mt_mode="range", exit_mode="before", min_draw_pts=0.0, leg_pd=0.0, am_exit=0,
+               breaker_zone="range")                # the engine before the decisions
+DECISIONS = {
+    "current": CURRENT,
+    "defaults": {},
+    "D1_am_from_1000": dict(am=(600, 660)),
+    "D2_sb_only": dict(sb_only=True),
+    "D2_sb_only_room5": dict(sb_only=True, min_draw_pts=5.0),
+    "D3_mss_wick": dict(mss_mode="wick"),
+    "D4_mt_range": dict(mt_mode="range"),
+    "D5_exit_before": dict(exit_mode="before"),
+    "D6_breaker_range": dict(breaker_zone="range"),
+    "D7_pm_from_1400": dict(pm=(840, 950)),
+    "D8_fomc_pm_1445": dict(fomc_pm_from=885),
+    "D8_nfp_thu": dict(nfp_thu=True),
+    "D9_skip_cpi": dict(skip_cpi=True),
+    "D11_entry_ce": dict(entry="ce"),
+    "D12_leg_062": dict(leg_pd=0.62),
+    "D12_leg_off": dict(leg_pd=0.0),
+    "D13_partial_08": dict(partial=0.8),
+    "D14_trail": dict(trail=True),
+    "D16_am_exit_1100": dict(am_exit=660),
+    "D16_am_hold": dict(am_exit=0),
+    "D16_pm_done_1500": dict(pm_done_by=900),
+    "D17_pivot_1": dict(pivot_n=1),
+    "D18_reentry_half": dict(reentry_half=True),
+    "D19_no_pm_after_win": dict(no_pm_after_am_win=True),
+    "D19_max_3_week": dict(max_trades_week=3),
+    "D20_skip_monday": dict(skip_monday=True),
+    "L15_room_off": dict(min_draw_pts=0.0),
+    "X6_fvg_abort": dict(fvg_abort=True),
+    "X9_time_stop_10": dict(time_stop_min=10),
+    "bias_react": dict(htf_bias="react"),
+    "bias_draw": dict(htf_bias="draw"),
+    "bias_pd": dict(htf_bias="pd"),
+    "bias_combo": dict(htf_bias="combo"),
+}
+DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
+
+
+def _bias_cache(tf: int) -> pd.DataFrame:
+    from . import htf
+    f = Path(f"runs/mentorship/htf_table_{tf}m.csv")
+    if not f.exists():
+        htf.table(B.load("SPX", tf, source="histdata")).to_csv(f)
+    t = pd.read_csv(f, index_col=0)
+    t.index = pd.to_datetime(t.index).date
+    return t
+
+
+def _dec_job(job):
+    tf, year, name = job
+    df, pa = B.load("SPX", tf, source="histdata"), B.load("NDX", tf, source="histdata")
+    a, b = pd.Timestamp(f"{year}-01-01", tz=B.NY), pd.Timestamp(f"{year + 1}-01-01", tz=B.NY)
+    lo = a - pd.Timedelta(days=45)
+    p = replace(Params(), **DEC_BASE, **DECISIONS[name])
+    t = B.run(df[(df.index >= lo) & (df.index < b)], tf, "SPX", p, pa[(pa.index >= lo) & (pa.index < b)],
+              bias_table=_bias_cache(tf))
+    if len(t):
+        t = t[pd.to_datetime(t.entry_time.astype(str).str[:10]) >= f"{year}-01-01"].copy()
+        t["tf"], t["year"], t["variant"] = tf, year, name
+    return t
+
+
+def main_decisions(out="runs/mentorship", workers=6, tfs=(5, 1), variants=None):
+    variants = variants or list(DECISIONS)
+    for tf in tfs:
+        _bias_cache(tf)
+    jobs = [(tf, y, v) for tf in tfs for v in variants for y in range(2019, 2027)]
+    jobs.sort(key=lambda j: (j[0] == 1, j[2] not in ("current", "defaults")))
+    cache = Path(out) / "dec_jobs"
+    cache.mkdir(parents=True, exist_ok=True)
+    path = lambda j: cache / "{}m_{}_{}.csv".format(*j)
+    todo = [j for j in jobs if not path(j).exists()]
+    with ProcessPoolExecutor(workers) as ex:
+        futs = {ex.submit(_dec_job, j): j for j in todo}
+        for k, f in enumerate(as_completed(futs), 1):
+            j = futs[f]
+            f.result().to_csv(path(j), index=False)
+            print(f"{k}/{len(todo)} {j}", flush=True)
+    parts = [pd.read_csv(path(j)) for j in jobs if path(j).exists() and path(j).stat().st_size > 2]
+    t = pd.concat([x for x in parts if len(x)], ignore_index=True)
+    t.to_csv(f"{out}/decision_trades.csv", index=False)
+    return t

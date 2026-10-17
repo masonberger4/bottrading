@@ -139,3 +139,37 @@ def test_no_look_ahead_with_every_optional_rule_on():
         a = full[full.entry_time <= c][cols].reset_index(drop=True)
         b = part[part.entry_time <= c][cols].reset_index(drop=True)
         pd.testing.assert_frame_equal(a, b)
+
+
+def test_htf_bias_uses_nothing_after_0930():
+    import pandas as pd
+    from mentorship import backtest as B, htf
+    from pathlib import Path
+    if not Path("data/mentorship/SPX_5min_hd.csv").exists():
+        return
+    df = B.load("SPX", 5, source="histdata")
+    df = df[(df.index >= "2024-01-01") & (df.index < "2024-07-01")]
+    full = htf.table(df)
+    for day in list(full.index)[-40::7]:
+        cut = pd.Timestamp(day, tz=B.NY) + pd.Timedelta(hours=9, minutes=30)
+        part = htf.table(df[df.index < cut])
+        a, b = full.loc[day], part.loc[day]
+        for k in ("react", "draw", "pd", "combo", "react_score", "draw_up", "draw_dn"):
+            assert (a[k] == b[k]) or (a[k] != a[k] and b[k] != b[k]), (day, k, a[k], b[k])
+
+
+def test_no_look_ahead_with_decision_switches_on():
+    x, y = B.synthetic(start="2026-03-30", end="2026-10-14", tf=5, seed=7)
+    for kw in (dict(mss_mode="wick", fvg_abort=True, time_stop_min=10, reentry_half=True,
+                    no_pm_after_am_win=True, pm_done_by=900, leg_pd=0, min_draw_pts=0),
+               dict(sb_only=True, min_draw_pts=5, leg_pd=0.8, max_trades_week=3, am_exit=660)):
+        p = Params(es_pt=0.09, use_bias=False, **kw)
+        full = B.run(x, 5, "RW", p, y)
+        assert len(full) > 0
+        cols = ["entry_time", "entry", "stop", "t1", "shares"]
+        for cut in full.entry_time.iloc[::2]:
+            c = cut + pd.Timedelta(minutes=2)
+            part = B.run(x[x.index <= c], 5, "RW", p, y[y.index <= c], partial_last=True)
+            a = full[full.entry_time <= c][cols].reset_index(drop=True)
+            b = part[part.entry_time <= c][cols].reset_index(drop=True)
+            pd.testing.assert_frame_equal(a, b)

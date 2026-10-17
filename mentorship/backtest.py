@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from claude_hf.daytypes import JOBS, is_trading_day
+from . import htf
 from .strategy import Params, run_day
 
 DATA = Path("data/mentorship")
@@ -77,8 +78,10 @@ def rth(g: pd.DataFrame) -> pd.DataFrame:
 
 
 def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
-        partner: pd.DataFrame | None = None, warmup: int = 3, partial_last: bool = False) -> pd.DataFrame:
+        partner: pd.DataFrame | None = None, warmup: int = 3, partial_last: bool = False,
+        bias_table: pd.DataFrame | None = None) -> pd.DataFrame:
     p = p or Params()
+    bt = bias_table if bias_table is not None else (htf.table(df, p.es_pt) if htf.has_overnight(df) else None)
     ds = days(df, tf, partial_last)
     pmap = {g.index[0].date(): g for g in days(partner, tf, partial_last)} if partner is not None else {}
     hist_p: list[pd.DataFrame] = []
@@ -89,7 +92,15 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
         if d in pmap and len(hist_p) >= warmup:
             pa = (pmap[d], hist_p)
         if k >= warmup:
-            for tr in run_day(g, [rth(x) for x in ds[max(0, k - 21):k]], symbol, p, tf, pa):
+            b = bt.loc[d].to_dict() if bt is not None and d in bt.index else None
+            wk = d.isocalendar()[:2]
+            n_wk = sum(1 for r in rows if r["date"].isocalendar()[:2] == wk) if p.max_trades_week else 0
+            if p.max_trades_week and n_wk >= p.max_trades_week:
+                continue
+            day_trades = run_day(g, [rth(x) for x in ds[max(0, k - 21):k]], symbol, p, tf, pa, bias=b)
+            if p.max_trades_week:
+                day_trades = day_trades[:p.max_trades_week - n_wk]
+            for tr in day_trades:
                 rows.append(tr.row(p.cost_per_share))
         if d in pmap:
             hist_p = (hist_p + [rth(pmap[d])])[-21:]
