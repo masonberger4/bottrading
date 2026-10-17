@@ -91,6 +91,9 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     p = p or Params()
     bt = bias_table if bias_table is not None else (htf.table(df, p.es_pt) if htf.has_overnight(df) else None)
     og = htf.opening_gaps(df, p.es_pt) if htf.has_overnight(df) else None
+    tt = df.index.hour * 60 + df.index.minute
+    pre = df[(tt >= 570) & (tt < p.org_close)]
+    closes = pre.groupby(pre.index.date).close.last().to_dict()     # ORG close per day
     cf = None
     if confluence and htf.has_overnight(df):
         from .confluence import Confluence
@@ -111,7 +114,8 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             if p.max_trades_week and n_wk >= p.max_trades_week:
                 continue
             day_trades = run_day(g, [rth(x) for x in ds[max(0, k - 21):k]], symbol, p, tf, pa, bias=b, conf=cf,
-                                 gaps=htf.gaps_for_day(og, d) if og is not None else None)
+                                 gaps=htf.gaps_for_day(og, d) if og is not None else None,
+                                 closes=closes)
             if p.max_trades_week:
                 day_trades = day_trades[:p.max_trades_week - n_wk]
             for tr in day_trades:

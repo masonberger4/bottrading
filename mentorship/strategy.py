@@ -116,6 +116,10 @@ class Params:
                                    # Fri 16:00 -> Mon 09:30 edges (also the fallback without overnight bars)
     org_days: int = 5              # opening range gaps (prior 16:00 close -> 09:30 open) kept as
                                    # targets (high / 75% / CE / 25% / low); 0 = off (L7, D21)
+    org_close: int = 975           # ORG uses the last price before this minute: 975 = 16:15 ES
+                                   # settlement (7 videos), 960 = 16:00 (3 videos; SPY's close)
+    or_minutes: int = 30           # opening range 09:30-10:00 (2023 videos); 60 = CC's 09:30-10:30;
+                                   # its high/low are AM sweep pools and targets once complete; 0 off
     htf_bias: str = "off"          # daily HTF bias filter: off / react / draw / pd / combo (htf.py)
     bias_neutral: str = "skip"     # with a bias filter, a 0 day: "skip" it or trade "both" sides
     lot: int = 1                   # units per contract: 1 for shares; 5 for MES, 2 for MNQ
@@ -258,7 +262,7 @@ class DayCtx:
     levels known before the open."""
 
     def __init__(self, df: pd.DataFrame, day: date, hist: list[pd.DataFrame], tf: int,
-                 htf: tuple = ()):
+                 htf: tuple = (), closes: dict | None = None, or_minutes: int = 30):
         prev = hist[-1]
         self.day, self.tf = day, tf
         frame = pd.concat([prev, df])
@@ -292,7 +296,13 @@ class DayCtx:
         for a, b in zip(seq[:-1], seq[1:]):
             rth = b[(b.index.hour * 60 + b.index.minute) >= 570]
             if len(rth) and len(a):
-                self.org.append((float(a.close.iloc[-1]), float(rth.open.iloc[0])))
+                pc = (closes or {}).get(a.index[0].date(), float(a.close.iloc[-1]))
+                self.org.append((float(pc), float(rth.open.iloc[0])))
+        # opening range 09:30 -> 09:30 + or_minutes: high/low usable once it is complete
+        self.or_end, self.or_hl = 570 + or_minutes, None
+        orb = df[(tt >= 570) & (tt < 570 + or_minutes)] if or_minutes else df.iloc[:0]
+        if len(orb):
+            self.or_hl = (float(orb.high.max()), float(orb.low.min()))
         self.wbias = weekly_bias(hist, day)
         # higher-timeframe FVGs over the last 5 sessions, in real prices, with the time known
         self.hzones = []
@@ -340,6 +350,8 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
     else:
         for a, b in ctx.nwog:
             lv += [(sd.x(a), "array"), (sd.x(b), "array")]
+    if ctx.or_hl is not None and ctx.t[i] >= ctx.or_end:
+        lv.append((sd.x(ctx.or_hl[0] if sd.sign > 0 else ctx.or_hl[1]), "pool"))
     if ctx.t[i] >= 810 and ctx.am_hl:
         lv.append((sd.x(ctx.am_hl[0] if sd.sign > 0 else ctx.am_hl[1]), "pool"))
     if p.org_days:
@@ -397,11 +409,11 @@ def _in_sb(t: int, p: Params) -> bool:
 def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, tf: int,
             partner: tuple[pd.DataFrame, list[pd.DataFrame]] | None = None,
             log: list | None = None, live: bool = False, bias: dict | None = None,
-            conf=None, gaps: list | None = None) -> list[Trade]:
+            conf=None, gaps: list | None = None, closes: dict | None = None) -> list[Trade]:
     """Trades for one day. With `live`, a position still open at the last bar is returned
     with no exit (exit_reason "open") instead of being closed at the last price."""
     day = df.index[0].date()
-    ctx = DayCtx(df, day, hist, tf, p.htf)
+    ctx = DayCtx(df, day, hist, tf, p.htf, closes, p.or_minutes)
     ctx.conf = conf
     ctx.gaps = gaps if (p.gap_mode == "ict" and gaps is not None) else None
     pctx = DayCtx(partner[0], day, partner[1], tf) if partner is not None else None
@@ -556,13 +568,15 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
     return trades
 
 
-def _sell_side(ctx: DayCtx, sd: Side, session: str) -> dict[str, float]:
+def _sell_side(ctx: DayCtx, sd: Side, session: str, i: int | None = None) -> dict[str, float]:
     keys = ("pdl1", "pdl2", "pdl3") if sd.sign > 0 else ("pdh1", "pdh2", "pdh3")
     out = {k: sd.x(ctx.pd[k]) for k in keys if k in ctx.pd}
     if session == "AM":
         k = "pml" if sd.sign > 0 else "pmh"
         if k in ctx.pd:
             out["premarket"] = sd.x(ctx.pd[k])
+        if ctx.or_hl is not None and i is not None and ctx.t[i] >= ctx.or_end:
+            out["opening_range"] = sd.x(ctx.or_hl[1] if sd.sign > 0 else ctx.or_hl[0])
     elif ctx.am_hl:
         out["am_session"] = sd.x(ctx.am_hl[1] if sd.sign > 0 else ctx.am_hl[0])
     return out
@@ -580,8 +594,9 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
     """Advance this side's sweep -> MSS -> FVG machine at bar i; return an order or None."""
     l, h, c = sd.l, sd.h, sd.c
     tol = p.eq_tol_pts * p.es_pt
-    lv = _sell_side(ctx, sd, session)
+    lv = _sell_side(ctx, sd, session, i)
     created = ctx.start if session == "AM" else ctx.start + int(np.searchsorted(ctx.t[ctx.start:], 810))
+    or_made = ctx.start + int(np.searchsorted(ctx.t[ctx.start:], ctx.or_end))
     for k, eq in enumerate(_eq_levels(sd, i - 1, tol, lows=True)):
         lv[f"rel_eq_lows{k}"] = eq
     sw = sd.sweep
@@ -589,7 +604,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         sw = sd.sweep = None
 
     def intact(k, v):   # not traded through between the level's creation and bar i-1
-        a = created if k == "am_session" else ctx.start
+        a = created if k == "am_session" else (or_made if k == "opening_range" else ctx.start)
         return k.startswith("rel_eq") or i <= a or l[a:i].min() >= v
     hit = [(k, v) for k, v in lv.items() if l[i] < v and intact(k, v)]
     if sw is None and hit:
