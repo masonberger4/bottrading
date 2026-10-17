@@ -199,3 +199,82 @@ def balanced_ranges(h, l) -> list[Zone]:
 def wick_midpoints(o: float, h: float, l: float, c: float) -> dict[str, float]:
     """50% of a daily candle's upper and lower wicks."""
     return {"upper": max(o, c) + (h - max(o, c)) / 2, "lower": min(o, c) - (min(o, c) - l) / 2}
+
+
+def inversion_fvgs(h, l, c, min_gap: float = 0.0) -> list[Zone]:
+    """Inversion FVGs (015 ~21:00; 048 ~21:32; 102 ~1:02:03): a bearish FVG that a candle body
+    closes above becomes bullish support (and a bullish FVG closed below becomes resistance).
+    Same top/bottom as the original gap; known at the closing candle. A later candle must
+    trade back into it for an entry, which a limit order placed after `i` guarantees."""
+    out = []
+    for z in fvgs(h, l):
+        if z.top - z.bottom < min_gap:
+            continue
+        after = c[z.i + 1:]
+        if z.kind == "bear":
+            k = np.flatnonzero(after > z.top)
+            if len(k):
+                out.append(Zone("bull", z.top, z.bottom, z.i + 1 + int(k[0]), z.src))
+        else:
+            k = np.flatnonzero(after < z.bottom)
+            if len(k):
+                out.append(Zone("bear", z.top, z.bottom, z.i + 1 + int(k[0]), z.src))
+    return sorted(out, key=lambda z: z.i)
+
+
+def voids(h, l) -> list[Zone]:
+    """Liquidity voids: a true price gap between two consecutive candles, no overlap at all
+    (028 ~36:17). Bullish: low[i] > high[i-1]. Known at candle i."""
+    out = []
+    for i in range(1, len(h)):
+        if l[i] > h[i - 1]:
+            out.append(Zone("bull", l[i], h[i - 1], i, i))
+        elif h[i] < l[i - 1]:
+            out.append(Zone("bear", l[i - 1], h[i], i, i))
+    return out
+
+
+def mitigation_blocks(o, h, l, c, n: int = 1) -> list[Zone]:
+    """Bullish mitigation block (cc04_004 ~2:42-14:35; 033 ~1:03:50): swing high A, swing low,
+    a HIGHER low (no stop run below the swing low), then a body close above A; the zone is the
+    last up-close candle at A (the failed high). The breaker's sibling without the sweep.
+    Bearish mirrors it. Known at the closing break."""
+    ph, pl = pivots(h, l, n)
+    out, used = [], set()
+    for i in range(len(c)):
+        for kind, hs, ls, sign in (("bull", ph, pl, 1), ("bear", pl, ph, -1)):
+            hk = [p for p in hs if p.known <= i]
+            if not hk or (kind, hk[-1].i) in used:
+                continue
+            H = hk[-1]
+            later = [p for p in ls if p.i > H.i and p.known <= i]
+            if len(later) < 2:
+                continue
+            L0, L1 = later[-2], later[-1]              # swing low after A, then the next low
+            higher_low = L1.price > L0.price if sign > 0 else L1.price < L0.price
+            broke = c[i] > H.price if sign > 0 else c[i] < H.price
+            if higher_low and broke:
+                blk = order_block(o, h, l, c, H.i - n, H.i, "bear" if sign > 0 else "bull")
+                if blk is not None:
+                    out.append(Zone(kind, blk.top, blk.bottom, i, blk.src))
+                used.add((kind, H.i))
+    return out
+
+
+def propulsion_blocks(o, h, l, c, obs: list[Zone]) -> list[Zone]:
+    """Bullish propulsion block (cc04_008 ~0:30-5:40; 027 ~11:31): a down-close candle that
+    trades down into an earlier bullish order block without a body close below that block's
+    mean threshold; it becomes the new support. Zone = that candle's range, `mt` = its body
+    midpoint (losing it = the idea is wrong). Known at that candle."""
+    out = []
+    for ob in obs:
+        if ob.kind != "bull":
+            continue
+        mt = ob.mt if ob.mt == ob.mt else ob.mid
+        for k in range(ob.i + 1, len(c)):
+            if c[k] < mt:
+                break                              # the order block failed
+            if c[k] < o[k] and l[k] <= ob.top:
+                out.append(Zone("bull", float(h[k]), float(l[k]), k, k, float((o[k] + c[k]) / 2)))
+                break
+    return out

@@ -191,3 +191,38 @@ def test_confluence_tags_do_not_look_ahead():
         a = full[full.entry_time <= c][cols].reset_index(drop=True)
         b = part[part.entry_time <= c][cols].reset_index(drop=True)
         pd.testing.assert_frame_equal(a, b)
+
+
+def test_inversion_fvg_void_and_mitigation():
+    import numpy as np
+    from mentorship import levels as L
+    h = np.array([10, 9, 7, 8, 12, 13.]); l = np.array([9, 8, 6, 6.5, 9.5, 12])
+    c = np.array([9.5, 8, 6.5, 7.5, 11, 12.5])
+    inv = L.inversion_fvgs(h, l, c)
+    assert len(inv) == 1 and inv[0].kind == "bull" and (inv[0].top, inv[0].bottom, inv[0].i) == (9, 7, 4)
+    v = L.voids(h, l)
+    assert [(z.kind, z.i) for z in v] == [("bear", 2), ("bull", 4)]
+    # high A (idx 2), swing low (idx 4), higher low (idx 6), close above A (idx 8)
+    h2 = np.array([5, 6, 8, 6, 4, 5, 6, 7, 9, 9.5]); l2 = np.array([4, 5, 6, 4, 2, 3.5, 3, 5, 7, 8])
+    o2 = np.array([4.5, 5.5, 6.5, 5.5, 3.5, 3.5, 5.5, 5.5, 7.5, 8.5]); c2 = np.array([5, 6, 7.5, 4.5, 3, 4.5, 4.5, 6.5, 8.8, 9])
+    m = L.mitigation_blocks(o2, h2, l2, c2, 1)
+    assert m and m[0].kind == "bull" and m[0].src == 2
+
+
+def test_no_look_ahead_with_new_arrays_on():
+    from pathlib import Path
+    if not Path("data/mentorship/ES_5min_db.csv").exists():
+        return
+    df = B.load("ES", 5, source="databento")
+    df = df[(df.index >= "2024-05-01") & (df.index < "2024-08-01")]
+    p = Params(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, leg_pd=0, min_draw_pts=0,
+               ifvg_entries=True, fvg_targets=True, mss_cisd=True, globex_pool=True)
+    full = B.run(df, 5, "ES", p)
+    assert len(full) > 2
+    cols = ["entry_time", "entry", "stop", "t1", "entry_kind", "mitigation", "propulsion", "conf_tfs"]
+    for cut in full.entry_time.iloc[::3]:
+        c = cut + pd.Timedelta(minutes=2)
+        part = B.run(df[df.index <= c], 5, "ES", p, partial_last=True)
+        a = full[full.entry_time <= c][cols].reset_index(drop=True)
+        b = part[part.entry_time <= c][cols].reset_index(drop=True)
+        pd.testing.assert_frame_equal(a, b)

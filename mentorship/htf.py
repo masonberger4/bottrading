@@ -199,7 +199,9 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
                          combo=rb if rb else pdb,
                          draw_up=up[2] if up else np.nan, draw_up_name=up[1] if up else "",
                          draw_dn=dn[2] if dn else np.nan, draw_dn_name=dn[1] if dn else ""))
-    return pd.DataFrame(rows).set_index("date")
+    cols = ["date", "px", "react", "react_score", "draw", "pd", "combo", "draw_up", "draw_up_name",
+            "draw_dn", "draw_dn_name"]
+    return pd.DataFrame(rows, columns=cols).set_index("date")
 
 
 def has_overnight(df: pd.DataFrame) -> bool:

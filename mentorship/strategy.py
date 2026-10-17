@@ -55,6 +55,14 @@ class Params:
                                    # 5-candle fractal"); 2 = the old 5-candle swing (D17)
     min_fvg_pts: float = 0.25      # an FVG must be at least one ES tick wide (in ES points)
     fvg_pick: str = "last"         # entry FVG among the open ones after the MSS: "last" or "first"
+    ifvg_entries: bool = False     # inversion FVGs (a bearish gap closed through) after the sweep
+                                   # also count as the entry gap (M10)
+    fvg_targets: bool = False      # untouched opposing FVGs and liquidity voids above as targets:
+                                   # near edge, then CE (L9)
+    mss_cisd: bool = False         # structure shift = change in state of delivery: a close above
+                                   # the open of the down-close candle(s) into the low (075 ~1:16:40)
+    globex_pool: bool = False      # overnight pool from the prior 18:00 reopen, not midnight (023)
+    tag_blocks: bool = True        # tag trades with mitigation / propulsion blocks (measurement)
     extra_pools: bool = True       # London 02:00-05:00, prior PM 13:30-16:00 and lunch 12:00-13:30
                                    # highs/lows as sweep pools and targets (067)
     es_pt: float = 0.10            # instrument price units per ES point (SPY ~ ES / 10)
@@ -216,6 +224,9 @@ class Trade:
     conf_n: int | None = None
     conf_top: str = ""
     conf_tfs: str = ""
+    entry_kind: str = "fvg"        # fvg / ifvg
+    mitigation: bool = False       # entry gap overlaps a mitigation block
+    propulsion: bool = False       # a propulsion block sits under the entry
 
     def pnl(self, cost: float) -> tuple[float, float]:
         s = 1 if self.side == "long" else -1
@@ -246,8 +257,38 @@ class Side:
             self.o, self.h, self.l, self.c = -o, -l, -h, -c
         self.ph, self.pl = L.pivots(self.h, self.l, n)
         self.gaps = [z for z in L.fvgs(self.h, self.l) if z.kind == "bull" and z.top - z.bottom >= min_gap]
+        self.min_gap = min_gap
         self.sweep = None
         self.n = n
+        self._ifvg = self._opp = self._mit = self._prop = None
+
+    # lazily built arrays (only the switches that use them pay for them)
+    def ifvgs(self):
+        if self._ifvg is None:
+            self._ifvg = [z for z in L.inversion_fvgs(self.h, self.l, self.c, self.min_gap) if z.kind == "bull"]
+        return self._ifvg
+
+    def opposing(self):
+        """Bearish FVGs and voids (resistance above, in side terms), for targets."""
+        if self._opp is None:
+            self._opp = [z for z in L.fvgs(self.h, self.l) + L.voids(self.h, self.l)
+                         if z.kind == "bear" and z.top - z.bottom >= self.min_gap]
+        return self._opp
+
+    def mitigations(self):
+        if self._mit is None:
+            self._mit = [z for z in L.mitigation_blocks(self.o, self.h, self.l, self.c, self.n) if z.kind == "bull"]
+        return self._mit
+
+    def propulsions(self):
+        if self._prop is None:
+            obs = []
+            for g in self.gaps:
+                ob = L.order_block_blend(self.o, self.h, self.l, self.c, g.i - 4, g.i - 2, "bull")
+                if ob is not None and self.c[g.i - 1] > ob.top:
+                    obs.append(L.Zone("bull", ob.top, ob.bottom, g.i, ob.src, ob.mt))
+            self._prop = L.propulsion_blocks(self.o, self.h, self.l, self.c, obs)
+        return self._prop
 
     def x(self, price):
         return self.sign * price
@@ -267,7 +308,8 @@ class DayCtx:
     levels known before the open."""
 
     def __init__(self, df: pd.DataFrame, day: date, hist: list[pd.DataFrame], tf: int,
-                 htf: tuple = (), closes: dict | None = None, or_minutes: int = 30):
+                 htf: tuple = (), closes: dict | None = None, or_minutes: int = 30,
+                 evening: pd.DataFrame | None = None):
         prev = hist[-1]
         self.day, self.tf = day, tf
         frame = pd.concat([prev, df])
@@ -290,6 +332,8 @@ class DayCtx:
         self.wick = L.wick_midpoints(po, ph, pl, pc)
         tt = df.index.hour * 60 + df.index.minute
         pre = df[tt < 570]                         # overnight: midnight (SPY: 04:00) to 09:30
+        if evening is not None and len(evening):
+            pre = pd.concat([evening, pre])           # globex: from the prior 18:00 reopen
         if len(pre):
             self.pd["pmh"], self.pd["pml"] = float(pre.high.max()), float(pre.low.min())
         am = df[(tt >= 570) & (tt < 810)]
@@ -440,11 +484,12 @@ def _in_sb(t: int, p: Params) -> bool:
 def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, tf: int,
             partner: tuple[pd.DataFrame, list[pd.DataFrame]] | None = None,
             log: list | None = None, live: bool = False, bias: dict | None = None,
-            conf=None, gaps: list | None = None, closes: dict | None = None) -> list[Trade]:
+            conf=None, gaps: list | None = None, closes: dict | None = None,
+            evening: pd.DataFrame | None = None) -> list[Trade]:
     """Trades for one day. With `live`, a position still open at the last bar is returned
     with no exit (exit_reason "open") instead of being closed at the last price."""
     day = df.index[0].date()
-    ctx = DayCtx(df, day, hist, tf, p.htf, closes, p.or_minutes)
+    ctx = DayCtx(df, day, hist, tf, p.htf, closes, p.or_minutes, evening if p.globex_pool else None)
     ctx.conf = conf
     ctx.gaps = gaps if (p.gap_mode == "ict" and gaps is not None) else None
     pctx = DayCtx(partner[0], day, partner[1], tf) if partner is not None else None
@@ -555,7 +600,9 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                            sd.x(o["stop"]), sd.x(o["t1"]), None if o["t2"] is None else sd.x(o["t2"]),
                            o["shares"], day_type=day_type(day), htf=o["htf"], macro=o["macro"],
                            news=news(day), wbias=ctx.wbias, sb=_in_sb(t, p), weekday=day.weekday(),
-                           conf_n=o["conf_n"], conf_top=o["conf_top"], conf_tfs=o["conf_tfs"], **btag)
+                           conf_n=o["conf_n"], conf_top=o["conf_top"], conf_tfs=o["conf_tfs"],
+                           entry_kind=o["entry_kind"], mitigation=o["mitigation"],
+                           propulsion=o["propulsion"], **btag)
                 pos = dict(trade=tr, side=sd, stop=o["stop"], t1=o["t1"], t2=o["t2"],
                            left=o["shares"], n=o["shares"], basis=fill * o["shares"],
                            t1_done=False, fill_i=i, fill_t=t, add=None, fvg_bottom=o["fvg_bottom"],
@@ -669,6 +716,10 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         if a >= sw["ext_i"]:
             return None
         ref_i = a + int(np.argmax(h[a:sw["ext_i"]])); ref = h[ref_i]
+    if p.mss_cisd:                     # the open of the down-close series into the low
+        blk = L.order_block_blend(sd.o, h, l, c, sw["ext_i"] - 5, sw["ext_i"], "bull")
+        if blk is not None:
+            ref = float(sd.o[blk.src])
     if sw["broke"] is None:
         if i > sw["ext_i"] and (h[i] if p.mss_mode == "wick" else c[i]) > ref:
             sw["broke"] = i
@@ -676,6 +727,8 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         else:
             return None
     gaps = [g for g in sd.gaps if g.i <= i and g.i - 2 >= sw["ext_i"]]
+    if p.ifvg_entries:                 # bearish gaps inverted by the move up from the sweep
+        gaps = sorted(gaps + [z for z in sd.ifvgs() if sw["ext_i"] < z.i <= i], key=lambda z: z.i)
     if not gaps:
         if i - sw["broke"] >= p.fvg_wait:
             sd.sweep = None
@@ -703,6 +756,9 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
     pick = uni or fresh
     g = pick[-1] if p.fvg_pick == "last" else pick[0]
     entry = g.top if p.entry == "edge" else g.mid
+    is_ifvg = g not in sd.gaps
+    mit = any(z.i <= i and g.overlaps(z) for z in sd.mitigations()) if p.tag_blocks else False
+    prop = any(z.i <= i and z.bottom <= g.top and z.top >= sw["ext"] for z in sd.propulsions()) if p.tag_blocks else False
     # order block: the blended last down-close candle(s) before the structure break (A12)
     ob = L.order_block_blend(sd.o, h, l, c, sw["ext_i"] - 3, sw["broke"] - 1, "bull")
     stop = g.bottom - p.stop_buffer
@@ -738,6 +794,12 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         return None
     eq_hi = _eq_levels(sd, i, tol, lows=False)
     lv = _targets(ctx, sd, i, max(leg_hi, entry), eq_hi, p, (sw["ext"], leg_hi), sw["ext_i"])
+    if p.fvg_targets:                  # untouched opposing FVGs / voids: near edge, then CE (L9)
+        extra = []
+        for z in sd.opposing():
+            if z.i <= i and z.bottom > max(leg_hi, entry) and h[z.i + 1:i + 1].max(initial=-np.inf) < z.bottom:
+                extra += [(z.bottom, "array"), (z.mid, "array")]
+        lv = sorted(set(lv) | set(extra))
     kinds = [kind for v, kind in lv]
     lv = [v + p.pool_beyond_pts * p.es_pt if (p.exit_mode == "split" and kind == "pool")
           else v - p.exit_before_pts * p.es_pt for v, kind in lv]
@@ -762,7 +824,8 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
                 ext=sw["ext"], ext_i=sw["ext_i"],
                 t2=lv[1] if len(lv) > 1 else None, shares=shares, htf=htf,
                 conf_n=None if cf is None else len(cf), conf_top=(cf[-1] if cf else ""),
-                conf_tfs="|".join(cf or []),
+                conf_tfs="|".join(cf or []), entry_kind="ifvg" if is_ifvg else "fvg",
+                mitigation=bool(mit), propulsion=bool(prop),
                 macro=bool(p.macro[0] <= t < p.macro[1]))
 
 

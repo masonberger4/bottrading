@@ -128,7 +128,7 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
                 continue
             day_trades = run_day(g, [rth(x) for x in ds[max(0, k - 21):k]], symbol, p, tf, pa, bias=b, conf=cf,
                                  gaps=htf.gaps_for_day(og, d) if og is not None else None,
-                                 closes=closes)
+                                 closes=closes, evening=_evening(df, d) if p.globex_pool else None)
             if p.max_trades_week:
                 day_trades = day_trades[:p.max_trades_week - n_wk]
             for tr in day_trades:
@@ -139,6 +139,12 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     if len(out):
         out.attrs["days"] = len(ds) - warmup
     return out
+
+
+def _evening(df: pd.DataFrame, d) -> pd.DataFrame:
+    """Bars from the prior evening's 18:00 reopen to midnight of day d."""
+    a = pd.Timestamp(d, tz=NY)
+    return df[(df.index >= a - pd.Timedelta(hours=6)) & (df.index < a)]
 
 
 def stats(t: pd.DataFrame, account: float = 100_000.0) -> dict:
