@@ -1,5 +1,5 @@
 # 006 January 2023 NonFarm Payroll Review & HTF Concepts (VKkn8uckkW0)
-Date discussed: Fri Jan 6 2023 (NFP). Market: ES (ESH2023), MES mentioned for SMT. Timeframes shown: 1D, 1h, 15m, 5m, 1m. Duration ~56:55. This is "Ep 04" in mentorship2023_rules.md.
+Date discussed: Fri Jan 6 2023 (NFP). Market: ES (ESH2023), MES mentioned for SMT. Timeframes shown: 1D, 1h, 15m, 5m, 1m. Duration ~56:55. This is "Ep 04" in mentorship_rules.md.
 
 ## Summary
 NFP-day demo/paper long on ES. Price ignored the 08:30 spike, dipped into the 08:30 5m/1m BISI without reaching the 3814.50 sell-side, then shifted structure twice above the midnight open (3847.50). Bought near the midnight open and in a 1m FVG; scaled out at the 3876.25 relative equal highs, the 3885.50 old daily high and 3896.25. The daily volume imbalance (~3920-3928) was reached around 15:00. Main teaching: power of three framed on the midnight open, and the post-news dealing range.

@@ -1,4 +1,4 @@
-"""Backtest the 2023 Mentorship model on SPY (QQQ as the SMT partner) or on a random walk."""
+"""Backtest the ICT Mentorship model on SPY (QQQ as the SMT partner) or on a random walk."""
 from __future__ import annotations
 
 import json
@@ -10,7 +10,7 @@ import pandas as pd
 from claude_hf.daytypes import JOBS, is_trading_day
 from .strategy import Params, run_day
 
-DATA = Path("data/mentorship2023")
+DATA = Path("data/mentorship")
 NY = "America/New_York"
 
 

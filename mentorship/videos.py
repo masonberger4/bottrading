@@ -1,13 +1,14 @@
-"""Study material for the 2023 Mentorship playlist: captions plus chart frames.
+"""Study material for ICT Mentorship playlists (the 2023 one first): captions plus chart frames.
 
 For each video: English auto-captions as timestamped text, and a still frame every
 `every` seconds from a 720p copy. The video file is deleted as soon as its frames are
-saved, so only one video is on disk at a time. Everything lands in data/mentorship2023/
+saved, so only one video is on disk at a time. Everything lands in data/mentorship/
 (gitignored): captions/<idx>_<id>.txt and frames/<idx>_<id>/<hh-mm-ss>.jpg.
 
 Needs yt-dlp and imageio-ffmpeg (a private ffmpeg binary). Study use only.
 
-    python -m mentorship2023.videos --items 11-20
+    python -m mentorship.videos --items 11-20
+    python -m mentorship.videos --playlist <url> --prefix m24_     # another playlist
 """
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ import sys
 from pathlib import Path
 
 PLAYLIST = "https://www.youtube.com/playlist?list=PLVgHx4Z63pabpjlduWBaEsn8VMtALhjGV"
-ROOT = Path("data/mentorship2023")
+ROOT = Path("data/mentorship")
 CAP, FRAMES, TMP = ROOT / "captions", ROOT / "frames", ROOT / "tmp_video"
 
 
@@ -30,8 +31,8 @@ def ytdlp(*args: str) -> subprocess.CompletedProcess:
                           capture_output=True, text=True, encoding="utf8")
 
 
-def playlist() -> list[tuple[int, str, int, str]]:
-    r = ytdlp("--flat-playlist", "--print", "%(playlist_index)s|%(id)s|%(duration)s|%(title)s", PLAYLIST)
+def playlist(url: str = PLAYLIST) -> list[tuple[int, str, int, str]]:
+    r = ytdlp("--flat-playlist", "--print", "%(playlist_index)s|%(id)s|%(duration)s|%(title)s", url)
     out = []
     for line in r.stdout.splitlines():
         i, vid, dur, title = line.split("|", 3)
@@ -55,8 +56,8 @@ def vtt_to_text(path: Path) -> str:
     return "\n".join(lines)
 
 
-def captions(idx: int, vid: str) -> Path | None:
-    out = CAP / f"{idx:03d}_{vid}.txt"
+def captions(idx: int, vid: str, prefix: str = "") -> Path | None:
+    out = CAP / f"{prefix}{idx:03d}_{vid}.txt"
     if out.exists():
         return out
     CAP.mkdir(parents=True, exist_ok=True)
@@ -71,8 +72,8 @@ def captions(idx: int, vid: str) -> Path | None:
     return out
 
 
-def frames(idx: int, vid: str, every: int = 20) -> Path | None:
-    out = FRAMES / f"{idx:03d}_{vid}"
+def frames(idx: int, vid: str, every: int = 20, prefix: str = "") -> Path | None:
+    out = FRAMES / f"{prefix}{idx:03d}_{vid}"
     if out.exists() and any(out.iterdir()):
         return out
     import imageio_ffmpeg
@@ -101,15 +102,17 @@ def main():
     ap.add_argument("--items", default="1-105", help="playlist positions, e.g. 11-20")
     ap.add_argument("--every", type=int, default=20, help="seconds between frames")
     ap.add_argument("--no-frames", action="store_true")
+    ap.add_argument("--playlist", default=PLAYLIST, help="another mentorship playlist URL")
+    ap.add_argument("--prefix", default="", help="file-name prefix for a playlist other than 2023's")
     a = ap.parse_args()
     lo, hi = map(int, a.items.split("-"))
     seen = set()
-    for idx, vid, dur, title in playlist():
+    for idx, vid, dur, title in playlist(a.playlist):
         if not lo <= idx <= hi or vid in seen:
             continue
         seen.add(vid)
-        c = captions(idx, vid)
-        f = None if a.no_frames else frames(idx, vid, a.every)
+        c = captions(idx, vid, a.prefix)
+        f = None if a.no_frames else frames(idx, vid, a.every, a.prefix)
         n = len(list(f.iterdir())) if f else 0
         print(f"{idx:03d} {vid} {dur // 60}m captions={'yes' if c else 'NONE'} frames={n} | {title}", flush=True)
 

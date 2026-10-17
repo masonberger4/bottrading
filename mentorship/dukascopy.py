@@ -10,7 +10,7 @@ Files: https://datafeed.dukascopy.com/datafeed/<SYM>/<YYYY>/<MM-1>/<DD>/<BID|ASK
 Minutes with no trading repeat the last price with zero volume and are dropped.
 Market data only.
 
-    python -m mentorship2023.dukascopy --start 2019-01-01
+    python -m mentorship.dukascopy --start 2019-01-01
 """
 from __future__ import annotations
 

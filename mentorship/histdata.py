@@ -7,7 +7,7 @@ local time (see _parse).
 Prices are bid quotes; volume is always 0. Files come one zip per past year and one per
 month for the current year. Market data only.
 
-    python -m mentorship2023.histdata --start 2019
+    python -m mentorship.histdata --start 2019
 """
 from __future__ import annotations
 

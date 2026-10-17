@@ -1,8 +1,8 @@
 """Rule-by-rule study: each optional rule switched on alone and all together, on SPY, QQQ
 and the one-instrument-per-session combination, plus the random-walk control.
 
-    python -m mentorship2023.study            # SPY/QQQ (Schwab)
-    python -m mentorship2023.study --index    # SPX/NDX index CFDs since 2019 (HistData)
+    python -m mentorship.study            # SPY/QQQ (Schwab)
+    python -m mentorship.study --index    # SPX/NDX index CFDs since 2019 (HistData)
 """
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def _rw(job):
     return t
 
 
-def main(out="runs/mentorship2023"):
+def main(out="runs/mentorship"):
     jobs = [(tf, v) for tf in (5, 1) for v in VARIANTS]
     rw = [(5, s, v) for s in range(12) for v in ("base", "all_but_htf")] + \
          [(1, s, v) for s in range(3) for v in ("base", "all_but_htf")]
@@ -100,7 +100,7 @@ def _index_job(job):
     return t
 
 
-def main_index(out="runs/mentorship2023", variants=None, tfs=(5, 1), workers=6):
+def main_index(out="runs/mentorship", variants=None, tfs=(5, 1), workers=6):
     variants = variants or list(IVARIANTS)
     years = range(2019, 2027)
     jobs = [(tf, s, v, y) for tf in tfs for v in variants for s in INDEX for y in years]
@@ -166,7 +166,7 @@ def _am_job(job):
     return t
 
 
-def main_am_spy(out="runs/mentorship2023", workers=6, tfs=(1, 5)):
+def main_am_spy(out="runs/mentorship", workers=6, tfs=(1, 5)):
     jobs = [(tf, y) for tf in tfs for y in range(2019, 2027)]
     with ProcessPoolExecutor(workers) as ex:
         t = pd.concat([x for x in ex.map(_am_job, jobs) if len(x)], ignore_index=True)

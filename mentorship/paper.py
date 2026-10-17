@@ -35,7 +35,7 @@ def snapshot(c, symbol: str, partner: str | None, minutes: int, p: Params):
     return trades, log
 
 
-def run(symbol="SPY", partner="QQQ", minutes=1, p: Params | None = None, out="runs/mentorship2023"):
+def run(symbol="SPY", partner="QQQ", minutes=1, p: Params | None = None, out="runs/mentorship"):
     from claude_hf.data import client
     p = p or Params()
     c = client()

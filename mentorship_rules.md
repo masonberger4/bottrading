@@ -1,11 +1,11 @@
-# 2023 Mentorship bot: rules from transcripts
+# ICT Mentorship bot: rules from transcripts
 
 All times New York (ET); ICT stresses charts must be set to New York local time, daylight
 saving included (Ep 01 ~25:15, Ep 03 ~9:46, Ep 04 ~4:07). ICT trades ES/NQ futures; our bot
 trades what Schwab allows (SPY/QQQ) with ES-equivalent targets.
 
 Verified 2026-10-17 against the YouTube auto-captions of playlist PLVgHx4Z63pabpjlduWBaEsn8VMtALhjGV
-(captions kept locally in data/mentorship2023/captions/, not committed). Notation: "~mm:ss"
+(captions kept locally in data/mentorship/captions/, not committed). Notation: "~mm:ss"
 = approximate time in that video; [corrected] = the earlier note overstated or misstated it;
 [added] = in the transcript but missing from the earlier notes.
 

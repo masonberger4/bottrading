@@ -1,4 +1,4 @@
-"""The 2023 Mentorship model as a bar-by-bar state machine (America/New_York times).
+"""The ICT Mentorship model as a bar-by-bar state machine (America/New_York times).
 
 Setups
   AM  09:30-11:00  market maker buy/sell model: a sweep of sell-side (buy-side) liquidity

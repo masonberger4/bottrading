@@ -1,5 +1,5 @@
 # 003 Deep Learning On Nasdaq Futures Trade - January 04, 2023 (ojy5ApHhEu4)
-Date discussed: Wed Jan 4 2023 (FOMC day, NFP week). Market: NQ March 2023 (NQH2023), ES and US100 CFD for comparison. Timeframes: daily, 60m, 15m, 5m, 1m. Duration 1:32:38. ("Ep 03" in mentorship2023_rules.md.)
+Date discussed: Wed Jan 4 2023 (FOMC day, NFP week). Market: NQ March 2023 (NQH2023), ES and US100 CFD for comparison. Timeframes: daily, 60m, 15m, 5m, 1m. Duration 1:32:38. ("Ep 03" in mentorship_rules.md.)
 
 ## Summary
 Review of a paper-traded market maker buy model on NQ: Jan 3 1m BISI / 5m OB under price, Jan 4 10:00 drop into it, long from the 5m-ish OB at 10:40, structure shift at 10:44, pyramid to 10 contracts, partials at the rejection block, the 10:00 wick high and the 11048 relative equal highs, last units stopped just before noon short of the daily volume imbalance. NQ picked over ES by relative strength.

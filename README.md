@@ -50,9 +50,9 @@ mutation step sizes and operator choice from what worked. Every generation is lo
 
 Paper trades go to `runs/claude_hf/paper_trades.csv`. There is no live mode.
 
-## 2023 Mentorship bot (`mentorship2023/`)
+## ICT Mentorship bot (`mentorship/`)
 
-The ICT 2023 Mentorship rules in `mentorship2023_rules.md`, implemented bar-by-bar with no
+The ICT Mentorship rules (starting with the 2023 Mentorship playlist) in `mentorship_rules.md`, implemented bar-by-bar with no
 lookahead (New York time). Paper/backtest only: it has no order-sending code.
 
 - `levels.py`: PD arrays: FVG (BISI/SIBI) with CE, order blocks with mean threshold, breakers,
@@ -78,14 +78,14 @@ lookahead (New York time). Paper/backtest only: it has no order-sending code.
   HistData.com (2019 onward, no account; same feed as Dukascopy's, whose public datafeed
   `dukascopy.py` also reads but throttles hard). They trade almost around the clock, so
   the real midnight open is used and prices are ES/NQ-style points. `calendar.py` adds the
-  2019-2025 NFP/CPI/PPI/FOMC dates. `python -m mentorship2023.study --index` sizes in MES
+  2019-2025 NFP/CPI/PPI/FOMC dates. `python -m mentorship.study --index` sizes in MES
   ($5/pt) and MNQ ($2/pt) with a tick of slippage plus commission per side.
 - 5-minute history: extended hours from late March, regular session only back to late
   January (09:30 open stands in for midnight there).
 
-    .venv\Scripts\python -m mentorship2023 fetch
-    .venv\Scripts\python -m mentorship2023 backtest --minutes 5
-    .venv\Scripts\python -m mentorship2023 synthetic --seeds 5
-    .venv\Scripts\python -m mentorship2023.study
-    .venv\Scripts\python -m mentorship2023 paper --minutes 1
-    .venv\Scripts\python -m pytest -q tests\test_mentorship2023.py
+    .venv\Scripts\python -m mentorship fetch
+    .venv\Scripts\python -m mentorship backtest --minutes 5
+    .venv\Scripts\python -m mentorship synthetic --seeds 5
+    .venv\Scripts\python -m mentorship.study
+    .venv\Scripts\python -m mentorship paper --minutes 1
+    .venv\Scripts\python -m pytest -q tests\test_mentorship.py

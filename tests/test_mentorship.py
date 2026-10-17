@@ -3,8 +3,8 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-from mentorship2023 import backtest as B, levels as L
-from mentorship2023.strategy import Params, blocked
+from mentorship import backtest as B, levels as L
+from mentorship.strategy import Params, blocked
 
 
 def arr(*rows):
@@ -116,7 +116,7 @@ def test_balanced_price_range():
 
 def test_wick_midpoints_and_weekly_bias():
     assert L.wick_midpoints(10, 12, 8, 9) == {"upper": 11.0, "lower": 8.5}
-    from mentorship2023.strategy import weekly_bias
+    from mentorship.strategy import weekly_bias
     hist = []
     for k, d in enumerate(pd.bdate_range("2026-06-01", "2026-06-16")):
         idx = pd.date_range(d + pd.Timedelta(hours=9.5), periods=2, freq="195min", tz="America/New_York")

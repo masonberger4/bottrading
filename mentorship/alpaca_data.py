@@ -3,7 +3,7 @@
 Set ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY (environment or the Windows user
 registry via setx). Read-only: this only calls the market data endpoint.
 
-    python -m mentorship2023.alpaca_data --start 2019-01-01
+    python -m mentorship.alpaca_data --start 2019-01-01
 """
 from __future__ import annotations
 

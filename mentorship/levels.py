@@ -1,4 +1,4 @@
-"""PD-array detectors from the 2023 Mentorship rules (mentorship2023_rules.md).
+"""PD-array detectors from the ICT Mentorship rules (mentorship_rules.md).
 
 Every detector reports the bar index at which its object became *known* (`Zone.i`,
 `Pivot.known`), so a bar-by-bar caller can use an object at bar i only when its known

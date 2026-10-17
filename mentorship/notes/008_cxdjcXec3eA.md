@@ -1,5 +1,5 @@
 # 008 ICT Forex Review January 09, 2023 (cxdjcXec3eA)
-Date discussed: Mon Jan 9 2023 (he says "9th of September", a slip). Markets: DXY (TVC) and EURUSD (FOREX.com). Timeframes: daily, 1h, 15m, 5m. Duration ~7:45. = "Ep 06" in mentorship2023_rules.md. All 23 frames viewed (charts only, no face cam).
+Date discussed: Mon Jan 9 2023 (he says "9th of September", a slip). Markets: DXY (TVC) and EURUSD (FOREX.com). Timeframes: daily, 1h, 15m, 5m. Duration ~7:45. = "Ep 06" in mentorship_rules.md. All 23 frames viewed (charts only, no face cam).
 
 ## Summary
 DXY was bearish into a daily BISI below relative equal lows; the NY-open kill zone delivered his 2022 short model and the low formed at noon (London close). EURUSD mirrored it: London-open low, NY continuation, high of day at London close. Ends with a fib standard-deviation projection homework.

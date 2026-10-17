@@ -1,6 +1,6 @@
 # Ideas parked for later
 
-## After all Mentorship 2023 transcripts are uploaded
+## After all mentorship transcripts are uploaded
 
 - **Swing version on 1-hour / 4-hour / daily bars.** Same pattern as the intraday model
   (sweep of the previous day's or week's high/low, structure break, FVG entry) with no

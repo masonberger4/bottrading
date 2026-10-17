@@ -1,10 +1,10 @@
 """Command line.
 
-  python -m mentorship2023 fetch                     # SPY + QQQ, 5-min and 1-min, extended hours
-  python -m mentorship2023 backtest --minutes 5      # SPY with QQQ as the SMT partner
-  python -m mentorship2023 backtest --minutes 1 --symbol QQQ --partner SPY
-  python -m mentorship2023 synthetic --seeds 5       # random-walk sanity check
-  python -m mentorship2023 paper --minutes 1         # live Schwab bars, simulated fills only
+  python -m mentorship fetch                     # SPY + QQQ, 5-min and 1-min, extended hours
+  python -m mentorship backtest --minutes 5      # SPY with QQQ as the SMT partner
+  python -m mentorship backtest --minutes 1 --symbol QQQ --partner SPY
+  python -m mentorship synthetic --seeds 5       # random-walk sanity check
+  python -m mentorship paper --minutes 1         # live Schwab bars, simulated fills only
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def cmd_backtest(a):
     t = B.run(df, a.minutes, a.symbol, p, partner)
     rep = B.report(t)
     rep["days"] = t.attrs.get("days")
-    B.save(t, rep, f"runs/mentorship2023/{a.symbol}_{a.minutes}min_trades.csv")
+    B.save(t, rep, f"runs/mentorship/{a.symbol}_{a.minutes}min_trades.csv")
     print(json.dumps(rep["all"], indent=1))
 
 
@@ -47,7 +47,7 @@ def cmd_paper(a):
 
 
 def main():
-    ap = argparse.ArgumentParser(prog="mentorship2023")
+    ap = argparse.ArgumentParser(prog="mentorship")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("fetch").set_defaults(fn=lambda a: B.fetch())
     b = sub.add_parser("backtest")
