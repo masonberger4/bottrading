@@ -233,6 +233,8 @@ DECISIONS = {
     "combo_sb_mt_range": dict(sb_only=True, mt_mode="range"),
     "combo_sb_mt_range_nfp_thu": dict(sb_only=True, mt_mode="range", nfp_thu=True),
     "D12_leg_at_arm": dict(leg_pd_at="arm"),
+    "D21_gaps_monday": dict(gap_mode="monday"),
+    "D21_org_off": dict(org_days=0),
     "conf_2tf": dict(conf_min_n=2),
     "conf_3tf": dict(conf_min_n=3),
     "conf_4tf": dict(conf_min_n=4),

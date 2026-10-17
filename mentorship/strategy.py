@@ -114,6 +114,8 @@ class Params:
     gap_mode: str = "ict"          # opening-gap targets: "ict" = NWOG (Fri close -> Sun 18:00, last
                                    # 5) + this week's NDOGs, high/CE/low; "monday" = the old
                                    # Fri 16:00 -> Mon 09:30 edges (also the fallback without overnight bars)
+    org_days: int = 5              # opening range gaps (prior 16:00 close -> 09:30 open) kept as
+                                   # targets (high / 75% / CE / 25% / low); 0 = off (L7, D21)
     htf_bias: str = "off"          # daily HTF bias filter: off / react / draw / pd / combo (htf.py)
     bias_neutral: str = "skip"     # with a bias filter, a 0 day: "skip" it or trade "both" sides
     lot: int = 1                   # units per contract: 1 for shares; 5 for MES, 2 for MNQ
@@ -284,6 +286,13 @@ class DayCtx:
                 if len(rth):
                     self.nwog.append((float(a.close.iloc[-1]), float(rth.open.iloc[0])))
         self.nwog = self.nwog[-4:]
+        # opening range gaps: each day's prior RTH close -> its 09:30 open (today's included)
+        self.org = []
+        seq = hist[-6:] + [df]
+        for a, b in zip(seq[:-1], seq[1:]):
+            rth = b[(b.index.hour * 60 + b.index.minute) >= 570]
+            if len(rth) and len(a):
+                self.org.append((float(a.close.iloc[-1]), float(rth.open.iloc[0])))
         self.wbias = weekly_bias(hist, day)
         # higher-timeframe FVGs over the last 5 sessions, in real prices, with the time known
         self.hzones = []
@@ -333,6 +342,9 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
             lv += [(sd.x(a), "array"), (sd.x(b), "array")]
     if ctx.t[i] >= 810 and ctx.am_hl:
         lv.append((sd.x(ctx.am_hl[0] if sd.sign > 0 else ctx.am_hl[1]), "pool"))
+    if p.org_days:
+        for a, b in ctx.org[-p.org_days:]:
+            lv += [(sd.x(a + q * (b - a)), "array") for q in (0.0, 0.5, 1.0)]   # edges, CE
     if p.wick_levels:
         lv.append((sd.x(ctx.wick["upper"] if sd.sign > 0 else ctx.wick["lower"]), "array"))
     if p.sd_targets and leg is not None:
@@ -656,13 +668,16 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         return None
     eq_hi = _eq_levels(sd, i, tol, lows=False)
     lv = _targets(ctx, sd, i, max(leg_hi, entry), eq_hi, p, (sw["ext"], leg_hi))
+    kinds = [kind for v, kind in lv]
     lv = [v + p.pool_beyond_pts * p.es_pt if (p.exit_mode == "split" and kind == "pool")
           else v - p.exit_before_pts * p.es_pt for v, kind in lv]
+    pools = [v for v, kind in zip(lv, kinds) if kind == "pool" and v - entry >= p.min_rr * risk]
     lv = [v for v in lv if v - entry >= p.min_rr * risk]
     if not lv:
         _f("x_no_target_1R")
         return None
-    if p.min_draw_pts and (lv[1] if len(lv) > 1 else lv[0]) - entry < p.min_draw_pts * p.es_pt:
+    draw = pools[0] if pools else lv[-1]             # the draw: the nearest liquidity pool
+    if p.min_draw_pts and draw - entry < p.min_draw_pts * p.es_pt:
         _f("x_room_lt_10")
         return None                                   # not enough room to the draw
     shares = _lots(min(risk_mult * p.risk_dollars / risk, p.max_notional / abs(entry)), p.lot)

@@ -129,7 +129,7 @@ def test_wick_midpoints_and_weekly_bias():
 def test_no_look_ahead_with_every_optional_rule_on():
     x, y = B.synthetic(start="2026-06-01", end="2026-07-31", tf=5, seed=5)
     p = Params(es_pt=0.09, use_bias=False, trail=True, adds=(0.5, 0.33), weekly_bias=True,
-               sd_targets=True, wick_levels=True)
+               sd_targets=True, wick_levels=True, leg_pd=0, min_draw_pts=0)
     full = B.run(x, 5, "RW", p, y)
     assert len(full) > 0
     cols = ["entry_time", "entry", "stop", "t1", "shares", "htf"]
