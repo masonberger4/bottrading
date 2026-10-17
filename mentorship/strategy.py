@@ -43,6 +43,7 @@ import pandas as pd
 from claude_hf.daytypes import JOBS, day_type, events
 from . import calendar as _calendar  # noqa: F401  (loads 2019-2025 event dates)
 from . import levels as L
+from .confluence import TFS as CF_TFS
 
 NEWS_1000 = {"ism_manufacturing", "ism_services", "jolts", "sentiment"}
 NEWS_0830 = {"cpi", "jobs", "ppi", "pce", "retail_sales", "gdp"}
@@ -106,6 +107,8 @@ class Params:
     no_pm_after_am_win: bool = False   # D19 test
     max_trades_week: int = 0           # D19 test (0 = no cap)
     reentry_half: bool = False     # D18 test: one same-direction re-entry at half risk after a loss
+    conf_min_n: int = 0            # min number of timeframes (1m..monthly) with a PD array at the
+    conf_min_top: str = ""         # sweep extreme / highest such timeframe (confluence.py); 0/"" off
     htf_bias: str = "off"          # daily HTF bias filter: off / react / draw / pd / combo (htf.py)
     bias_neutral: str = "skip"     # with a bias filter, a 0 day: "skip" it or trade "both" sides
     lot: int = 1                   # units per contract: 1 for shares; 5 for MES, 2 for MNQ
@@ -194,6 +197,9 @@ class Trade:
     b_pd: int | None = None
     sb: bool = False
     weekday: int = 0
+    conf_n: int | None = None
+    conf_top: str = ""
+    conf_tfs: str = ""
 
     def pnl(self, cost: float) -> tuple[float, float]:
         s = 1 if self.side == "long" else -1
@@ -369,11 +375,13 @@ def _in_sb(t: int, p: Params) -> bool:
 
 def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, tf: int,
             partner: tuple[pd.DataFrame, list[pd.DataFrame]] | None = None,
-            log: list | None = None, live: bool = False, bias: dict | None = None) -> list[Trade]:
+            log: list | None = None, live: bool = False, bias: dict | None = None,
+            conf=None) -> list[Trade]:
     """Trades for one day. With `live`, a position still open at the last bar is returned
     with no exit (exit_reason "open") instead of being closed at the last price."""
     day = df.index[0].date()
     ctx = DayCtx(df, day, hist, tf, p.htf)
+    ctx.conf = conf
     pctx = DayCtx(partner[0], day, partner[1], tf) if partner is not None else None
     sides = [Side(1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n), Side(-1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n)]
     psides = ppos = None
@@ -477,7 +485,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                            o["swept"], o["unicorn"], o["smt"], ctx.idx[o["i"]], ts, sd.x(fill),
                            sd.x(o["stop"]), sd.x(o["t1"]), None if o["t2"] is None else sd.x(o["t2"]),
                            o["shares"], day_type=day_type(day), htf=o["htf"], macro=o["macro"],
-                           news=news(day), wbias=ctx.wbias, sb=_in_sb(t, p), weekday=day.weekday(), **btag)
+                           news=news(day), wbias=ctx.wbias, sb=_in_sb(t, p), weekday=day.weekday(),
+                           conf_n=o["conf_n"], conf_top=o["conf_top"], conf_tfs=o["conf_tfs"], **btag)
                 pos = dict(trade=tr, side=sd, stop=o["stop"], t1=o["t1"], t2=o["t2"],
                            left=o["shares"], n=o["shares"], basis=fill * o["shares"],
                            t1_done=False, fill_i=i, fill_t=t, add=None, fvg_bottom=o["fvg_bottom"],
@@ -534,6 +543,14 @@ def _sell_side(ctx: DayCtx, sd: Side, session: str) -> dict[str, float]:
     return out
 
 
+FUNNEL = None   # set to a collections.Counter to count how setups are found and rejected
+
+
+def _f(key):
+    if FUNNEL is not None:
+        FUNNEL[key] += 1
+
+
 def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mult=1.0):
     """Advance this side's sweep -> MSS -> FVG machine at bar i; return an order or None."""
     l, h, c = sd.l, sd.h, sd.c
@@ -555,6 +572,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         sw = sd.sweep = dict(session=session, name=("rel_eq_lows" if sd.sign > 0 else "rel_eq_highs") if k.startswith("rel_eq") else k,
                              level=v, key=k, ext=l[i], ext_i=i, broke=None, sweep_i=i)
         sw["smt"] = _smt(ctx, sd, i, k, v, session, pctx, psides, ppos)
+        _f("1_sweep")
     if sw is None:
         return None
     if l[i] < sw["ext"]:
@@ -571,14 +589,17 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
     if sw["broke"] is None:
         if i > sw["ext_i"] and (h[i] if p.mss_mode == "wick" else c[i]) > ref:
             sw["broke"] = i
+            _f("2_mss")
         else:
             return None
     gaps = [g for g in sd.gaps if g.i <= i and g.i - 2 >= sw["ext_i"]]
     if not gaps:
         if i - sw["broke"] >= p.fvg_wait:
             sd.sweep = None
+            _f("x_no_fvg_after_mss")
         return None
     sd.sweep = None   # this sweep is consumed whether or not the order passes the filters
+    _f("3_fvg")
     bz = L.order_block(sd.o, h, l, c, ref_i - p.pivot_n, ref_i, "bear")   # breaker candle
     if bz is not None and p.breaker_zone == "body":   # body of the highest-body up-close candle
         ups = [k for k in range(max(0, ref_i - p.pivot_n), ref_i + 1) if c[k] > sd.o[k]]
@@ -595,16 +616,30 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         stop = min(stop, mt - p.stop_buffer)
     risk = entry - stop
     if not (p.min_risk_pts * p.es_pt <= risk <= p.max_risk_pts * p.es_pt):
+        _f("x_risk_too_small" if risk < p.min_risk_pts * p.es_pt else "x_risk_too_big")
         return None
     if p.use_bias:
         ref_open = ctx.opens.get("midnight" if session == "AM" else "1330")
         if ref_open is not None and not entry < sd.x(ref_open):
+            _f("x_wrong_side_of_open")
             return None
     leg_hi = h[sw["ext_i"]:i + 1].max()
     if p.leg_pd and entry > sw["ext"] + p.leg_pd * (leg_hi - sw["ext"]):
+        _f("x_leg_premium")
         return None                                   # entry FVG not in the leg's discount
     htf = _htf_tag(ctx, sd, i, sw["ext"], tol)
     if p.require_htf and not htf:
+        return None
+    cf = None
+    if getattr(ctx, "conf", None) is not None:
+        cf = ctx.conf.at(ctx.idx[i] + pd.Timedelta(minutes=ctx.tf), sd.x(sw["ext"]), sd.sign,
+                         known_by=ctx.idx[sw["ext_i"]] + pd.Timedelta(minutes=ctx.tf))
+        n_tf = len(cf)
+        top = max((CF_TFS.index(x) for x in cf), default=-1)
+        if n_tf < p.conf_min_n or (p.conf_min_top and top < CF_TFS.index(p.conf_min_top)):
+            _f("x_confluence")
+            return None
+    elif p.conf_min_n or p.conf_min_top:
         return None
     eq_hi = _eq_levels(sd, i, tol, lows=False)
     lv = _targets(ctx, sd, i, max(leg_hi, entry), eq_hi, p, (sw["ext"], leg_hi))
@@ -612,18 +647,23 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
           else v - p.exit_before_pts * p.es_pt for v, kind in lv]
     lv = [v for v in lv if v - entry >= p.min_rr * risk]
     if not lv:
+        _f("x_no_target_1R")
         return None
     if p.min_draw_pts and (lv[1] if len(lv) > 1 else lv[0]) - entry < p.min_draw_pts * p.es_pt:
+        _f("x_room_lt_10")
         return None                                   # not enough room to the draw
     shares = _lots(min(risk_mult * p.risk_dollars / risk, p.max_notional / abs(entry)), p.lot)
     if shares < 1:
         return None
+    _f("4_order")
     t = ctx.t[i]
     setup = "am_mm" if session == "AM" else ("pm_last_hour" if p.last_hour[0] <= t < p.last_hour[1]
                                               else "pm_sb" if 840 <= t < 900 else "pm")
     return dict(side=sd, session=session, setup=setup, swept=sw["name"], unicorn=bool(uni),
                 smt=sw["smt"], i=i, entry=entry, stop=stop, t1=lv[0], fvg_bottom=g.bottom,
                 t2=lv[1] if len(lv) > 1 else None, shares=shares, htf=htf,
+                conf_n=None if cf is None else len(cf), conf_top=(cf[-1] if cf else ""),
+                conf_tfs="|".join(cf or []),
                 macro=bool(p.macro[0] <= t < p.macro[1]))
 
 

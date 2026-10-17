@@ -230,6 +230,8 @@ DECISIONS = {
     "L15_room_off": dict(min_draw_pts=0.0),
     "X6_fvg_abort": dict(fvg_abort=True),
     "X9_time_stop_10": dict(time_stop_min=10),
+    "combo_sb_mt_range": dict(sb_only=True, mt_mode="range"),
+    "combo_sb_mt_range_nfp_thu": dict(sb_only=True, mt_mode="range", nfp_thu=True),
     "bias_react": dict(htf_bias="react"),
     "bias_draw": dict(htf_bias="draw"),
     "bias_pd": dict(htf_bias="pd"),
@@ -253,7 +255,7 @@ def _dec_job(job):
     df, pa = B.load("SPX", tf, source="histdata"), B.load("NDX", tf, source="histdata")
     a, b = pd.Timestamp(f"{year}-01-01", tz=B.NY), pd.Timestamp(f"{year + 1}-01-01", tz=B.NY)
     lo = a - pd.Timedelta(days=45)
-    p = replace(Params(), **DEC_BASE, **DECISIONS[name])
+    p = replace(Params(), **{**DEC_BASE, **DECISIONS[name]})
     t = B.run(df[(df.index >= lo) & (df.index < b)], tf, "SPX", p, pa[(pa.index >= lo) & (pa.index < b)],
               bias_table=_bias_cache(tf))
     if len(t):

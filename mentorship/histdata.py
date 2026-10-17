@@ -107,3 +107,23 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def fix_sessions(df: pd.DataFrame) -> pd.DataFrame:
+    """Some sessions in the HistData files run one hour early: they close at 15:14 instead
+    of 16:14 and reopen at 17:00 (the US/EU daylight-saving mismatch weeks every March and
+    October/November, and most of Feb-Jul 2023). Shift those sessions one hour later so
+    every session closes at 16:14 New York time. A session = reopen to close, labelled with
+    the date of (time + 7h)."""
+    lab = (df.index + pd.Timedelta(hours=7)).date
+    ts = pd.Series(df.index, index=df.index).groupby(lab)
+    last, first = ts.transform("max"), ts.transform("min")
+    m = last.dt.hour * 60 + last.dt.minute
+    f = first.dt.hour * 60 + first.dt.minute
+    # closes 14:30-15:29 AND reopened 17:00-17:59: an hour early (a gappy session that
+    # merely lost its last hour still reopened at 18:00 and is left alone)
+    early = ((m >= 870) & (m < 930) & (f >= 1020) & (f < 1080)).values
+    idx = df.index.where(~early, df.index + pd.Timedelta(hours=1))
+    out = df.copy()
+    out.index = idx
+    return out[~out.index.duplicated(keep="last")].sort_index()

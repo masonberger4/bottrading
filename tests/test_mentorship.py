@@ -173,3 +173,21 @@ def test_no_look_ahead_with_decision_switches_on():
             a = full[full.entry_time <= c][cols].reset_index(drop=True)
             b = part[part.entry_time <= c][cols].reset_index(drop=True)
             pd.testing.assert_frame_equal(a, b)
+
+
+def test_confluence_tags_do_not_look_ahead():
+    from pathlib import Path
+    if not Path("data/mentorship/SPX_5min_hd.csv").exists():
+        return
+    df = B.load("SPX", 5, source="histdata")
+    df = df[(df.index >= "2024-05-01") & (df.index < "2024-08-01")]
+    p = Params(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, leg_pd=0, min_draw_pts=0)
+    full = B.run(df, 5, "SPX", p)
+    assert len(full) > 2
+    cols = ["entry_time", "entry", "stop", "conf_n", "conf_tfs"]
+    for cut in full.entry_time.iloc[::3]:
+        c = cut + pd.Timedelta(minutes=2)
+        part = B.run(df[df.index <= c], 5, "SPX", p, partial_last=True)
+        a = full[full.entry_time <= c][cols].reset_index(drop=True)
+        b = part[part.entry_time <= c][cols].reset_index(drop=True)
+        pd.testing.assert_frame_equal(a, b)

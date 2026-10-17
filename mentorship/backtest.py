@@ -26,7 +26,8 @@ def load(symbol: str, minutes: int, rth_history: bool = True, source: str = "sch
     for the days the extended pull doesn't reach. Those days have no pre-market, so their
     'midnight open' falls back to the 09:30 open and they have no pre-market high/low."""
     if source == "histdata":                     # index CFDs, see histdata.py (SPX, NDX)
-        return _read(DATA / f"{symbol}_{minutes}min_hd.csv")
+        from .histdata import fix_sessions
+        return fix_sessions(_read(DATA / f"{symbol}_{minutes}min_hd.csv"))
     if source == "alpaca":                       # see alpaca_data.py: years, with extended hours
         return _read(DATA / f"{symbol}_{minutes}min_alpaca.csv")
     df = _read(DATA / f"{symbol}_{minutes}min.csv")
@@ -79,9 +80,13 @@ def rth(g: pd.DataFrame) -> pd.DataFrame:
 
 def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
         partner: pd.DataFrame | None = None, warmup: int = 3, partial_last: bool = False,
-        bias_table: pd.DataFrame | None = None) -> pd.DataFrame:
+        bias_table: pd.DataFrame | None = None, confluence: bool = True) -> pd.DataFrame:
     p = p or Params()
     bt = bias_table if bias_table is not None else (htf.table(df, p.es_pt) if htf.has_overnight(df) else None)
+    cf = None
+    if confluence and htf.has_overnight(df):
+        from .confluence import Confluence
+        cf = Confluence(df, tf, p.es_pt)
     ds = days(df, tf, partial_last)
     pmap = {g.index[0].date(): g for g in days(partner, tf, partial_last)} if partner is not None else {}
     hist_p: list[pd.DataFrame] = []
@@ -97,7 +102,7 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             n_wk = sum(1 for r in rows if r["date"].isocalendar()[:2] == wk) if p.max_trades_week else 0
             if p.max_trades_week and n_wk >= p.max_trades_week:
                 continue
-            day_trades = run_day(g, [rth(x) for x in ds[max(0, k - 21):k]], symbol, p, tf, pa, bias=b)
+            day_trades = run_day(g, [rth(x) for x in ds[max(0, k - 21):k]], symbol, p, tf, pa, bias=b, conf=cf)
             if p.max_trades_week:
                 day_trades = day_trades[:p.max_trades_week - n_wk]
             for tr in day_trades:
