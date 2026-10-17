@@ -223,6 +223,7 @@ DECISIONS = {
     "D16_am_hold": dict(am_exit=0),
     "D16_pm_done_1500": dict(pm_done_by=900),
     "D17_pivot_1": dict(pivot_n=1),
+    "D17_pivot_2": dict(pivot_n=2),
     "D18_reentry_half": dict(reentry_half=True),
     "D19_no_pm_after_win": dict(no_pm_after_am_win=True),
     "D19_max_3_week": dict(max_trades_week=3),
