@@ -238,8 +238,8 @@ class Params:
     t1_fixed_all: bool = False           # with t1_fixed_pts: the whole position off at +N (no T2)
     day_target_pts: float = 0.0          # X14a test: stop for the day after N net ES pts
     sb_target_mode: str = "draw"         # Silver Bullet exits at the draw (owner #2); "fixed" = +5
-    # #3 year end (Ep01.9, N7.4) - OWNER ANSWER PENDING: off until the mapping is confirmed
-    year_end: str = "off"                # "december" (side from December's direction) / "long" (old
+    # #3 year end (Ep01.9, N7.4) - owner answer 2026-10-18: (a) against December, squaring map
+    year_end: str = "december"           # owner #3 (a): "december" (side from December's direction) / "long" (old
                                          # always-bullish) / "tag" (tags only) / "off"
     year_end_map: str = "squaring"       # Dec down -> long (Ep 01 Dec 2022); "with": Dec down -> short
                                          # (owner_directives.md l.23) - owner must confirm
@@ -287,9 +287,9 @@ class Params:
     draw_lock_near_cap: bool = False     # test: drop lock candidates beyond the nearest HTF cap
     draw_lock_min_pts: float = 5.0       # [our interpretation] a draw must lie at least this many ES pts
                                          # from the lock price (owner #2: 5 handles = minimum room)
-    # #10 sloppy days (B17.4, N8.1, Ep08.2) - OWNER ANSWER PENDING: tag only for now
-    sloppy_mode: str = "off"             # "off" = tag only; "stand_aside" (owner #10); "scalp"
-    sloppy_tests: tuple = ("big_prev", "chop", "nfp_week")
+    # #10 sloppy days (B17.4, N8.1, Ep08.2) - owner answer 2026-10-18: stand aside on sloppy days only
+    sloppy_mode: str = "stand_aside"     # owner #10: stand aside on sloppy days; "off" = tag only; "scalp"
+    sloppy_tests: tuple = ("big_prev", "chop")   # owner: NFP-week Thu / FOMC week stay tradable; add "nfp_week" to block
     sloppy_big_mult: float = 2.0         # [our interpretation] prior range > 2x ADR5
     sloppy_chop_frac: float = 0.35       # [our interpretation] range since midnight < 0.35x ADR5 ...
     sloppy_chop_cross: int = 4           # ... and >= 4 close crossings of the midnight open

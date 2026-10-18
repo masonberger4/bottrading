@@ -339,7 +339,7 @@ DECISIONS = {
     "X14a_day_target5": dict(day_target_pts=5.0),
     "M3_sb_target_fixed": dict(sb_model=True, sb_target_mode="fixed"),
     "M3_sb_target_draw": dict(sb_model=True),
-    "N7.4_year_end_december": dict(year_end="december"),                 # #3 (owner answer pending)
+    "N7.4_year_end_off": dict(year_end="off"),                           # #3 owner (a) default = december/squaring
     "N7.4_year_end_dec_with": dict(year_end="december", year_end_map="with"),
     "N7.4_year_end_long": dict(year_end="long"),
     "N7.4_year_end_tag": dict(year_end="tag"),
@@ -369,7 +369,8 @@ DECISIONS = {
     "B3_lock_relock": dict(draw_relock=True),
     "B3_lock_near_cap": dict(draw_lock_near_cap=True),
     "B3_lock_min0": dict(draw_lock_min_pts=0.0),
-    "B17.4_sloppy_stand_aside": dict(sloppy_mode="stand_aside"),         # #10 (owner answer pending)
+    "B17.4_sloppy_off": dict(sloppy_mode="off"),                         # #10 owner default = stand_aside
+    "B17.4_sloppy_nfp_week": dict(sloppy_tests=("big_prev", "chop", "nfp_week")),
     "B17.4_sloppy_scalp": dict(sloppy_mode="scalp"),
     "M1.4_ob_post_mss": dict(ob_entry="post_mss"),                       # #11
     "M1.4_ob_both": dict(ob_entry="both"),
