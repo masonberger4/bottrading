@@ -100,7 +100,8 @@ def rth(g: pd.DataFrame) -> pd.DataFrame:
 
 def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
         partner: pd.DataFrame | None = None, warmup: int = 3, partial_last: bool = False,
-        bias_table: pd.DataFrame | None = None, confluence: bool = True) -> pd.DataFrame:
+        bias_table: pd.DataFrame | None = None, confluence: bool = True,
+        partner2: pd.DataFrame | None = None) -> pd.DataFrame:
     p = p or Params()
     bt = bias_table if bias_table is not None else (htf.table(df, p.es_pt) if htf.has_overnight(df) else None)
     og = htf.opening_gaps(df, p.es_pt) if htf.has_overnight(df) else None
@@ -113,13 +114,16 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
         cf = Confluence(df, tf, p.es_pt)
     ds = days(df, tf, partial_last)
     pmap = {g.index[0].date(): g for g in days(partner, tf, partial_last)} if partner is not None else {}
+    pmap2 = {g.index[0].date(): g for g in days(partner2, tf, partial_last)} if partner2 is not None else {}
     hist_p: list[pd.DataFrame] = []
+    hist_p2: list[pd.DataFrame] = []
     rows = []
     for k, g in enumerate(ds):
         d = g.index[0].date()
         pa = None
         if d in pmap and len(hist_p) >= warmup:
             pa = (pmap[d], hist_p)
+        pa2 = (pmap2[d], hist_p2) if d in pmap2 and len(hist_p2) >= warmup else None
         if k >= warmup:
             b = bt.loc[d].to_dict() if bt is not None and d in bt.index else None
             wk = d.isocalendar()[:2]
@@ -128,13 +132,16 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
                 continue
             day_trades = run_day(g, [rth(x) for x in ds[max(0, k - 21):k]], symbol, p, tf, pa, bias=b, conf=cf,
                                  gaps=htf.gaps_for_day(og, d) if og is not None else None,
-                                 closes=closes, evening=_evening(df, d) if p.globex_pool else None)
+                                 closes=closes, evening=_evening(df, d) if p.globex_pool else None,
+                                 partner2=pa2)
             if p.max_trades_week:
                 day_trades = day_trades[:p.max_trades_week - n_wk]
             for tr in day_trades:
                 rows.append(tr.row(p.cost_per_share))
         if d in pmap:
             hist_p = (hist_p + [rth(pmap[d])])[-21:]
+        if d in pmap2:
+            hist_p2 = (hist_p2 + [rth(pmap2[d])])[-21:]
     out = pd.DataFrame(rows)
     if len(out):
         out.attrs["days"] = len(ds) - warmup

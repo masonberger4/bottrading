@@ -137,6 +137,8 @@ class Params:
                                    # settlement (7 videos), 960 = 16:00 (3 videos; SPY's close)
     or_minutes: int = 30           # opening range 09:30-10:00 (2023 videos); 60 = CC's 09:30-10:30;
                                    # its high/low are AM sweep pools and targets once complete; 0 off
+    smt_min: int = 0               # B18: at least this many sister indices (NQ, YM) must have
+                                   # failed to take their version of the swept level; 0 = tag only
     htf_bias: str = "off"          # daily HTF bias filter: off / react / draw / pd / combo (htf.py)
     bias_neutral: str = "skip"     # with a bias filter, a 0 day: "skip" it or trade "both" sides
     lot: int = 1                   # units per contract: 1 for shares; 5 for MES, 2 for MNQ
@@ -231,6 +233,8 @@ class Trade:
     entry_kind: str = "fvg"        # fvg / ifvg / 5m entry modes keep "fvg"
     mitigation: bool = False       # entry gap overlaps a mitigation block
     propulsion: bool = False       # a propulsion block sits under the entry
+    smt2: bool | None = None       # second sister index (YM)
+    smt_n: int = 0                 # sister indices that did not confirm the sweep
 
     def pnl(self, cost: float) -> tuple[float, float]:
         s = 1 if self.side == "long" else -1
@@ -519,7 +523,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             partner: tuple[pd.DataFrame, list[pd.DataFrame]] | None = None,
             log: list | None = None, live: bool = False, bias: dict | None = None,
             conf=None, gaps: list | None = None, closes: dict | None = None,
-            evening: pd.DataFrame | None = None) -> list[Trade]:
+            evening: pd.DataFrame | None = None,
+            partner2: tuple[pd.DataFrame, list[pd.DataFrame]] | None = None) -> list[Trade]:
     """Trades for one day. With `live`, a position still open at the last bar is returned
     with no exit (exit_reason "open") instead of being closed at the last price."""
     day = df.index[0].date()
@@ -534,6 +539,12 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         psides = {1: Side(1, pctx.o, pctx.h, pctx.l, pctx.c, p.pivot_n, mg),
                   -1: Side(-1, pctx.o, pctx.h, pctx.l, pctx.c, p.pivot_n, mg)}
         ppos = pd.Series(np.arange(len(pctx.idx)), index=pctx.idx)
+    ctx.partner2 = None
+    if partner2 is not None:
+        c2 = DayCtx(partner2[0], day, partner2[1], tf)
+        ctx.partner2 = (c2, {1: Side(1, c2.o, c2.h, c2.l, c2.c, p.pivot_n, mg),
+                             -1: Side(-1, c2.o, c2.h, c2.l, c2.c, p.pivot_n, mg)},
+                        pd.Series(np.arange(len(c2.idx)), index=c2.idx))
     tags = events(day)
     am_start = 600 if tags & NEWS_1000 else p.am[0]
     trades: list[Trade] = []
@@ -636,6 +647,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                            news=news(day), wbias=ctx.wbias, sb=_in_sb(t, p), weekday=day.weekday(),
                            conf_n=o["conf_n"], conf_top=o["conf_top"], conf_tfs=o["conf_tfs"],
                            entry_kind=o["entry_kind"], mitigation=o["mitigation"],
+                           smt2=o["smt2"], smt_n=o["smt_n"],
                            propulsion=o["propulsion"], **btag)
                 pos = dict(trade=tr, side=sd, stop=o["stop"], t1=o["t1"], t2=o["t2"],
                            left=o["shares"], n=o["shares"], basis=fill * o["shares"],
@@ -736,6 +748,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         sw = sd.sweep = dict(session=session, name=("rel_eq_lows" if sd.sign > 0 else "rel_eq_highs") if k.startswith("rel_eq") else k,
                              level=v, key=k, ext=l[i], ext_i=i, broke=None, sweep_i=i)
         sw["smt"] = _smt(ctx, sd, i, k, v, session, pctx, psides, ppos)
+        sw["smt2"] = _smt(ctx, sd, i, k, v, session, *ctx.partner2) if getattr(ctx, "partner2", None) else None
         _f("1_sweep")
     if sw is None:
         return None
@@ -858,6 +871,10 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
     if p.min_draw_pts and draw - entry < p.min_draw_pts * p.es_pt:
         _f("x_room_lt_10")
         return None                                   # not enough room to the draw
+    smt_n = int(sw["smt"] is True) + int(sw.get("smt2") is True)
+    if smt_n < p.smt_min:
+        _f("x_no_smt")
+        return None
     shares = _lots(min(risk_mult * p.risk_dollars / risk, p.max_notional / abs(entry)), p.lot)
     if shares < 1:
         return None
@@ -866,7 +883,8 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
     setup = "am_mm" if session == "AM" else ("pm_last_hour" if p.last_hour[0] <= t < p.last_hour[1]
                                               else "pm_sb" if 840 <= t < 900 else "pm")
     return dict(side=sd, session=session, setup=setup, swept=sw["name"], unicorn=bool(uni),
-                smt=sw["smt"], i=i, entry=entry, stop=stop, t1=lv[0], fvg_bottom=g.bottom,
+                smt=sw["smt"], smt2=sw.get("smt2"), smt_n=smt_n,
+                i=i, entry=entry, stop=stop, t1=lv[0], fvg_bottom=g.bottom,
                 ext=sw["ext"], ext_i=sw["ext_i"],
                 t2=lv[1] if len(lv) > 1 else None, shares=shares, htf=htf,
                 conf_n=None if cf is None else len(cf), conf_top=(cf[-1] if cf else ""),
@@ -881,11 +899,15 @@ def _smt(ctx, sd, i, key, level, session, pctx, psides, ppos):
     if pctx is None or key.startswith("rel_eq"):
         return None
     ps = psides[sd.sign]
-    plv = _sell_side(pctx, ps, session).get(key)
+    j = ppos.index.searchsorted(ctx.idx[i], side="right") - 1
+    if j < pctx.start:
+        return None
+    plv = _sell_side(pctx, ps, session, j, True).get(key)
     if plv is None:
         return None
-    j = ppos.index.searchsorted(ctx.idx[i], side="right") - 1
-    created = pctx.start + int(np.searchsorted(pctx.t[pctx.start:], 810)) if key == "am_session" else pctx.start
+    at = lambda m: pctx.start + int(np.searchsorted(pctx.t[pctx.start:], m))
+    created = {"am_session": at(810), "lunch": at(810), "opening_range": at(pctx.or_end),
+               "london": at(300)}.get(key, pctx.start)
     if j < created:
         return None
     return bool(ps.l[created:j + 1].min() >= plv)
