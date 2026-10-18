@@ -33,6 +33,28 @@ LIFE = {"1m": "1D", "5m": "2D", "15m": "5D", "30m": "10D", "1h": "20D", "4h": "6
         "D": "90D", "W": "1100D", "M": "3700D"}   # D: ~60 trading days, as htf.py
 
 
+def _structure(h, l, c) -> np.ndarray:
+    """Market-structure state after each bar: +1 once a close is above the most recent
+    confirmed swing high (3-candle pivot), -1 once a close is below the most recent swing low;
+    the state holds until the opposite break."""
+    ph, pl = L.pivots(h, l, 1)
+    st = np.zeros(len(c))
+    hi = lo = None
+    a = b = 0
+    s = 0
+    for k in range(len(c)):
+        while a < len(ph) and ph[a].known <= k:
+            hi = ph[a].price; a += 1
+        while b < len(pl) and pl[b].known <= k:
+            lo = pl[b].price; b += 1
+        if hi is not None and c[k] > hi:
+            s = 1
+        elif lo is not None and c[k] < lo:
+            s = -1
+        st[k] = s
+    return st
+
+
 def _zones(o, h, l, c, end_times, gaps=None, max_bars=None):
     """Arrays as columns: kind (+1 bull / -1 bear), top, bottom, inv (invalidation level),
     known (time the array can first be used), plus the bar index the invalidation scan
@@ -70,6 +92,7 @@ class Confluence:
     def __init__(self, df: pd.DataFrame, base_minutes: int, es_pt: float = 1.0):
         self.tol = 0.25 * es_pt
         self.z = {}
+        self.st = {}                   # tf -> (bar end times, structure state)
         for tf, m in MINUTES.items():
             if m < base_minutes:
                 continue
@@ -83,6 +106,7 @@ class Confluence:
             life_bars = int(pd.Timedelta(LIFE[tf]).total_seconds() // 60 // m)
             z = _zones(*(b[k].values.astype(float) for k in ("open", "high", "low", "close")),
                        end.astype(float), max_bars=life_bars)
+            self.st[tf] = (end.astype(float), _structure(b.high.values, b.low.values, b.close.values))
             if z:
                 z["life"] = pd.Timedelta(LIFE[tf]).value
                 self.z[tf] = z
@@ -91,6 +115,10 @@ class Confluence:
         lab = (df.index + pd.Timedelta(hours=7)).normalize().tz_localize(None)
         last = pd.Series(df.index, index=df.index).groupby(lab).max()
         dend = pd.DatetimeIndex(last.reindex(d.index) + pd.Timedelta(minutes=base_minutes)).as_unit("ns").asi8.astype(float)
+        # never before the session's scheduled 17:00 close, so a session still in progress at the
+        # end of the data is not taken as complete
+        close17 = pd.DatetimeIndex((d.index + pd.Timedelta(hours=17)).tz_localize(NY)).as_unit("ns").asi8.astype(float)
+        dend = np.maximum(dend, close17)
         for tf, per in (("D", None), ("W", "W-FRI"), ("M", "M")):
             if per is None:
                 b, ends = d, dend
@@ -102,6 +130,7 @@ class Confluence:
                 ends = pd.Series(dend, index=d.index).groupby(grp).max().values
             z = _zones(*(b[k].values.astype(float) for k in ("open", "high", "low", "close")),
                        np.asarray(ends, float))
+            self.st[tf] = (np.asarray(ends, float), _structure(b.high.values, b.low.values, b.close.values))
             if z:
                 z["life"] = np.full(len(z["kind"]), float(pd.Timedelta(LIFE[tf]).value))
                 self.z[tf] = z
@@ -144,6 +173,44 @@ class Confluence:
             if m.any():
                 out.append(tf)
         return out
+
+
+def _targets_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs) -> list[float]:
+    """Opposing PD arrays (FVGs, order blocks, opening gaps) still valid at time t on the
+    given timeframes, beyond `beyond` in the trade's direction: their near edge and CE.
+    For a long (side +1): bearish arrays above; for a short: bullish arrays below."""
+    now = float(t.value)
+    out = []
+    for tf in tfs:
+        z = self.z.get(tf)
+        if z is None:
+            continue
+        m = ((z["kind"] == -side) & (z["known"] <= now) & (z["dead"] > now)
+             & (now - z["known"] <= z["life"]))
+        if side > 0:
+            m &= z["bottom"] > beyond
+            near = z["bottom"][m]
+        else:
+            m &= z["top"] < beyond
+            near = z["top"][m]
+        ce = (z["top"][m] + z["bottom"][m]) / 2
+        out += list(near) + list(ce)
+    return out
+
+
+Confluence.targets = _targets_impl
+
+
+def _trend_impl(self, t: pd.Timestamp, tf: str) -> int:
+    """Structure state of timeframe tf from the last bar closed by time t (0 if unknown)."""
+    e = self.st.get(tf)
+    if e is None:
+        return 0
+    k = int(np.searchsorted(e[0], float(t.value), side="right")) - 1
+    return int(e[1][k]) if k >= 0 else 0
+
+
+Confluence.trend = _trend_impl
 
 
 def score(tfs: list[str]) -> tuple[int, int]:

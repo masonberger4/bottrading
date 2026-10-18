@@ -247,3 +247,24 @@ def test_no_look_ahead_with_5m_entries_on_1m():
                 a = full[full.entry_time <= cut][cols].reset_index(drop=True)
                 b = part[part.entry_time <= cut][cols].reset_index(drop=True)
                 pd.testing.assert_frame_equal(a, b)
+
+
+def test_no_look_ahead_smt_htf_targets_sb_topdown():
+    from pathlib import Path
+    if not Path("data/mentorship/YM_5min_db.csv").exists():
+        return
+    es, nq, ym = (B.load(s, 5, source="databento") for s in ("ES", "NQ", "YM"))
+    cut = lambda d: d[(d.index >= "2024-03-01") & (d.index < "2024-06-01")]
+    es, nq, ym = cut(es), cut(nq), cut(ym)
+    p = Params(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, leg_pd=0, min_draw_pts=0,
+               htf_targets=("15m", "1h", "4h", "D"), sb_setup=True, topdown=("D", "1h"), topdown_min=1)
+    full = B.run(es, 5, "ES", p, nq, partner2=ym)
+    assert len(full) > 2
+    cols = ["entry_time", "entry", "stop", "t1", "smt", "smt2", "td_agree", "setup", "macro_win"]
+    for cut_t in full.entry_time.iloc[::3]:
+        c = cut_t + pd.Timedelta(minutes=2)
+        part = B.run(es[es.index <= c], 5, "ES", p, nq[nq.index <= c], partial_last=True,
+                     partner2=ym[ym.index <= c])
+        a = full[full.entry_time <= c][cols].reset_index(drop=True)
+        b = part[part.entry_time <= c][cols].reset_index(drop=True)
+        pd.testing.assert_frame_equal(a, b)

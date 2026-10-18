@@ -45,6 +45,9 @@ from . import calendar as _calendar  # noqa: F401  (loads 2019-2025 event dates)
 from . import levels as L
 from .confluence import TFS as CF_TFS
 
+# ICT macro windows (T6): 08:50-09:10, 09:50-10:10, 10:50-11:10, 11:50-12:10, 13:10-13:40,
+# 14:50-15:10, 15:15-15:45
+MACROS = ((530, 550), (590, 610), (650, 670), (710, 730), (790, 820), (890, 910), (915, 945))
 NEWS_1000 = {"ism_manufacturing", "ism_services", "jolts", "sentiment"}
 NEWS_0830 = {"cpi", "jobs", "ppi", "pce", "retail_sales", "gdp"}
 
@@ -137,6 +140,12 @@ class Params:
                                    # settlement (7 videos), 960 = 16:00 (3 videos; SPY's close)
     or_minutes: int = 30           # opening range 09:30-10:00 (2023 videos); 60 = CC's 09:30-10:30;
                                    # its high/low are AM sweep pools and targets once complete; 0 off
+    htf_targets: tuple = ()        # e.g. ("15m", "1h", "4h", "D"): opposing FVGs / OBs / gaps on
+                                   # those timeframes as targets, near edge then CE (L9, P2)
+    topdown: tuple = ()            # e.g. ("D", "4h", "1h", "15m"): structure on these timeframes
+    topdown_min: int = 0           # must agree with the trade on at least this many (0 = all)
+    sb_setup: bool = False         # Silver Bullet as its own setup: one more trade inside each SB
+                                   # window (10-11, 14-15) after that session's trade, tagged sb_am/sb_pm
     smt_min: int = 0               # B18: at least this many sister indices (NQ, YM) must have
                                    # failed to take their version of the swept level; 0 = tag only
     htf_bias: str = "off"          # daily HTF bias filter: off / react / draw / pd / combo (htf.py)
@@ -233,6 +242,8 @@ class Trade:
     entry_kind: str = "fvg"        # fvg / ifvg / 5m entry modes keep "fvg"
     mitigation: bool = False       # entry gap overlaps a mitigation block
     propulsion: bool = False       # a propulsion block sits under the entry
+    macro_win: str = ""            # ICT macro window at arming time
+    td_agree: int | None = None    # of D/4h/1h/15m, how many have structure in the trade's direction
     smt2: bool | None = None       # second sister index (YM)
     smt_n: int = 0                 # sister indices that did not confirm the sweep
 
@@ -626,6 +637,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         if pending is not None:
             sd = pending["side"]
             cut = p.am[1] if pending["session"] == "AM" else p.pm[1]
+            if pending.get("done_key", "").startswith("SB_"):
+                cut = p.sb_windows[0][1] if pending["session"] == "AM" else p.sb_windows[1][1]
             if p.sb_only:                               # fills only inside the session's SB window
                 sb_a, cut = p.sb_windows[0] if pending["session"] == "AM" else p.sb_windows[1]
             if t >= cut or i - pending["i"] > max(1, p.pending_minutes // tf):
@@ -647,13 +660,14 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                            news=news(day), wbias=ctx.wbias, sb=_in_sb(t, p), weekday=day.weekday(),
                            conf_n=o["conf_n"], conf_top=o["conf_top"], conf_tfs=o["conf_tfs"],
                            entry_kind=o["entry_kind"], mitigation=o["mitigation"],
-                           smt2=o["smt2"], smt_n=o["smt_n"],
+                           smt2=o["smt2"], smt_n=o["smt_n"], macro_win=o["macro_win"],
+                           td_agree=o["td_agree"],
                            propulsion=o["propulsion"], **btag)
                 pos = dict(trade=tr, side=sd, stop=o["stop"], t1=o["t1"], t2=o["t2"],
                            left=o["shares"], n=o["shares"], basis=fill * o["shares"],
                            t1_done=False, fill_i=i, fill_t=t, add=None, fvg_bottom=o["fvg_bottom"],
                            abort=None, best=fill)
-                done[o["session"]] = True
+                done[o.get("done_key", o["session"])] = True
                 pending = None
                 if sd.l[i] <= pos["stop"]:           # same-bar stop (conservative)
                     tr.exits.append((ts, sd.x(pos["stop"]), pos["left"], "stop")); pos["left"] = 0
@@ -666,7 +680,11 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             session, w0 = "PM", p.pm[0]
         else:
             continue
-        if t < w0 or done[session] or pos is not None:
+        done_key = session
+        if done[session] and p.sb_setup and _in_sb(t, p):
+            done_key = "SB_" + session                # the Silver Bullet window's own trade
+            done.setdefault(done_key, False)
+        if t < w0 or done[done_key] or pos is not None:
             continue
         if (p.day_filter and blocked(day, session, p, t)) or (p.skip_news and news(day) != "none"):
             continue
@@ -681,6 +699,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             o_ = _scan(ctx, sd, i, p, session, w0, pctx, psides, ppos,
                        0.5 if state["reentered"].get(session) else 1.0)
             if o_ is not None:
+                if done_key != session:
+                    o_.update(done_key=done_key, setup="sb_" + session.lower())
                 pending = o_
                 if log is not None:
                     log.append((ts, symbol, session, sname, o_["swept"], sd.x(o_["entry"]),
@@ -851,8 +871,23 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
             return None
     elif p.conf_min_n or p.conf_min_top:
         return None
+    td = None
+    if getattr(ctx, "conf", None) is not None:
+        now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
+        td = sum(ctx.conf.trend(now, x) == sd.sign for x in ("D", "4h", "1h", "15m"))
+        if p.topdown:
+            ok = sum(ctx.conf.trend(now, x) == sd.sign for x in p.topdown)
+            if ok < (p.topdown_min or len(p.topdown)):
+                _f("x_topdown")
+                return None
+    elif p.topdown:
+        return None
     eq_hi = _eq_levels(sd, i, tol, lows=False)
     lv = _targets(ctx, sd, i, max(leg_hi, entry), eq_hi, p, (sw["ext"], leg_hi), sw["ext_i"])
+    if p.htf_targets and getattr(ctx, "conf", None) is not None:
+        now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
+        real = ctx.conf.targets(now, sd.x(max(leg_hi, entry)), sd.sign, p.htf_targets)
+        lv = sorted(set(lv) | {(sd.x(v), "array") for v in real})
     if p.fvg_targets:                  # untouched opposing FVGs / voids: near edge, then CE (L9)
         extra = []
         for z in sd.opposing():
@@ -890,7 +925,8 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
                 conf_n=None if cf is None else len(cf), conf_top=(cf[-1] if cf else ""),
                 conf_tfs="|".join(cf or []), entry_kind="ifvg" if is_ifvg else "fvg",
                 mitigation=bool(mit), propulsion=bool(prop),
-                macro=bool(p.macro[0] <= t < p.macro[1]))
+                macro=bool(p.macro[0] <= t < p.macro[1]), td_agree=td,
+                macro_win=next((f"{a // 60:02d}{a % 60:02d}" for a, b in MACROS if a <= t < b), ""))
 
 
 def _smt(ctx, sd, i, key, level, session, pctx, psides, ppos):
