@@ -1,537 +1,1030 @@
-# Rule coverage map: every ICT rule vs the bot, with build specs
+# Rule coverage: verified code audit
 
-Read-only audit, 2026-10-17. Sources: `mentorship_rules.md` (section 2 rules, section 3 decisions,
-Appendix A Ep 01-08), every digest in `mentorship/digests/`, and the code in `mentorship/`
-(strategy.py, levels.py, htf.py, confluence.py, sb_model.py, pre_open.py, backtest.py,
-calendar.py). The code was read as the **working copy** on branch `mentorship`, including
-uncommitted edits made during the audit: `ladder_by_day`, `ladder_fracs_slow`, `slow_frac`,
-`be_on`, and `ladder_trail="fvg"` as the default. Re-check those rows if those edits are reverted.
+This is a rule-by-rule audit of `mentorship_rules.md` against the bot code in `mentorship/*.py`. For every rule, one agent gave a verdict and a second agent checked it against the code. Where the checker disagreed, its status is the one used here, and the "revised" column says so.
 
-Owner decisions applied:
-- The bot follows the **experienced** version wherever ICT splits the rule (`experienced_rules.md`).
-- The Silver Bullet is off by default.
-- Every new rule is a `Params` switch.
-- Data: ES/NQ/YM 1m futures for all hours (Databento), SPX/NDX CFD, daily DXY, daily 10y yield.
-- Trades are executed as SPY or futures.
+Statuses:
+- **FULL**: the code does what the rule says, either by default or behind a Params switch.
+- **SIMPLIFIED**: part of the rule is coded, or a proxy for it.
+- **MISSING**: nothing in the code does it, under any name.
+- **NA**: not a trading rule, FX-only, or no data exists for it.
 
-**Default policy used in the specs.** A new switch defaults ON only when all four hold:
-1. ICT states it as a rule, not only in one chart example.
-2. At least two sources, or one source that states it explicitly as a rule.
-3. It is not a beginner-only rule.
-4. No other ICT statement contradicts it.
+New rules go in as Params switches that are off by default. The only exception is ICT's clear experienced-trader rule where nothing contradicts it. "[our interpretation]" marks thresholds we chose because ICT gives none.
 
-Everything else defaults OFF and gets a test variant. "[our interpretation]" marks a number or
-condition that ICT never gives; each one carries the reasoning.
+## 1. Counts
 
-Units: thresholds are in ES points ("pts") and convert to price with `p.es_pt`. 1 tick = 0.25 ES
-pt. "Side space" is the code's mirrored-bull frame: a long's logic applied to `-price` for a short.
+### By status
 
----
+| Status | Count | Share |
+|---|---|---|
+| FULL | 86 | 18% |
+| SIMPLIFIED | 248 | 52% |
+| MISSING | 121 | 26% |
+| NA | 18 | 4% |
+| **Total** | **473** | |
 
-## 0. Findings that need attention first (bugs or rule violations in today's defaults)
+The checker changed 23 statuses (section 2, "revised" column). It agreed with the other 450, sometimes after rewriting the build spec.
 
-1. **Pyramiding is ON by default and allowed on NFP Friday.** `adds=(0.5, 0.33, 0.17)` and
-   `nfp_day=True`. ICT: "no pyramiding on NFP" (105 ~9:13). Rule N1b / E12f. Fix: spec M-14f.
-2. **The stop padding is below one tick on futures data.** `stop_buffer=0.01` is in price units, so
-   on ES/SPX (`es_pt=1.0`) it is 0.01 pt; one tick is 0.25. ICT pads "one tick beyond the level"
-   (Ep 08 ~16:01). It is the same on SPY (0.01 = 0.1 ES pt). Rule E6f. Fix: spec E-10.
-3. **On 10:00-release days the AM starts at 10:00, but ICT waits 30 min after any release**
-   (065B ~4:07). The `NEWS_1000` dates also exist only for 2026, so before 2026 the gate never
-   fires. Rules N5a and N5b. Fix: specs W-1 and W-2.
-4. **FOMC: `fomc_pm_from=885` only blocks arming.** An order armed before 14:00 can fill at
-   14:00-14:45, and an open AM/PM position is held through the 14:00 release. Rule N3a/b. Fix:
-   spec M-13 (`fomc_flat_t`).
-5. **`fvg_abort` is not ICT's rule.** The code arms on a bar whose whole body is below the gap and
-   then exits on any later bar that trades below that bar's low. ICT says a candle **closes**
-   beyond the FVG and the **next** candle trades beyond it (045 ~1:19:58). Rule X6. Fix: spec M-9.
-6. **`reentry_half` does not force the same direction or the "idea intact" condition, and does
-   not exempt FOMC days** (021 ~43:56). Rule X13b / N3f. Fix: spec M-16.
-7. **Silver Bullet `_arm` scans both sides every bar** and can switch direction inside a window.
-   ICT chooses the draw first and trades one direction (054 ~9:31-9:52). Rule M3b. Fix: spec SB-1.
-8. **`Params.org_close=975` (16:15) is right for ES futures** but wrong if the signal data is SPY
-   (no 16:15 print). It is not a problem when the signals come from Databento futures. Mention only.
+### By rulebook section
 
----
-
-## 1. Summary counts
-
-Counted from the tables in section 2 (one row = one rule or sub-rule).
-
-| Group | Rows | FULL | SIMPLIFIED | MISSING | N/A |
+| Section | Total | FULL | SIMPLIFIED | MISSING | NA |
 |---|---|---|---|---|---|
-COUNTS_PLACEHOLDER
+| A: PD arrays and structure | 41 | 6 | 27 | 7 | 1 |
+| B: Bias | 48 | 4 | 15 | 28 | 1 |
+| N: News, calendar, day filters | 44 | 5 | 19 | 20 | 0 |
+| T: Time | 14 | 2 | 10 | 1 | 1 |
+| L: Liquidity and targets | 24 | 3 | 14 | 7 | 0 |
+| M: Models | 75 | 7 | 48 | 17 | 3 |
+| E: Entries, stops, sizing | 24 | 4 | 12 | 8 | 0 |
+| X: Exits and management | 63 | 14 | 29 | 20 | 0 |
+| D: Decisions | 23 | 7 | 15 | 1 | 0 |
+| Ep01 | 24 | 7 | 12 | 4 | 1 |
+| Ep02 | 9 | 1 | 6 | 2 | 0 |
+| Ep03 | 25 | 10 | 10 | 1 | 4 |
+| Ep04 | 14 | 4 | 7 | 2 | 1 |
+| Ep05 | 11 | 4 | 5 | 0 | 2 |
+| Ep06 | 7 | 1 | 4 | 0 | 2 |
+| Ep07 | 10 | 2 | 5 | 2 | 1 |
+| Ep08 | 17 | 5 | 10 | 1 | 1 |
+| **Total** | **473** | **86** | **248** | **121** | **18** |
 
----
+Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and nothing that keeps bias state from one day to the next.
 
-## 2. Coverage tables
+## 2. Full table
 
-Column "code location" gives `file:function` and the param. "Spec" names the build spec in
-section 3 that closes the gap (prefix = work package: B = bias, M = management, T = targets,
-E = entry/stop/size, C = context, W = news, D = detectors, SB = Silver Bullet, S = setups).
+`S` = strategy.py, `L` = levels.py, `H` = htf.py, `C` = confluence.py, `SB` = sb_model.py, `PO` = pre_open.py, `BT` = backtest.py. "Missing" is a short version of what the checker confirmed.
 
-### 2.1 Definitions (A)
+| id | rule | status | code | what's missing | revised |
+|---|---|---|---|---|---|
+| A1 | 3-candle swing; STL/ITL/LTL tiers | SIMPLIFIED | L.pivots (pivot_n=1); S._scan refs[-1] | No ITL/LTL tiers. The MSS reference is always the minor swing, and when there is none it falls back to a highest-high that is not a swing. The rulebook's "pivot_n=2" note is stale. | no |
+| A2 | BSL/SSL booked 1 tick through; an imbalance is not liquidity | SIMPLIFIED | S._sell_side, _scan `l<v`, pool_beyond_pts | The sweep has no tick threshold, which matters on CFD prices. Plain old swings count as pools only when pool_swings is on (off by default). The SB draw can be an imbalance. | no |
+| A3 | REH/REL; smoother = stronger | SIMPLIFIED | S._eq_levels, L.equal_levels | Equality is tested on wicks only, never bodies. Clusters are not ranked for smoothness or touch count. | no |
+| A4 | Bodies mark the level; mohawk wick still counts as respect | SIMPLIFIED | S._scan stops; mt_mode body | Stops and trails have no mohawk tolerance. There is no sweep through the body cluster. | no |
+| A5 | FVG definition and sub-rules | SIMPLIFIED | L.fvgs; _scan pick, CE, closed-through | Missing: a c2 direction check, quadrants, VI extension, a skip for gaps above a pool, HTF CE as the draw, an upper-quarter hold, repriced/rebalanced state, and reuse of a gap after it fills. | no |
+| A6 | Breakaway, measuring and common gaps | SIMPLIFIED | fvg_pick='first', ce_hold (off) | No breakaway tag. No measuring-gap projection. No protected-range stop. | no |
+| A7 | Immediate rebalance | MISSING | (none) | No detector, tag or use. | no |
+| A8 | IFVG rules | SIMPLIFIED | L.inversion_fvgs; ifvg_entries (off) | No "holds" confirmation. No depth rule based on prior passes. CE invalidation exists only as the generic ce_hold switch. No bias switch. | no |
+| A9 | Volume imbalance | SIMPLIFIED | L.volume_imbalances (never called) | Defined but used nowhere: not as a stop, not with a death rule, not as a porous discount, not as a draw. | no |
+| A10 | Liquidity voids and opening gaps | SIMPLIFIED | L.voids via fvg_targets (off); NWOG/NDOG/ORG | Voids are not separate targets. No CC leg-start fill target. | no |
+| A11 | Balanced price range | SIMPLIFIED | L.balanced_ranges (used only in a test) | Not used as a target, a barrier, or a midpoint abort. | no |
+| A12 | Order block rules | SIMPLIFIED | L.order_block_blend; ob_mt stop | No sensitive range or wick rule. The MT is a wick stop. No quality filters. No intraday opposing-OB targets. No "other half not revisited" rule. | no |
+| A13 | Breaker | SIMPLIFIED | S._scan inline bz; L.breakers unused | No check that L2 < L1. No leg zone, no MT invalidation, no breaker entries, no time check. Two breaker definitions disagree. | no |
+| A13.1 | Breaker structure L1/H/L2 | SIMPLIFIED | _scan l1/ref/ext | L2 < L1 is not checked. The fallback bars are not swings. The wick and CISD MSS modes do not break H on a body. | no |
+| A13.2 | Breaker candle = highest up-close body | FULL | _scan max close, breaker_zone | (none) | no |
+| A13.3 | Breaker zone extent; MT not closed through | SIMPLIFIED | breaker_zone body/range | No leg option. No breaker MT exit or cancel. No 018 entry floor. | no |
+| A13.4 | Breaker first-touch entry | MISSING | bz used only for the unicorn | The breaker is never an entry. | no |
+| A13.5 | Time distortion is not a breaker | MISSING | (none) | No session-block check on H, L2 or the break bar. | no |
+| A14 | Unicorn | SIMPLIFIED | uni preference; Trade.unicorn | No unicorn-at-the-open tag or filter. Inherits the A13.1 gap. | no |
+| A15 | Mitigation block | SIMPLIFIED | L.mitigation_blocks (tag) | The swing order is wrong: the A low before X is never checked. Used only as a tag, not a target. | no |
+| A16 | Propulsion block | SIMPLIFIED | L.propulsion_blocks (tag) | No entry at the block high. No MT-loss exit. | no |
+| A17 | Rejection block | MISSING | L.rejection_blocks unused | Not used anywhere. No long-wick test. No 2023 body-edge pool. | no |
+| A18 | Reclaimed OB | MISSING | (none) | No sell-side-of-curve OB entry after the low. | no |
+| A19 | MSS after a sweep with displacement | SIMPLIFIED | _scan sweep, ref, mss_mode, fvg_wait | No parent-swing reference. Non-swing fallback. No "on side" double MSS. | no |
+| A19.1 | MSS core | FULL | _scan | (none) | no |
+| A19.2 | Which swing (parent; wait for the lower of equal lows) | SIMPLIFIED | refs[-1] | Only the minor swing. No equal-cluster wait on the MSS reference (the audit's claim that this was met was wrong). | no |
+| A19.3 | MSS on wick or close | FULL | mss_mode | (none) | no |
+| A19.4 | Two MSS = on side | MISSING | (none) | No count of a second shift. | no |
+| A19.5 | Liquidity run first | FULL | _scan needs sd.sweep | (none) | no |
+| A20 | Displacement size and speed | SIMPLIFIED | any FVG after the sweep | No 2-3x OB-body test, no follow-through, no rip-through margin. | no |
+| A21 | Premium/discount | SIMPLIFIED | leg_pd, use_bias, htf pd (off) | No 20-day range, no OTE band, no body-based multi-day range. | no |
+| A21.1 | EQ = 50%, buy below / sell above | FULL | leg_pd=0.5; htf pd | (none) | no |
+| A21.2 | Intraday leg; day context = 20-day high/low | SIMPLIFIED | leg_pd; htf pd swings | No 20-day premium/discount. | no |
+| A21.3 | OTE 62-79%, thirds, deep | SIMPLIFIED | leg_pd (upper bound only) | No 79% floor, no 70.5% entry, no depth tag. | no |
+| A21.4 | Wicks intraday, bodies multi-day | SIMPLIFIED | htf pd on wick pivots | Multi-day ranges use wicks, not bodies. | no |
+| A22 | PD-array matrix | SIMPLIFIED | _targets sorted; htf_targets | Breakers, mitigation blocks and rejection blocks are never targets. No breaker precedence. Exhaustion is only partly checked. | no |
+| A23 | Wick CE | SIMPLIFIED | L.wick_midpoints; wick_levels | Only the prior RTH day. No continuation/revisit read. Docs and code disagree on the default. | no |
+| A24 | Not codeable (implied FVG, Reaper, inducement) | SIMPLIFIED | sweep step | The Reaper is missing (A24.2). | no |
+| A24.1 | Implied FVG | NA | (none) | Never defined in the source. | no |
+| A24.2 | Reaper | MISSING | (none) | Not built. | no |
+| A24.3 | Inducement = sweep step | FULL | _scan sweep | (none) | no |
+| B1 | Price runs liquidity or rebalances, else consolidates | SIMPLIFIED | _targets; htf_targets; fvg_targets off | VIs unused. Voids/LTF FVGs off by default. Only the prior day's wick CE. No consolidation state. | no |
+| B2 | Draw search order | MISSING | H.table draw = nearest | No inefficiency-first order, no P/D-chosen liquidity, no extent level. | no |
+| B3 | Bias toward the next draw; one direction | SIMPLIFIED | htf_bias (off); want filter | Nearest draw, not the largest move. Pre-open look-ahead. SB/Ma Deuce ignore `want`. Judas is only a tag. | no |
+| B4 | Bias is a condition, not a trade | FULL | run_day + _scan | (none) | no |
+| B5 | Timeframe chain | SIMPLIFIED | topdown, conf_min_top (off) | No weekly gate. No bellwether delivery read. No news-day chain. No daily VI. | no |
+| B6 | Institutional order flow on the daily | MISSING | (none) | No IOF score. | no |
+| B7 | Daily OB MT close rule | SIMPLIFIED | H react drop; weekly_bias | No OB state or flip. No "high of the week in" rule. | no |
+| B8 | Close-based bias flips | MISSING | partial analogues only | No persistent bias state to flip. | no |
+| B8a | Flip on a close through the daily OB MT | MISSING | H.table drops the OB | No flip output. | no |
+| B8b | Flip on closes through 3 PD arrays | MISSING | pd3_exit (intraday) | No daily version. | no |
+| B8c | Weekly close below the last down-close week | MISSING | (none) | No weekly-close rule. | no |
+| B8d | Close above Friday's high / wick CE / weekly quadrant | SIMPLIFIED | weekly_bias wick-CE cancel | Only the strong-day wick CE exists. No Friday high, no weekly wick CE or quadrant, no htf_bias flip. | yes (was MISSING) |
+| B8e | Thursday trade back through the weekly open | MISSING | (none) | No weekly-open logic. | no |
+| B8f | Stop above the breaker cancels SMT -> long | MISSING | reverse_after_loss | No forced direction. | no |
+| B9 | What is not a flip | SIMPLIFIED | per-day bias, closes | No neutral-on-target. No retracement persistence. No fallback to the next weekly array. | no |
+| B10 | MWD sequential | MISSING | building blocks only | No case logic. | no |
+| B11 | Candle-pattern day context | SIMPLIFIED | day_context; three_day_rule | Inside day is a tag only. No inside week, outside day or NR3/NR7. | no |
+| B11a | 3-day rule | FULL | three_day_rule | Ma Deuce skips it (minor). | no |
+| B11b | Down-close outside day | MISSING | (none) | Not detected. | no |
+| B11c | Inside week / NR -> expansion | SIMPLIFIED | inside_day tag | No inside week or NR, no effect. | no |
+| B12 | Intraday PO3 vs the midnight/13:30 open | FULL | use_bias | Strict `<` (minor). | no |
+| B13 | Weekly open | MISSING | (none) | No weekly-open level. | no |
+| B14.1 | NWOG regime | MISSING | NWOG used as targets | No return count, no regime, no convergence. | no |
+| B14.2 | Converging NWOGs | MISSING | (none) | No comparison between gaps. | no |
+| B14.3 | Bias vs NWOG | MISSING | H react (touch + CE) | No hold-above / reclaim state. | no |
+| B15 | ORG direction tell | MISSING | DayCtx.org as targets | No 30-minute attempt test. No gap x bias rule. | no |
+| B16 | Sunday gap scenarios | MISSING | skip_monday (exempts NFP/FOMC weeks) | No scenario check. | no |
+| B17 | Neutral / no-bias conditions | SIMPLIFIED | htf_bias + bias_neutral; neutral_skip | B17.1 is a proxy. B17.3-5 are absent. | yes (was MISSING) |
+| B17.1 | 50/50 framing -> no trade | MISSING | (none) | No both-sides check. | no |
+| B17.2 | Stuck or chop -> wait for 09:30 | FULL | AM starts 09:30 | Pre-open switches have no guard. | no |
+| B17.3 | HTF draw delivered -> stop for the week | MISSING | (none) | No objective-met state. | no |
+| B17.4 | Range market / inside daily BISI / sloppy | MISSING | neutral_skip (N8) | None of the three is detected. | no |
+| B17.5 | Indices decoupled; SMT both ways | MISSING | _smt per sweep | No decoupling measure. | no |
+| B18.1 | SMT qualifier | SIMPLIFIED | _smt, smt_min | No PD-array requirement. No "obvious" gap. No rel-eq SMT. | no |
+| B18.2 | SMT windows | MISSING | (none) | No window filter. No pre-09:30 SMT. | no |
+| B18.3 | SMT uses (partials, instrument) | SIMPLIFIED | combine tie-break | No SMT partials. Instrument choice is a tie-break only. No bias input. | no |
+| B18 | SMT overall | SIMPLIFIED | _smt | See B18.1-B18.3. | no |
+| B19.1 | DXY up = risk-off | SIMPLIFIED | INTERMARKET dxy tag | Tag only, using a 20-day mean, not the range high. | no |
+| B19.2 | ES lower low vs DXY higher high | NA | (none) | Needs DXY 1m data. | no |
+| B19.3 | Bonds range -> consolidation | SIMPLIFIED | tnx tag | No range detection, no effect. | no |
+| B19 | Intermarket overall | SIMPLIFIED | INTERMARKET | Tags only. | no |
+| B20.1 | COT commercials | MISSING | (none) | No data. | no |
+| B20.2 | Open interest | MISSING | (none) | No data. | no |
+| B20.3 | Weekly Williams %R | MISSING | (none) | Not computed. | no |
+| B20 | COT/OI/sentiment overall | MISSING | (none) | All three missing. | no |
+| B21 | IPDA 20/40/60-day ranges | MISSING | (none) | No pools. History passed in is only 45 days. | no |
+| B22 | Quarterly shift | MISSING | (none) | Not computed. | no |
+| B23 | Seasonals | MISSING | BT by_month (reporting only) | No map, tag or report. | yes (was SIMPLIFIED) |
+| N1 | NFP Friday | SIMPLIFIED | nfp_day=True; entries from 09:30 | Pyramids on NFP. Pre-open switches break the first-hour rule. | no |
+| N2 | NFP week beginner block | FULL | nfp_week_block (off) | Also needs nfp_thu=False. | no |
+| N3 | FOMC overall | SIMPLIFIED | blocked fomc_pm; am_exit | Day-before, day-after and no-re-entry handling is missing or partial. | no |
+| N3.1 | 14:00 release; observe until 14:45 | SIMPLIFIED | fomc_pm_from=885 | No observation: sweeps are not tracked and the 14:00 Judas pool is retired. SB PM is skipped entirely. | no |
+| N3.2 | Never hold into the release | SIMPLIFIED | am_exit=720 | Holds only through the default. No recipe or skip variant. | no |
+| N3.3 | FOMC-only day AM consolidates | SIMPLIFIED | _split 80/20; PM gate | No FOMC-only distinction. No AM filter. | yes (was MISSING) |
+| N3.4 | Day before light / day after AM out | MISSING | _split only | No size cut, no AM block. | no |
+| N3.5 | No re-entry on FOMC | SIMPLIFIED | done per session | The PM still trades after an AM loss. reentry_half and SB leak. | no |
+| N4 | CPI | SIMPLIFIED | skip_cpi; pre_flat_0830 | No day-before-CPI rule. Ma Deuce and sb_london hold through 08:30. | no |
+| N5 | Other releases | SIMPLIFIED | am_start=600 | No 10:00+30 wait, no news room, no 09:45 releases, no two-driver/Fed/auction rules. Calendar has gaps. | no |
+| N5.1 | Wait 30 minutes and need 10 handles | SIMPLIFIED | am_start; min_draw_pts | No 30-minute wait after 10:00. No room raise. | no |
+| N5.2 | 09:45/10:00 releases | SIMPLIFIED | NEWS_1000 | No 09:45 set. Missing 10:00 releases. | no |
+| N5.3 | No 08:30 news -> wait for 09:30 | FULL | am=(570,...) | (none) | no |
+| N5.4 | Two drivers | SIMPLIFIED | am_start 600 | No stand-aside. Pre-open windows trade ahead of the second release. Detection is weak. | no |
+| N5.5 | Fed chair at 10:00 | MISSING | (none) | No calendar. | no |
+| N5.6 | Treasury auction AM | MISSING | (none) | No calendar. | no |
+| N6 | News Judas profile | SIMPLIFIED | post_news news_range | No first-side tracking. No CE target. No breaker change on NFP/CPI/FOMC. | no |
+| N7 | Holidays and calendar | MISSING | roll_week tag | None of the behaviours. | no |
+| N7.1 | Holiday eve skip | MISSING | (none) | Not implemented. | no |
+| N7.2 | Morning after a holiday | MISSING | (none) | Not implemented. | no |
+| N7.3 | Holiday week Thu/Fri | MISSING | (none) | No tag. | no |
+| N7.4 | Year end / year start | MISSING | (none) | Not implemented. | no |
+| N7.5 | Roll week | SIMPLIFIED | day_type roll_week | Tag is overwritten by other day types. No switch. | no |
+| N7.6 | August | MISSING | (none) | Not implemented. | no |
+| N8 | Day type overall | SIMPLIFIED | big_prev + neutral_skip | Only the >2x ADR5 skip exists. | no |
+| N8.1 | Consolidation = no trade | MISSING | (none) | No detector. | no |
+| N8.2 | Trending-day recipe | MISSING | (none) | Not combined. | no |
+| N8.3 | Consolidation predictors | MISSING | (none) | Not implemented. | no |
+| N8.4 | Big ORG/prior range -> sacrifice the AM | MISSING | neutral_skip (whole day) | No AM-only skip. | yes (was SIMPLIFIED) |
+| N8.5 | >2x ADR5 skip / <ADR5 expansion due | SIMPLIFIED | big_prev | No expansion-due logic. Ranges are RTH only. | no |
+| N8.6 | Seek & destroy | MISSING | (none) | Not implemented. | no |
+| N9 | In-day no-trade conditions | SIMPLIFIED | _scan requirements | Only N9.1, plus a proxy for N9.3. | no |
+| N9.1 | No draw/inefficiency/displacement -> no trade | FULL | _scan | (none) | no |
+| N9.2 | Draw delivered pre-09:30 | MISSING | (none) | htf.table removes overnight-delivered draws. | no |
+| N9.3 | Objective done before lunch | MISSING | no_pm_after_am_win | No objective tracking. | no |
+| N9.4 | Narrow overnight / shallow raid | MISSING | (none) | Not implemented. | no |
+| N9.5 | Macro with no move -> close the charts | MISSING | MACROS tag | No session end. | no |
+| N9.6 | London ~80% of ADR5 | MISSING | (none) | Not implemented. | no |
+| N10 | Day of week | SIMPLIFIED | skip_monday; tgif; flatten | Monday rules partial. No Thu/Fri structure. Friday rules mostly missing. | no |
+| N10.1 | No Sunday open | FULL | session build | (none) | no |
+| N10.2 | Monday | SIMPLIFIED | skip_monday | No PM-only mode, no "obvious" rule, no Tuesday-off-Monday. | no |
+| N10.3 | Tue/Wed ideal; Mon-Wed extremes | MISSING | weekday tag | Not implemented. | no |
+| N10.4 | Friday rules | SIMPLIFIED | tgif | No Friday 80/20. No weekly objective. Strong-Thursday check missing. | no |
+| N10.5 | No weekend or 17:00 holds | FULL | flatten=960 | (none) | no |
+| T1 | NY time, time-based charts | FULL | tz_convert NY | (none) | no |
+| T2 | Opening prices | SIMPLIFIED | L.opens; use_bias | 08:30 and 09:30 opens unused. No release-day 08:30 body rule. | no |
+| T3 | Kill zones | FULL | London pool | (none) | no |
+| T4 | Opening range | SIMPLIFIED | or_minutes; OR pools | No or_no_entry. No deep exception. No OR bias. No wide-OR draw. | no |
+| T5 | NY AM session | SIMPLIFIED | am, pre windows | No 08:20/08:30-09:00 window. | no |
+| T6 | Silver Bullet windows | SIMPLIFIED | SB.run_sb | No 15:00-16:00 or 07:00-08:30 window. | no |
+| T7 | Macros | SIMPLIFIED | MACROS tags | Tags only. No 2:00 macro, no gate, no done/MOC rules. | no |
+| T8 | Lunch | SIMPLIFIED | am/pm windows; lunch pool | No lunch session. No carried draw. No objective skip. | no |
+| T9 | PM session | SIMPLIFIED | pm; tags | No 14:30 skip, no 13:45 restart, no continue-AM filter, no AM-OB entry. | no |
+| T10 | Last hour / MOC | SIMPLIFIED | pm end 950; tag | No MOC run. No pool-before-15:50 exit. | no |
+| T11 | End of day | SIMPLIFIED | flatten | No late-add cutoff. No fade block. | no |
+| T12 | Extreme timing statistics | NA | (none) | Research only. | no |
+| T13 | Day templates / PO3 | SIMPLIFIED | use_bias; _judas tag | Judas not required. No expansion hold. No profiles. No NFP seek-and-destroy. | no |
+| T14 | Weekly time statistics | MISSING | (none) | No study, no switch. | yes (was NA) |
+| L1 | Session pools and priority | SIMPLIFIED | DayCtx.sess; _sell_side | AM range ends 13:30 (rule: 12:00). No previous-AM pool. No priority. ORG is not a pool. | no |
+| L2 | Liquidity matrix | SIMPLIFIED | pdh/pdl 1-3 | No PD-array/flow requirement. RTH only. | no |
+| L3 | Higher pools | SIMPLIFIED | pw/pm_ switches; or_minutes | No 20/40/60-day pools. RTH only. One OR length at a time. | no |
+| L4 | Pool quality | MISSING | draw = nearest pool | No ranking, no equilibrium test, no resistance count. | no |
+| L5 | NWOG | SIMPLIFIED | H.opening_gaps | No quarters, no holiday skip, no halfway rule, no run-stop. | no |
+| L6 | NDOG | FULL | H.opening_gaps | (none) | no |
+| L7 | ORG | SIMPLIFIED | DayCtx.org | No behaviour rules. Capped at 6 days. Close time not per symbol. | no |
+| L8 | Vacuum block | MISSING | (none) | No event-anchored gap. | no |
+| L9 | FVG targets | SIMPLIFIED | htf_targets; fvg_targets | No FVG-over-OB rule. No remainder. NWOG far edge always added. | no |
+| L10 | Wick CE levels | SIMPLIFIED | DayCtx.wick | One day only. No weekly. Target only. | no |
+| L11 | Rejection-block target | MISSING | (none) | Exits go past the wick. | no |
+| L12 | SD targets | SIMPLIFIED | sd_targets (off) | No -0.5, one anchor, no clusters, no roles, no alignment. | no |
+| L13 | Other projections | MISSING | (none) | No breaker/measuring/ORG/extension projections. | no |
+| L14 | Choose the draw | SIMPLIFIED | draw = nearest pool | Parts a, c, d, e missing or partial. | no |
+| L14a | Draw first, trade toward it | SIMPLIFIED | htf_bias draw (off) | No session draw, no objective-met state, no B2 order. | no |
+| L14b | Enter IRL, exit ERL | SIMPLIFIED | FVG entry; pool exits | No OB/void entries. Range not redefined. Arrays used as exits. | yes (was FULL) |
+| L14c | Opposing array one TF lower | SIMPLIFIED | react; conf.targets | No TF link. | no |
+| L14d | Untraded targets only | SIMPLIFIED | `seen` filter (pools) | Arrays never retired. | no |
+| L14e | Conditional draws | MISSING | (none) | No session draw state. | no |
+| L14f | Sorted level list | FULL | ladder | (none) | no |
+| L14g | SB draw list | SIMPLIFIED | SB._arm -> _targets | No PWH/PWL by default, no OTE, no HTF, no fallback. | no |
+| L15 | Room (10-handle framework) | FULL | min_draw_pts=5 | (none) | no |
+| L16 | ADR5 targets | MISSING | _split only | Not implemented. | no |
+| L17 | Rounding | MISSING | (none) | No switch. | no |
+| M0 | Common skeleton | SIMPLIFIED | _scan; htf | Bias proxy. No pool priority. FVG/IFVG entries only. | no |
+| M0.1 | Bias = weekly/daily candle draw | SIMPLIFIED | htf_bias | No candle projection. SB/Ma Deuce ignore it. | no |
+| M0.2 | Window pools | SIMPLIFIED | _sell_side all armed | No single-window choice. No previous-AM pool. | no |
+| M0.3 | Judas raid | FULL | _scan sweep; use_bias | (none) | no |
+| M0.4 | MSS with displacement leaves an FVG | SIMPLIFIED | _scan | Displacement is only "an FVG exists". | yes (was FULL) |
+| M0.5 | Enter on any PD array | SIMPLIFIED | FVG/IFVG; 5m OB fallback | No OB, breaker, OTE, wick-CE or turtle entries. | no |
+| M0.6 | Target the opposite pool | FULL | _targets | (none) | no |
+| M1 | AM market maker model | SIMPLIFIED | _scan am_mm | Context, speed check and pre-MSS entry are absent. | no |
+| M1.1 | HTF draw and discount array | SIMPLIFIED | require_htf, conf (off) | No HTF-draw requirement. No daily VI. | no |
+| M1.2 | Short-term low taken, then MSS | SIMPLIFIED | _scan; pool_swings | The swing_low intact() bug drops valid lows. No displacement test. | yes (was FULL) |
+| M1.3 | Speed check | SIMPLIFIED | ep07_body_exit | No rip-through-SIBI timing. | no |
+| M1.4 | Entry, unicorn, pre-MSS OB | SIMPLIFIED | _scan | No early OB entry. | no |
+| M1.5 | Stop below the OB MT | FULL | ep07_stop | (none) | no |
+| M1.6 | MM phases are context | NA | (none) | Context only. | no |
+| M2 | 2022 model | SIMPLIFIED | _scan; leg_pd | FVG choice, stop, pyramid and target rules are partial. | no |
+| M2.1 | Buy-side incl. NWOG taken | SIMPLIFIED | _sell_side | NWOG is not a sweep pool. | no |
+| M2.2 | Sell above 50%, not the breakout candle | FULL | leg_pd | (none) | no |
+| M2.3 | FVG choice | SIMPLIFIED | fvg_pick | No VI+OB preference. EQ only rejects. | no |
+| M2.4 | New candle, no new low before the fill | SIMPLIFIED | pending | No cancel on a new extreme. | no |
+| M2.5 | Stop variants | SIMPLIFIED | stop_mode | Not a pure MT+2pt stop. No candle or CE2 stop. | no |
+| M2.6 | Premium pyramid; 25% cutoff; larger pool | SIMPLIFIED | adds; t1_done gate | No P/D check on adds. No 25% cutoff. No pool size rank. | yes (was MISSING) |
+| M2.7 | Three drives | MISSING | (none) | No detector. | no |
+| M3 | Silver Bullet | SIMPLIFIED | SB | Several sub-rules simplified. | no |
+| M3.1 | SB windows | SIMPLIFIED | SB wins | Missing windows. | no |
+| M3.2 | SB draw first | SIMPLIFIED | SB._arm draws[0] | Draw not chosen first. | no |
+| M3.3 | First FVG in the bias direction | SIMPLIFIED | SB | No bias filter. MSS forced. | no |
+| M3.4 | Evolving SB | FULL | SB re-arm | (none) | no |
+| M3.5 | Cancel on target; shallow run | SIMPLIFIED | SB cancel | No depth tag. | no |
+| M3.6 | SB room | FULL | sb_room_pts | (none) | no |
+| M3.7 | SB entry price | FULL | g.top | (none) | no |
+| M3.8 | SB stop variants | SIMPLIFIED | SB 090 stop | No 057 or 086 stop. | no |
+| M3.9 | Session order, one market | SIMPLIFIED | SB per window | No cascade. combine switches markets. | no |
+| M3.10 | Immediate rebalance -> more than 5 handles | MISSING | (none) | Not implemented. | no |
+| M3.11 | SB layered exits | SIMPLIFIED | sb_mgmt | No 4/2/4 split. No weekly condition. | no |
+| M4 | Breaker and unicorn entries | SIMPLIFIED | uni pref | Classic, advanced, pyramid and CC versions absent. | no |
+| M4.1 | Classic breaker entry | MISSING | (none) | No entry. | no |
+| M4.2 | Unicorn conditions | SIMPLIFIED | uni; adds | No 09:30 gate, no MT floor. | no |
+| M4.3 | Advanced breaker | MISSING | (none) | Not built. | no |
+| M4.4 | Turtle soup + breaker pyramid | MISSING | (none) | Not built. | no |
+| M4.5 | CC breaker and failure swing | MISSING | MB tag | No entry. | no |
+| M5 | PM last hour / MOC | SIMPLIFIED | pm_last_hour tag | No own model. | no |
+| M5.1 | Ep01 last-hour version | MISSING | (none) | Not built. | no |
+| M5.2 | 2022 model in the window | SIMPLIFIED | params | Sweep not tied to the window. No VI or 1m OB entry. | no |
+| M5.3 | Example entry times | NA | pm end 950 | Examples only. | no |
+| M6 | PM reversal (2:00 macro) | SIMPLIFIED | _scan PM; ifvg | No bias/objective precondition. No IFVG at the high. No PDH target. | no |
+| M7 | PM off lunch; 13:30 Judas | SIMPLIFIED | lunch pool; use_bias | No lunch-target, ORG or premium link. | no |
+| M7.1 | Lunch low -> lunch high target | SIMPLIFIED | lunch pool; _targets | The lunch high is always dropped by the `seen` filter. | yes (was FULL) |
+| M7.2 | Short mirror into the ORG | SIMPLIFIED | lunch pool | No ORG requirement. | no |
+| M7.3 | 13:30 Judas into an array | SIMPLIFIED | use_bias | A pool sweep is required. | no |
+| M8 | ORG repricing | SIMPLIFIED | ORG targets | No Judas-away setup. | no |
+| M9 | News Judas | SIMPLIFIED | late starts | No first-run detection. | no |
+| M9.1 | First run after a release = losing side | SIMPLIFIED | post_news | No direction gate. | no |
+| M9.2 | FOMC 14:25 real move | SIMPLIFIED | fomc_pm_from | No 14:00-14:25 range. | no |
+| M10 | IFVG entry | SIMPLIFIED | ifvg_entries | No CE+3-4 stop. No 061 trigger. No depth rule. | no |
+| M11 | IR / CISD / wick-CE entries | MISSING | mss_cisd (reference only) | Not built. | no |
+| M11a | Immediate-rebalance entry | MISSING | (none) | Not built. | no |
+| M11b | CISD OB entry | SIMPLIFIED | mss_cisd; leg_pd | OB never the entry. No OB-low hold check. | no |
+| M11c | Wick-CE long | MISSING | (none) | Not built. | no |
+| M12 | Turtle soup | MISSING | context gates only | No false-break entry. | no |
+| M12.1 | 2023 no-MSS version | MISSING | (none) | Not built. | no |
+| M12.2 | Short at an old high | SIMPLIFIED | MSS machine | No no-MSS trigger. No breaker adds. | yes (was MISSING) |
+| M12.3 | CC limit / 1h OB / OR60 | MISSING | (none) | Not built. | no |
+| M12.4 | External turtle soup | MISSING | (none) | Not built. | no |
+| M12.5 | Turtle soup context | SIMPLIFIED | conf/topdown gates | No depth or reversal test. | no |
+| M13 | OTE | SIMPLIFIED | leg_pd | No band, no 70.5%, strict 50% passes, no leg stop. | no |
+| M14 | TGIF | SIMPLIFIED | tgif block | Direction only. | no |
+| M14.1 | TGIF context | SIMPLIFIED | day_context | No HTF-array check. RTH week only. | no |
+| M14.2 | TGIF 20-30% zone | MISSING | (none) | Not built. | no |
+| M14.3 | TGIF timing | MISSING | (none) | Not built. | no |
+| M14.4 | TGIF exits | SIMPLIFIED | ladder | No grid. | no |
+| M15 | Ma Deuce | SIMPLIFIED | PO.run_ma_deuce | No big-candle check, no 2nd entry, one target, not blocked by blocked(). | no |
+| M16 | Index SMT / sick sister | SIMPLIFIED | _smt; combine | Neither model exists. | no |
+| M16.1 | CC AM SMT entry | SIMPLIFIED | _smt gate | No stop entry, no 05:00 lows, no exit. | no |
+| M16.2 | Sick sister | MISSING | (none) | Not built. | no |
+| M17 | Out of scope | NA | (none) | FX/swing/stocks. | no |
+| E1 | Resting limit; CC order types | SIMPLIFIED | pending limits | Adds rest as limits. No scalp. No CC stop entries. | no |
+| E2 | Edge / CE / IOFED / ladder | SIMPLIFIED | entry edge/ce | No IOFED mode, no ladder. SB hardcodes the edge. | no |
+| E3 | Fill needs 1 tick through | SIMPLIFIED | strict `<` | Ma Deuce fills on a touch. Exits fill on a touch. No tick parameter. | no |
+| E4 | Buy into down-close candles | SIMPLIFIED | implicit | No candle check. | no |
+| E5 | Don't chase / order hygiene | SIMPLIFIED | pending expiry/cancel | No evolving FVG. No waiting for a structural entry. | no |
+| E6 | Stop variants | SIMPLIFIED | stop_mode | Only a is full. | no |
+| E6a | Stop below the OB MT | FULL | ob_mt; ep07_stop | (none) | no |
+| E6b | Stop beyond the FVG-forming candle | SIMPLIFIED | g.bottom | No candle-low or bodies mode. | no |
+| E6c | Stop beyond the sweep extreme | MISSING | (none) | Not built. | no |
+| E6d | Stop beyond every inefficiency | MISSING | (none) | Not built. | no |
+| E6e | Mohawk / EQ swing | MISSING | (none) | Not built. | no |
+| E6f | Padding | SIMPLIFIED | stop_buffer 0.01 | Less than a tick. No CE or NFP pad. | no |
+| E7 | Never widen a stop | FULL | max() everywhere | (none) | no |
+| E8 | Size = risk/stop; 1-2% | SIMPLIFIED | risk_dollars fixed | No equity compounding. No 2% clamp on the first unit. | no |
+| E9 | Size down/up conditions | MISSING | (none) | No multiplier. | no |
+| E10 | Halve after a loss | MISSING | reentry_half | No risk state. | no |
+| E11 | Contract caps | SIMPLIFIED | risk caps | No count caps. | no |
+| E12 | Adds | SIMPLIFIED | adds | c, e, f missing. | no |
+| E12a | Decreasing add sizes | FULL | adds fractions | (none) | no |
+| E12b | Where to add | SIMPLIFIED | new FVG tops | No hold test. No other arrays. | no |
+| E12c | Add at the FVG low end | MISSING | (none) | Not built. | no |
+| E12d | No adds after partials | FULL | t1_done gate | (none) | no |
+| E12e | No adds past EQ | MISSING | (none) | Not built. | no |
+| E12f | No adds on NFP / decoupled days | MISSING | (none) | Not built. | no |
+| X1 | Targets = next opposing liquidity/array | SIMPLIFIED | _targets | Swings and LTF FVGs off. No LTF OBs. min_rr drops inner levels. | no |
+| X2 | Exit before arrays, beyond pools | FULL | exit_mode split | (none) | no |
+| X3 | Partials | SIMPLIFIED | ladder | Many sub-rules partial. | no |
+| X3a | Scale out at each pool | SIMPLIFIED | ladder cap 3 | No run-down. | no |
+| X3b | Bulk at first target | SIMPLIFIED | _split | SB ignores _split. JOLTS before 2026 missing. | no |
+| X3c | Wick-CE partial | SIMPLIFIED | prior-day wick | Scope limited, can be dropped. | no |
+| X3d | -0.5 SD / halfway partials | MISSING | (none) | Not built. | no |
+| X3e | Never the exact FVG edge | FULL | exit_before | (none) | no |
+| X3f | Full pull vs partials by resistance | MISSING | (none) | Not built. | no |
+| X3g | SMT bank 50% | MISSING | (none) | Not built. | no |
+| X3h | Capture 80-85% | MISSING | (none) | Not built. | no |
+| X4 | Breakeven after partial and expansion | SIMPLIFIED | be_on expansion | No commission pad. SB ignores be_on. | no |
+| X5 | Trailing | SIMPLIFIED | ladder_trail fvg | Only the newer-FVG variant. | no |
+| X5a | Breakaway / measuring trail | SIMPLIFIED | ladder_trail | No breakaway or measuring mode. | no |
+| X5b | Don't trail early | FULL | t1 gate | (none) | no |
+| X5c | Day trade keeps its initial stop | MISSING | (none) | Not built. | no |
+| X6 | FVG abort | SIMPLIFIED | fvg_abort | Whole-body arm. Any later bar confirms. | no |
+| X7 | Three-PD-array rule | SIMPLIFIED | pd3_exit | Partial. | no |
+| X7a | Three arrays, exit before the stop | SIMPLIFIED | pd3_exit | FVGs only. List not fixed at entry. | no |
+| X7b | Half off on VI+FVG+OB | MISSING | (none) | Not built. | no |
+| X7c | Three fails -> stop for the session | SIMPLIFIED | done per session | The SB_AM key and reentry_half leak a third entry. | yes (was FULL) |
+| X8 | Other invalidations | SIMPLIFIED | ce_hold; ep07 | c, d, e, g missing. | no |
+| X8a | CE close-through | FULL | ce_hold | (none) | no |
+| X8b | Leg-candle MT | SIMPLIFIED | ob_mt stop | No close exit. | no |
+| X8c | IR EQ exit | MISSING | (none) | Not built. | no |
+| X8d | Propulsion MT exit | MISSING | (none) | Not built. | no |
+| X8e | Offside test | MISSING | (none) | Not built. | no |
+| X8f | Below the swing-low bodies | FULL | ep07_body_exit | (none) | no |
+| X8g | Meander exit | MISSING | (none) | Not built. | no |
+| X9 | Time stops | SIMPLIFIED | time_stop_min | One generic stop. | no |
+| X9a | Deliver in 2-3 candles | SIMPLIFIED | time_stop | Fixed points, full exit. | no |
+| X9b | Move within ~10 minutes | FULL | time_stop_min=10 | (none) | no |
+| X9c | Far edge, 2 minutes | MISSING | (none) | Not built. | no |
+| X9d | Lethargic -> cut half | SIMPLIFIED | time_stop (full exit) | No half cut. | yes (was MISSING) |
+| X10 | AM exits | SIMPLIFIED | am_exit | b, c, d missing. SB/Ma Deuce skip am_exit. | no |
+| X10a | Last AM unit off before noon | FULL | am_exit=720 | (none) | no |
+| X10b | Bulk off 10:00-11:00 | MISSING | (none) | Not built. | no |
+| X10c | Hold AM SMT trades to 10:30-11:00 | MISSING | (none) | Not built. | no |
+| X10d | AM delivered the range -> skip PM | MISSING | (none) | Not built. | no |
+| X11 | PM exits | SIMPLIFIED | pm_done_by; flatten | c missing. | no |
+| X11a | Done by 15:00 if the target is hit | FULL | pm_done_by | (none) | no |
+| X11b | Hold PM trends to 15:00-16:00 | FULL | flatten | (none) | no |
+| X11c | Consolidation PM exits 14:00 | MISSING | (none) | Not built. | no |
+| X11d | Flat by 16:00 | FULL | flatten | (none) | no |
+| X12 | Objective hit -> stop for the day | SIMPLIFIED | ladder; done | No objective exit. No day stop. | no |
+| X13 | After a loss | SIMPLIFIED | reverse_after_loss; reentry_half | Re-entry partial. | no |
+| X13a | AM loss, no reversal | SIMPLIFIED | done; lost_side | No in-session experienced reversal. Beginner lock lasts all day. SB_AM leaks. | yes (was FULL) |
+| X13b | Half-risk same-direction re-entry | SIMPLIFIED | reentry_half | No direction lock, no intact check, no FOMC exemption. | no |
+| X14 | After a win | SIMPLIFIED | no_pm_after_am_win | a, b missing. | no |
+| X14a | 5 handles then stop | MISSING | (none) | Not built. | no |
+| X14b | Chop: one win and stop | MISSING | (none) | Not built. | no |
+| X14c | AM win -> skip the PM | FULL | no_pm_after_am_win | (none) | no |
+| X14d | No re-entry after a winner | SIMPLIFIED | done per session | Per session, not per day. | yes (was FULL) |
+| X15 | Frequency | SIMPLIFIED | max_trades_week | d missing. Truncation-order bug. | no |
+| X15a | Weekly cap | FULL | max_trades_week | (none) | no |
+| X15b | One AM SB a day | FULL | SB per window | (none) | no |
+| X15c | ~2 setups a day | FULL | done | (none) | no |
+| X15d | Weekly objective -> done | MISSING | (none) | Not built. | no |
+| X16 | Journal items | SIMPLIFIED | tags | Partial. | no |
+| X16a | Range vs ADR5 | SIMPLIFIED | big_prev tag | Flag only. | yes (was MISSING) |
+| X16b | Last 3 days' highs/lows taken | MISSING | (none) | Not built. | no |
+| X16c | Weekly H/L weekday and session | MISSING | (none) | Not built. | no |
+| X16d | Entry-array timeframe | SIMPLIFIED | entry_kind | No per-trade timeframe. | no |
+| D1 | AM from 09:30 vs 10:00; or_no_entry | SIMPLIFIED | am | No or_no_entry. The 10:00 test drops OR sweeps. | no |
+| D2 | SB as its own setup | SIMPLIFIED | SB | No fvg_in_window. No first-FVG switch. | no |
+| D3 | MSS close vs wick | FULL | mss_mode | (none) | no |
+| D4 | MT body vs range | FULL | mt_mode | (none) | no |
+| D5 | Exit buffer by type | FULL | exit_mode | (none) | no |
+| D6 | Breaker zone body/range/leg | SIMPLIFIED | breaker_zone | No leg or last-candle mode. No tag-only switch. | no |
+| D7 | PM window and tags | FULL | pm; tags | (none) | no |
+| D8 | News day options | SIMPLIFIED | blocked() | No nfp_day_from, no skip_post_fomc_am, no NFP no-adds. | no |
+| D9 | CPI tests | SIMPLIFIED | skip_cpi | No skip_pre_cpi. | no |
+| D10 | Early OB / turtle entries | MISSING | (none) | Not built. | no |
+| D11 | Entry price modes | SIMPLIFIED | entry | No edge_1tick/iofed/ladder. Silent fallback. | no |
+| D12 | P/D leg filter, add cutoff, OTE | SIMPLIFIED | leg_pd | No add_cutoff. The OTE test is inverted. | no |
+| D13 | First partial size | FULL | ladder fracs | (none) | no |
+| D14 | Breakeven / trailing modes | SIMPLIFIED | be_on; ladder_trail | No after_mss or stall BE. Trail-off undocumented. | no |
+| D15 | Which index on divergence | SIMPLIFIED | combine | No smt_pick. No consolidation gate. | no |
+| D16 | AM 12:00 / PM 15:00 exits | FULL | am_exit; pm_done_by | (none) | no |
+| D17 | Pivot size | FULL | pivot_n=1 | (none) | no |
+| D18 | Re-entry after a stop-out | SIMPLIFIED | reentry_half | See X13b. | no |
+| D19 | Trade frequency | SIMPLIFIED | done; caps | Truncation order. No cap in paper.py. Breakeven counts as a win. | no |
+| D20 | Mondays | SIMPLIFIED | skip_monday | No PM-only mode. | no |
+| D21 | NWOG/ORG conventions | SIMPLIFIED | H gaps; org | org_days capped at 6. Monday gap mode has no CE. | no |
+| D22 | Real midnight open | SIMPLIFIED | L.opens | No bias_open switch. Live SPY uses 04:00. | no |
+| D23 | SD anchor | SIMPLIFIED | sd_targets | Anchor is leg_hi. No switch. | no |
+| Ep01.0 | NY time | FULL | tz NY | (none) | no |
+| Ep01.1 | BSL/SSL | FULL | pools | (none) | no |
+| Ep01.2 | FVG/CE | FULL | L.fvgs | (none) | no |
+| Ep01.3 | Void | FULL | L.voids | (none) | no |
+| Ep01.4 | BPR | MISSING | balanced_ranges unused | Not used. | no |
+| Ep01.5 | Breakaway gap | SIMPLIFIED | open-gap check; ce_hold | No classification. | no |
+| Ep01.6 | Breaker body close | SIMPLIFIED | inline bz | No lower-low check. Not an entry. | no |
+| Ep01.7 | Narrative vs bias | NA | (none) | Concept. | no |
+| Ep01.8 | Low-vol inside day | SIMPLIFIED | pdh1/pdl1 | No detection. | no |
+| Ep01.9 | Year end reprices up | MISSING | (none) | Not built. | no |
+| Ep01.10 | AM 08:30-11:00, PM 14:00-16:00 | SIMPLIFIED | am/pm | 08:30-09:00 never scanned. | no |
+| Ep01.11 | PM 15:15-15:45; nothing by 15:50 -> no trade | SIMPLIFIED | pm; tag | No setup-window switch. | yes (was FULL) |
+| Ep01.12 | AM loss no reverse | FULL | reverse_after_loss | (none) | no |
+| Ep01.13 | Last-hour run | SIMPLIFIED | PM slot | No own slot. | no |
+| Ep01.14 | Draw on liquidity | FULL | _targets | (none) | no |
+| Ep01.15 | Nested FVGs | SIMPLIFIED | require_htf | No all-TF requirement. | no |
+| Ep01.16 | Hold above the 4h CE | MISSING | (none) | Not built. | no |
+| Ep01.17 | Bodies refuse; started by 15:25 | SIMPLIFIED | require_htf | No timing. No breakaway check. | no |
+| Ep01.18 | Entry and adds | SIMPLIFIED | edge; adds | No retest or breaker adds. | no |
+| Ep01.19 | Dip into the breakaway gap | SIMPLIFIED | adds | No body stop. | no |
+| Ep01.20 | Stop at the FVG candle open | SIMPLIFIED | stop modes | No open stop. No body trail. | no |
+| Ep01.21 | Pool target with an intermediate | SIMPLIFIED | ladder; min_draw | No intermediate structure. | yes (was FULL) |
+| Ep01.22 | Clean delivery | MISSING | (none) | Not built. | no |
+| Ep01.23 | HTF refs on LTF | FULL | hzones; conf | (none) | no |
+| Ep02.1 | 09:45 release wait | SIMPLIFIED | NEWS_1000 | No PMI. | no |
+| Ep02.2 | AM short model | SIMPLIFIED | mirrored _scan | No round-number pools. No 1m OB/breaker entries. | no |
+| Ep02.3 | Bearish OB MT | SIMPLIFIED | mt_mode | Wick-triggered MT stop. | no |
+| Ep02.4 | CE/MT | FULL | Zone.mid/mt | (none) | no |
+| Ep02.5 | HTF targets / runner | SIMPLIFIED | htf_targets | No 30m. No reclaim exit. | no |
+| Ep02.6 | No narrative -> scalp | MISSING | (none) | Not built. | no |
+| Ep02.7 | First day of year | MISSING | (ISM 10:00 by accident) | No rule. | no |
+| Ep02.8 | Daily VI top-down | SIMPLIFIED | topdown | VIs unused. | no |
+| Ep02.9 | Open FVG = breakaway | SIMPLIFIED | ce_hold | No tag. | no |
+| Ep03.1 | NFP week | FULL | nfp_week_block | (none) | no |
+| Ep03.2 | FOMC release | FULL | fomc_pm_from | (none) | no |
+| Ep03.3 | VI daily draw | SIMPLIFIED | detector only | Unused. | no |
+| Ep03.4 | BISI/SIBI | FULL | L.fvgs | (none) | no |
+| Ep03.5 | Measuring gap | MISSING | (none) | Not built. | no |
+| Ep03.6 | IOFED | FULL | edge entry | (none) | no |
+| Ep03.7 | Rejection block named | NA | (none) | Not defined. | no |
+| Ep03.8 | Reclaimed OB | NA | (none) | Descriptive. | no |
+| Ep03.9 | OB anchor high/open | SIMPLIFIED | order_block_blend | No open entry. | no |
+| Ep03.10 | First FVG trail | SIMPLIFIED | ladder_trail | Not the first FVG. | no |
+| Ep03.11 | Stronger index | SIMPLIFIED | combine | First fill only. | no |
+| Ep03.12 | MM buy context | SIMPLIFIED | htf_bias | No draw+pd combination. No pre-existing array. | no |
+| Ep03.13 | STL then STH MSS | FULL | _scan | (none) | no |
+| Ep03.14 | Entry/stop at the FVG | FULL | _scan | (none) | no |
+| Ep03.15 | BE after buy-side | SIMPLIFIED | be_on | Not keyed to a pool. | no |
+| Ep03.16 | Pyramid on held FVGs | FULL | adds | (none) | no |
+| Ep03.17 | Bull-flag stop run | NA | (none) | Descriptive. | no |
+| Ep03.18 | Small after large | NA | (none) | Descriptive. | no |
+| Ep03.19 | Scale out one unit at a time | SIMPLIFIED | ladder | Fixed fractions. | no |
+| Ep03.20 | Trail after two rounds | SIMPLIFIED | ladder_trail | After one partial. Not a measuring gap. | no |
+| Ep03.21 | Never widen | FULL | max() | (none) | no |
+| Ep03.22 | Final HTF target | SIMPLIFIED | ladder | Ends at the 3rd level. No VI. | no |
+| Ep03.23 | Off before noon | FULL | am_exit | (none) | no |
+| Ep03.24 | One setup/week; 5 handles | SIMPLIFIED | caps; min_draw | No 5-handle target. | yes (was FULL) |
+| Ep03.25 | Time-based charts | FULL | bars | (none) | no |
+| Ep04.1 | NFP Friday | FULL | nfp_day | (none) | no |
+| Ep04.2 | Midnight open | FULL | L.opens | (none) | no |
+| Ep04.3 | PO3 bullish | SIMPLIFIED | use_bias | Judas not required. No hold. | no |
+| Ep04.4 | PO3 bearish | SIMPLIFIED | mirror | Same as Ep04.3. | no |
+| Ep04.5 | News dealing range | SIMPLIFIED | post_news | Not used from 09:30. Not a target. | no |
+| Ep04.6 | MSS + OB near midnight | SIMPLIFIED | _scan | No OB entry. No tolerance. | no |
+| Ep04.7 | Two MSS | MISSING | (none) | Not built. | no |
+| Ep04.8 | IOFED | FULL | edge | (none) | no |
+| Ep04.9 | Pyramid sizes | FULL | adds | (none) | no |
+| Ep04.10 | Add at the FVG low end | MISSING | (none) | Not built. | no |
+| Ep04.11 | Clean REH | SIMPLIFIED | _eq_levels | No smoothness priority. | no |
+| Ep04.12 | Target order; bulk first | SIMPLIFIED | _targets | No type order. No VI. | no |
+| Ep04.13 | Done by 15:00 | SIMPLIFIED | pm_done_by | No day done. | no |
+| Ep04.14 | ES vs MES SMT | NA | (none) | Same underlying. | no |
+| Ep05.1 | Breaker/OB MT levels | SIMPLIFIED | bz; ob_mt | Breaker MT unused. | no |
+| Ep05.2 | No 08:30 news -> 09:30 | FULL | am | (none) | no |
+| Ep05.3 | NWOG target | FULL | H gaps | (none) | no |
+| Ep05.4 | Unicorn rules | SIMPLIFIED | uni | Not required. No overlap entry. | no |
+| Ep05.5 | Accumulate in the breaker | SIMPLIFIED | limit FVG | No breaker entry. | no |
+| Ep05.6 | 08:00 OB move | SIMPLIFIED | pre_0700 | One observation. | no |
+| Ep05.7 | Lunch CE reversal | NA | (none) | Observation. | no |
+| Ep05.8 | MM sell model | SIMPLIFIED | _scan | No consolidation. No rel-eq. | no |
+| Ep05.9 | Weekly bias | FULL | weekly_bias | (none) | no |
+| Ep05.10 | One market | FULL | combine | (none) | no |
+| Ep05.11 | Stop placement anecdote | NA | (none) | Anecdote. | no |
+| Ep06.1 | Kill zones | SIMPLIFIED | London pool | No London entries. | no |
+| Ep06.2 | FX day template | NA | (none) | FX. | no |
+| Ep06.3 | SIBI retrace to CE | FULL | entry ce; ce_hold | (none) | yes (was SIMPLIFIED) |
+| Ep06.4 | SD projection | SIMPLIFIED | sd_targets | Anchor and close-based hits differ. | no |
+| Ep06.5 | DXY/EURUSD | NA | dxy tag | FX. | no |
+| Ep06.6 | Midnight reference | SIMPLIFIED | use_bias | No confirm, no target. | no |
+| Ep06.7 | Prefer rel-eq pools | SIMPLIFIED | _eq_levels | No preference. | no |
+| Ep07.1 | Old daily close draw | SIMPLIFIED | ORG q=0 | No weekly draw, no "unrealized" filter. | no |
+| Ep07.2 | AM model | SIMPLIFIED | _scan | No VI entry. Edge default. | no |
+| Ep07.3 | Ep07 stop/trail | FULL | ep07_stop/trail | (none) | no |
+| Ep07.4 | VI holds | MISSING | (none) | Not built. | no |
+| Ep07.5 | Down-close adds, up-close exits | MISSING | (none) | Not built. | no |
+| Ep07.6 | Speed and distance | SIMPLIFIED | MSS close | No speed test. | no |
+| Ep07.7 | Below the swing-low bodies | SIMPLIFIED | ep07_body_exit | The fill bar is never checked. | yes (was FULL) |
+| Ep07.8 | Macro 09:50 | SIMPLIFIED | macro tag | Tag only. | no |
+| Ep07.9 | Bulk exit; 1% risk | FULL | ladder; risk | (none) | no |
+| Ep07.10 | 5-handle thinking | NA | (none) | Expectation. | no |
+| Ep08.1 | Daily wick CE / FVG edges | SIMPLIFIED | wick; htf | One RTH day. Early exit. | no |
+| Ep08.2 | Neutral / chop | SIMPLIFIED | bias_neutral | No chop mode. | no |
+| Ep08.3 | Three opens | SIMPLIFIED | L.opens | 08:30/09:30 unusable. | no |
+| Ep08.4 | MSS swing validity | SIMPLIFIED | refs[-1] | Minor swing. | no |
+| Ep08.5 | Bearish OB open | SIMPLIFIED | ob_mt | No open entry. | no |
+| Ep08.6 | PM 13:30 Judas | FULL | use_bias | (none) | no |
+| Ep08.7 | Sell >= 50% | FULL | leg_pd | (none) | no |
+| Ep08.8 | Partial before the FVG edge | FULL | exit_before | (none) | no |
+| Ep08.9 | Measured move | SIMPLIFIED | sd_targets | Leg anchor. | no |
+| Ep08.10 | Liquidity matrix | SIMPLIFIED | pd 1-3 | Window shift. RTH only. | no |
+| Ep08.11 | Old level needs PD array + time | FULL | _scan gates | (none) | no |
+| Ep08.12 | Size; after a loss | SIMPLIFIED | caps | No after-loss limit. | no |
+| Ep08.13 | Done for the week remark | NA | (none) | Remark. | no |
+| Ep08.14 | IOFED touch | FULL | edge + E3 fill | (none) | yes (was SIMPLIFIED) |
+| Ep08.15 | Turtle soup | MISSING | (none) | Not built. | no |
+| Ep08.16 | 5m equal lows MSS | SIMPLIFIED | entry_tf 5m | No 5m reference. | no |
+| Ep08.17 | 1-tick stop; 10 handles | SIMPLIFIED | stop_buffer | Not a tick. No range rule. | no |
 
-| ID | Rule (short) | Status | Code location | What is missing / spec |
-|---|---|---|---|---|
-| A1 | 3-candle swing; STL / ITL / LTL hierarchy; confirmed by a later lower candle | SIMPLIFIED | levels.pivots; `pivot_n=1` | No ITL/LTL hierarchy (needed for the parent-swing MSS and SD clusters). D-1 |
-| A2 | BSL above highs / SSL below lows; a level is booked only 1 tick through; an imbalance is not liquidity | SIMPLIFIED | strategy._scan sweep test `l[i] < v`; `exit_mode="split"` | A sweep should need >= 1 tick (0.25 ES pt) through. E-1 |
-| A3 | REH/REL: 2+ highs close together; smoother = stronger; near-level bodies count; REL line at the lower low | SIMPLIFIED | strategy._eq_levels, levels.equal_levels; `eq_tol_pts=0.5` | No body-based equality; no touch-count weight. D-2, T-18 |
-| A4 | Bodies tell the story, wicks do the damage; a 1-2 tick "mohawk" is still respect; CC: stops sit beyond the body cluster | SIMPLIFIED | sweep on wicks; `stop_buffer` | Stop padding ignores mohawks; no body-cluster sweep variant. E-2, E-10 |
-| A5a | FVG = 3-candle wick gap, known at c3 | FULL | levels.fvgs; `min_fvg_pts=0.25` | Optional c2-colour check (D-3) |
-| A5b | Levels high/low/CE; 25/75% quadrants on large gaps; HTF FVG CE = session objective | SIMPLIFIED | Zone.mid; confluence.targets (near edge + CE) | No FVG quadrants. D-3, T-10 |
-| A5c | Extend the box over an adjacent VI; a body gap inside the FVG gives the exact limit | MISSING | - | D-3, E-7 |
-| A5d | Valid after close + new candle + trade back without first taking the low; on the path to the draw | SIMPLIFIED | limit armed after c3 closes; `_scan` "still open" filter | No cancel when the bar opens below the sweep extreme (gap-through fill). E-9 |
-| A5e | State: repriced (touch) / rebalanced (through and out) / filled (bodies through) | SIMPLIFIED | `_scan` open / fresh filters | No per-gap state tracker. D-4 |
-| A5f | Retrace into a BISI stops at the top or CE; bullish = holds the upper quarter | SIMPLIFIED | `ce_hold` (off) | Upper-quarter tag. D-4 |
-| A5g | Two FVGs in a leg: the higher (second) one is allowed; skip an FVG sitting right above a pool | SIMPLIFIED | `fvg_pick="last"` | Skip-above-pool rule. E-13, T-12 |
-| A5h | FVG overlapping an OB: the FVG near edge comes first | SIMPLIFIED | confluence.targets returns both | OB levels inside an FVG are not suppressed. T-11 |
-| A5i | Lifetime: extend forward, reuse after fills, up to 60 days | SIMPLIFIED | confluence LIFE (D = 90D); arrays die at a close-through | Filled FVGs are dropped instead of kept as levels / turned into IFVGs. D-5 |
-| A6 | Breakaway (protected, at most half retraced), measuring (project -1 SD), common gaps | MISSING | `ce_hold` only approximates the breakaway hold | Classification, measuring-gap projection, protected-zone trail. D-6, T-7, M-8 |
-| A7 | Immediate rebalance (intraday; daily open trades exactly to PDH/PDL) | MISSING | - | Detector and uses. D-7, S-6, SB-10 |
-| A8 | IFVG: close beyond, NEW candle back in, holds; depth by prior use; bias switch | SIMPLIFIED | levels.inversion_fvgs; `ifvg_entries` | Hold check, depth rule, CE entry, CE +/- 3 pt stop. D-8, S-5 |
-| A9 | VI: bodies apart, wicks overlap; stop at its low; dead when a body crosses it; clusters = porous | SIMPLIFIED | levels.volume_imbalances (definition only, unused) | Uses: entries, stops, adds, death, porous flag. D-9, E-14, M-14 |
-| A10 | Void = true gap + session gaps; CC one-sided range: leg start = fill target | SIMPLIFIED | levels.voids (`fvg_targets`); NWOG/NDOG/ORG | Leg-start fill target. D-10 |
-| A11 | BPR: trading TO it easy, THROUGH it rare; a body close through its midpoint = abort | MISSING | levels.balanced_ranges (unused) | Target, abort, size-up. D-11, M-15, E-11 |
-| A12a | OB = last opposite candle(s), blended; anchor = open of the first; sensitive range high..open; stubby wick -> open, long wick -> low + wick CE | SIMPLIFIED | levels.order_block_blend (blend + body MT) | No high..open zone; no wick rule. D-12 |
-| A12b | Validation: CISD (trade through the open, then the low holds); CC: trade above the OB high | SIMPLIFIED | `mss_cisd` (MSS reference only) | "Low must hold" cancel. D-12, E-6 |
-| A12c | Quality: FVG right after, larger body, move away >= 2-3x the body, use the original/highest candle | MISSING | - | D-12 (tags), E-5 |
-| A12d | Mean threshold 50%; bodies must not close through it | FULL | `mt_mode="body"` (D4); `_scan` stop | |
-| A12e | Opposing OBs are targets; once price trades through an opposing OB's MT, its other half is not revisited | SIMPLIFIED | `htf_targets` (OB near edge + mid) | MT-crossed rule. T-11 |
-| A13 | Breaker: L1, H, lower L2, break of H; highest up-close candle by body; MT not closed through; first touch valid; wrong time = time distortion | SIMPLIFIED | `_scan` inline breaker (unicorn tag only); levels.breakers (unused) | Breaker as entry, target, invalidation; time-distortion filter. D-13, S-1 |
-| A14 | Unicorn = FVG inside the breaker; preferred | FULL | `_scan` `uni`; `Trade.unicorn` | |
-| A15 | Mitigation block (failure-swing twin); used more as a target | SIMPLIFIED | levels.mitigation_blocks; `tag_blocks` | Target use. T-16 |
-| A16 | Propulsion block: tag its high and leave; losing its MT = wrong | SIMPLIFIED | levels.propulsion_blocks; tag | MT-loss exit, high-tag entry. M-11d, D-16 |
-| A17 | Rejection block (wick zone); 2023 = body-edge level | MISSING | levels.rejection_blocks (unused, no long-wick test) | D-17, T-5 |
-| A18 | Reclaimed OB (MM model: buy retests of sell-side-curve down candles after the low) | MISSING | - | Codeable once the MSS confirms the low [our interpretation]. D-18, M-14b |
-| A19a | MSS reference = the parent swing that delivered the sweep; with REL wait for the lower one | SIMPLIFIED | `_scan` `refs[-1]` + non-swing fallback | Parent swing; REL lower-one rule. E-3 |
-| A19b | MSS on wick or close (D3) | FULL | `mss_mode="close"` | |
-| A19c | Two MSSs, each leaving an open FVG = "on side" | MISSING | - | E-4 |
-| A19d | Don't trust a shift until the liquidity run has happened | FULL | `_scan` requires a sweep | |
-| A20 | Displacement: move >= 2-3x the OB body; the next candle follows | SIMPLIFIED | FVG within `fvg_wait`; `min_fvg_pts` | No size or follow test. E-5, E-12 |
-| A21 | P/D: leg EQ intraday; 20-day range for the day; OTE 62-79%; wicks intraday, bodies multi-day | SIMPLIFIED | `leg_pd=0.5`, `leg_pd_at` | 20-day P/D, OTE, body ranges. B-13, S-8 |
-| A22 | PD-array matrix order; a breaker in the path stops price first; skip exhausted arrays | MISSING | targets sorted by price only | T-1, T-2 |
-| A23 | Wick CE = 50% body edge to tip; next-candle close beyond = continuation | SIMPLIFIED | levels.wick_midpoints (prior day); `wick_levels=True` | Intraday/weekly wick CEs; continuation read. D-19, T-4, M-2 |
-| A24a | Implied FVG | N/A | - | Undefined (035 names it once) |
-| A24b | Reaper (breaker + FVG in the discount half of its impulse leg, CE holds) | MISSING | - | [our interpretation] S-12 |
-| A24c | "Inducement" = the sweep step | FULL | `_scan` sweep | |
+## 3. Work packages
 
-### 2.2 Bias (B)
+Each package below lists its SIMPLIFIED and MISSING items, high impact first. Every item gets a short build spec, and new Params switches default off unless a spec says otherwise. Four items the checker moved to package "none" are placed where their code lives: L14b goes to entries_stops_sizing, M0.4 and M1.2 to setups_models, and M7.1 to targets_partials.
 
-| ID | Rule (short) | Status | Code location | What is missing / spec |
-|---|---|---|---|---|
-| B1 | Price moves only to run liquidity or rebalance an inefficiency (<= 60 days) | FULL | `_targets` pools + arrays; no target -> no order | |
-| B2 | Draw search order: inefficiency first, then liquidity by premium/discount; the nearest inefficiency beyond the pool sets the run | MISSING | htf.table `draw` = nearest of everything | B-6 |
-| B3 | Bias = toward the next draw; ONE direction; expect the first delivery against it | SIMPLIFIED | `htf_bias` (off); `_judas` tag | One-direction lock (experienced default off: 095 ~11:46). B-7 |
-| B4 | Bias needs displacement + FVG + retrace + time of day | FULL | engine | |
-| B5 | Weekly first, daily main; >= 4h array alignment; 15m bellwether; news-day top-down | FULL | `topdown`, `topdown_min`, `conf_min_top` (all off) | |
-| B6 | Daily institutional order flow score | MISSING | - | B-1 |
-| B7 | Daily OB MT close rule; a close below 50% of the last down-close daily candle = high of week in | SIMPLIFIED | strategy.weekly_bias (Ep 05 one-week case) | B-2 |
-| B8a | Flip: daily close through the last daily OB MT | MISSING | - | B-3 |
-| B8b | Flip: bodies close through three daily arrays | MISSING | - | B-3 |
-| B8c | Flip: weekly close below the last down-close weekly candle's low -> sells | MISSING | - | B-3 |
-| B8d | Flip: daily close above Friday's high / a wick CE / a weekly wick's upper quadrant | MISSING | - | B-3 |
-| B8e | Flip: Thursday trades back through the weekly open against the bias | MISSING | - | B-3 |
-| B8f | Flip: stopped out above a breaker high cancels the SMT -> long rest of day | MISSING | - | B-3 |
-| B9 | Not a flip: target reached (= neutral), two down days in an uptrend, a failed daily array, the Judas | MISSING | no bias state machine | B-4 |
-| B10 | MWD sequential | MISSING | - | B-5 |
-| B11 | Candle-pattern context: inside day/week, down-close outside day, 3 same-direction closes, NR3/NR7 | SIMPLIFIED | strategy.day_context (`inside_day`, `big_prev`, `three_*`); `three_day_rule` | Inside week, outside day, NR3/NR7, close>open variant. C-1 |
-| B12 | PO3: buy at/below the midnight open, sell above; PM uses 13:30 | FULL | `use_bias` in `_scan`; levels.opens (true midnight on futures) | Variant: midnight also in the PM (B-16) |
-| B13 | Weekly open (Sun 18:00 / Mon 00:00) filter | MISSING | - | B-8 |
-| B14 | NWOG regime (returns = consolidation; leaves = trend); bias vs NWOG | MISSING | - | B-9 |
-| B15 | ORG tell: no attempt back to the prior close within 30 min = very directional | MISSING | - | C-2 |
-| B16 | No bias before the Sunday open; neither scenario -> trade from Tuesday | MISSING | - | B-10 |
-| B17a | 50/50 (both sides frameable) = no trade | MISSING | - | C-3 |
-| B17b | Stuck at a premium array / chop -> wait for 09:30 | FULL | AM from 09:30; pre-open windows off | |
-| B17c | HTF/weekly draw delivered -> neutral, stop for the week | MISSING | - | C-3 |
-| B17d | Multi-day daily range = scalping; inside a daily BISI = no trade; one-way run into HTF premium = sloppy | SIMPLIFIED | `neutral_skip` (> 2x ADR5 day only) | C-3 |
-| B17e | Indices decoupled -> scalp/skip; SMT both ways with no bias -> no trade | MISSING | - | C-3 |
-| B18a | SMT (ES vs NQ vs YM) as a qualifier: tag / filter | FULL | strategy._smt; `partner2`; `smt_min` | |
-| B18b | SMT windows AM 05:00-09:30, PM 12:00-15:00 | MISSING | SMT checked at any sweep | B-17 |
-| B18c | SMT uses: partials, instrument choice | MISSING | - | M-5, S-10 |
-| B19a | DXY up = risk-off; no ES longs while DXY rallies above its range high (daily version) | SIMPLIFIED | backtest.INTERMARKET `dxy` tag | Gate. B-11 |
-| B19b | ES lower low should come with a DXY higher high (intraday) | N/A | - | Needs DXY 1m (not in our data) |
-| B19c | Bonds and stocks together; bonds in a range -> everything consolidates | SIMPLIFIED | `tnx` tag | Range regime. B-11 |
-| B20a | COT hedging program | MISSING | - | Free CFTC download, not loaded. B-12 |
-| B20b | Open interest 10-15% rule | N/A | - | No CME OI history in our data |
-| B20c | Weekly Williams %R extremes | MISSING | - | B-12 |
-| B21 | IPDA 20/40/60-day ranges, pools and EQ | MISSING | - | B-13, T-19 |
-| B22 | Quarterly shift (context) | MISSING | - | B-14 |
-| B23 | Seasonal map (road map only) | SIMPLIFIED | backtest.report `by_month` | Tag + filter. B-14 |
+### File ownership and integration order
 
-### 2.3 Day selection and news (N)
+Most packages own a separate region of the code, so they can be built in parallel. Where two packages must change the same function, the integration order below says which merges first.
 
-| ID | Rule (short) | Status | Code location | What is missing / spec |
-|---|---|---|---|---|
-| N1a | NFP Friday: experienced trade it after the first hour | FULL | `nfp_day=True` (AM from 09:30) | |
-| N1b | No pyramiding on NFP | MISSING | `adds` on by default, no NFP exemption | M-14f |
-| N2 | NFP week Wed PM / Thu / Fri: experienced trade them | FULL | `nfp_week_block=False`, `nfp_thu=True` | |
-| N3a | FOMC: no trading the 14:00 release; 14:00-14:45 observe; normal after 14:45 | SIMPLIFIED | strategy.blocked `fomc_pm_from=885` (arming only) | Pending orders and open positions live through 14:00. M-13 |
-| N3b | CC: FOMC AM tradeable; never hold into the release | SIMPLIFIED | AM open | Flat before 14:00. M-13 |
-| N3c | FOMC-only day: AM consolidation, PM volatility | MISSING | - | Tag. W-6 |
-| N3d | Day before FOMC, and FOMC week before Wed 14:00: trade light | MISSING | - | W-6 |
-| N3e | Day after FOMC: sit still in the AM | MISSING | - | W-6 |
-| N3f | Don't re-enter if stopped on FOMC | MISSING | `reentry_half` has no exemption | M-16 |
-| N4a | CPI: no position into or at the release | FULL | AM from 09:30; `pre_flat_0830` for PRE7 | |
-| N4b | Day before CPI: no trade or small bread-and-butter only | MISSING | - | W-7 |
-| N5a | Any high/medium release: wait >= 30 min, then trade only with ~10 handles of room | SIMPLIFIED | AM starts 10:00 on 10:00-release days | 30-min wait; news room. W-2 |
-| N5b | 09:45/10:00 releases: wait for the release, not just 09:30 | SIMPLIFIED | `NEWS_1000` tags (2026 dates only) | 2019-2025 dates. W-1 |
-| N5c | No 08:30 news: wait for 09:30 | FULL | `am=(570, 660)` | |
-| N5d | Two drivers in one session: stand aside / not ahead of the second | MISSING | - | W-3 |
-| N5e | Fed chair testimony/speech at 10:00: no AM; trade 13:30-16:00 | MISSING | calendar not loaded (obtainable) | W-4 |
-| N5f | Treasury auction day: avoid the AM | MISSING | calendar not loaded (obtainable) | W-5 |
-| N6a | News: the first pool run after the release is usually false | SIMPLIFIED | `post_news` (sweep of the 08:30-09:00 range) | First-side-false logic. W-8 |
-| N6b | After both pools are taken, price retraces to the CE between them | MISSING | - | W-8 |
-| N6c | On NFP/CPI/FOMC days breakers reject poorly | MISSING | - | W-8 |
-| N7a | Day before a long weekend / holiday: skip | MISSING | calendar.HOLIDAYS exists, unused | C-4 |
-| N7b | Morning after a holiday: no trade; Tue after a Monday holiday acts like Monday | MISSING | - | C-4 |
-| N7c | Holiday weeks deliver cleaner Thu/Fri | MISSING | - | Tag. C-4 |
-| N7d | Last trading day of the year = inside day; first trading day: don't rush | MISSING | - | C-4 |
-| N7e | Rollover week: more volatile and choppy | SIMPLIFIED | daytypes `roll_week` day_type tag | Size option. C-4 |
-| N7f | August "meat grinder": trade small or stand aside, last two weeks especially | MISSING | - | C-4 |
-| N8a | Consolidation = no trade, wait for expansion | MISSING | - | C-5 |
-| N8b | Trending-day recipe (small prior ranges + daily array hit + 08:30 news) | MISSING | - | C-5 |
-| N8c | Consolidation-day predictors and behaviour (AM scalp only if OR small, done by 11:00, PM only if no AM stop run) | MISSING | - | C-5 |
-| N8d | Large ORG or very large prior range: sacrifice the AM, trade 13:30-16:00 | MISSING | - | C-5 |
-| N8e | Prior range > 2x ADR5: skip; < ADR5: expansion due | SIMPLIFIED | `neutral_skip` (`big_prev`) | Expansion-due tag. C-5 |
-| N8f | Seek & destroy: don't hold trades | MISSING | - | [our interpretation] C-5 |
-| N9a | No draw / inefficiency / displacement -> no trade | FULL | engine requires all three | |
-| N9b | Draw delivered before 09:30 -> choppy 09:30, trade the PM | MISSING | - | C-6 |
-| N9c | Daily objective done before lunch -> skip the rest | MISSING | - | C-6 |
-| N9d | Overnight range too narrow or pre-09:30 raid too shallow -> no AM | MISSING | - | C-6 |
-| N9e | Macro window with no move toward the draw -> close the session | MISSING | - | C-6 |
-| N9f | London already made ~80% of ADR5 -> skip NY | MISSING | - | C-6 |
-| N10a | Don't trade the Sunday open | FULL | no evening session in the engine | |
-| N10b | Mondays (experienced: trade them) | FULL | `skip_monday=False` | |
-| N10c | Tue/Wed ideal; Thu reverses; weekly H/L Mon-Wed ~70%; Thu/Fri break of Mon-Wed = expansion | SIMPLIFIED | `Trade.weekday` tag | Stats and the Thu/Fri expansion tag. C-7, C-11 |
-| N10d | Friday: small unless weekly objective unmet; most at the first pool; no trade after targets met; don't buy after a strong Thursday | MISSING | - | C-7 |
-| N10e | No weekend holds or holds across 17:00-18:00 | FULL | `flatten=960` | |
+| Package | Owns | Shares with others |
+|---|---|---|
+| levels_detectors | `levels.py` (all new detectors); `confluence.py:_zones` new array rows; `htf.py:_arrays`/`opening_gaps`; `strategy.py` DayCtx pool construction, `_sell_side`, `_eq_levels` | `_scan` sweep test (A2 tick threshold), shared with setups_models |
+| setups_models | `strategy.py:_scan` sweep/MSS block (~1027-1076) and new setup branches (turtle soup, breaker, IR, OB entries); `backtest.combine` instrument pick | `_scan` gap pick (~1077-1118), shared with entries_stops_sizing |
+| entries_stops_sizing | `_scan` entry/stop block (~1118-1137); `run_day` pending-fill block (~877-919) and add-arming block (~863-875); `SB._arm` stop; `PO` fill | Add block shared with management_exits; Params entry/stop fields |
+| targets_partials | `strategy.py:_targets`; `_scan` target merge (~1172-1213) | Ladder loop (~793-813), shared with management_exits |
+| management_exits | `run_day` position-management loop (~786-860); `_after_close`; done flags | Uses ladder levels and kinds from targets_partials |
+| bias_htf | `htf.py:table`; `run_day` `want`/bias (~764-769, ~945-951); `weekly_bias`; `BT.INTERMARKET`; new data loaders (COT/OI) | `_scan` bias gates (~1138-1170), shared with setups_models |
+| news_calendar_times | `calendar.py` event sets; `blocked()` news branches; `run_day` session windows (`am_start`, `pre_windows`, ~740-760) | `blocked()` and `calendar.py`, shared with day_week_context |
+| day_week_context | `day_context`; `blocked()` day-of-week/holiday branches; `BT.run` weekly state; weekly study scripts | Same as news_calendar_times |
+| silver_bullet | `sb_model.py` only | Calls `_targets` and `blocked()` |
 
-### 2.4 Times and sessions (T)
+Merge order:
+1. **levels_detectors.** Most new detectors are used by other packages.
+2. **setups_models**, then **entries_stops_sizing**, then **targets_partials**. All three edit `_scan`, top to bottom in that order.
+3. **targets_partials ladder changes**, then **management_exits**, then the **entries_stops_sizing add block**. All three edit the run_day management loop.
+4. **news_calendar_times**, then **day_week_context**. Both edit `blocked()`, `calendar.py` and the session-window section of `run_day`.
+5. **bias_htf**. It edits `htf.table` after levels_detectors adds VI rows to `_arrays`, and the `_scan` bias gates after setups_models.
+6. **silver_bullet** goes last because it calls the shared `_targets`/`blocked()`.
 
-| ID | Rule (short) | Status | Code location | What is missing / spec |
-|---|---|---|---|---|
-| T1 | New York clock incl. DST; time-based bars only | FULL | data in America/New_York; 1m/5m bars | |
-| T2 | Opens: midnight, 08:30, 09:30, 13:30; after a release, retrace bodies stop at the 08:30 open | SIMPLIFIED | levels.opens | 08:30-open uses (stop / level). W-9 |
-| T3 | Kill zones; for indices only the London 02:00-05:00 H/L matters (pool) | FULL | DayCtx.sess["london"]; `extra_pools=True` | Asia 20:00-00:00 is fx-only |
-| T4a | Opening range 09:30-10:00: don't trade it; exception: price already deep in discount | SIMPLIFIED | `am=(570, 660)`; `or_minutes=30` (pool only) | `or_no_entry` switch. C-8 |
-| T4b | CC OR60 holds the HOD or LOD; a wide OR's far end gets run | SIMPLIFIED | `or_minutes=60` variant (pools/targets) | Wide-OR rule. C-8 |
-| T5 | NY AM session window | FULL | `Params.am` | |
-| T6 | SB windows 10-11, 14-15, 03-04; also 15-16 and optional 07:00-08:30; entry inside the window | SIMPLIFIED | `sb_windows`, `sb_london` | 15-16 and 07:00-08:30 windows. SB-13 |
-| T7a | Macros as timing windows (tags) | FULL | `MACROS`; `Trade.macro_win`, `macro` | |
-| T7b | Macro behaviours: lunch macro runs the stops protecting the AM move; 14:50-15:10 swing start; MOC runs untaken liquidity, nothing if the HTF target is hit; a macro fails once the day's run is done | MISSING | - | S-15, S-2 |
-| T8a | Lunch: experienced may trade it | MISSING | no lunch window (AM to 11:00, PM from 13:30) | C-9 |
-| T8b | Lunch runs trailed AM stops; an AM draw not reached by lunch carries to the PM | SIMPLIFIED | `am_exit=720` closes AM leftovers | Carry the AM draw into the PM. C-9 |
-| T9a | PM session 13:30 (or 14:00) to the close | FULL | `pm=(810, 950)` | |
-| T9b | Divided day: bad AM -> back at 13:45; nothing by 14:30 -> skip the PM | MISSING | - | C-10 |
-| T10a | No setup by 10 min before the close -> no trade | FULL | `pm` end 950 | |
-| T10b | No clear setup: wait to 15:40-15:45 for a 5-8 (to 10) handle run | MISSING | - | S-2 |
-| T10c | Pool taken before 15:50 -> flurry then pullback | MISSING | - | M-13 |
-| T11a | Flat before 16:00; flat once the final level is hit | FULL | `flatten=960`; ladder last level exits all | |
-| T11b | No adds or fades in the last ~15 min | MISSING | adds have no time cut-off | M-14 |
-| T12 | When the day's extremes form (stats) | MISSING | - | Study script. C-11 |
-| T13a | Daily PO3 / Judas | FULL | `use_bias`; `_judas` tag | |
-| T13b | CC six index day profiles | MISSING | - | [our interpretation] C-12 |
-| T14 | Weekly time (bulk Tue-Thu; Tue London low; 30-50% by Wed) stats | MISSING | - | Study script. C-11 |
+Rules for every package:
+- **Params:** each package adds its fields in its own commented block at the end of the Params class, so merges do not collide.
+- **Shared helpers:**
+  - `breaker_zone()` lives in levels_detectors and is used by setups, entries, targets and exits.
+  - `adr5()` and `next_trading_day()` live in day_week_context and are used by news and targets.
+  - `volume_imbalances` wiring lives in levels_detectors.
+- **Build them first** (they are listed with the packages below).
 
-### 2.5 Levels and draw (L)
+### levels_detectors (36 items)
 
-| ID | Rule (short) | Status | Code location | What is missing / spec |
-|---|---|---|---|---|
-| L1a | Session pools: prev PM 13:30-16:00, London 02-05, lunch 12:00-13:30, AM 09:30-12:00, ORG | SIMPLIFIED | DayCtx.sess, `am_hl`, `extra_pools` | Previous day's AM range (09:30-12:00) pool. E-15 |
-| L1b | Pool priority at 09:30: prev PM if near, else London, else prev AM | MISSING | `_scan` takes the lowest hit level | E-15 |
-| L2 | Liquidity matrix (3 days + 3-day extreme); PDH/PDL first targets; needs a PD array + time; a reversal needs an HTF array + HTF order flow | SIMPLIFIED | DayCtx.pd (spent check); engine | HTF order-flow condition. B-1 |
-| L3a | Previous week / month high-low as pools | SIMPLIFIED | `pool_prev_week`, `pool_prev_month` (both off) | Defaults off. T-20 |
-| L3b | 20/40/60-day highs/lows as pools | MISSING | - | T-19 |
-| L3c | Globex high; OR30/OR60 H/L; lunch REL/REH as PM targets | FULL | `globex_pool`, `or_minutes`, sess["lunch"], `_eq_levels` | |
-| L4 | Pool quality: larger pool, 4h REL over 1h REL, pool below the leg EQ, low-resistance runs, fund stops up to 10 handles beyond | MISSING | - | T-18, M-4 |
-| L5a | NWOG: Fri close -> Sun 18:00; high/low/CE; never discarded; 60 days | FULL | htf.opening_gaps, gaps_for_day(`nwog_days=60`), `gap_mode="ict"` | |
-| L5b | Holiday-shortened week: ignore that NWOG | MISSING | - | D-20 |
-| L5c | Quarters; halfway rule between NWOGs; a sell-side run stops at the nearest NWOG/NDOG/ORG | MISSING | - | T-13, S-7 |
-| L6 | NDOG 17:00 -> 18:00, Mon-Thu, > 1 pt, through Friday, confluence only | FULL | htf.opening_gaps; gaps_for_day | |
-| L7a | ORG: prior close -> 09:30; high/75/CE/25/low; 5 days; 16:15 close for ES | FULL | `org_days=5`, `org_close=975`, `_targets` | |
-| L7b | ORG behaviour: 09:30 seeks the prior close; a quarter fill that holds = strength; half filled -> later the other half | MISSING | - | S-4, C-2 |
-| L7c | ORGs kept ~60 days as dimmed confluence levels (092) | MISSING | - | T-14 |
-| L8 | Vacuum block (event gap): 08:30 gaps fill the same day | MISSING | - | T-15 |
-| L9 | FVG targets: near edge, then CE; weekly CE enough; a partly traded FVG's remainder + stops beyond = next draw | SIMPLIFIED | `htf_targets`, `fvg_targets`, `htf_far_edge` | Remainder rule; 30m timeframe. T-3, T-10 |
-| L10 | Daily and weekly wick CEs as targets, partials, invalidation | SIMPLIFIED | `wick_levels` (prior day only) | T-4, M-2 |
-| L11 | Cover at the old low's lowest body, not the wick | MISSING | - | T-5 |
-| L12 | SD: -0.5, -1 ... beyond a broken swing; first level beyond the pool; clusters; -0.5 first partial, -1 most off; must align with pool/array/time | SIMPLIFIED | `sd_targets` (off), `sd_levels=(1..2.5)`, `sd_first_beyond` | -0.5..-4.5, clusters, alignment, anchors. T-6, M-3 |
-| L13 | Breaker A-B +1x; measuring gap; ORG multiples; CC 1.27/1.62 at opposing arrays | MISSING | - | T-7 (CBDR/Asian/Flout are fx-only) |
-| L14a | Decide the draw first, then trade only toward it | MISSING | - | B-6, B-7 |
-| L14b | Enter at internal range liquidity, exit at external | FULL | engine | |
-| L14c | Direction from the matrix: after a reaction at one side's arrays, the other side is the draw | SIMPLIFIED | `htf_bias="react"` | Part of B-6 |
-| L14d | Only targets not traded through; skip exhausted arrays | SIMPLIFIED | `_targets` `seen`; DayCtx.pd spent check | Exhausted arrays. T-1 |
-| L14e | Conditional draws: upper fails -> switch to lower; lower taken = spent | MISSING | - | B-15 |
-| L14f | Sorted level list; mark each done | FULL | `mgmt="ladder"` | |
-| L14g | Silver Bullet draw list | FULL | sb_model._arm via `_targets` | |
-| L15 | Room: ~10 handles, experienced 5 | FULL | `min_draw_pts=5.0` | |
-| L16 | ADR5: aim 65-70%; ADR before 10:00 -> take 80%, keep a runner | MISSING | - | T-8 |
-| L17 | CC rounding toward price (2023 does not round) | MISSING | - | D-21 |
+Owns: `levels.py`, `confluence._zones`, `htf._arrays`/`opening_gaps`, DayCtx pools, `_sell_side`, `_eq_levels`. Includes M1.2 (the `_scan` intact fix) only when the setups_models owner agrees, since that code sits in the sweep block.
 
-### 2.6 Models and setups (M)
+High:
+- **B21:** Pass at least 61 days of history. Build H/L 20/40/60 as pools `ipda20h` etc., plus `ipda_next` sequencing. Add `ipda_eq_day` (off/tag/skip) for the range-day-at-EQ rule.
 
-| ID | Rule (short) | Status | Code location | What is missing / spec |
-|---|---|---|---|---|
-| M0 | One setup for life: bias, window pools, raid, MSS + FVG, any PD array, opposite pool | FULL | engine (`_scan`) | |
-| M1a | MMBM/MMSM context + trigger | FULL | `_scan`; `require_htf` / `conf_min_n` | |
-| M1b | Speed check: rip through the SIBI high; afterwards not below the lowest open/close of the swing low | SIMPLIFIED | `ep07_body_exit` (off) | Rip-through test E-12; default M-11f |
-| M1c | First entry in the OB before the MSS (D10) | MISSING | - | E-16 |
-| M1d | MM model phases | N/A | - | Context, not a trigger |
-| M2a | 2022 model: sweep, MSS, FVG at >= 50% of the leg | FULL | `_scan`; `leg_pd=0.5` | |
-| M2b | FVG choice: aligned with VI + OB; the higher of two allowed; else the first beyond EQ | SIMPLIFIED | `fvg_pick` | E-13 |
-| M2c | 2022 stops: OB MT + 2 pts, FVG candle high, CE of the higher FVG | SIMPLIFIED | `stop_mode="ob_mt"` | E-10 |
-| M2d | Pyramid only in premium; past the 25% line stop adding | MISSING | - | M-14e |
-| M2e | Target sell-side below 50% of the range, larger pool | MISSING | - | T-18 |
-| M2f | Three drives into failing liquidity, then MSS | MISSING | - | E-17 |
-| M3a | SB windows; entry inside; FVG may be earlier; target after the window | FULL | sb_model.run_sb | |
-| M3b | Displacement toward a draw chosen first; one direction | SIMPLIFIED | sb_model._arm (both sides each bar) | SB-1 |
-| M3c | First FVG in the bias direction, beyond the broken level | FULL | `_arm` `g.top > ref`, newest untouched | |
-| M3d | Evolving SB | FULL | `_arm` re-arm | |
-| M3e | Cancel if the target trades first; a shallow 1-tick sweep is wanted | SIMPLIFIED | run_sb cancel | Shallow-sweep tag. SB-5 |
-| M3f | Room 10 / experienced 5 | FULL | `sb_room_pts=5` | |
-| M3g | Entry near edge; CE "worst case" for the room; 066 a little above the FVG candle high | SIMPLIFIED | entry = `g.top` | SB-4, SB-17 |
-| M3h | Stops: 2 pts beyond / below c1 + OB MT / below the entry candle / above the higher FVG CE | SIMPLIFIED | stop = min(c1 low, OB MT) | SB-11 |
-| M3i | London, else AM, else PM; one market | SIMPLIFIED | one per window; backtest.combine | SB-14 |
-| M3j | Immediate rebalance in the window -> expect more than 5 handles | MISSING | - | SB-10 |
-| M3k | Exits: layered limits; with the weekly profile aligned, keep a runner | SIMPLIFIED | `sb_mgmt`, `sb_runner` | SB-9, SB-19 |
-| M3l | Skip spotty days and out-of-sync markets | MISSING | - | SB-7, SB-8 |
-| M3m | Sweep optional (tag); MSS shown in nearly every example | SIMPLIFIED | `_arm` requires MSS; `swept` tag | SB-5 |
-| M4a | Classic breaker entry (first return, bodies respect, stop beyond the sweep) | MISSING | - | S-1 |
-| M4b | Unicorn: FVG/CE inside the breaker; add on each imbalance; accumulate before the breakout | SIMPLIFIED | unicorn preference in `_scan` | S-1 |
-| M4c | Advanced breaker: A-B leg, early entry with bias, target B + (B-A) | MISSING | - | S-1 |
-| M4d | Breaker pyramid: turtle-soup low, then add at the breaker retest | MISSING | - | S-1, S-7 |
-| M4e | CC breaker swing vs failure swing | MISSING | - | S-1 |
-| M5 | PM last hour (Ep 01 nested-FVG version; 2022 model 15:15-15:45) | SIMPLIFIED | `last_hour` tag; PM window | S-2 |
-| M6 | PM reversal "2:00 macro" via IFVG | MISSING | - | S-3 |
-| M7 | PM off lunch; PM 13:30 Judas | FULL | sess["lunch"] pools; `use_bias` 13:30 | |
-| M8 | ORG repricing after the 09:30 Judas | MISSING | - | S-4 |
-| M9 | News Judas: the first run is the losing side; FOMC real move 14:25-14:30 | SIMPLIFIED | `post_news` | W-8 |
-| M10 | IFVG entry protocol (CE / near edge, depth, stop CE + 3-4 pts) | SIMPLIFIED | `ifvg_entries` | S-5 |
-| M11a | Immediate-rebalance entry with a tight stop; out above range EQ | MISSING | - | S-6 |
-| M11b | CISD OB entry at/below EQ of the post-CISD range | MISSING | (`mss_cisd` only changes the MSS reference) | S-6 |
-| M11c | Wick-CE long after the next candle closes above the CE | MISSING | - | S-6 |
-| M12a | 2023 turtle soup: external level, SMT, one PD array, no MSS | MISSING | - | S-7 |
-| M12b | Turtle soup short at an old high, add on new FVGs/breakers (Ep 08) | MISSING | - | S-7 |
-| M12c | CC turtle soup: limit at the old low; 1h sweep into a daily OB (1R/2R/5R); OR60 low | MISSING | - | S-7 |
-| M12d | External turtle soup (pattern 2) | MISSING | - | S-7 |
-| M13 | OTE 62-79% (70.5%) | MISSING | (`leg_pd=0.62` variant is only a filter) | S-8 |
-| M14 | TGIF | SIMPLIFIED | strategy.day_context `tgif_*`; `tgif` (direction block) | C-13 |
-| M15 | Ma Deuce | SIMPLIFIED | pre_open.run_ma_deuce; `ma_deuce` | S-9 |
-| M16a | CC AM index SMT entry (buy stop above a down-close candle) | MISSING | - | S-10 |
-| M16b | Sick sister | MISSING | - | S-10 |
-| M16c | D15: trade the leader (or the laggard) | SIMPLIFIED | backtest.combine (first fill) | S-10 |
-| M17 | London/CBDR/Asian models, OSOK, swing, stocks | N/A | - | fx-only / swing / stock models (out of scope) |
+Medium:
+- **A1:** Add `swing_tiers()` for ITL/LTL, where a tier is known only once its right neighbour is. Add `mss_ref` (stl/itl/ltl) and `mss_ref_fallback`. Fix the stale rulebook note.
+- **A2:** Add `sweep_ticks=1.0`, applied in `_scan`, intact, `_smt`, the `seen` filter and the SB swept tag. Test pool_swings=True. Add `sb_draw_pools_only`.
+- **A5:** Add `fvg_c2_dir=True`, `Zone.q`, `fvg_quadrants`, `fvg_vi_extend`, `fvg_skip_above_pool`, `htf_ce_draw`, `fvg_q_hold`, a state tag with `fvg_state_filter`, and `fvg_keep_filled`.
+- **A13:** Add a shared `breaker_zone(sd,l1_i,ref_i,ext_i,i,mode)` with body/range/leg modes, an L1-run check and an MT. Replace both definitions with it.
+- **B1:** Add `vi_targets`, VI rows in `C._zones` and `H.table`, `wick_days`, and the `no_draw`/`skip_no_draw` consolidation state.
+- **L1:** Add `am_range_end`, a `prev_am` pool, `session_priority` (prev_pm > london > prev_am) and `org_pools`.
+- **L2:** Add `daily_level_needs_array`, `daily_level_needs_flow`, `pd_hl_session='eth'` and `pool_today_hl`.
+- **L5:** Add `gap_quarters`, `nwog_skip_holiday`, `nwog_halfway` and `gap_run_stop`. Count trading days instead of calendar days.
+- **L7:** Use an ORG history of max(org_days,5)+1. Set `org_close` per symbol. Add `org_draw`/breakaway, `org_half_draw` and an `org_q_hold` tag.
+- **L10:** Add `wick_days`, `wick_weekly`, `wick_both`, `wick_session`, `wick_invalidate` and `wick_partial`. Fix the default mismatch.
+- **M2.1:** Add `pool_gaps` (NWOG/NDOG as sweep pools, unique keys) with `gap_pool_edge` far/ce.
+- **T2:** Add `release_open` (08:30 body hold) and `release_open_stop` (open/wick_ce). Add `bias_open` for the AM reference.
+- **Ep01.5:** Add a breakaway mode (off/tag/hold/next_fvg) using ICT's first-FVG-after-MSS definition.
+- **Ep01.6:** Require a lower low for bz. Take the candle from the L1-to-H leg. Add `breaker_entry` (shared with A13.4).
+- **Ep02.8:** Add `vi_arrays`: daily/weekly VIs in `H._arrays` as draws, plus targets and an optional `vi_news_draw`.
+- **Ep03.3:** Use the same `vi_arrays` switch, with a rebalance death rule and a D_vi draw.
+- **Ep05.1:** Add `breaker_levels` (entry clamp at the breaker MT, body-close exit, a fallback stop).
+- **Ep06.7:** Add `eq_pref` (off/rank/require) with a `pool_eq` kind.
+- **Ep08.10:** Add `matrix_full` (ETH sessions), `matrix_days` (ict with today's H/L), and the labels m3h/m3l.
 
-### 2.7 Entries, stops and sizing (E)
+Low:
+- **A3:** Add `eq_bodies` and `eq_rank` (touches, spread). Test eq_tol 0.25/0.5/1.0.
+- **A7:** Add `immediate_rebalances()`, `imm_rebalance_disp`, a Trade.imm_rebal tag, and a daily open_to_pdh/pdl tag.
+- **A9:** Add a VI min_gap, a body death rule, `vi_stop`, `vi_porous_n` and `vi_htf_draw`.
+- **A11:** Window BPR pairs with `bpr_max_gap_bars`. Add `bpr_targets` and `bpr_abort` (body close through the midpoint).
+- **A13.1:** Add `breaker_ll` (real pivots, L2 < L1, body close above the real H).
+- **A13.5:** Add `breaker_time` (H, L2 and the break in one session block), with an optional L1.
+- **A15:** Fix the `mitigation_blocks` swing order (A, X, then a higher low B). Add `mit_targets` and `mit_body_respect`.
+- **D6:** Allow breaker_zone leg and last, and raise an error on unknown values. Add `unicorn_pref`.
+- **D21:** Pass org_days into DayCtx and widen the history. Add a CE for the monday gap mode. Add `nwog_quarters` and `org_sweep`.
+- **L3:** Add `ipda_pools`, `ipda_next`, `or_extra` and `pw_pm_full_session`.
+- **L8:** Add `vacuum_block()` at releases (08:30 near/MT/far; 10:00+ near/MT). Do not duplicate NDOG/ORG.
+- **M0.2:** Shares the L1 `pool_priority` and prev_am work.
+- **Ep01.4:** Add `bpr_rule` with known-time BPRs, the A11 midpoint body-close exit and a T1 cap.
+- **Ep02.9:** Use the shared breakaway tag (Ep01.5).
+- **Ep08.1:** Add `wick_days` (full session), `wick_react` and `daily_fvg_exact`.
+- **M1.2 (reassigned):** In intact(), for swing_low keys use a = pivot index + 1. Optionally add `displacement_mult`.
 
-| ID | Rule (short) | Status | Code location | What is missing / spec |
-|---|---|---|---|---|
-| E1 | Resting limit in the array; adds/scalps at market; CC stop orders on breakers/FVGs | SIMPLIFIED | limit entries; adds as limits | Stop-order variant. E-18 |
-| E2 | Entry: near edge / CE / IOFED (1 tick in, shallow touch) / ladder high-75%-CE | SIMPLIFIED | `entry="edge"` or `"ce"` | IOFED, ladder. E-7 |
-| E3 | A limit fills only on 1 tick through | FULL | pending `l < entry` (futures tick); gap fills at the open | |
-| E4 | Buy into down-close candles, sell into up-close | MISSING | - | E-8 |
-| E5 | Don't chase; move to a newer FVG; cancel if target first; entry in window; don't enter early with a wide stop | SIMPLIFIED | pending cancel rules; `max_risk_pts` | Evolving FVG in the main engine. E-9 |
-| E6a | Stop below the MT of the OB nearest the sweep low | FULL | `stop_mode="ob_mt"`; `ep07_stop` | |
-| E6b | Stop beyond the FVG-forming candle / below its open and bodies | SIMPLIFIED | `stop_mode="fvg"` (= c1 high) | c2-open / bodies variant. E-10 |
-| E6c | Stop beyond the sweep extreme | MISSING | - | E-10 |
-| E6d | Stop beyond every nearby inefficiency and any overshoot wick | MISSING | - | E-10 |
-| E6e | Not just past a level price may mohawk | MISSING | - | E-10 |
-| E6f | Padding 1 tick; 3-4 pts on CE stops; NFP wider, behind HTF bodies | SIMPLIFIED | `stop_buffer=0.01` (price units: < 1 tick) | E-10 |
-| E7 | Never widen a stop | FULL | stop only moves via `max()` | |
-| E8 | Size = risk / stop distance | FULL | `_scan` `shares` | |
-| E9 | Size down (mixed conditions) / up (BPR+FVG, near an HTF target) | MISSING | - | E-11 |
-| E10 | After a loss: halve, win back ~50%, step up; never size up to recover | MISSING | (`reentry_half` 0.5x only) | E-11 |
-| E11 | Caps: ~6 contracts initial, 10-16 with adds | SIMPLIFIED | `max_total_risk`, `max_notional` | Contract caps. E-11 |
-| E12a | Adds decrease in size | FULL | `adds=(0.5, 0.33, 0.17)` | |
-| E12b | Add on new FVG retests, down-close candles into OB/VI, breaker retests, IFVGs, next VI | SIMPLIFIED | adds at new FVG tops only | M-14b |
-| E12c | Body closes into the FVG -> add once more at its low end | MISSING | - | M-14c |
-| E12d | No adds after partials | FULL | `t1_done` check | |
-| E12e | No adds past the 25% line of the leg or past EQ of the implied range | MISSING | - | M-14e |
-| E12f | No pyramiding on NFP or low-probability / decoupled days | MISSING | - | M-14f |
+### entries_stops_sizing (45 items)
 
-### 2.8 Management and exits (X)
+Owns: the `_scan` entry/stop block, the pending-fill and add-arming blocks in run_day, the SB stop and the PO fill.
 
-| ID | Rule (short) | Status | Code location | What is missing / spec |
-|---|---|---|---|---|
-| X1 | Target = next opposing liquidity or PD array | FULL | `_targets`; `htf_targets` | |
-| X2 | Exit before arrays, just beyond pools | FULL | `exit_mode="split"`, `exit_before_pts`, `pool_beyond_pts` | |
-| X3a | Scale out at each pool ("running down equity") | FULL | `mgmt="ladder"` (3 levels) | Unit-per-new-high variant M-1 |
-| X3b | Bulk at the first target: 80/20 on slow / news-ahead days, 50/25/25 normal | FULL | strategy._split; `ladder_by_day`, `ladder_fracs(_slow)`, `slow_frac` | |
-| X3c | A partial a little before the CE of any wick in the path; with two wicks the longer | MISSING | - | M-2 |
-| X3d | -0.5 SD always a first partial; next partial halfway between the hit target and the next | MISSING | - | M-3 |
-| X3e | Never the exact FVG edge; first partial at an FVG CE or a daily FVG top | FULL | `exit_mode` split; `htf_targets` CE | |
-| X3f | Full pull in a low-resistance run, partials in a high-resistance run | MISSING | - | [our interpretation] M-4 |
-| X3g | SMT warning (sister refuses to break) -> bank ~50% (most if YM diverges) | MISSING | - | M-5 |
-| X3h | Aim to capture 80-85% of the best-case run | MISSING | - | M-6 |
-| X4 | Breakeven only after the first partial and after expansion | FULL | `be_on="expansion"` (a later bar closes beyond T1) | BE + costs pad, Ep 03 variant: M-7 |
-| X5a | Trail under the first breakaway FVG / the measuring gap after two rounds / each newer FVG after each partial | SIMPLIFIED | `ladder_trail="fvg"`, `"prior"`, `"hit"`; `ep07_trail` | Breakaway and measuring modes. M-8 |
-| X5b | Don't trail early; never into the FVG right after the MSS | FULL | `ladder_trail="fvg"` uses only FVGs formed after the last partial | |
-| X5c | A day trade keeps its initial stop; session trades trail | MISSING | - | M-8 |
-| X6 | FVG abort: a body closes beyond the FVG and the next candle trades beyond it | SIMPLIFIED | `fvg_abort` (off): whole body below; any later bar | M-9 |
-| X7a | Three PD arrays: body closes through all three -> exit before the stop | SIMPLIFIED | `pd3_exit` (off): own-side FVGs only | M-10 |
-| X7b | Body close below the nearest VI + FVG + OB MT -> half off | MISSING | - | M-10 |
-| X7c | Three arrays in a row fail -> stop for the session | MISSING | - | M-10 |
-| X8a | Bodies close through a bullish FVG's CE -> close early | FULL | `ce_hold` (off: conflicts with the Ep 04 add) | |
-| X8b | Retrace through the MT of the candle that started the leg | MISSING | - | M-11b |
-| X8c | Immediate-rebalance trade back above range EQ -> out | MISSING | - | S-6 |
-| X8d | Propulsion block MT lost -> wrong | MISSING | - | M-11d |
-| X8e | Offside: bodies respect the opposing candle's open and trade back -> close | MISSING | - | M-11e |
-| X8f | After the trigger, not below the lowest open/close of the swing low | FULL | `ep07_body_exit` (off) | Default: M-11f |
-| X8g | Meandering inside the SIBI instead of rejecting -> close | MISSING | - | M-12c |
-| X9a | Deliver within 2-3 1m candles of touching the array | SIMPLIFIED | `time_stop_min`, `time_stop_pts` (off) | M-12a |
-| X9b | A 1m trade should move within ~10 min | FULL | `time_stop_min=10` variant | |
-| X9c | After touching the far edge, 2 minutes to move back, else half or all off | MISSING | - | M-12c |
-| X10a | Last AM unit off before noon | FULL | `am_exit=720` | |
-| X10b | CC: bulk off 10:00-11:00; AM delivered the day's range -> flat before lunch, skip the PM | SIMPLIFIED | `am_exit=660` variant | Range-delivered rule. M-13 |
-| X11a | Target hit by 15:00 -> done | FULL | `pm_done_by` (off; conflicts with cc10_014) | |
-| X11b | Consolidation-profile PM trades exit ~14:00 | MISSING | - | M-13 |
-| X12 | Session objective hit -> close everything, stop for the day | MISSING | - | M-13 |
-| X13a | No reversal after a loss (experienced may reverse) | FULL | `reverse_after_loss=True` | |
-| X13b | Same-direction re-entry at half risk while the idea is intact; not on FOMC | SIMPLIFIED | `reentry_half` (off; any direction) | M-16 |
-| X14 | After a win (experienced keep trading) | FULL | `no_pm_after_am_win=False` | |
-| X15a | Frequency caps | FULL | `max_trades_week`; one per session / window | |
-| X15b | Weekly objective delivered -> done for the week | MISSING | - | C-3 |
-| X16 | Journal items: range vs ADR5, last-3-day H/L taken, weekday/session of the weekly H/L, entry-array TF | SIMPLIFIED | `Trade.weekday` | C-15 |
+High:
+- **E6:** Add stop_mode choices (fvg_c1_low, fvg_bodies, sweep), plus `stop_all_ineff`, `stop_pad_ticks`, `ce_stop_pad_pts`, `mohawk_ticks` and `nfp_stop_wide`.
+- **E6c:** Add stop_mode='sweep' (sw.ext - buffer), tested with max_risk 25.
 
-### 2.9 Appendix A bullets (Ep 01-08)
+Medium:
+- **A4:** Add `mohawk_ticks` for all structural stops and trails, with a close-based exit beyond the raw level and a mohawk-tolerant fresh test. Add `sweep_body` (unranked, off).
+- **A12:** Add `ob_zone` (range/sensitive) with the stubby/long wick rule, `mt_close_stop`, `ob_disp_mult`, an ob_cisd tag with a cancel, `ob_targets_1m` and `opp_ob_mt`.
+- **A13.4:** Add `breaker_entry`. Compute bz before the no-FVG return. Enter at the breaker top with the stop beyond the sweep. Cancel on a body close below the MT.
+- **M1.4:** Add `early_entry` (pre-MSS OB limit, HTF+SMT gates, half risk). Later MSS FVGs become adds.
+- **M2.4:** Add `no_new_extreme` (freeze leg_hi0 and cancel on a new extreme before the fill).
+- **E2:** Extend entry to iofed/ladder, with an `iofed_ref` option. Pass it to SB.
+- **E5:** Add `evolve_fvg` (keep the sweep alive, replace only with a newer untouched FVG) and `wait_structural`.
+- **E6b:** Add stop_mode fvg_candle and fvg_bodies.
+- **E6d:** Add `stop_all_ineff` (open FVGs/VIs below the entry, overshoot wick).
+- **E6f:** Add `stop_pad_ticks` to replace the 0.01 buffer, plus `ce_stop_pad_pts` and `nfp_stop_wide`.
+- **E9:** Add `size_rules` multipliers (news eve, FOMC week, August, against macro, decoupled, low probability) and test-only size-ups (BPR, HTF 5000).
+- **E10:** Add `loss_halving` with halving_floor and winback_frac carried across days, plus `no_max_after_loss`.
+- **E12:** Add `add_points`, `add_fvg_low_end`, `add_cutoff` and `no_adds_nfp`/low probability. Reconcile the adds default with the docs.
+- **E12e:** Add `add_cut` (EQ of the range or leg 75%) with a cancel once progress passes it.
+- **D11:** Extend entry to edge_1tick/iofed/ladder, raise on unknown values, and loosen the touch cancel.
+- **D12:** Add `add_cutoff=0.25` (mirrored for the 022 short) and `leg_pd_min`. Fix the OTE study variant.
+- **Ep02.2:** Add `round_pools` and `entry_arrays` (ob, breaker).
+- **Ep02.3:** Add `mt_close_stop` when the MT is the binding stop, with the far-edge hard stop.
+- **Ep01.20:** Add stop_mode fvg_open and `trail_ref` body.
+- **Ep07.2:** Add `vi_entries` (VI index offset, not is_ifvg). Add an ep07 preset.
+- **Ep07.4:** Add `vi_stop` and `vi_hold` (body close below the VI).
+- **Ep08.5:** Add ob_entries off/fallback/prefer at the anchor open with the MT stop, run before the no-gap return.
+- **Ep08.17:** Add `stop_tick_pts=0.25` (default on) and `engage_range_pts`.
+- **L14b (reassigned):** Add `irl_entries` (fvg/ob/void), `erl_range_swings` and `erl_exits_only`.
 
-Most bullets restate a section-2 rule; "maps to" names it. These rows are counted separately
-(summary row "Appendix").
+Low:
+- **A16:** Add `prop_entry` (top - 1 tick), `prop_mt_exit` and `prop_zone`.
+- **A21.3:** Add `ote` (62-79% band, 70.5% entry, 79% cancel) and a leg_depth tag.
+- **M2.5:** Add stop_mode ob_mt_pure (2 pt pad), fvg_candle and ce2.
+- **E1:** Add `add_order` market-on-retest and `entry_order` stop_cc.
+- **E3:** Add `tick_pts`/`fill_through` in all paths. Fix Ma Deuce `<=`. Add `exit_fill_through`.
+- **E4:** Add `retrace_candle` intrabar/closed.
+- **E8:** Add `risk_pct` with running equity, a 2% clamp and `risk_incl_costs`.
+- **E11:** Add `max_contracts_initial`/`total` with `units_per_contract`.
+- **E12b:** Add `add_arrays` (vi/ifvg/ob/breaker) and `add_hold`.
+- **E12c:** Add `add_low_end` (body closes into the FVG -> add at its bottom, once).
+- **E12f:** Add `nfp_no_adds=True` and `decoupled_no_adds`.
+- **Ep01.18:** Add `add_on` retest/breaker.
+- **Ep01.19:** Add `add_body_stop`.
+- **Ep03.9:** Add `ob_entry` high/open.
+- **Ep04.6:** Use entry_arrays ob. Add `mo_tol_pts` (tolerance above the open).
+- **Ep04.10:** Add `add_fvg_low`.
+- **Ep05.5:** Add `breaker_entry` fallback at bz.top.
+- **Ep08.12:** Add `after_loss_mult` and `after_loss_adds`.
+- **Ep08.17:** Covered under the medium items above.
 
-| ID | Bullet (short) | Status | Maps to / code | Spec |
-|---|---|---|---|---|
-| Ep01.1 | BSL/SSL definitions | SIMPLIFIED | A2 | E-1 |
-| Ep01.2 | FVG, CE | FULL | A5a | |
-| Ep01.3 | Liquidity void | SIMPLIFIED | A10 | D-10 |
-| Ep01.4 | BPR: price should not re-enter | MISSING | A11 | D-11 |
-| Ep01.5 | Breakaway gap expected to stay open | MISSING | A6 | D-6 |
-| Ep01.6 | Breaker on bodies | SIMPLIFIED | A13 / `breaker_zone="body"` | S-1 |
-| Ep01.7 | Narrative is separate from bias | N/A | not a trading rule | |
-| Ep01.8 | Low-volatility day (last of year) = inside day; Monday refers to Friday's range | MISSING | N7d | C-4 |
-| Ep01.9 | Year end reprices to buy-side | MISSING | tag | C-17 |
-| Ep01.10 | AM 08:30-11:00; PM 14:00-16:00, focus 15:00-16:00 | FULL | `am`, `pm` | |
-| Ep01.11 | PM setup window 15:15-15:45; none by 15:50 -> no trade | FULL | `last_hour` tag; `pm` end 950 | |
-| Ep01.12 | AM loss -> no reversal (experienced may) | FULL | X13a | |
-| Ep01.13 | A last-hour run to an old high/low/imbalance nearly every day | MISSING | T10b | S-2 |
-| Ep01.14 | Mark the draw (old high/low, REH/REL, imbalance) | FULL | `_targets` | |
-| Ep01.15 | Nested 4h/1h/15m/5m FVGs; bodies refuse to close beyond | SIMPLIFIED | `entry_tf="nested"`, `require_htf` | S-2 |
-| Ep01.16 | Last hour should hold above the 4h FVG midpoint | MISSING | - | S-2 |
-| Ep01.17 | Trigger: bodies refuse to close through the 60m FVG low end, then a breakaway FVG; move started by ~15:25 | MISSING | - | S-2 |
-| Ep01.18 | Entry at the top of the 1m FVG; add on retests and on a breaker | SIMPLIFIED | edge entry; FVG adds | M-14b |
-| Ep01.19 | Dip into the breakaway gap -> buy, stop below the bodies | MISSING | - | S-2 |
-| Ep01.20 | Stop below the FVG candle open, later below bodies, trailed | SIMPLIFIED | E6b, X5 | E-10, M-8 |
-| Ep01.21 | Target the pool; a nearer short-term high as intermediate; ~5 handles | FULL | ladder | |
-| Ep01.22 | Clean delivery: few small down-close candles | MISSING | quality tag | S-2 |
-| Ep02.1 | 09:45 release: wait for it | SIMPLIFIED | N5b | W-1 |
-| Ep02.2 | AM short: BSL run, MSS, short FVG/OB/breaker; adds on later FVGs | SIMPLIFIED | engine (FVG only) | S-1, E-6 |
-| Ep02.3 | OB MT measured high to low (wicks) | FULL | `mt_mode="range"` variant | |
-| Ep02.4 | CE = 50% of the FVG, MT = 50% of the OB | FULL | Zone.mid, `ob.mt` | |
-| Ep02.5 | Targets 15m/30m FVGs + sell-side; partials at each; runner while "heavy" below the 30m FVG | SIMPLIFIED | `htf_targets` (no 30m); ladder | T-10, M-8 |
-| Ep02.6 | No daily breakout / no HTF narrative -> scalp only | MISSING | - | C-16 |
-| Ep02.7 | First trading day of the year: don't rush | MISSING | N7d | C-4 |
-| Ep02.8 | Top-down from the daily VI; daily VI as the draw | SIMPLIFIED | confluence has no VIs | T-10 |
-| Ep02.9 | FVG left open on the way down = breakaway | MISSING | A6 | D-6 |
-| Ep03.1 | NFP week Mon-Wed AM only (experienced: all days) | FULL | N2 | |
-| Ep03.2 | FOMC: don't trade the release | SIMPLIFIED | N3a | M-13 |
-| Ep03.3 | VI; daily-chart draw | SIMPLIFIED | A9 | D-9, T-10 |
-| Ep03.4 | BISI / SIBI | FULL | levels.fvgs | |
-| Ep03.5 | Measuring gap: project the target | MISSING | A6 | D-6, T-7 |
-| Ep03.6 | IOFED: shallow dip short of CE | SIMPLIFIED | E2 | E-7 |
-| Ep03.7 | Reclaimed OB (loose usage: OB retested as support) | N/A | descriptive | |
-| Ep03.8 | OB anchored on the down-close candle's high or open | SIMPLIFIED | A12a | D-12 |
-| Ep03.9 | First FVG after the shift = breakaway, protected; trail under it | SIMPLIFIED | X5a | M-8 |
-| Ep03.10 | Trade the stronger index for longs | SIMPLIFIED | M16c | S-10 |
-| Ep03.11 | MMBM: HTF draw above, price in a 5m OB / 1m BISI discount | FULL | M1a | |
-| Ep03.12 | STL taken, STH broken (MSS) leaving an FVG | FULL | `_scan` | |
-| Ep03.13 | BE after buy-side is run; pyramid on new FVGs | SIMPLIFIED | X4 variant | M-7 |
-| Ep03.14 | Large candles turning small -> large candles in the bias direction next | N/A | descriptive | |
-| Ep03.15 | Scale out one contract per new high near each pool | SIMPLIFIED | X3a | M-1 |
-| Ep03.16 | Trail under the latest measuring gap after two rounds of partials | SIMPLIFIED | X5a | M-8 |
-| Ep03.17 | Never widen a stop | FULL | E7 | |
-| Ep03.18 | Final target an HTF PD array; accept the last units stopped | SIMPLIFIED | ladder caps at 3 levels | M-1 |
-| Ep03.19 | Last contract off before noon | FULL | `am_exit=720` | |
-| Ep03.20 | One good setup a week; 5-handle target | FULL | `max_trades_week` variant; L15 | |
-| Ep03.21 | Time-based charts only | FULL | T1 | |
-| Ep04.1 | NFP Friday (experienced: after the first volatility) | FULL | N1a | |
-| Ep04.2 | Midnight open = true open; PO3 | FULL | B12 | |
-| Ep04.3 | After news: the post-manipulation range is the framework; expansion to ERL | SIMPLIFIED | `post_news` | W-8 |
-| Ep04.4 | MSS while the FVG stays open; enter near the midnight open | FULL | engine + `use_bias` | |
-| Ep04.5 | Two MSSs with open FVGs = on side | MISSING | A19c | E-4 |
-| Ep04.6 | IOFED ~1 tick into the FVG | SIMPLIFIED | E2 | E-7 |
-| Ep04.7 | Pyramid 6/3/2/1; no adds after partials | FULL | E12a/d | |
-| Ep04.8 | Closes into the FVG -> add at its low end | MISSING | E12c | M-14c |
-| Ep04.9 | Smooth REH/REL are magnets | SIMPLIFIED | A3 | D-2 |
-| Ep04.10 | Targets REH -> old daily highs -> daily VI; bulk (10 of 12) at the first | SIMPLIFIED | ladder; no daily VI | T-10 |
-| Ep04.11 | Target hit by 15:00 -> be done | FULL | `pm_done_by` (off) | |
-| Ep04.12 | SMT ES vs MES | N/A | same index | |
-| Ep05.1 | Bearish breaker; MT and CE as reaction levels | SIMPLIFIED | A13 | S-1 |
-| Ep05.2 | No 08:30 news -> wait for 09:30 | FULL | N5c | |
-| Ep05.3 | NWOG as a target | FULL | L5a | |
-| Ep05.4 | Unicorn: buy the FVG/CE in the breaker; add on each imbalance | SIMPLIFIED | M4b | S-1 |
-| Ep05.5 | Accumulate inside the breaker before the breakout | MISSING | M4b | S-1 |
-| Ep05.6 | MMSM: rally into REH, MSS, sell when price fails to reach the imbalance CE | FULL | engine, edge entry | |
-| Ep05.7 | Weekly bias after a strong down day (that week) | FULL | `weekly_bias` | |
-| Ep05.8 | Watch one market | FULL | backtest.combine | |
-| Ep05.9 | Stop just below the FVG high when away from the screen | N/A | personal | |
-| Ep06.1 | Kill zones (NY time) | FULL | T3 | |
-| Ep06.2 | Trending-day template: LOD London, HOD London close, noon reversal | N/A | fx-leaning; the index version is T13b | |
-| Ep06.3 | Retrace into a SIBI often stops at CE | SIMPLIFIED | A5f | D-4 |
-| Ep06.4 | SD projection on the manipulation swing, after its high is taken | SIMPLIFIED | L12 | T-6 |
-| Ep06.5 | DXY bearish = risk-on | SIMPLIFIED | B19a | B-11 |
-| Ep06.6 | Midnight open as the reference | FULL | B12 | |
-| Ep06.7 | REH/REL preferred pools | SIMPLIFIED | A3 | D-2 |
-| Ep07.1 | An old daily close can be the draw | MISSING | - | T-9 |
-| Ep07.2 | Wait for 09:30; sell-side purged; buy inside the FVG/VI near its midpoint | SIMPLIFIED | `entry="ce"` (VI entry missing) | E-14 |
-| Ep07.3 | Stop below the body MT of the down-close candle nearest the sweep low | FULL | `ep07_stop`; `mt_mode="body"` | |
-| Ep07.4 | Trail to the retracement low after bodies clear the prior swing high | FULL | `ep07_trail` | |
-| Ep07.5 | VI should hold; stop at its low | SIMPLIFIED | A9 | E-14 |
-| Ep07.6 | Pyramid on down-close candles into OB/VI; take profit on up-close candles | MISSING | E12b, E4 | M-14b, E-8 |
-| Ep07.7 | Speed and distance through the trigger | SIMPLIFIED | A20 | E-12 |
-| Ep07.8 | Not below the lowest open/close of the swing low | FULL | `ep07_body_exit` | |
-| Ep07.9 | Macro 09:50-10:10 | FULL | T7a | |
-| Ep07.10 | Bulk (9 of 14) at the target; risk 1-1.3% | FULL | X3b; E8 | |
-| Ep07.11 | Think in 5-handle increments | N/A | expectation | |
-| Ep08.1 | Daily wick 50% is a key level; daily FVG edges hit to the tick | SIMPLIFIED | L10 | T-4 |
-| Ep08.2 | Neutral: wait for 09:30; chop = 2.5-5 handle scalps | SIMPLIFIED | B17b (scalp mode missing) | C-16 |
-| Ep08.3 | Three opens; bearish sells above the open | FULL | B12 | |
-| Ep08.4 | MSS validity = the parent swing; liquidity run first | SIMPLIFIED | A19a | E-3 |
-| Ep08.5 | Bearish OB = up-close series; return to the open; next wick stops at its MT | SIMPLIFIED | A12a | D-12 |
-| Ep08.6 | PM 13:30 Judas; last hour at old daily highs/lows | FULL | `use_bias` 13:30 (last-hour model: M5) | S-2 |
-| Ep08.7 | FVG at or above 50% of the swing | FULL | `leg_pd` | |
-| Ep08.8 | Exit 0.5-1 pt before an FVG; first partial at FVG CE / daily FVG top | FULL | X2, X3e | |
-| Ep08.9 | Measured move | MISSING | L13 | T-7 |
-| Ep08.10 | Liquidity matrix | FULL | L2 | |
-| Ep08.11 | An old daily low alone is not an entry | FULL | engine | |
-| Ep08.12 | 6 contracts building to 10-16; after a losing day no max size | SIMPLIFIED | E11, E10 | E-11 |
-| Ep08.13 | IOFED needs only a touch of the gap's candle | SIMPLIFIED | E2 | E-7 |
-| Ep08.14 | Turtle soup plan at an old high | MISSING | M12b | S-7 |
-| Ep08.15 | Multi-TF shift: 1m breaks 5m equal lows, then the 5m FVG | SIMPLIFIED | `entry_tf="5m"` (no 5m equal lows) | E-15 |
-| Ep08.16 | Stops one tick beyond; ~10 handles before engaging fully | SIMPLIFIED | E6f (room is FULL) | E-10 |
+### targets_partials (36 items)
 
-### 2.10 Section 3 decisions (D1-D23)
+Owns: `_targets` and the `_scan` target merge. Ladder-loop edits are done in coordination with management_exits.
 
-| ID | Decision | Status | Param today | Missing |
-|---|---|---|---|---|
-| D1 | AM start 09:30 vs 10:00 | FULL | `am` | `or_no_entry` variant C-8 |
-| D2 | SB as its own setup; FVG in window; room 5/10; evolving | SIMPLIFIED | `sb_model`, `sb_room_pts`, `sb_only` | `sb_fvg_in_window` SB-2 |
-| D3 | MSS close vs wick | FULL | `mss_mode` | |
-| D4 | MT body vs range | FULL | `mt_mode` | |
-| D5 | Exit split | FULL | `exit_mode` | |
-| D6 | Breaker zone body / range / leg | SIMPLIFIED | `breaker_zone` | "leg" mode S-1 |
-| D7 | PM window; pm_sb / last-hour tags | FULL | `pm`; setup tags | |
-| D8 | News blocks (experienced) | FULL | `nfp_day`, `nfp_thu`, `fomc_pm_from` | `skip_post_fomc_am` W-6 |
-| D9 | CPI | SIMPLIFIED | `skip_cpi` | `pre_cpi` W-7 |
-| D10 | Early OB entry | MISSING | - | E-16 |
-| D11 | Entry edge / CE / IOFED | SIMPLIFIED | `entry` | IOFED E-7 |
-| D12 | Leg P/D + add cut-off | SIMPLIFIED | `leg_pd` | `add_cutoff` M-14e |
-| D13 | First partial size | FULL | `ladder_fracs`, `ladder_by_day` | |
-| D14 | BE / trail | FULL | `be_on`, `ladder_trail` | breakaway trail M-8 |
-| D15 | Leader vs laggard | MISSING | - | S-10 |
-| D16 | AM exit / PM done by 15:00 | FULL | `am_exit`, `pm_done_by` | |
-| D17 | Pivot size | FULL | `pivot_n` | |
-| D18 | Re-entry half | SIMPLIFIED | `reentry_half` | M-16 |
-| D19 | Frequency | FULL | `no_pm_after_am_win`, `max_trades_week` | |
-| D20 | Mondays | FULL | `skip_monday` | |
-| D21 | NWOG / ORG definitions and lifetimes | SIMPLIFIED | `gap_mode`, `nwog_days`, `org_days`, `org_close` | 60-day ORG levels T-14; holiday NWOG D-20 |
-| D22 | Real midnight open | FULL | futures data (levels.opens) | |
-| D23 | SD anchor | SIMPLIFIED | `sd_targets` | `sd_anchor`, -0.5..-4.5 T-6 |
+High:
+- **X3:** Umbrella for X3a-h: `ladder_all_pools`, `wick_ce_partial`, `sd_neg05_first`, `halfway_partial`, `smt_bank`, `resistance_mode`, and a capture metric.
+
+Medium:
+- **A6:** Add a breakaway tag, `measuring_gap` (near-edge projection) and `trail_breakaway`.
+- **A22:** Add `matrix_targets` (breakers, mitigation and rejection blocks), `breaker_first` and `skip_exhausted`.
+- **L4:** Add `pool_rank` (touch count + TF), `rel_tfs`, `draw_below_eq`, `lrlr_max` and `pool_runner_pts`.
+- **L9:** Add `fvg_over_ob`, `fvg_remainder` (far-edge test) and `weekly_gap_ce_only`.
+- **L11:** Add `rb_targets` ladder/replace at the body edge.
+- **L12:** Add sd_levels 0.5-4.5, `sd_anchor` (sweep_leg/fulcrum/london/multi), `sd_cluster_ticks`, `sd_roles`, `sd_align` and `sd_no_pool_fallback`.
+- **L14d:** Add `target_hygiene` (retire traded-through arrays, touched HTF arrays).
+- **M8:** Add `org_reprice` (Judas away from the ORG, T1 = near edge).
+- **M14.2:** Add `tgif_zone` (20/22.5/25/30% of the weekly range from Sunday 18:00, cap at 30%, stand down at 40%).
+- **X1:** Add `target_ltf_obs` and `keep_inner_levels`.
+- **X3a:** Add `run_down` and `ladder_max_levels`. Keep level kinds.
+- **X3c:** Add `wick_partials` (multi-TF, longest wick, protected rung).
+- **X3d:** Add `sd_half_partial` (exempt from min_rr) and `halfway_partial`.
+- **Ep02.5:** Add 30m to htf_targets. Add `runner_htf_exit` (test 15m and 30m).
+- **Ep03.5:** Add `measuring_target` with `measuring_anchor` near/ce.
+- **Ep03.22:** Add `final_htf` (last rung = nearest 4h/D/W array or daily VI).
+
+Low:
+- **A10:** Add `void_targets` and `leg_start_target`.
+- **A17:** Fix the rejection_blocks window and wick test. Add `rej_targets` and `pool_body_edge`.
+- **A23:** Add `wick_days`, `wick_daily_src`, `wick_week`, `wick_tfs` and `wick_read`. Fix the default doc.
+- **L13:** Add `proj_breaker`, `proj_measuring`, `proj_org_k` and `proj_ext`.
+- **L16:** Add `adr_target`/`adr_frac` and `adr_early` (80% off before 10:00).
+- **L17:** Add `round_step_pts` (targets down and entries up toward price; stops not rounded).
+- **M14.4:** Add `tgif_exits` (25/25/50 at 20/22.5/25%).
+- **X3b:** Add JOLTS dates, SB use of _split, and a slow_frac study.
+- **X3f:** Add `resistance_mode` (full pull at the draw).
+- **X3h:** Add `capture_frac`.
+- **D23:** Add `sd_anchor` broken/leg and sd_levels 0.5-4.5. Fix the models.md note.
+- **Ep01.21:** Add `inter_swing_target` (swing intermediate, pool draw).
+- **Ep03.19:** Add mgmt='unit'.
+- **Ep04.11:** Add `clean_eq_pref`.
+- **Ep04.12:** Add `daily_vi_targets`, `ladder_news_day` and `target_order`.
+- **Ep06.4:** Add sd_anchor manip, `sd_close_hit` and `sd_close_window`.
+- **Ep07.1:** Add `close_draw` (unrealized prior closes, the weekly draw as a pool).
+- **Ep08.9:** Add `mm_targets` with `mm_anchor` ref/leg.
+- **M7.1 (reassigned):** Add `pm_off_lunch` (exempt the lunch high from `seen`, make it the draw) and `pm_judas_1330`.
+
+### setups_models (75 items)
+
+Owns: the `_scan` sweep/MSS block, new setup branches, and `combine` picking. A shared turtle-soup core covers M12/M12.1-5/D10/Ep08.15/M4.4.
+
+High:
+- **A19:** Add mss_ref last/parent, `mss_ref_fallback` and `mss_on_side`.
+- **A19.2:** Add mss_ref itl, `mss_eq_wait` and `mss_fallback`.
+- **A20:** Add `disp_mult` (OB body), `disp_follow`, `disp_through_pts` and `disp_fvg_after_break`, also in SB.
+- **M1:** Add `am_htf_draw`, `am_discount_array`, `rip_through`, `ob_pre_mss_entry` and an explicit nearest-OB stop.
+- **M2:** Add fvg_pick m2, `no_breakout_fvg`, stop ce_higher, `add_leg_cut`, `m2_target` and a `three_drives` tag.
+- **M12:** Add `turtle_soup` (2023/cc_limit/cc_1h_ob/or60/external) with `ts_max_pts`, `ts_back_bars`, an HTF array and order-flow check.
+- **M12.1:** 2023 variant: limit at the array top, stop at the array or a gap, no MSS needed.
+- **Ep08.4:** Add mss_ref='origin' anchored at ext_i.
+
+Medium:
+- **A19.4:** Add `on_side` tag/require (track after arming).
+- **M0:** Umbrella: candle_draw bias, pool priority, entry_arrays.
+- **M0.5:** Add `entry_arrays` (ob/breaker/ote/wick_ce), merged before the fvg_wait reset.
+- **M1.1:** Add `mm_context` and `daily_vi_targets`.
+- **M1.3:** Add `speed_check` (SIBI reclaimed within speed_bars) and a fill-bar body_low check.
+- **M2.3:** Add fvg_pick='2022' (VI+OB, then first in discount, then deeper of two).
+- **M4:** Add `breaker_entries`, `unicorn_mt_floor`, `unicorn_open_only`, leg zone/advanced, `breaker_retest_add` and `failure_swing_entries`.
+- **M4.1:** Classic breaker entry (bz before the FVG return, MT cancel, stop beyond L2).
+- **M5:** Add `pm_last_hour_model` (sweep in the window, no entries after 15:45, HTF-done skip) and `pm_ep01`.
+- **M5.1:** Add `pm_ep01` (nested 1h/4h, refusal, breakaway, 4h CE hold, single exit).
+- **M10:** Add `ifvg_entry`, `ifvg_stop_pts`, `ifvg_min_risk_pts`, `ifvg_depth` and `ifvg_061`.
+- **M11:** Add `ir_entries`, `cisd_ob_entries` and `wick_ce_entries`.
+- **M12.2:** Add the turtle_soup short branch at the spike with `ts_adds_breakers`.
+- **M12.3:** Add cc_limit, cc_1h_ob and or60 variants, plus mgmt r_multiple.
+- **M12.5:** Add a depth/back gate inside turtle soup, optionally on the MSS model too.
+- **M13:** Add `ote` filter/limit, a strict leg_pd, a leg stop and an ote_stack tag.
+- **M16:** Add `smt_entry` and `sick_sister`.
+- **M16.1:** Add `smt_entry` (05:00 lows, buy stop above the down-close candle, `smt_turtle`, exit at 11:00, ES only).
+- **D10:** Add `early_entry` and `turtle_soup` (shared core).
+- **Ep01.13:** Add `last_hour_setup` (LH_PM slot, unengaged liquidity, HTF-done skip).
+- **Ep01.15:** Add `nest_tfs` with FVG-only confluence.
+- **Ep03.11:** Add smt_pick leader/laggard with ext/leg_hi fields.
+- **Ep04.3:** Add `require_judas`, `po3_runner` and `judas_window`.
+- **Ep04.5:** Add `news_range` (pools from 09:00, opposite-extreme draw).
+- **Ep04.7:** Add `mss_count=2` (higher low, second break, both FVGs open).
+- **Ep05.4:** Add `unicorn_only`, unicorn_entry overlap, `add_on_vi`, `unicorn_open` and `adds_in_breaker`.
+- **Ep05.8:** Add `mmxm_ctx` (consolidation origin, target its low) and `mmxm_breaker`. Reuse ce_hold.
+- **Ep07.6:** Add `mss_max_bars`, `mss_disp` and `mss_ref_sibi`.
+- **Ep08.15:** Add turtle_soup with `ts_need_htf` and `ts_max_run`.
+- **Ep08.16:** Add `mss_ref_tf=5` (5m equal levels or swing as the MSS reference).
+
+Low:
+- **A8:** Add IFVG passes and both-way counts, `ifvg_depth`, `ifvg_hold` and `ifvg_after_htf`.
+- **A14:** Add a unicorn_open tag and `unicorn_only`.
+- **A18:** Add `reclaimed_ob` (sell-side-of-curve OB, reclaimed after the low, retest limit).
+- **A24:** Umbrella for the Reaper.
+- **A24.2:** Add `reaper` (discount-half FVG of the breaker leg, CE holds, optional `reaper_confirm`).
+- **B18:** Umbrella: `smt_window`, `smt_at_pd`, `smt_min_gap` and `smt_pick`.
+- **B18.1:** Add `smt_min_gap_pts`, `smt_need_array` and rel-eq partner pivots.
+- **B18.2:** Add `smt_windows` with smt_pre for the 05:00-09:30 window.
+- **N6:** Add `news_profile` (first-leg extreme), `news_ce_target` and `news_no_unicorn`.
+- **T10:** Add `moc_run` (15:40 run to unengaged liquidity, HTF-done gate) and `moc_pool_exit`.
+- **T13:** Add `require_judas`, `po3_hold`, profile tags and `nfp_sd`.
+- **M2.7:** Add a `three_drives` tag/filter (known pivots, into a level, failing pushes).
+- **M4.2:** Add `unicorn_rules` (Judas gate, entry inside bz, MT floor).
+- **M4.3:** Add `adv_breaker` (A-B leg, MT 1 tick through, B+1x(B-A)).
+- **M4.4:** Add `ts_breaker_pyramid`.
+- **M4.5:** Add `cc_swings` (breaker swing/failure swing retest of the breaking point).
+- **M5.2:** Add `last_hour_strict`, `last_hour_own_slot` and entry_arrays vi/ob.
+- **M6:** Add `pm_reversal` (bias +1, AM high taken, objective met, IFVG at the high).
+- **M7:** Add `pm_lunch_target`, `pm_lunch_org` and `pm_judas_filter`.
+- **M7.2:** Add `lunch_org`.
+- **M7.3:** Add `pm_judas_array`.
+- **M11a:** Add `ir_entry` (A7 detector, tight stop, close-beyond-EQ exit).
+- **M11b:** Add `cisd_ob_entry` (wick CISD, limit min(EQ, OB top), OB-low cancel).
+- **M11c:** Add `wick_ce_entry`.
+- **M12.4:** Add the external turtle soup (false low above an unreached HTF array).
+- **M15:** Add `md_big_candle`, `md_second`, a ladder of targets, `md_need_news`, ETH dailies and blocked() routing.
+- **M16.2:** Add `sick_sister` (fewest reference highs taken, deep discount, untaken targets).
+- **Ep01.16:** Add `pm_4h_ce` (body holds above the 4h FVG CE from 15:00).
+- **Ep01.17:** Add `lh_start_by=925`.
+- **Ep01.22:** Add `clean_leg=-1` and clean_body.
+- **Ep04.4:** Add `po3_require_bias`, `po3_inclusive` and require_judas.
+- **Ep05.6:** Test variant only.
+- **M0.4 (reassigned):** Add `disp_body_mult` and `disp_follow`.
+
+### bias_htf (45 items)
+
+Owns: `htf.table`, run_day bias filters, `weekly_bias`, `INTERMARKET` and new data loaders.
+
+High:
+- **B2:** Add draw_ord / draw_ord_lvl / draw_ext_lvl columns (inefficiency first, then P/D liquidity, then extent). Add htf_bias='ordered' and `draw_ext_target`.
+- **B3:** Add an ordered/largest-draw mode. Remove the look-ahead with `htf.table cut` per session start. Pass `want` to SB/Ma Deuce. Add `judas_required`.
+- **B6:** Add an `iof` column (held down-closes, run up-closes, reversed pivot raids) and mode combo2.
+- **L14:** Umbrella: `draw_first`, a conf-target hygiene extension, `conditional_draw`.
+- **L14a:** Add draw_first='session' (B2 order, side gate, stop once the objective is met).
+
+Medium:
+- **A21:** Add `pd_day_range`, `ote_band`, `pd_zone` and `pd_body_multiday`.
+- **A21.2:** Add day_pd='20d' (body range of 20 prior sessions) and a pd20 column.
+- **B5:** Add `weekly_gate`, VI rows in C, `news_topdown` and `bellwether_15m`.
+- **B7:** Add an `ob_mt` state column (last bull/bear daily OB, flip on a close through the MT) and `how_rule`.
+- **B8:** Add a stateful `flip` column with triggers flip_ob_mt, flip_pd3, flip_wk_dc, flip_close_above, flip_thu_wopen and stop_flip.
+- **B8a:** Add the `ob_state` flip (same as B7).
+- **B8c:** Add `flip_wk_dc` (weekly close beyond the last down/up-close week).
+- **B9:** Add `objective_neutral`, persistence and `next_array_on_fail`.
+- **B10:** Add `mwd` (M/W/D displacement state, breaker-only cancel, cases A/B/C).
+- **B13:** Add weekly_open filter (sun18/mon00/either, Mon-Tue below / Wed+ above, expires at an opposing daily array).
+- **B14.1:** Add `nwog_regime` (return count, trending/consolidation, `nwog_converge_pts`).
+- **B14.3:** Add `nwog_bias` with hold-until-reclaim.
+- **B17:** Add `neutral_gate` tuple (fifty_fifty, premium_chop, draw_delivered, range_market, decoupled).
+- **B17.1:** Add `neutral_5050` (both sides armed in the window, or separate react weights).
+- **B17.3:** Add objective_met_stop day/week.
+- **L14c:** Add `matrix_tf_lower` (react_tf, then the opposing array one TF down as the draw).
+- **M0.1:** Add bias_candle W/D (nearest unreached draw from the candle open). Apply `want` in SB/Ma Deuce.
+- **D15:** Add smt_pick first/leader/laggard (laggard on consolidation days) and `one_market`.
+- **D22:** Add a `bias_open` helper, `bias_open_src`, and live midnight from CFD/ES mapped to SPY.
+- **Ep02.6:** Add `no_narrative_scalp` (bias_neutral='scalp', single target, no adds).
+- **Ep03.12:** Add htf_bias='draw_pd', daily VI draws and `mmbm_zone`.
+- **Ep08.2:** Add chop_mode skip/scalp (overnight range, or stuck inside an HTF array).
+
+Low:
+- **A21.4:** Add `pd_bodies` in htf.table and the 20-day range.
+- **B8b:** Add `flip_pd3` (3 nearest supporting D/W arrays closed through).
+- **B8d:** Add `flip_close_above` (Friday high, last daily wick CE, weekly wick CE/quadrant), with the result set to neutral.
+- **B8e:** Add `flip_thu_wopen` (body close across the weekly open on Thursday).
+- **B8f:** Add `stop_flip` (breaker_far stored, stop-out flips the day's side, SMT-only option).
+- **B14.2:** Add a converging-NWOG check (in the regime function).
+- **B17.5:** Add decoupled tag/scalp/skip and `smt_both`.
+- **B19:** Umbrella intermarket switches.
+- **B19.1:** Add `dxy_gate` (prior close above the 20-day high and rising -> block longs).
+- **B19.3:** Add bond_range tag/scalp and bond_dir.
+- **B20:** Umbrella.
+- **B20.1:** Add a `cot_tag` loader (52-week midpoint, usable from the session after release).
+- **B20.2:** Add an `oi_tag` (Databento statistics, roll-summed).
+- **B20.3:** Add a `wpr_tag` (weekly %R(14)).
+- **B22:** Add qshift_tag/size (60-day turn or consolidation, due window, 252-day trend).
+- **L14e:** Add `cond_draw` (failed upper draw -> lower side, spent flag).
+- **Ep06.6:** Add `midnight_target`, `midnight_confirm` and `midnight_below_ok`.
+- **Ep08.3:** Add bias_open midnight/0830/0930/all with a time guard.
+
+### management_exits (46 items)
+
+Owns: the run_day management loop, `_after_close` and done flags.
+
+High:
+- **M2.6:** Add `add_in_pd` and `add_cutoff=0.25` (fixed leg at the fill, block adds past the 25% line) and `pool_size_rank`.
+
+Medium:
+- **X3g:** Add `smt_partial` (50% when a sister refuses to break, 80% when the sister breaks against the trade).
+- **X5:** Umbrella.
+- **X5a:** Add ladder_trail breakaway/measuring and `trail_pad_pts=0.25`.
+- **X6:** Rework `fvg_abort` (close-only arm, confirm on the next bar only, clear the arm, 5m candles).
+- **X7:** Umbrella.
+- **X7a:** Add a pd3 list fixed at the fill (FVG/VI/OB MT/breaker, nearest 3), a warn tag, and `pd3_dynamic`.
+- **X7b:** Add `pd3_half` (VI+FVG+OB MT body closes -> 50% off once).
+- **X8:** Umbrella.
+- **X9:** Umbrella; apply to SB/Ma Deuce.
+- **X9a:** Add `time_stop_ref` (pts/leg_high/array_far) and `time_stop_frac`.
+- **X9c:** Add far_edge_min=2 with `far_edge_frac` (moved back = CE).
+- **X10:** Apply am_exit to SB and Ma Deuce. Add X10b-d.
+- **X11:** Umbrella.
+- **X12:** Add `obj_stop` with obj_source draw/htf_ce (exit at the objective, then all done flags for the day).
+- **X13:** Umbrella.
+- **X13b:** Gated reentry_half (same side, idea intact, not FOMC, restored sweep with fvg after the stop, done_key).
+- **D14:** Add be_on after_mss and stall, ladder_trail 'off', and study variants. Fix stale docs.
+- **D18:** Add reentry_lock_r/target_r, half of the losing trade's risk, and a lost_side reset at the PM.
+- **Ep03.10:** Add `trail_first_fvg` and first_fvg_fail.
+- **Ep03.15:** Add be_on='pool' (carry pool levels).
+- **Ep03.20:** Add `trail_after=2` and ladder_trail='measuring'.
+
+Low:
+- **A13.3:** Add breaker_zone leg (A=L1 to B=H), `breaker_mt_exit` and `breaker_mt_entry`.
+- **B18.3:** Add `smt_exit`, smt_pick and `smt_bias`.
+- **T11:** Add `late_cutoff=945` (no adds, no fades) default on.
+- **X4:** Add `be_pad_pts` with a cost pad. Have SB respect be_on.
+- **X5c:** Add trade_type 'day' (08:30 open/wick-CE stop, no trail, no BE).
+- **X7c:** Add `session_stop_after_fails` (trades/arrays mode, SB keys shared).
+- **X8b:** Add `leg_mt_exit` (close below the leg candle MT).
+- **X8c:** Add `ir_eq_exit` (wick by default).
+- **X8d:** Add `prop_exit`.
+- **X8e:** Add `offside_exit` with offside_level open/wick_ce.
+- **X8g:** Add `meander_bars` (store fvg_top).
+- **X9d:** Add `time_stop_frac=0.5` with fire-once and a min-size close.
+- **X10b:** Add `am_bulk_t` and `am_bulk_frac` (only for fills before that time).
+- **X10c:** Add `smt_hold_until` and `smt_hold_exit`.
+- **X11c:** Add `pm_consol_exit=840` with a consolidation classifier at 13:30, and no entries after it.
+- **X13a:** Add `reverse_in_session`, a session-scoped lost_side and `loss_ends_morning`.
+- **X14:** Umbrella.
+- **X14a:** Add `day_target_pts=5`.
+- **X14b:** Add `chop_one_win` (shared _slow helper).
+- **X14d:** Add `no_trade_after_win` (day-level, blocks SB/pre-open).
+- **Ep04.13:** Add `done_if_target` (final level before 15:00 -> day done).
+- **Ep07.5:** Add add_mode downclose and `tp_upclose`.
+- **Ep07.7:** Run the body_low check on the fill bar and add a pending guard.
+
+### day_week_context (49 items)
+
+Owns: `day_context`, the day branches of `blocked()`, the weekly state in BT.run, and the study scripts. Build `adr5()` and `next_trading_day()` here first.
+
+Medium:
+- **B15:** Add org_tell tag/filter (no 50% attempt by 10:00) and `org_bias_gap`.
+- **B16:** Add sunday_scenario tag/filter (futures only).
+- **B17.4:** Add daily_range_regime tag/scalp/skip (range days, inside daily BISI, run into premium).
+- **N7:** Umbrella for holidays.
+- **N8:** Add the adr5 helper and switches for each N8 sub-rule.
+- **N8.1:** Add `consol_skip` (range < 0.35 ADR5 and 4+ crosses of the midnight open; expansion resumes trading).
+- **N8.2:** Add a trend_recipe tag/only/side (small ranges, react into an array, 08:30 news).
+- **N8.4:** Add `big_day_am_skip` (big prior range or ORG -> AM off, PM kept), in run_day.
+- **N9:** Umbrella.
+- **N10:** Add monday_mode, tue_off_monday, mon_wed_extreme, the thu_reversal tag, friday_first_pool, friday_week_done and strong_thu_no_long.
+- **M14:** Add `tgif_model` with sub-switches.
+- **M14.1:** Add `tgif_htf_array` (the week's extreme touched a D/W/4h array or NWOG/NDOG, Sunday 18:00 range).
+- **X10d:** Add `am_range_skip_pm` (AM range >= k x ADR5 -> done PM and SB_PM).
+- **X15:** Sort by entry time before truncating. Add the weekly cap to paper.py.
+- **X15d:** Add `week_done_on_draw` (all-hours prior-week H/L or NWOG CE).
+
+Low:
+- **B11:** Add inside_week (scalp), outside_day_rule, nr3/nr7/inside_bar_body and nr_expansion.
+- **B11b:** Add `outside_day_rule` (block longs until the outside day's high trades).
+- **B11c:** Add b11_inside_expansion and b11_inside_week.
+- **B23:** Add `seasonal_tag` (month map, htf agreement, fail after day 10, optional samples), reported only.
+- **N7.1:** Add `skip_holiday_eve` and EARLY_CLOSE flattening.
+- **N7.2:** Add `skip_post_holiday_am=True`, `post_holiday_pm_sync`, week_day_index and the wed_reversal tag.
+- **N7.3:** Add a holiday_week tag and `holiday_week_thu_fri`.
+- **N7.4:** Add year_end skip/inside and `year_first_am_from`.
+- **N7.5:** Add an independent roll tag, roll_risk and skip_roll_week.
+- **N7.6:** Add `august_risk`, `august_from_day` and `skip_august`.
+- **N8.3:** Add `consol_day_rules` (predictors, small-OR AM, out by 11:00, PM only if the AM stop pool is intact).
+- **N8.5:** Add an expansion_due tag, `expansion_targets` and `adr_basis`.
+- **N8.6:** Add `sd_no_hold`, `sd_week_skip` and `sd_context_required`.
+- **N9.2:** Add eve_draw columns and `pre_draw_pm` (gate in run_day).
+- **N9.3:** Add `objective_done_skip` (draw hit before 12:00 -> PM done) in the bar loop.
+- **N9.4:** Add `min_on_range_frac` and `min_raid_pts`.
+- **N9.5:** Add `macro_no_move` and `macro_no_move_pm`.
+- **N9.6:** Add `london_adr_skip=0.8` (range computed in the context builder).
+- **N10.2:** Add monday_mode trade/skip/pm_only/obvious and `tue_off_monday`.
+- **N10.3:** Add `pool_mon_wed`, mw_break tags, `thu_fri_break` and a thu_reversal tag.
+- **N10.4:** Add `friday_slow_split=True`, `friday_objective` and `no_fri_after_strong_thu`.
+- **M14.3:** Add `tgif_timing` (10:00-12:00 and 13:30-15:00) and `tgif_week_sweep`.
+- **T14:** Add a `study_week.py` weekly-extreme study, then a `tue_week_extreme` switch if it holds.
+- **X16:** Add tags adr5_prev, adr5_today, prev3_taken and entry_array_tf, plus a weekly study.
+- **X16a:** Add an adr5 helper and the adr_prev/adr_fill fields, plus a day_ranges CSV.
+- **X16b:** Add a taken_3d tag.
+- **X16c:** Add `weekly_extremes()` (kill-zone labels).
+- **X16d:** Add an entry_tf_tag.
+- **D19:** Add a week_left budget across the engine/SB/Ma Deuce, a paper.py cap and `be_counts_as_win`.
+- **D20:** Add monday_mode and `monday_small_range`.
+- **Ep01.8:** Add `low_vol_inside` (last trading day; optional holiday-adjacent days).
+- **Ep01.9:** Add `year_end_long`.
+- **Ep02.7:** Add `first_day_wait` set later than 10:00, or first_day_skip_am.
+- **Ep03.24:** Add `t1_fixed_pts` (+5 first rung) and t1_fixed_all.
+
+### news_calendar_times (31 items)
+
+Owns: `calendar.py` events, the news branches of `blocked()`, and the run_day session windows. Merge before day_week_context.
+
+Medium:
+- **N1:** Add `nfp_no_adds=True` and `nfp_first_hour=True` (skip PRE9; Ma Deuce off on jobs days). Add an nfp tag.
+- **N3:** Add `fomc_flat_before`, `fomc_eve_risk`, `fomc_after_am_block`, `fomc_only_am` and `fomc_no_reentry`.
+- **N3.1:** Add `fomc_observe` (scan during 14:00-14:45, defer the order, Judas side), `fomc_pm_block_from`, and an SB check at max(a, fomc_pm_from).
+- **N5:** Add the 2019-2025 calendar (PCE/GDP/retail/JOLTS/CB), NEWS_0945 and `release_times()`.
+- **N5.1:** Add `news_wait_min=30` (default on) in all models, and `news_room_pts`.
+- **N5.2:** Add the NEWS_0945 set and `news_0945` start at 09:45.
+- **T4:** Add `or_no_entry` (fills from 10:00, expiry anchored at 10:00), `or_deep` (09:37-09:46), `or_bias` and `or_wide`.
+- **T5:** Add `pre_0820` (a PRE8 window with a 500 snapshot, skipped on 08:30 days).
+- **T8:** Add a `lunch` session (710-810, no look-ahead AM H/L), `pm_carry_draw` and `draw_done_skip`.
+- **M9:** Add `news_judas` (first post-release run blocks that direction).
+- **M9.1:** Add news_judas with pre-release reference pools and no entries before the first run.
+- **D1:** Add `or_no_entry`, `or_no_entry_news1000` and `or_deep_pd`.
+- **D8:** Add `nfp_day_from`, `skip_post_fomc_am`, `nfp_no_adds` and `fomc_no_reentry`.
+- **Ep01.10:** Add `am_from_0830` (a 510 snapshot, no double scan).
+
+Low:
+- **N3.2:** Add `fomc_flat=840` (default on) and fomc_am open/recipe/skip.
+- **N3.3:** Add a fomc_only tag and fomc_only_am consolidation/skip.
+- **N3.4:** Add `pre_fomc_risk` (compounded with re-entry) and `skip_post_fomc_am`. Fix _split's holiday handling.
+- **N3.5:** Add `fomc_no_reentry=True` (all done keys, skip reentry_half).
+- **N4:** Add pre_cpi skip/small. Generalize the 08:29 flat to Ma Deuce and sb_london.
+- **N5.4:** Add `skip_two_drivers` and the minimal no-trading-ahead-of-the-second-release rule. Add tags.
+- **N5.5:** Add a FED_CHAIR calendar and `fed_chair_skip_am=True`.
+- **N5.6:** Add an AUCTIONS list and `skip_auction_am`.
+- **T7:** Add a 13:39 macro, multi-tag support, `macro_gate`, `macro_done_skip` and `moc_htf_done`.
+- **T9:** Add `pm_skip_after=870`, `pm_bad_am_start`, `pm_continue_am` and `pm_ob_entry`.
+- **M9.2:** Add `fomc_judas` (a 14:00-14:25 range, fomc_pm_from 865) and `fomc_stage2_cont`.
+- **D9:** Add skip_pre_cpi skip/small with next_trading_day.
+- **Ep01.11:** Add `pm_setup_window` (detect 15:15-15:45, fills until 15:50).
+- **Ep02.1:** Add the 'pmi' event set and `wait_0945=True`.
+- **Ep06.1:** Add `london_kz` (a LON window, futures only), `london_kz_start` and `ny_kz_futures`.
+- **Ep07.8:** Add macro_only 0950/all (start-or-arm test).
+
+### silver_bullet (12 items)
+
+Owns: `sb_model.py` only. Merge last.
+
+Medium:
+- **M3:** Umbrella: `sb_mss_required`, sb_fvg_pick, `sb_one_per_day`, sb_entry, sb_room_mode, sb_rebalance_ext, sb_mgmt layered057, sb_stop.
+- **M3.2:** Add `sb_draw_first` (the 054 list with an HTF fallback). Apply `want` to run_sb.
+- **D2:** Add `sb_fvg_in_window`, `sb_fvg_from` and `sb_evolve`. Honour mss_mode, mt_mode and entry consistently.
+
+Low:
+- **T6:** Add `sb_last_hour` (900-950) and `sb_0700` (with an 08:29 flat).
+- **L14g:** Merge conf/fvg targets in _arm. Add `sb_pw_pools=True`, `sb_ote_draw` and `sb_htf_fallback`.
+- **M3.1:** Add sb_extra pm2/early.
+- **M3.3:** Pass `want`, use_bias and weekly_bias into SB. Add `sb_need_mss`.
+- **M3.5:** Add a sweep_depth tag, `sb_need_sweep` and sb_sweep_max_pts.
+- **M3.8:** Add sb_stop 090/fvg2/entry_candle.
+- **M3.9:** Add `sb_one_market` and `sb_cascade`. Fix combine's session key.
+- **M3.10:** Add `sb_rebalance_ext` (A7 rebalance in the 10-11 window -> extended target).
+- **M3.11:** Add sb_mgmt gap424 and `sb_runner_if_weekly`.
+
+### Shared pieces to build first (cross-package)
+
+| Helper | Owner | Used by |
+|---|---|---|
+| `breaker_zone()` (A13) | levels_detectors | setups (M4.x, A14), entries (A13.4, Ep05.5), targets (A22, L13), exits (A13.3) |
+| VI wiring (`vi_arrays`, VI rows in C/H) | levels_detectors | targets (Ep03.22, Ep04.12), bias (B5, Ep03.12), entries (Ep07.2/4, E12b) |
+| `adr5()`, `next_trading_day()` | day_week_context | news (N3.4, D9), targets (L16), exits (X10d, X11c, X14b) |
+| Turtle-soup core (M12) | setups_models | M4.4, M12.x, D10, Ep08.15 |
+| Level kinds carried into `pos` | targets_partials | exits (Ep03.15 be_on pool, X3a run-down) |
+| Stateful bias column (`flip`) | bias_htf | B8a-f, B9, B13, B17.3 |
