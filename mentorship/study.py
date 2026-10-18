@@ -225,7 +225,10 @@ PRE_OWNER = dict(ob_entry="post_mss", draw_lock="off", htf_resist_cap=False, new
                  # trading-day count): switched back so the golden window still reproduces 833350f
                  sweep_ticks=0.0, fvg_c2_dir=False, nwog_trading_days=False,
                  # review fix (levels_detectors): Ep01.6 breaker lower low + L1 -> H candle are defaults now
-                 breaker_ll=False, breaker_cand_to="ext")
+                 breaker_ll=False, breaker_cand_to="ext",
+                 # owner answers 2026-10-18 (year end against December; stand aside on sloppy days)
+                 # came after the golden numbers were recorded
+                 year_end="off", sloppy_mode="off")
 LEGACY_1PCT_2PCT = dict(risk_dollars=1000.0, max_total_risk=2000.0)   # E8 / owner #12 preset
 # setups_models review: the FVG-path variants need the FVG path to trade at all - post_mss with the
 # owner #9 lock and #7 cap produced 0 trades on ES 5m 2023H2, so those variants drop both too

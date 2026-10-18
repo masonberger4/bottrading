@@ -464,8 +464,10 @@ def test_sloppy_scalp_stand_aside_and_alias():
     assert tr == [] and skips and skips[0][2:] == ("sloppy", "big_prev")
     tr, _, _, skips = run(df, hist, Params(**BASE, neutral_skip=True), A_LOCK)
     assert tr == [] and skips[0][3] == "big_prev"
-    t = run(df, hist, Params(**BASE), A_LOCK)[0][0]
-    assert t.sloppy == "big_prev"                                  # default: tag only
+    tr, _, _, skips = run(df, hist, Params(**BASE), A_LOCK)        # owner default: stand aside
+    assert tr == [] and skips and skips[0][2:] == ("sloppy", "big_prev")
+    t = run(df, hist, Params(**BASE, sloppy_mode="off"), A_LOCK)[0][0]
+    assert t.sloppy == "big_prev"                                  # "off": tag only
 
 
 def test_sloppy_nfp_week_fomc_week_premium_run_inside_bisi():
@@ -805,6 +807,6 @@ def test_look_ahead_es_london_sb_lock_and_rebalance_ext():
     es = B.load("ES", 1, source="databento")
     es = es[(es.index >= "2024-01-02") & (es.index < "2024-02-10")]
     p = Params(**FUT, am=(0, 0), pm=(0, 0), sb_model=True, sb_london=True, sb_rebalance_ext=8.0,
-               am_exit_extras=False)
+               am_exit_extras=False, sloppy_mode="off")   # owner's sloppy stand-aside skips this window's only trade
     full = _no_look_ahead(es, 1, "ES", p, ["entry_time", "entry", "stop", "t1", "setup", "draw_px"], lag=1)
     assert 120 in B.lock_cuts(p)

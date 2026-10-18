@@ -149,7 +149,10 @@ def test_year_end_takes_side_from_december():
     assert S.day_context(falling, day, replace(p, year_end="long"))[1]["year_end"] == (-1,)
     tags, block = S.day_context(falling, day, replace(p, year_end="tag"))
     assert "year_end_long" in tags and "year_end" not in block
-    assert "year_end" not in S.day_context(falling, day, Params())[0]   # default off
+    # owner answer 2026-10-18: the default is year_end="december" / squaring (Dec down -> long)
+    tags, block = S.day_context(falling, day, Params())
+    assert "year_end_long" in tags and block["year_end"] == (-1,)
+    assert "year_end" not in S.day_context(falling, day, Params(year_end="off"))[0]
     assert S.day_context(falling, date(2022, 12, 29), p)[1].get("year_end") is None
     late = [x for x in falling if x.index[0].date() >= date(2022, 12, 2)]
     assert S.december_dir(late, day) == 0                                # no session before Dec 1
