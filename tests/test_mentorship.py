@@ -287,3 +287,22 @@ def test_no_look_ahead_day_templates_and_exits():
         a = full[full.entry_time <= c][cols].reset_index(drop=True)
         b = part[part.entry_time <= c][cols].reset_index(drop=True)
         pd.testing.assert_frame_equal(a, b)
+
+
+def test_silver_bullet_no_look_ahead():
+    from pathlib import Path
+    if not Path("data/mentorship/ES_1min_db.csv").exists():
+        return
+    es = B.load("ES", 1, source="databento")
+    es = es[(es.index >= "2024-01-01") & (es.index < "2024-02-15")]
+    p = Params(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, am=(0, 0), pm=(0, 0),
+               sb_runner=True)
+    full = B.run(es, 1, "ES", p)
+    assert len(full) > 5 and set(full.setup) <= {"sb_am", "sb_pm"}
+    cols = ["entry_time", "entry", "stop", "t1", "side"]
+    for cut_t in full.entry_time.iloc[::4]:
+        c = cut_t + pd.Timedelta(minutes=1)
+        part = B.run(es[es.index <= c], 1, "ES", p, partial_last=True)
+        a = full[full.entry_time <= cut_t][cols].reset_index(drop=True)
+        b = part[part.entry_time <= cut_t][cols].reset_index(drop=True)
+        pd.testing.assert_frame_equal(a, b)

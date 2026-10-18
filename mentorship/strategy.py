@@ -156,6 +156,12 @@ class Params:
     sd_first_beyond: bool = True   # L12: with sd_targets, only the first SD level beyond the nearest pool
     topdown: tuple = ()            # e.g. ("D", "4h", "1h", "15m"): structure on these timeframes
     topdown_min: int = 0           # must agree with the trade on at least this many (0 = all)
+    sb_model: bool = True          # ICT's Silver Bullet as its own setup (sb_model.py)
+    sb_room_pts: float = 5.0       # draw at least this far (10 new traders, 5 experienced; 046)
+    sb_target_pts: float = 5.0     # take ~5 ES handles (or the draw if nearer)
+    sb_runner: bool = False        # keep 20% for the draw, stop to breakeven
+    sb_min_rr: float = 0.0         # optional reward:risk floor on the 5-handle target (x min_rr)
+    sb_london: bool = False        # 03:00-04:00 window (futures only; SPY can't trade it)
     sb_setup: bool = False         # Silver Bullet as its own setup: one more trade inside each SB
                                    # window (10-11, 14-15) after that session's trade, tagged sb_am/sb_pm
     smt_min: int = 0               # B18: at least this many sister indices (NQ, YM) must have
@@ -798,6 +804,9 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 if log is not None:
                     log.append((ts, symbol, session, sname, o_["swept"], sd.x(o_["entry"]),
                                 sd.x(o_["stop"]), sd.x(o_["t1"])))
+    if p.sb_model:
+        from .sb_model import run_sb
+        trades += run_sb(ctx, sides, p, day, symbol, blocked, btag)
     if pos is not None:   # data ended early
         tr = pos["trade"]
         if not live:
