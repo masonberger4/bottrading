@@ -271,3 +271,212 @@ study variants set `ob_entry="post_mss"` where needed.
 - M1.2 swing-low intact bug | done (owner directives, earlier) | `displacement_mult` | 0 | unchanged
 
 Results (setups_models): tests/test_setups_models.py 31 passed (unit + 15 synthetic + 2 ES/NQ no-look-ahead runs); test_mentorship -k look_ahead 12 passed; the other suites (non-look-ahead) 102 passed, 3 failed - the same 3 fail at HEAD (year_end, PRE_OWNER golden, sloppy alias: owner-answer defaults). With every new switch off, ES Jan-Mar 2024 trades (defaults and PRE_OWNER, SB + Ma Deuce on) are identical to HEAD.
+
+
+## setups_models review fixes (2026-10-18)
+
+Fixes for the setups_models review findings, then the items left partial. Code: `setups.py`,
+`strategy.py` (`_scan_core`, `run_day`, `_finish_order`, `_ob_pre`, `_smt`, `_lock_times`,
+`_lock_step`), `levels.implied_fvgs`, `pre_open.run_ma_deuce`, `backtest.prepare` / `lock_cuts`,
+`study.py`. Tests: `tests/test_setups_models.py` (review-fix unit tests, ES runs with exits / adds
+compared, and evidence that each switch fires). With every switch at its default, ES 5m
+2023-11-15..2024-03-31 trades are identical to HEAD (defaults, SB + Ma Deuce on, and post_mss with no
+lock / cap).
+
+### Findings and fixes
+
+| Finding | Fix | New / changed switches |
+|---|---|---|
+| ~40 switches inert under owner #11 `pre_break` | The MSS-validity gates (A20 disp_*, M0.4, Ep07.6 mss_max_bars / mss_disp, M1.3 speed_check, A19.2 mss_eq_wait, Ep01.22 clean_*, M1.2 displacement_mult, A7 imm_rebalance_disp, the mss_ref variants) now act on the default OB order: the order carries its sweep (`sw_ref`); a break that fails the gates (or a timing drop) sets `ob_void` and the still-pending OB order is cancelled at the next bar; "hold" fills it only after the gated MSS. The FVG-path-only switches stay FVG-path: owner question 7. Study: FVG-path variants use `SM_POST` (post_mss + no #9 lock + no #7 cap); new `*_ob_cancel` / `*_ob_hold` variants | `ob_pre_gate` "cancel" (default) / "hold" / "off" [our interpretation] |
+| M5 / M5.1 15:15-15:45 window (owner #1) | `setups.lh_window`: 15:00-15:50, the sweet spot only with `last_hour_strict`; the M5 cut is the window end | - |
+| Ep01.13 / M5.2 own LH slot traded with no lock (owner #9) | The own LH slot locks its own draw at 15:00 (`_lock_times` "LH", PM mark-up cut at 15:00, htf table cut 900 in `lock_cuts`); the slot trades only toward it and is done when it is delivered. Owner question 8 | `lh_no_lock` (first build) |
+| Ep04.7 require: timeout from the first break | `_fvg_wait_from`: fvg_wait runs from the second break; the first leg's FVG is re-checked on every bar up to arming | - |
+| A24.2 reaper_confirm unreachable | The reaction candle (wick in, close >= CE) is tested before the "above the top" check; "wait" while unconfirmed; a body close below the CE kills the Reaper (the FVG path may use the sweep) | - |
+| A20 / M0.4 / M2.3 wrong OB | `setups.ob_low`: the OB at the sweep low (order_block_blend over [ext_i-3, ext_i]) for disp_mult, disp_body_mult and the 2022 VI+OB pick | - |
+| M15 md_eth inert | `backtest.prepare` builds the ETH sessions with `ma_deuce and md_eth` (paper uses prepare) | - |
+| M15 Ma Deuce never trades / ladder off under the lock | Funnel keys `md_x_*` (strategy.FUNNEL). ES 5m 2023-06..12 with FUT + defaults: `M15_ma_deuce_full` is stopped by md_need_news (145 days), the big candle (14) and no daily FVG (10); plain `ma_deuce` by no daily FVG (76), not past the inverted FVG at 08:00 (33), risk (30), wrong half (14), #7 cap (8), lock side (4), chop (2) - 0 trades; with lock and cap off 3 trades. 2019-2022 (lock / cap off): 5-12 a year, nearly all stopped. The ladder now runs under the #9 lock / #7 cap: every rung capped at the locked draw / the cap, the cap is the last rung when it cuts the ladder; the scalp cap applies to every rung | - |
+| M5.1 / Ep01.16 / Ep01.17 inert | pm_ep01: owner window, every nested 1h/4h pair tried (nearest 1h first), no leg-discount wait at the fill (no_leg_wait), no PO3 open filter (synth_po3); the 4h CE hold moved to the pair's 4h FVG under `pm_4h_ce`; pm_4h_ce on other LH trades rejects when no 4h FVG exists; lh_start_by also gates pm_ep01. ES 2022-12-30 (the Ep 01 day): long pm_ep01 armed 15:15, filled 15:20 at 3842.00 (ICT: 3839.25 ~15:25), one add, out at the draw (lock / cap off; the default 15:00 LH lock picks the AM low below that day) | `synth_po3` |
+| M16.1 smt_entry inert | Three causes: the PO3 open filter (x_wrong_side_of_open on most candidates; the CC model has no PO3 - now skipped), the #11 OB order armed a bar later replaced the SMT order (pre-break model entries now block the OB order), and no re-arm after a new low (smt_sent reset on re-anchor). ES 2023 with lock / cap off: 25 smt_stop trades. With the owner #7 cap on, the remaining candidates are capped (x_htf_resist). Study variants list SPX (the CFD study symbol) in smt_entry_syms | - |
+| Look-ahead coverage | `_no_look_ahead(exits=True)` also cuts at exit times and compares exit time / reasons / adds / net of every trade closed by the cut; min_trades >= 1 everywhere; each ES / synthetic run asserts its switches fired (entry kinds, tags, exit reasons, FUNNEL); smt_pick look-ahead via truncated ES + NQ books combined | - |
+| Ep08.4 origin | `setups.leg_origin`: walked back from ext_i while no close above the high and no higher swing low intervened | `mss_ref="origin_max"` (first build) |
+| smt_pre narrowed "any" | `_smt_window_ok`: windows only when smt_windows is set; smt_pre adds 05:00-09:30 | - |
+| unicorn_only | picks among the unicorns (fvg_pick inside them) | - |
+| moc_run / IR / PO3; cc failure | synthetic setups skip the PO3 open filter (`synth_po3`); cc failure arms on the first bar where the swing low B is confirmed AND a close above H printed since B (the break used to come before B was known) | `synth_po3` |
+| M6 pm_reversal | with no session lock, the htf table's draw the other way traded today = objective met; the 10-bar IFVG window marked [our interpretation] | - |
+| A19.4 tag | each of the two legs must leave an FVG still open at the fill; the first MSS of an OB order comes from its sweep | - |
+| M13 ote_stack_tag | any swept sell-side pool of the sweep machine (not only swing / rel-eq keys) | - |
+| Ep03.11 smt_pick variants | `study._dec_job` runs the partner book and combines when smt_pick != "first"; IVARIANTS also carry both | - |
+| M16.2 sick sister | references = PDH 1-3, the overnight high (ctx.pd "pmh" = midnight -> 09:30, from 18:00 with globex_pool), London, prior PM; entry below sick_depth of the day's range | `sick_depth` 0.25 [our interpretation; 0.5 = first build] |
+| Ep05.8 mmxm | rel-eq requirement; the CE exit reuses the ce_hold rule (order flag, exit reason ce_close) | `mmxm_rel_eq` |
+| A20 in the SB | every breaking close after the leg extreme is tried; the first that passes is the MSS | - |
+
+### Items left partial by the first build (now built)
+
+- M4.3 `adv_breaker_pre` | done | with the bias on side (the lock side / htf bias), the first close back above A after the run below it -> market entry, stop beyond L2, target B + 1x(B-A) [our interpretation of the trigger]; takes the OB order's place for that sweep.
+- M5.1 `pm_ep01_adds` | done | Ep 01 sequence: add in the entry FVG (CE), in the breakaway gap (its top; after the fill the stop goes below that gap's candle bodies from the next bar), on a breaker; trail under each later FVG's bodies. Generic adds / trail are off for these trades.
+- A24.1 `implied_fvg` | done | `levels.implied_fvgs`: wick-CE to wick-CE across a displacement candle with overlapping outer wicks [our interpretation]; entry kind implied_fvg. Inducement = the sweep step (A24.3, FULL).
+- T13 `cc_profile` | done | six CC profiles at 13:30 (AM leg, opposing 4h / D array at the AM extreme, no news after 10:00 + AM range < 0.5 ADR5 = consolidation, NFP = seek_destroy) [our interpretation]; "tag" / "gate" (PM direction; consolidation profiles out at 14:00).
+- Ep05.8 rel-eq | done | `mmxm_rel_eq`.
+- Ep05.6 | study variant only, by spec.
+
+### ES trade counts per study variant (review probe)
+
+ES 5m 2023-06-01..2023-12-31, FUT sizing (es_pt 1, lot 1), every other Params at its default plus
+the variant (the reviewer's setting). "= base" means entries identical to the base run.
+| Variant | Trades | = base | Entry kinds (non ob_pre) / tags / exits of note |
+|---|---|---|---|
+| base | 15 |  |  |
+| A19_mss_ref_parent | 2 |  | fvg 2 |
+| A19.2_mss_eq_wait | 5 |  | fvg 5 |
+| A19.4_on_side_tag | 5 |  | fvg 5 |
+| Ep04.7_on_side_require | 0 |  |  |
+| Ep08.4_mss_ref_origin | 1 |  | fvg 1 |
+| A20_disp_mult2 | 2 |  | fvg 2 |
+| A20_disp_through_1 | 5 |  | fvg 5 |
+| A20_disp_fvg_after_break | 4 |  | fvg 4 |
+| A20_disp_all_sb | 13 |  |  |
+| M0.4_disp_body_mult1 | 4 |  | fvg 4 |
+| M0.4_disp_follow | 0 |  |  |
+| Ep07.6_mss_max_bars6 | 3 |  | fvg 3 |
+| Ep07.6_mss_disp15 | 3 |  | fvg 3 |
+| Ep07.6_mss_ref_sibi | 6 |  | fvg 6 |
+| Ep08.16_mss_ref_tf5 | 5 |  | fvg 5 |
+| M1_am_htf_draw | 15 | yes | mm_ctx 1 |
+| M1_am_discount_array | 9 |  | mm_ctx 1 |
+| M1_stop_ob_near | 5 |  | fvg 5 |
+| M1.1_mm_context_require | 9 |  | mm_ctx 1 |
+| M1.1_daily_vi_targets | 15 | yes |  |
+| M1.3_speed_check | 4 |  | fvg 4 |
+| M1.3_body_low_cancel | 5 |  | fvg 5 |
+| M2_no_breakout_fvg | 5 |  | fvg 5 |
+| M2_stop_fvg_candle | 5 |  | fvg 5; am_exit 1 |
+| M2_stop_ce2 | 4 |  | fvg 4 |
+| M2_add_leg_cut | 5 |  | fvg 5 |
+| M2_m2_target | 5 |  | fvg 5; draw_m2 5 |
+| M2.3_fvg_pick_2022 | 5 |  | fvg 5 |
+| M2.7_three_drives_require | 7 |  | three_drives 7 |
+| M4_unicorn_open_only | 5 |  | fvg 5 |
+| M4_breaker_retest_add | 5 |  | fvg 5 |
+| M4.1_breaker_classic | 2 |  | breaker 2; breaker_mt 1 |
+| M4.2_unicorn_rules | 5 |  | fvg 5 |
+| M4.3_adv_breaker | 21 |  | adv_breaker 16, fvg 5 |
+| M4.4_ts_breaker_pyramid | 18 |  | turtle_soup 5 |
+| M4.5_cc_swings_breaker | 16 |  | cc_breaker_swing 1 |
+| M4.5_cc_swings_failure | 15 | yes |  |
+| A14_unicorn_only | 1 |  | fvg 1 |
+| Ep05.4_unicorn_overlap | 5 |  | fvg 5 |
+| Ep05.4_add_on_vi | 5 |  | fvg 5 |
+| Ep05.4_adds_in_breaker | 5 |  | fvg 5 |
+| M5_pm_last_hour_model | 4 |  | fvg 4 |
+| M5.1_pm_ep01 | 13 |  | pm_ep01 1 |
+| M5.2_last_hour_own_slot | 12 |  |  |
+| M5.2_entry_arrays_vi_ob | 7 |  | fvg 4, arr_ob 3; am_exit 1 |
+| Ep01.13_last_hour_setup | 12 |  |  |
+| Ep01.13_lh_parts | 12 |  |  |
+| Ep01.16_pm_4h_ce | 12 |  |  |
+| Ep01.17_lh_start_by_1525 | 12 |  |  |
+| T10_moc_run | 17 |  | moc_run 2 |
+| T10_moc_pool_exit | 15 | yes |  |
+| M6_pm_reversal | 20 |  | pm_reversal 5 |
+| M7_pm_lunch_target | 3 |  | fvg 3; draw_lunch 1 |
+| M7.2_pm_lunch_org | 7 |  |  |
+| M7.3_pm_judas_array | 16 |  |  |
+| M10_ifvg_ce_stop3 | 2 |  | fvg 1, ifvg 1 |
+| M10_ifvg_061 | 5 |  | fvg 5 |
+| A8_ifvg_depth_hold | 2 |  | fvg 2 |
+| A8_ifvg_after_htf | 3 |  | fvg 3 |
+| M11a_ir_entries | 24 |  | ir 9 |
+| M11b_cisd_ob_entries | 16 |  | cisd_ob 11 |
+| M11c_wick_ce_entries | 39 |  | wick_ce 29 |
+| M12_ts_need_flow | 17 |  | turtle_soup 3 |
+| M12.2_ts_adds_breakers | 18 |  | turtle_soup 5 |
+| Ep08.15_ts_max_run | 17 |  | turtle_soup 3 |
+| M13_ote_filter | 3 |  | fvg 3 |
+| M13_ote_limit_stop | 8 |  | fvg 8; am_exit 1, breaker_mt 1 |
+| M13_leg_pd_strict | 5 |  | fvg 5; ote_stack 3 |
+| M16.1_smt_entry | 18 |  | smt_stop 3 |
+| M16.1_smt_turtle | 16 |  | smt_turtle 1 |
+| M16.2_sick_sister | 1 |  |  |
+| Ep03.11_smt_pick_leader | 15 | yes |  |
+| Ep03.11_smt_pick_laggard | 15 | yes |  |
+| B18.1_smt_min_gap1 | 4 |  |  |
+| B18.1_smt_rel_eq | 5 |  |  |
+| B18_smt_need_array | 3 |  |  |
+| B18.2_smt_windows | 5 |  |  |
+| N6_news_profile | 13 |  | news_profile 2 |
+| N6_news_ce_target | 15 | yes |  |
+| N6_news_no_unicorn | 5 |  | fvg 5 |
+| T13_po3_hold_profiles | 15 |  | profile_up_close 7, profile_down_close 4, profile_reversal 4; po3_hold 1 |
+| T13_nfp_sd_skip | 13 |  |  |
+| Ep04.3_require_judas | 9 |  |  |
+| Ep04.3_po3_runner | 15 |  | am_exit 1 |
+| Ep04.4_po3_bias_inclusive | 16 |  |  |
+| Ep01.15_nest_tfs | 0 |  |  |
+| Ep05.6_0800_ob_move | 15 |  |  |
+| Ep05.8_mmxm | 3 |  | fvg 3; draw_mmxm 3 |
+| Ep01.22_clean_leg2 | 4 |  | fvg 4 |
+| A18_reclaimed_ob | 6 |  | arr_reclaimed_ob 4, fvg 2; am_exit 1 |
+| A24.2_reaper | 5 |  | fvg 5 |
+| A24.2_reaper_confirm | 5 |  | fvg 5 |
+| M0_candle_draw_daily | 14 |  |  |
+| M0_candle_draw_weekly | 13 |  |  |
+| M0.5_entry_arrays_all | 2 |  | arr_ote 1, arr_wick_ce 1 |
+| M15_ma_deuce_full | 15 | yes |  |
+| M15_ma_deuce_ladder | 15 | yes |  |
+| A20_disp_mult2_ob_cancel | 13 |  |  |
+| A20_disp_mult2_ob_hold | 0 |  |  |
+| A20_disp_through_1_ob_cancel | 15 | yes |  |
+| M0.4_disp_body_mult1_ob_cancel | 14 |  |  |
+| M0.4_disp_follow_ob_hold | 0 |  |  |
+| Ep07.6_mss_max_bars6_ob_cancel | 14 |  |  |
+| Ep07.6_mss_disp15_ob_hold | 0 |  |  |
+| M1.3_speed_check_ob_cancel | 12 |  |  |
+| A19.2_mss_eq_wait_ob_hold | 2 |  |  |
+| Ep01.22_clean_leg2_ob_hold | 2 |  |  |
+| A19_mss_ref_parent_ob_hold | 0 |  |  |
+| Ep08.4_mss_ref_origin_ob_hold | 0 |  |  |
+| Ep08.4_mss_ref_origin_max | 0 |  |  |
+| A19.4_on_side_tag_ob | 2 |  |  |
+| D10_ob_pre_gate_hold | 2 |  |  |
+| M5.1_pm_ep01_adds | 13 |  | pm_ep01 1 |
+| M5.1_pm_ep01_strict | 13 |  |  |
+| M5_pm_last_hour_model_strict | 4 |  | fvg 4 |
+| M5.2_lh_no_lock | 17 |  |  |
+| T10_moc_run_synth_po3 | 17 |  | moc_run 2 |
+| M16.2_sick_depth_eq | 1 |  |  |
+| Ep05.8_mmxm_rel_eq | 0 |  |  |
+| A24.1_implied_fvg | 6 |  | fvg 5, implied_fvg 1 |
+| M4.3_adv_breaker_pre | 18 |  | adv_breaker_pre 11 |
+| T13_cc_profile_tag | 15 | yes | cc_seek_destroy 2, cc_two_session_down 4, cc_am_decline_pm_reversal 1, cc_unclear 1 |
+| T13_cc_profile_gate | 10 |  | cc_two_session_down 2, cc_am_decline_pm_reversal 1 |
+
+Notes: the "= base" check compares entry times / prices and net P&L, so tag-only variants
+(T13_cc_profile_tag) show "yes" by design; Ep03.11 smt_pick acts only in a combined book (the probe
+runs ES alone; the decisions harness now combines). The `*_ob_cancel` variants change 1-3 trades
+(the OB order usually fills before the break); the `*_ob_hold` variants turn the OB entry into an
+entry after the gated MSS (0-2 trades in 7 months).
+
+### Status changes
+
+- Built, unverified (0 trades / no change on ES 2023H2 with FUT + defaults; fires elsewhere):
+  Ep04.7 mss_on_side="require" (2 trades with the on_side tag on ES 2023-08-28..10-06, ES_BASE),
+  M0.4 disp_follow (FVG path), M1.1 daily_vi_targets, M1 am_htf_draw (no AM trade removed),
+  M4.5 cc_swings="failure" (fires on synthetic), T10 moc_pool_exit (no last-hour pool exit hit),
+  N6 news_ce_target, Ep01.15 nest_tfs (0 trades with SM_POST; nested 15m fires in the ES test run),
+  Ep05.8 mmxm_rel_eq, Ep08.4 mss_ref "origin" / "origin_max" with the OB hold (0) - "origin" alone
+  on the FVG path: 1 trade, M15 Ma Deuce (all switches; the gate funnel above; trades on ES 2020
+  in the test window), the `*_ob_hold` variants with 0 trades (A20 disp_mult 2, M0.4 disp_follow,
+  Ep07.6 mss_disp 1.5, A19 parent).
+- Verified on ES 2023H2 after the fixes (were inert or unverified in the review): pm_ep01 (1, plus
+  the Ep 01 day 2022-12-30), smt_entry (3 smt_stop) / smt_turtle (1), moc_run (2), pm_reversal (5),
+  Reaper variants run (FVG fills; no Reaper fill in 2023H2: unverified), cc_swings breaker (1),
+  adv_breaker_pre (11), implied_fvg (1), cc_profile gate (5 fewer trades).
+- Status changes in the first-build list above: M4.3, M5.1, A24, T13 partial -> done (review pass);
+  A24.2 reaper_confirm, M15 Ma Deuce, Ep05.8 rel-eq, T10 moc_pool_exit, Ep04.7 require ->
+  "built, unverified (0 trades on ES 2023H2)".
+
+Results (review pass): tests/test_setups_models.py: unit + synthetic look-ahead (with exits on the
+exit / add sets) 23 passed; ES runs (look-ahead with exits / adds and per-switch evidence, Ep 01
+day, LH lock, md_eth, smt_pick combine, Ma Deuce 2020) passed; test_mentorship -k look_ahead 12
+passed. Defaults identical to HEAD on ES 5m 2023-11-15..2024-03-31 (defaults, SB + Ma Deuce,
+post_mss without lock / cap).

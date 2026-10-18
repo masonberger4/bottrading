@@ -84,3 +84,20 @@ Built as switches; the defaults stay as they are until the owner answers.
 6. **Paid data:** `roll_kind="calendar"` / `roll_spread` need Databento ES.c.0 (paid). Not built
    without a go-ahead (and a `quote()` first).
 
+7. **setups_models FVG-path switches under #11 (review pass, extends question 1).** About 40 of the
+   setups_models switches (2022 FVG pick, unicorn rules, IFVG entries, OTE, entry arrays, Reaper,
+   on-side "require", breaker entries, N6 no-unicorn ...) act only on the FVG entry after the MSS.
+   Under the default `ob_entry="pre_break"` they never trade; the study runs them with
+   `SM_POST` (`ob_entry="post_mss"`, no #9 lock, no #7 cap - post_mss with the lock and cap gave 0
+   trades on ES 5m 2023H2). The MSS-validity gates (displacement, speed, equal-low wait, clean leg,
+   the MSS reference variants) now also act on the default OB order through `ob_pre_gate`:
+   "cancel" (default; a failed break cancels the still-pending OB order - rare, because the OB
+   order usually fills before the break) or "hold" (the OB order fills only after the gated MSS -
+   no longer "before the break", so it contradicts #11). Choose: (a) keep "cancel" (the gates
+   rarely matter for the default entry), (b) "hold" as the default when a gate is on, or (c) answer
+   question 1 with `ob_entry="both"`, which also brings the FVG-path switches back.
+8. **Own last-hour lock (review pass).** The own LH slot (`last_hour_own_slot`) now locks its own
+   draw at 15:00 like the MD / SB own locks (question 3); `lh_no_lock` keeps the first build (no
+   lock once the PM draw was delivered). On the Ep 01 day (ES 2022-12-30) the 15:00 lock picks the
+   AM low below (nearest), while ICT's draw was the buy side above - so the Ep 01 last-hour long is
+   blocked by the default lock. Confirm the 15:00 lock, or tie the LH slot to the PM lock.

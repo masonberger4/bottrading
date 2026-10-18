@@ -635,3 +635,26 @@ def failure_swing(highs: list, lows: list, level: float, max_above: float, i: in
     if not hs:
         return None
     return B, hs[-1]
+
+
+def implied_fvgs(o, h, l, c) -> list[Zone]:
+    """A24.1 implied FVG (035 ~29:46: "the consequent encroachment of this wick and this wick,
+    that range projected out"; named once, never defined) [our interpretation of the bar test]:
+    three candles with a displacement middle candle (bullish: up-close) whose outer wicks overlap
+    (no real FVG: low[k] <= high[k-2]); the implied gap runs from the CE of candle 1's upper wick
+    (between its body top and high) up to the CE of candle 3's lower wick (between its low and
+    body bottom), when the latter is higher. Bearish mirrors it. Known at the third candle k."""
+    out = []
+    for k in range(2, len(h)):
+        a, b = k - 2, k
+        if c[k - 1] > o[k - 1] and l[b] <= h[a]:
+            lo_ = (max(o[a], c[a]) + h[a]) / 2          # candle 1 upper-wick CE
+            hi_ = (min(o[b], c[b]) + l[b]) / 2          # candle 3 lower-wick CE
+            if hi_ > lo_:
+                out.append(Zone("bull", float(hi_), float(lo_), k, k - 1))
+        elif c[k - 1] < o[k - 1] and h[b] >= l[a]:
+            hi_ = (min(o[a], c[a]) + l[a]) / 2          # candle 1 lower-wick CE
+            lo_ = (max(o[b], c[b]) + h[b]) / 2          # candle 3 upper-wick CE
+            if hi_ > lo_:
+                out.append(Zone("bear", float(hi_), float(lo_), k, k - 1))
+    return out

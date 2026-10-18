@@ -1102,3 +1102,19 @@ trades are identical to the commit before. FVG-path switches act with `ob_entry=
 | M16, M16.1, M16.2, Ep03.11, B18, B18.1, B18.2 | FULL | SMT stop / turtle entry (ES only, 05:00 low, 11:00 exit), sick sister, leader / laggard pick, SMT gap / array / rel-eq twin / windows |
 | N6, Ep04.3, Ep04.4, Ep01.15, M15 | FULL | news profile / CE / no unicorn; Judas required, runner, bias, inclusive; nested FVGs; Ma Deuce big candle / 2nd entry / ladder / news / ETH / blocked |
 | Ep05.6 | SIMPLIFIED | study variant only (one observation) |
+
+### setups_models review pass (2026-10-18)
+
+Review fixes and the items the first build left partial (`build_log.md` "setups_models review
+fixes" has the switches, the per-variant ES trade counts and the items still unverified on real
+data).
+
+| Id | New status | Note |
+|---|---|---|
+| M4.3 | FULL | `adv_breaker_pre`: with the bias on side, the first close back above A after the run below it enters at market (stop beyond L2, target B + 1x(B-A)) [our interpretation of the trigger] |
+| M5.1 | FULL | `pm_ep01_adds`: the Ep 01 sequence (add in the FVG at its CE, in the breakaway gap with the stop moved below its bodies, on a breaker) and the trail under each new FVG's bodies; owner #1 window 15:00-15:50; nested 1h/4h pairs; fires on the Ep 01 day (ES 2022-12-30, long ~15:20) |
+| A24 / A24.1 | FULL | `implied_fvg`: wick-CE to wick-CE across a displacement candle whose outer wicks overlap (035 ~29:46, named once) [our interpretation]; inducement = the sweep step (A24.3) |
+| T13 | FULL | `cc_profile` ("tag" / "gate"): the six CC index profiles classified at 13:30 from the AM leg, an opposing 4h / D array at the AM extreme, no news after 10:00 + a small AM range, NFP = seek and destroy [our interpretation of the classification]; consolidation profiles out by 14:00 |
+| Ep05.8 | FULL | `mmxm_rel_eq` (the sweep must be of relative equal lows / highs); the CE exit now reuses the ce_hold rule |
+| A19, A19.2, A20, M0.4, M1.3, Ep07.6, Ep08.4, Ep08.16, Ep01.22 | FULL | under the owner #11 default (OB order before the break) the MSS gates act through `ob_pre_gate` ("cancel" default / "hold"); Ep08.4 "origin" anchored at the sweep extreme (`leg_origin`), the first rule kept as "origin_max" |
+| Ep05.6 | SIMPLIFIED | study variant only, by spec |

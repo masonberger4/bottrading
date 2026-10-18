@@ -45,6 +45,17 @@ def _ob_body(o, c, z, end: int) -> tuple[float, float]:
     return float(np.max(o[j:k + 1])), float(np.min(c[j:k + 1]))
 
 
+def ob_low(sd, e: int):
+    """Review fix (A20 / M0.4 / M2.3): the order block AT the sweep low - the last down-close
+    candle(s) in [e-3, e] (order_block_blend limited to the sweep extreme), never a pullback
+    candle of the up-leg after the low. (zone, body top, body low) or None."""
+    ob = L.order_block_blend(sd.o, sd.h, sd.l, sd.c, e - 3, e, "bull")
+    if ob is None:
+        return None
+    top, low = _ob_body(sd.o, sd.c, ob, e)
+    return ob, top, low
+
+
 # --- pools (hooked into strategy._sell_side) ----------------------------------------------------
 
 def extra_pools(ctx, sd, session, i, p, out: dict) -> None:
@@ -76,7 +87,8 @@ def _tf_pivots(ctx, sd, m: int):
 
 def mss_ref(ctx, sd, sw, i, p):
     """(ref_i, ref, real_pivot) from the setups_models reference rules, or None (the caller falls
-    back to the A1 tier chain with mss_ref "stl")."""
+    back to the A1 tier chain with mss_ref "stl"). Ep08.4 "origin" = leg_origin (anchored at the
+    sweep extreme, review fix); "origin_max" = the first build's rule, kept as a value."""
     e = sw["ext_i"]
     if p.mss_ref_sibi:                       # Ep07.6 / M1: the small SIBI high the leg left
         hs = [q for q in sd.ph if q.i < e and q.known <= i]
@@ -91,7 +103,7 @@ def mss_ref(ctx, sd, sw, i, p):
             if len(hs) > 1 and abs(hs[-2].price - q.price) <= p.eq_tol_pts * p.es_pt and hs[-2].price > q.price:
                 q = hs[-2]
             return q.i, q.price, True
-    if p.mss_ref in ("parent", "origin"):
+    if p.mss_ref in ("parent", "origin", "origin_max"):
         refs = [q for q in sd.ph if q.i < e and q.known <= i]
         if p.mss_ref == "parent":            # A19 [our interpretation]: walk back over lower highs
             if refs:
@@ -99,13 +111,36 @@ def mss_ref(ctx, sd, sw, i, p):
                 while k - 1 >= 0 and refs[k - 1].price > refs[k].price:
                     k -= 1
                 return refs[k].i, refs[k].price, True
-        else:                                # Ep08.4 [our interpretation]: the high that led to the run
+        elif p.mss_ref == "origin":          # Ep08.4 (review fix: anchored at ext_i)
+            q = leg_origin(sd, e, i)
+            if q is not None:
+                return q.i, q.price, True
+        else:                                # "origin_max" (the first build): the highest swing high
             a = S._level_created(ctx, sw["key"], sw["session"]) if not sw.get(SYNTH) else ctx.start
-            rr = [q for q in refs if q.i >= min(a, e - 1)]
-            if rr:
+            rr = [q for q in refs if q.i >= min(a, e - 1)]    # between the swept level's creation
+            if rr:                                          # and the extreme [our interpretation]
                 q = max(rr, key=lambda q: (q.price, q.i))
                 return q.i, q.price, True
     return None
+
+
+def leg_origin(sd, e: int, i: int):
+    """Ep08.4 "the swing that originated the leg into the sweep extreme" [our interpretation of
+    the walk-back]: from the last swing high before ext_i (known by bar i) walk back to earlier
+    swing highs as long as the leg from that high down to ext_i stays one leg - no close above
+    the high after it, and the swing lows after it (known by bar i) form a staircase of lower lows
+    (no higher swing low intervened). The furthest such high is the origin. None if none."""
+    hs = [q for q in sd.ph if q.i < e and q.known <= i]
+    ls = [q for q in sd.pl if q.i < e and q.known <= i]
+    best = None
+    for q in reversed(hs):
+        if sd.c[q.i + 1:e + 1].max(initial=-np.inf) >= q.price:
+            break                                  # a close above it: the leg started later
+        lows = [x.price for x in ls if x.i > q.i]
+        if any(b > a for a, b in zip(lows, lows[1:])):
+            break                                  # a higher swing low intervened
+        best = q
+    return best
 
 
 def parent_high(sd, e: int, i: int):
@@ -150,9 +185,9 @@ def break_ok(ctx, sd, sw, i, p, ref, lv: dict, tol: float, tk: float) -> bool:
         S._f("x_disp_through")
         return False
     if p.disp_mult or p.disp_body_mult:
-        ob = L.order_block_blend(o, h, l, c, sw["ext_i"] - 3, i - 1, "bull")
-        if ob is not None:
-            top, low = _ob_body(o, c, ob, i - 1)
+        r = ob_low(sd, sw["ext_i"])          # review fix: the OB at the sweep low, not the last
+        if r is not None:                    # down-close candle before the break
+            _, top, low = r
             body = top - low
             if body > 0:
                 if p.disp_mult and c[i] - top < p.disp_mult * body:
@@ -188,22 +223,25 @@ def break_ok(ctx, sd, sw, i, p, ref, lv: dict, tol: float, tk: float) -> bool:
 
 def disp_ok_sb(sd, li: int, i: int, ref: float, p) -> tuple[bool, int | None]:
     """A20 "also in SB": the Silver Bullet's MSS (a close beyond ref after the leg extreme li) with
-    disp_through_pts / disp_mult / disp_body_mult / mss_disp on the first breaking candle and
-    disp_follow (its next candle closes above it, by bar i). Returns (ok, breaking bar)."""
+    disp_through_pts / disp_mult / disp_body_mult / mss_disp and disp_follow (the next candle
+    closes above it, by bar i). Review fix: every breaking close after li is tried in turn and
+    the first one that passes is the MSS (a weak first break no longer rejects a later candle
+    that breaks with displacement). Returns (ok, breaking bar: the passing one, else the first)."""
     c = sd.c
     thr = ref + p.disp_through_pts * p.es_pt
     hit = np.flatnonzero(c[li + 1:i + 1] > (thr if p.disp_through_pts else ref))
     if not len(hit):
         return False, None
-    k = li + 1 + int(hit[0])
     sw = dict(ext_i=li, ext=float(sd.l[li]), level=-np.inf)
     q = Params_like(p, mss_eq_wait=False, clean_leg=-1, clean_body=0.0, disp_through_pts=0.0)
-    if not break_ok(None, sd, sw, k, q, ref, {}, 0.0, 0.0):
-        return False, k
-    if p.disp_follow:
-        if k + 1 > i or not c[k + 1] > c[k]:
-            return False, k
-    return True, k
+    for h_ in hit:
+        k = li + 1 + int(h_)
+        if not break_ok(None, sd, sw, k, q, ref, {}, 0.0, 0.0):
+            continue
+        if p.disp_follow and (k + 1 > i or not c[k + 1] > c[k]):
+            continue
+        return True, k
+    return False, li + 1 + int(hit[0])
 
 
 class Params_like:
@@ -221,10 +259,16 @@ class Params_like:
 def on_side_wait(ctx, sd, sw, i, p, wait: int):
     """Ep04.7 mss_on_side="require": after the first MSS (sw["broke"]) wait for a higher low, a
     second close above the high before it, and an FVG from that leg, with the first leg's FVG still
-    open. Returns "wait", "drop" or None (ready: sw["leg2_from"] set)."""
-    if sw.get("leg2_from") is not None:
-        return None
+    open. Returns "wait", "drop" or None (ready: sw["leg2_from"] / sw["broke2"] / sw["f1"] set).
+    Review fix: once ready, the first leg's FVG must still be open (no close below its bottom) on
+    every later bar up to the arming bar - else the sweep is dropped; the caller measures the
+    no-FVG timeout from the SECOND break (sw["broke2"])."""
     c, l, h = sd.c, sd.l, sd.h
+    if sw.get("leg2_from") is not None:
+        f1 = sw.get("f1")
+        if f1 is not None and c[f1.i + 1:i + 1].min(initial=np.inf) < f1.bottom:
+            return "drop"                      # the first leg's FVG closed through before arming
+        return None
     b1, e = sw["broke"], sw["ext_i"]
     f1 = next((g for g in sd.gaps if g.i - 2 >= e and g.i <= i), None)
     if f1 is None:
@@ -242,21 +286,34 @@ def on_side_wait(ctx, sd, sw, i, p, wait: int):
         return "wait"
     sw["broke2"] = hl.i + 1 + int(brk[0])
     sw["leg2_from"] = hl.i
+    sw["f1"] = f1
     sw["on_side"] = True
     return None
 
 
 def on_side_since(sd, o: dict, i: int) -> bool:
     """A19.4 tag: a second MSS (higher low, then a close above the high before it) between the
-    arming bar and bar i-1 (closed bars before the fill)."""
+    first MSS and bar i-1 (closed bars before the fill), each leg leaving an FVG that is still
+    open (no close below its bottom) through bar i-1 (review fix: the FVG part of "two MSSs each
+    leaving an open FVG", 006 ~49:16). The first MSS bar is the order's own, or (owner #11 OB
+    order armed before the break) the one its sweep printed later."""
     b1, e = o.get("broke"), o["ext_i"]
+    if b1 is None:
+        b1 = (o.get("sw_ref") or {}).get("broke")
     if b1 is None:
         return False
     hl = next((q for q in sd.pl if q.i >= b1 and q.known <= i - 1 and q.price > o["ext"]), None)
     if hl is None:
         return False
     hh = sd.h[e:hl.i].max(initial=-np.inf)
-    return bool((sd.c[hl.i + 1:i] > hh).any())
+    k2 = np.flatnonzero(sd.c[hl.i + 1:i] > hh)
+    if not len(k2):
+        return False
+    b2 = hl.i + 1 + int(k2[0])
+    is_open = lambda g: sd.c[g.i + 1:i].min(initial=np.inf) >= g.bottom
+    leg1 = any(g.i - 2 >= e and g.i <= hl.i and is_open(g) for g in sd.gaps)
+    leg2 = any(g.i - 2 >= hl.i and g.i <= max(b2, i - 1) and is_open(g) for g in sd.gaps if g.i <= i - 1)
+    return bool(leg1 and leg2)
 
 
 # --- gap filters / picks / stops -----------------------------------------------------------------
@@ -270,7 +327,8 @@ def pick_2022(ctx, sd, sw, pick: list, i: int, p):
     leg_hi = h[e:i + 1].max()
     eq = sw["ext"] + 0.5 * (leg_hi - sw["ext"])
     vis = [z for z in sd.vis("bull") if z.i <= i]
-    ob = L.order_block_blend(o, h, l, c, e - 3, (sw["broke"] or i) - 1, "bull")
+    r = ob_low(sd, e)                    # review fix: the OB at the sweep low (not a pullback candle)
+    ob = None if r is None else r[0]
     tk = 0.25 * p.es_pt
     a = [g for g in pick if any(abs(z.i - g.src) <= 1 for z in vis)
          and ob is not None and ob.top >= g.bottom - tk and ob.bottom <= g.top]
@@ -285,7 +343,7 @@ def pick_2022(ctx, sd, sw, pick: list, i: int, p):
 def ifvg_filter(ctx, sd, sw, gaps, i, p):
     """A8 ifvg_hold (no close back below the IFVG top since the inversion) and ifvg_after_htf
     (only once the sweep reached an HTF array) on the inversion zones of `gaps`."""
-    native = set(id(g) for g in sd.gaps)
+    native = set(id(g) for g in sd.gaps) | set(id(z) for z in sd._lz.get("implied", []))   # A24.1
     out = []
     htf = None
     for g in gaps:
@@ -363,8 +421,10 @@ def ote_adjust(sd, sw, i, p, entry, stop, kind, lvt):
         stop = sw["ext"] - p.stop_buffer
     if stop >= entry - p.min_risk_pts * p.es_pt:
         stop = min(stop, sw["ext"] - p.stop_buffer)
+    # review fix: any swept sell-side pool of the sweep machine counts as the "swept low" (PDL,
+    # London, overnight, swing / rel-eq lows ...), not only swing_low / rel_eq keys; synthetic never
     if p.ote_stack_tag and lo <= entry <= hi and kind in ("fvg", "ifvg") and S._ob_at_low(sd, sw, i) is not None \
-            and str(sw.get("key", "")).startswith(("swing_low", "rel_eq")):
+            and not sw.get(SYNTH):
         lvt.append("ote_stack")
     return entry, stop
 
@@ -434,15 +494,25 @@ def reaper_order(ctx, sd, sw, i, p, session, risk_mult, ref_i, real_ref, wait: i
         sw["reaper"] = L.reaper(sd.o, sd.h, sd.l, sd.c, q.i, ref_i, sw["ext_i"], sd.c2_dir)
         sw["reaper_e"] = sw["ext_i"]
     z = sw["reaper"]
-    if z is None or z.top >= sd.c[i]:
+    if z is None or sw.get("reaper_dead"):
         return None
     market = False
     entry = z.top
     if p.reaper_confirm:
+        # review fix: the reaction candle (a wick into the Reaper, a close at or above its CE -
+        # the textbook confirmation closes between the CE and the top) is tested BEFORE any
+        # "price above the top" check; while the Reaper stands unconfirmed the sweep waits
+        # ("wait", the ordinary FVG path does not consume it)
         b = sw["broke"]
-        if not (i > b and sd.l[i] <= z.top and sd.c[i] >= z.mid):
+        if i > b and sd.l[i] <= z.top and sd.c[i] >= z.mid:
+            market, entry = True, float(sd.c[i])
+        elif i > b and sd.c[i] < z.mid:
+            sw["reaper_dead"] = True           # a body close below its CE: the Reaper failed -
+            return None                        # the ordinary FVG path may still use the sweep
+        else:
             return "drop" if i - b > max(wait, p.pending_minutes // max(ctx.tf, 1)) else "wait"
-        market, entry = True, float(sd.c[i])
+    elif z.top >= sd.c[i]:
+        return None
     tags = dict(unicorn=False, fvg_bottom=z.bottom, fvg_ce=z.mid, entry_kind="reaper", mitigation=False,
                 propulsion=False, market=market, no_leg_wait=True, lvx={"reaper_ce": (z.mid, True)})
     return S._finish_order(ctx, sd, i, p, session, sw, entry, z.bottom - p.stop_buffer, risk_mult,
@@ -464,6 +534,31 @@ def adv_breaker_order(ctx, sd, sw, i, p, session, risk_mult, ref_i, ref, real_re
     tags = dict(unicorn=False, fvg_bottom=A, fvg_ce=mt, entry_kind="adv_breaker", mitigation=False,
                 propulsion=False, through=tk, no_leg_wait=True)
     return S._finish_order(ctx, sd, i, p, session, sw, mt, sw["ext"] - p.stop_buffer, risk_mult,
+                           sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True, fixed=fixed)
+
+
+def adv_breaker_pre(ctx, sd, sw, i, p, session, risk_mult, ref_i, ref, real_ref):
+    """M4.3 advanced breaker, the "bias on side" entry (070 ~34:59-1:08:31: "with bias on side you
+    may buy inside the A-B leg or on the sell-side run without waiting for the break and retest")
+    [our interpretation of the trigger]: bias on side = the locked draw / htf bias this way
+    (ctx.cur_bias); A = the swing low L1 before the reference high B. After the run below A (the
+    sweep extreme L2 < A), the FIRST close back above A - price back inside the A-B leg, B not yet
+    broken - enters at market (next open); stop beyond L2; target B + 1x(B - A). Once per sweep
+    extreme."""
+    if getattr(ctx, "cur_bias", 0) != sd.sign or i <= sw["ext_i"]:
+        return None
+    q = _l1(sd, ref_i, i)
+    if q is None or not real_ref or not sw["ext"] < q.price:
+        return None
+    k = np.flatnonzero(sd.c[sw["ext_i"] + 1:i + 1] > q.price)
+    if not len(k) or sw["ext_i"] + 1 + int(k[0]) != i or not sd.c[i] < ref:
+        return None
+    sw["adv_pre_sent"] = True
+    A, B = q.price, ref
+    fixed = [(S._exit_px(B + (B - A), "array", p), "array")]
+    tags = dict(unicorn=False, fvg_bottom=A, fvg_ce=(A + B) / 2, entry_kind="adv_breaker_pre", mitigation=False,
+                propulsion=False, market=True, no_leg_wait=True)
+    return S._finish_order(ctx, sd, i, p, session, sw, float(sd.c[i]), sw["ext"] - p.stop_buffer, risk_mult,
                            sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True, fixed=fixed)
 
 
@@ -494,7 +589,14 @@ def cc_failure_order(ctx, sd, i, p, session, risk_mult):
         if r is None:
             continue
         B, H = r
-        if B.i in used or not sd.c[i] > H.price or (sd.c[B.i:i] > H.price).any():
+        if B.i in used or not sd.c[i] > H.price:
+            continue
+        # review fix: the swing low B is confirmed only pivot_n bars after it prints, and the
+        # break of H often comes inside those bars - arm on the first bar where BOTH are known
+        # (B confirmed and a close above H since B), not only when the first close above H is
+        # itself the current bar (which made the setup unreachable after a fast break)
+        kk = np.flatnonzero(sd.c[B.i:i + 1] > H.price)
+        if not len(kk) or i != max(B.i + int(kk[0]), B.known):
             continue
         used.add(B.i)
         sw = dict(session=session, name="cc_failure", level=v, key=k, ext=B.price, ext_i=B.i, broke=i,
@@ -556,8 +658,11 @@ def _smt_order(ctx, sd, sw, i, p, session, risk_mult):
             return None
         kind, extra = "smt_stop", {"stop_entry": True}
     sw["smt_sent"] = True
+    # review fix: the [CC] 2017 model has no PO3 open filter - with it the buy stop above the
+    # down-close candle was rejected on most ES days (x_wrong_side_of_open, 2023)
     tags = dict(unicorn=False, fvg_bottom=sw["ext"], fvg_ce=(entry + sw["ext"]) / 2, entry_kind=kind,
-                mitigation=False, propulsion=False, exit_at=p.smt_exit, no_leg_wait=True, **extra)
+                mitigation=False, propulsion=False, exit_at=p.smt_exit, no_leg_wait=True,
+                skip_po3=not p.synth_po3, **extra)
     return S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, max(h[e:i + 1].max(), entry),
                            tags, skip_leg_pd=True)
 
@@ -623,7 +728,8 @@ def ir_entry(ctx, sd, i, p, session, risk_mult):
     sw = dict(session=session, name="ir", level=float(sd.h[i - 2]), key="ir", ext=float(sd.l[i]), ext_i=i,
               broke=i, sweep_i=i, smt=None, smt2=None, **{SYNTH: True})
     tags = dict(unicorn=False, fvg_bottom=float(sd.l[i]), fvg_ce=eq, entry_kind="ir", mitigation=False,
-                propulsion=False, market=True, no_leg_wait=True, imm_rebal=True, lvx={"ir_eq": (eq, False)})
+                propulsion=False, market=True, no_leg_wait=True, imm_rebal=True, lvx={"ir_eq": (eq, False)},
+                skip_po3=not p.synth_po3)
     return S._finish_order(ctx, sd, i, p, session, sw, float(sd.c[i]), float(sd.l[i]) - p.stop_buffer,
                            risk_mult, float(sd.h[i]), tags, skip_leg_pd=True)
 
@@ -631,28 +737,47 @@ def ir_entry(ctx, sd, i, p, session, risk_mult):
 def htf_done(ctx, sd, i) -> bool:
     """M5 / Ep01.13 / T10 "HTF objective done" [our interpretation]: a session lock on this side
     delivered by bar i, or the htf table's draw this way (draw_up / draw_dn) traded today."""
+    return htf_done_sign(ctx, sd.sign, i)
+
+
+def htf_done_sign(ctx, sign: int, i: int) -> bool:
+    """htf_done for a direction (+1 up / -1 down) in real prices (M6 needs the OTHER side's)."""
     for lk in getattr(ctx, "lock", {}).values():
-        if lk.get("side") == sd.sign and lk.get("delivered_i") is not None and lk["delivered_i"] <= i:
+        if lk.get("side") == sign and lk.get("delivered_i") is not None and lk["delivered_i"] <= i:
             return True
     row = getattr(ctx, "bias_row", None) or {}
-    v = row.get("draw_up" if sd.sign > 0 else "draw_dn")
+    v = row.get("draw_up" if sign > 0 else "draw_dn")
     if v is not None and v == v:
-        return bool(sd.h[ctx.start:i + 1].max() >= sd.x(float(v)))
+        v = float(v)
+        return bool(ctx.h[ctx.start:i + 1].max() >= v if sign > 0 else ctx.l[ctx.start:i + 1].min() <= v)
     return False
+
+
+def lh_window(p) -> tuple:
+    """Owner #1: last-hour entries 15:00-15:50 (p.last_hour); 15:15-15:45 (last_hour_sweet) only
+    under the last_hour_strict switch (review fix: M5 / M5.1 no longer re-introduce the sweet spot
+    as the window, owner_directive_specs #1: 'M5 and proposed change 23: drop no entries after
+    15:45')."""
+    return tuple(p.last_hour_sweet) if p.last_hour_strict else tuple(p.last_hour)
+
+
+def _htf_fvgs(ctx, sd, i, k_known, tf_):
+    """Same-side FVGs on timeframe tf_ (confluence rows, source FVG), known by bar k_known's
+    start, alive at bar i's close: [(top, bottom)] in side space."""
+    conf = getattr(ctx, "conf", None)
+    if conf is None or k_known >= len(ctx.t):
+        return []
+    now = ctx.idx[i] + _tf(ctx)
+    out = []
+    for top, bot, _, _, _ in conf.valid(now, sd.sign, (tf_,), (0,), ctx.idx[k_known]):
+        a, b = sd.x(top), sd.x(bot)
+        out.append((max(a, b), min(a, b)))
+    return out
 
 
 def _h4_ce(ctx, sd, i, k900):
     """Ep01.16: (ce, top, bottom) of the nearest same-side 4h FVG below the close, known by 15:00."""
-    conf = getattr(ctx, "conf", None)
-    if conf is None or k900 >= len(ctx.t):
-        return None
-    now = ctx.idx[i] + _tf(ctx)
-    kb = ctx.idx[k900]
-    arr = []
-    for top, bot, tf_, sc, kn in conf.valid(now, sd.sign, ("4h",), (0,), kb):
-        a, b = sd.x(top), sd.x(bot)
-        arr.append((max(a, b), min(a, b)))
-    arr = [a for a in arr if a[1] <= sd.c[i]]
+    arr = [a for a in _htf_fvgs(ctx, sd, i, k900, "4h") if a[1] <= sd.c[i]]
     if not arr:
         return None
     t_, b_ = max(arr)
@@ -660,49 +785,85 @@ def _h4_ce(ctx, sd, i, k900):
 
 
 def pm_ep01(ctx, sd, i, p, session, risk_mult):
-    """M5.1 Ep 01 last hour (001 ~39:03-45:20): a 1h FVG nested in a 4h FVG (same side, known by
-    15:00, below price); from 15:00 bodies hold above the 4h FVG CE (~30:48); from 15:15 price trades
-    into the 1h FVG and bodies refuse to close below its low; then a fast candle leaves a breakaway
-    FVG -> buy its top (limit, 15:15-15:45), stop below the FVG candle's open; one exit at the draw."""
+    """M5.1 Ep 01 last hour (001 ~39:03-45:20): a 1h FVG nested in a 4h FVG (same side, both known
+    by 15:00, the 4h one below price); from the window start price trades into the 1h FVG and
+    bodies refuse to close below its low; then a fast candle leaves a breakaway FVG -> buy its top
+    (limit), stop below the FVG candle's open; one exit at the draw. Review fixes: the window is
+    owner #1's 15:00-15:50 (lh_window; the sweet spot only with last_hour_strict), every nested
+    1h/4h pair is tried (nearest 1h first) instead of only the nearest 4h FVG, and the 4h CE hold
+    (Ep01.16, 001 ~30:48) is the separate pm_4h_ce switch on THAT pair's 4h FVG [our
+    interpretation: "the four hour range ... that middle point, we're above it"]."""
     t = ctx.t[i]
-    if session != "PM" or not (p.last_hour_sweet[0] <= t < p.last_hour_sweet[1]):
+    wa, wb = lh_window(p)
+    if session != "PM" or not (wa <= t < wb):
         return None
-    conf = getattr(ctx, "conf", None)
-    if conf is None:
+    k900, ka = S._idx_at(ctx, p.last_hour[0]), S._idx_at(ctx, wa)
+    if ka > i or k900 > i:
         return None
-    k900, k915 = S._idx_at(ctx, p.last_hour[0]), S._idx_at(ctx, p.last_hour_sweet[0])
-    if k900 > i:
-        return None
-    h4 = _h4_ce(ctx, sd, i, k900)
-    if h4 is None or (sd.c[k900:i + 1] <= h4[0]).any():
-        return None
-    now, kb = ctx.idx[i] + _tf(ctx), ctx.idx[k900]
-    a1 = []
-    for top, bot, tf_, sc, kn in conf.valid(now, sd.sign, ("1h",), (0,), kb):
-        a, b = sd.x(top), sd.x(bot)
-        a1.append((max(a, b), min(a, b)))
-    a1 = [z for z in a1 if z[1] < h4[1] and z[0] > h4[2]]          # nested (overlapping the 4h)
-    if not a1:
-        return None
-    top1, bot1 = max(a1)
-    touch = np.flatnonzero(sd.l[k915:i + 1] <= top1)
-    if not len(touch) or (sd.c[k900:i + 1] < bot1).any():
-        return None
-    kt = k915 + int(touch[0])
+    h4s = [z for z in _htf_fvgs(ctx, sd, i, k900, "4h") if z[1] <= sd.c[i]]
+    h1s = _htf_fvgs(ctx, sd, i, k900, "1h")
+    pairs = sorted(((z1, z4) for z1 in h1s for z4 in h4s if z1[1] < z4[0] and z1[0] > z4[1]),
+                   key=lambda zz: (-zz[0][0], -zz[1][0]))
     used = sd.__dict__.setdefault("_ep01", set())
-    gs = [g for g in sd.gaps if g.i - 2 >= kt and g.i <= i and g.i not in used
-          and sd.l[g.i + 1:i + 1].min(initial=np.inf) > g.top]
-    if not gs:
-        return None
-    g = gs[-1]
-    used.add(g.i)
-    e = kt + int(np.argmin(sd.l[kt:g.i + 1]))
-    sw = dict(session=session, name="pm_ep01", level=bot1, key="pm_ep01", ext=float(sd.l[e]), ext_i=e, broke=g.i,
-              sweep_i=kt, smt=None, smt2=None, **{SYNTH: True})
-    tags = dict(unicorn=False, fvg_bottom=g.bottom, fvg_ce=g.mid, entry_kind="pm_ep01", mitigation=False,
-                propulsion=False, single_exit=True, cut=p.last_hour_sweet[1])
-    return S._finish_order(ctx, sd, i, p, session, sw, g.top, float(sd.o[g.src]) - p.stop_buffer, risk_mult,
-                           sd.h[e:i + 1].max(), tags, skip_leg_pd=True)
+    for (top1, bot1), (top4, bot4) in pairs:
+        if p.pm_4h_ce and (sd.c[k900:i + 1] <= (top4 + bot4) / 2).any():
+            continue                                   # Ep01.16: bodies hold above the 4h CE
+        touch = np.flatnonzero(sd.l[ka:i + 1] <= top1)
+        if not len(touch) or (sd.c[ka:i + 1] < bot1).any():
+            continue                                   # into the 1h FVG, bodies refuse its low
+        kt = ka + int(touch[0])
+        gs = [g for g in sd.gaps if g.i - 2 >= kt and g.i <= i and g.i not in used
+              and sd.l[g.i + 1:i + 1].min(initial=np.inf) > g.top]
+        if not gs:
+            continue
+        g = gs[-1]
+        used.add(g.i)
+        e = kt + int(np.argmin(sd.l[kt:g.i + 1]))
+        sw = dict(session=session, name="pm_ep01", level=bot1, key="pm_ep01", ext=float(sd.l[e]), ext_i=e,
+                  broke=g.i, sweep_i=kt, smt=None, smt2=None, **{SYNTH: True})
+        tags = dict(unicorn=False, fvg_bottom=g.bottom, fvg_ce=g.mid, entry_kind="pm_ep01", mitigation=False,
+                    propulsion=False, single_exit=True, cut=wb, skip_po3=not p.synth_po3, no_leg_wait=True)
+        return S._finish_order(ctx, sd, i, p, session, sw, g.top, float(sd.o[g.src]) - p.stop_buffer, risk_mult,
+                               sd.h[e:i + 1].max(), tags, skip_leg_pd=True)
+    return None
+
+
+def ep01_manage(ctx, sd, pos, tr, i, p, can_add: bool) -> None:
+    """M5.1 pm_ep01_adds (001 ~37:45-45:02) [our interpretation of the order]: the Ep 01 sequence
+    instead of the generic adds / trail, one pending add at a time (p.adds fractions, #12 cap):
+    (1) add in the entry FVG (a limit at its CE, armed on the first close after the fill above
+    it); (2) add in the breakaway gap (the first new FVG after the fill, a limit at its top) -
+    once it fills the stop goes just below that gap's candle bodies ("stop just below the candle
+    bodies", ~42:19); (3) add on a breaker (the first bullish breaker formed after the fill, a
+    limit at its top). Trail ("then trailed up", ~37:45): every new FVG after the fill lifts the
+    stop to just below its candle bodies (kept below the close)."""
+    st = pos.setdefault("ep01_stage", 0)
+    new = [g for g in sd.gaps if g.i == i and g.i - 2 > pos["fill_i"]]
+    for g in new:                                      # the trail under each new gap's bodies
+        b = min(min(sd.o[k], sd.c[k]) for k in range(g.i - 2, g.i + 1)) - p.stop_buffer
+        if b < sd.c[i] and pos.get("ep01_trail_ok"):
+            pos["stop"] = max(pos["stop"], b)
+    if not (can_add and pos["add"] is None and len(tr.adds) < len(p.adds)):
+        return
+    if st == 0 and i > pos["fill_i"] and sd.c[i] > pos["fvg_ce"] > pos["stop"]:
+        pos["ep01_stage"] = 1
+        S._arm_add(pos, tr, pos["fvg_ce"], i, p, ctx.equity)
+        return
+    if st <= 1 and new:
+        g = new[-1]
+        pos["ep01_stage"] = 2
+        pos["ep01_trail_ok"] = True                    # trailing starts with the breakaway gap
+        if g.top > pos["stop"] and add_ok(sd, pos, g.top, i, p):
+            S._arm_add(pos, tr, g.top, i, p, ctx.equity)
+            if pos["add"] is not None:
+                pos["add"]["stop_to"] = min(min(sd.o[k], sd.c[k]) for k in range(g.i - 2, g.i + 1)) - p.stop_buffer
+        return
+    if st == 2:
+        zs = [z for z in _breakers(sd, p) if z.i == i and z.i > pos["fill_i"] and z.top > pos["stop"]
+              and z.top < sd.c[i]]
+        if zs:
+            pos["ep01_stage"] = 3
+            S._arm_add(pos, tr, zs[-1].top, i, p, ctx.equity)
 
 
 def moc_run(ctx, sd, i, p, session, risk_mult):
@@ -728,7 +889,7 @@ def moc_run(ctx, sd, i, p, session, risk_mult):
     sw = dict(session=session, name="moc", level=entry, key="moc", ext=stop + p.stop_buffer, ext_i=i, broke=i,
               sweep_i=i, smt=None, smt2=None, **{SYNTH: True})
     tags = dict(unicorn=False, fvg_bottom=stop, fvg_ce=entry, entry_kind="moc_run", mitigation=False,
-                propulsion=False, market=True, no_leg_wait=True, done_key="MOC")
+                propulsion=False, market=True, no_leg_wait=True, done_key="MOC", skip_po3=not p.synth_po3)
     return S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, entry, tags, skip_leg_pd=True,
                            fixed=[(x, "pool")])
 
@@ -743,9 +904,14 @@ def pm_reversal(ctx, sd, i, p, risk_mult):
     if not (p.pm[0] <= t < p.pm[1]) or not ctx.am_hl:
         return None
     b = -sd.sign
-    if not any(lk.get("side") == b and lk.get("delivered_i") is not None and lk["delivered_i"] <= i
-               for lk in getattr(ctx, "lock", {}).values()):
-        return None
+    locks = [lk for lk in getattr(ctx, "lock", {}).values() if lk.get("side")]
+    if locks:
+        if not any(lk.get("side") == b and lk.get("delivered_i") is not None and lk["delivered_i"] <= i
+                   for lk in locks):
+            return None
+    elif not htf_done_sign(ctx, b, i):
+        return None                  # review fix: no lock (draw_lock off / neutral) -> the htf table's
+                                     # draw the other way traded today is the "objective met"
     k_pm = S._idx_at(ctx, 810)
     am_x = sd.x(ctx.am_hl[1] if sd.sign > 0 else ctx.am_hl[0])
     seg = sd.l[k_pm:i + 1]
@@ -753,6 +919,7 @@ def pm_reversal(ctx, sd, i, p, risk_mult):
         return None
     e = k_pm + int(np.argmin(seg))
     used = sd.__dict__.setdefault("_pmr", set())
+    # the IFVG is the 1m FVG left AT the extreme: formed within 10 bars before it [our interpretation]
     zs = [z for z in sd.ifvgs() if e < z.i <= i and z.src + 1 >= max(k_pm, e - 10) and z.i not in used
           and sd.l[z.i + 1:i + 1].min(initial=np.inf) > z.top]
     if not zs:
@@ -859,6 +1026,55 @@ def _nested(ctx, sd, sw, i, p, tol) -> bool:
     return True
 
 
+CC_PROFILES = {1: ("two_session_up", "am_rally_pm_reversal", "cons_am_rally_pm_decline"),
+               -1: ("two_session_down", "am_decline_pm_reversal", "cons_am_decline_pm_rally")}
+
+
+def cc_profile(ctx, i, p):
+    """T13 [CC] six index day profiles (cc10_013 ~1:21-15:43; cc10_014) classified at 13:30 from
+    bars closed by then [our interpretation of the classification - the source reads them off an
+    HTF array map]: the AM leg (09:30-12:00) = +1 when its low came before its high and it closed
+    above its open (AM rally), -1 the mirror, else unclear; then
+      - consolidation (5 / 6): no release after 10:00 and the AM range < 0.5 x ADR5;
+      - AM rally (decline) into a 4h / daily premium (discount) array = an opposing 4h / D FVG at
+        the AM extreme, known by 13:30 -> PM reversal (3 / 4);
+      - else the two-session trend profile (1 / 2);
+      - NFP days: "seek_destroy" (the exception).
+    Returns (name, PM direction: +1 / -1 / 0) or None before 13:30; cached on ctx."""
+    k810 = S._idx_at(ctx, 810)
+    if i < k810 or k810 >= len(ctx.t):
+        return None
+    if getattr(ctx, "_cc_prof", None) is not None:
+        return ctx._cc_prof
+    if "jobs" in events(ctx.day):
+        ctx._cc_prof = ("seek_destroy", 0)
+        return ctx._cc_prof
+    a, b = S._idx_at(ctx, 570), S._idx_at(ctx, 720)
+    b = min(b, k810)
+    if b - a < 2:
+        ctx._cc_prof = ("unclear", 0)
+        return ctx._cc_prof
+    h, l, o, c = ctx.h[a:b], ctx.l[a:b], ctx.o[a:b], ctx.c[a:b]
+    ih, il = int(np.argmax(h)), int(np.argmin(l))
+    d = 1 if (il < ih and c[-1] > o[0]) else -1 if (ih < il and c[-1] < o[0]) else 0
+    if d == 0:
+        ctx._cc_prof = ("unclear", 0)
+        return ctx._cc_prof
+    from .calendar import release_times
+    adr = S.adr5(getattr(ctx, "hist", [])[-5:])
+    cons = (not any(R >= 600 for R in release_times(ctx.day)) and adr is not None
+            and float(h.max() - l.min()) < 0.5 * adr)
+    at_arr = False
+    conf = getattr(ctx, "conf", None)
+    if conf is not None:
+        now = ctx.idx[k810 - 1] + _tf(ctx)
+        x = float(h.max()) if d > 0 else float(l.min())
+        at_arr = any(tf_ in ("4h", "D") for tf_ in conf.at(now, x, -d))   # the opposing array (real price)
+    name = CC_PROFILES[d][2 if cons else 1 if at_arr else 0]
+    ctx._cc_prof = (name, d if name.startswith("two_session") else -d)
+    return ctx._cc_prof
+
+
 def finish_gates(ctx, sd, sw, i, p, session, entry, tags: dict, lvt: list, lvx: dict) -> bool:
     """setups_models filters on every entry path (False = reject) and their tags."""
     tol = p.eq_tol_pts * p.es_pt
@@ -907,22 +1123,25 @@ def finish_gates(ctx, sd, sw, i, p, session, entry, tags: dict, lvt: list, lvx: 
             S._f("x_three_drives")
             return False
     lh = session == "PM" and p.last_hour[0] <= t < p.last_hour[1]
+    ep01 = sw.get("key") == "pm_ep01"
     if lh and not synth:
-        if p.pm_last_hour_model and not (p.last_hour_sweet[0] <= ctx.t[sw["sweep_i"]] < p.last_hour_sweet[1]
-                                         and t < p.last_hour_sweet[1]):
+        # M5 (review fix, owner #1): the last-hour sweep and the entry inside the owner's window
+        # (15:00-15:50; the 15:15-15:45 sweet spot only with last_hour_strict)
+        wa, wb = lh_window(p)
+        if p.pm_last_hour_model and not (wa <= ctx.t[sw["sweep_i"]] < wb and t < wb):
             S._f("x_lh_window")
             return False
-        if p.lh_start_by and ctx.t[sw["ext_i"]] > p.lh_start_by:
-            S._f("x_lh_start_by")
-            return False
+    if lh and p.lh_start_by and (not synth or ep01) and ctx.t[sw["ext_i"]] > p.lh_start_by:
+        S._f("x_lh_start_by")                 # Ep01.17: the move started by 15:25 (also pm_ep01)
+        return False
     if lh and (p.pm_last_hour_model or lh_on(p, "lh_htf_done_skip")) and htf_done(ctx, sd, i):
         S._f("x_lh_htf_done")
         return False
-    if lh and p.pm_4h_ce:
+    if lh and p.pm_4h_ce and not ep01:        # pm_ep01 tests its own nested pair's 4h CE
         k900 = S._idx_at(ctx, p.last_hour[0])
         h4 = _h4_ce(ctx, sd, i, k900)
-        if h4 is not None and (sd.c[k900:i + 1] <= h4[0]).any():
-            S._f("x_pm_4h_ce")
+        if h4 is None or (sd.c[k900:i + 1] <= h4[0]).any():
+            S._f("x_pm_4h_ce")                # review fix: no 4h FVG below price = no hold either
             return False
     if session == "PM" and not synth and (p.pm_lunch_target or p.pm_lunch_org):
         if sw.get("key") != "lunch":
@@ -941,6 +1160,16 @@ def finish_gates(ctx, sd, sw, i, p, session, entry, tags: dict, lvt: list, lvx: 
         prof = ("up_close" if d_ == 1 and h4_ == 1 else "down_close" if d_ == -1 and h4_ == -1
                 else "consolidation" if d_ == 0 and h4_ == 0 else "reversal")
         lvt.append("profile_" + prof)
+    if p.cc_profile != "off" and session == "PM":     # T13 CC day profiles
+        pr = cc_profile(ctx, i, p)
+        if pr is not None:
+            lvt.append("cc_" + pr[0])
+            if p.cc_profile == "gate":
+                if pr[1] != sd.sign:
+                    S._f("x_cc_profile")
+                    return False
+                if pr[0].startswith("cons"):           # cc10_014 ~13:17: out by ~14:00
+                    tags["exit_at"] = 840
     if p.po3_hold:
         ref = S._open_known(ctx, "1330" if session == "PM" else "midnight", i)
         if ref is not None:
@@ -950,10 +1179,12 @@ def finish_gates(ctx, sd, sw, i, p, session, entry, tags: dict, lvt: list, lvx: 
 
 def sick_sister(ctx, sd, i, p, session, entry):
     """M16.2 sick sister (053 ~1:56-7:57) [our interpretation of the count]: at the session start
-    (09:30 AM / 13:30 PM) count the reference highs (side space: PDH 1-3, overnight, London and
-    prior-PM highs) each index has traded through since midnight; the index with strictly fewer
-    than every sister is the sick one - trade it only, only in the day's discount (below the EQ of
-    midnight -> bar i), targets = its untaken references (exit before the last). None = reject."""
+    (09:30 AM / 13:30 PM) count the reference highs (side space: PDH 1-3, the overnight high =
+    ctx.pd "pmh" (midnight -> 09:30, from the 18:00 reopen with globex_pool), London and prior-PM
+    highs) each index has traded through since midnight; the index with strictly fewer than every
+    sister is the sick one - trade it only, only in the day's DEEP discount (review fix: below
+    sick_depth of the range midnight -> bar i, 0.25 by default [our interpretation of "deep"];
+    0.5 = the EQ, the first build), targets = its untaken references. None = reject."""
     sisters = []
     ps = getattr(ctx, "pside", None)
     if ps is not None and ps[0] is not None:
@@ -990,8 +1221,8 @@ def sick_sister(ctx, sd, i, p, session, entry):
     if not others or not me[0] < min(others):
         S._f("x_not_sick_sister")
         return None
-    eqd = (sd.l[ctx.start:i + 1].min() + sd.h[ctx.start:i + 1].max()) / 2
-    if not entry < eqd:
+    lo_, hi_ = sd.l[ctx.start:i + 1].min(), sd.h[ctx.start:i + 1].max()
+    if not entry < lo_ + p.sick_depth * (hi_ - lo_):
         S._f("x_sick_not_discount")
         return None
     tg = [v for v in me[1] if v > entry]

@@ -164,6 +164,8 @@ def lock_cuts(p: Params) -> set:
         cuts.add(480)
     if p.sb_model and p.sb_london:
         cuts.add(120)
+    if (p.last_hour_own_slot or p.last_hour_setup) and not p.lh_no_lock:
+        cuts.add(p.last_hour[0])                  # setups_models: the own last-hour slot's 15:00 lock
     return cuts
 
 
@@ -244,7 +246,7 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
     eth = None
     ipda_on = p.ipda_pools or p.ipda_next or p.ipda_eq_day != "off"
     if (p.pd_hl_session == "eth" or p.matrix_full or p.wick_session == "eth" or p.pw_pm_full_session
-            or (ipda_on and p.ipda_session == "eth")):
+            or (ipda_on and p.ipda_session == "eth") or (p.ma_deuce and p.md_eth)):   # M15 md_eth (review fix)
         se = htf.sessions(df)                  # full sessions (evening reopen -> close), by trading date
         eth = {t.date(): (float(r.open), float(r.high), float(r.low), float(r.close)) for t, r in se.iterrows()}
     return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth)

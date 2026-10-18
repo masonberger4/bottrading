@@ -66,16 +66,20 @@ def _h1_gap_edge(ctx, sign, k8, beyond):
 
 def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
     from .strategy import (Trade, _first_units, news, day_type, _eff_flat, _stamp_frame,
-                           mark_levels, CF_SRC, blocked, _arm_add, _lots)
+                           mark_levels, CF_SRC, blocked, _arm_add, _lots, _f)
+    # the funnel keys md_* (strategy.FUNNEL) show which gate stops Ma Deuce (setups_models review)
     if len(hist) < 3:
         return []
     if p.md_need_news and news(day) != "0830":
+        _f("md_x_need_news")
         return []                                      # setups_models M15: the release delivers
     if p.md_blocked and ((p.day_filter and blocked(day, "AM", p, 480)) or (p.skip_news and news(day) != "none")):
+        _f("md_x_blocked")
         return []
     oo, hh, ll, cc = _dailies(ctx, hist, p, day, 10 if p.md_big_candle else 4)
     zones = [z for z in L.fvgs(hh, ll) if z.i >= len(hh) - 2]
     if not zones:
+        _f("md_x_no_daily_fvg")
         return []
     z = zones[-1]                                     # the most recent daily FVG
     if p.md_big_candle:                               # M15: one big candle made the gap
@@ -83,6 +87,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
         prior = (hh - ll)[max(0, k - 5):k]
         up = cc[k] > oo[k] if z.kind == "bull" else cc[k] < oo[k]
         if not up or not len(prior) or hh[k] - ll[k] < p.md_big_candle * float(prior.mean()):
+            _f("md_x_big_candle")
             return []
     t = ctx.t
     k8 = ctx.start + int(np.searchsorted(t[ctx.start:], 480))
@@ -95,6 +100,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
     elif z.kind == "bear" and px < z.mid:
         sign = 1                                       # discount of a daily SIBI -> buy
     else:
+        _f("md_x_wrong_half")
         return []
     if sign in getattr(ctx, "block_side", {}).get("year_end", ()):
         return []                                      # owner #3 (off by default)
@@ -114,20 +120,24 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
         if len(after) and (after > g.top).any():
             inv = g                                    # newest one inverted before 08:00
     if inv is None:
+        _f("md_x_no_inverted_fvg")
         return []
     entry = inv.top                                    # near edge from above (side space)
     stop = inv.bottom - p.stop_buffer
     # at 08:00 price must already be past the inverted gap (the retest comes later)
     if sc[k8 - 1] <= entry:
+        _f("md_x_not_past_at_0800")
         return []
     risk = entry - stop
     if not (p.min_risk_pts * p.es_pt <= risk <= p.max_risk_pts * p.es_pt):
+        _f("md_x_risk")
         return []
     lock = None
     if p.draw_lock == "session":                       # owner #9 [our interpretation]: Ma Deuce
         lock = mark_levels(ctx, getattr(ctx, "bias_by_cut", {}).get(480), 480, "MD", p, ())
         ctx.lock["MD"] = lock                          # decides at 08:00 - its own 08:00 lock
         if (lock["side"] == 0 and p.draw_lock_neutral == "skip") or (lock["side"] and lock["side"] != sign):
+            _f("md_x_lock_side")
             return []
         if lock["side"]:
             tv = sign * lock["target"]
@@ -135,27 +145,45 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
                 else tv - p.exit_before_pts * p.es_pt
             target = min(target, T)                    # the nearer of the CE and the draw
     capped = False
+    cap = np.inf                                       # the hard ceiling of every ladder rung
+    if lock is not None and lock["side"]:
+        cap = T
     if p.htf_resist_cap and getattr(ctx, "conf", None) is not None:      # owner #7 at 08:00
         r = ctx.conf.resistance(ctx.idx[k8], sign * entry, sign, p.htf_resist_tfs,
                                 tuple(CF_SRC[x] for x in p.htf_resist_src))
         if r is not None:
             capx = sign * r[0] - p.htf_resist_buffer_pts * p.es_pt
+            cap = min(cap, capx)
             if capx < target:
                 if capx - entry < p.sb_room_pts * p.es_pt:
+                    _f("md_x_htf_resist")
                     return []
                 target, capped = capx, True
     # side space: the target (the daily gap's CE) lies beyond the entry for both directions
     if target - entry < p.sb_room_pts * p.es_pt:
+        _f("md_x_room")
         return []
     levels = [target]
-    if p.md_ladder and not capped and not (lock is not None and lock["side"]):   # M15 ladder (no lock)
+    if p.md_ladder:
+        # M15 ladder: CE, lower quadrant, the 1h BISI low. Review fix: no longer switched off under
+        # the #9 lock / #7 cap - every rung is capped at the locked draw (one exact target, owner
+        # #9) and at the HTF resistance (#7); the cap itself is the last rung when it cuts the
+        # ladder [our interpretation]
         quad = sign * (z.bottom + 0.25 * (z.top - z.bottom) if sign < 0 else z.top - 0.25 * (z.top - z.bottom))
-        h1 = _h1_gap_edge(ctx, sign, k8, max(quad, target))
-        levels = sorted({v for v in (target, quad, h1) if v is not None and v > entry})
+        h1 = _h1_gap_edge(ctx, sign, k8, max(quad, sign * z.mid))
+        raw = sorted({v for v in (sign * z.mid, quad, h1) if v is not None and v > entry})
+        levels = [v for v in raw if v < cap - p.es_pt]
+        if np.isfinite(cap) and (not levels or max(raw) >= cap - p.es_pt):
+            levels.append(float(cap))
+        levels = levels or [target]
     chop = getattr(ctx, "chop", None)
     sloppy = set(r for r in getattr(ctx, "sl_day", ()) if not r.endswith(":PM"))
+
+    def scalp_cap(lv_, t_):                            # #10 scalp: every rung capped at +scalp pts
+        s_ = entry + p.sloppy_scalp_pts * p.es_pt      # (review fix: the ladder too, not only target)
+        return sorted({min(v, s_) for v in lv_}), min(t_, s_)
     if p.sloppy_mode == "scalp" and sloppy:
-        target = min(target, entry + p.sloppy_scalp_pts * p.es_pt)      # #10 scalp mode
+        levels, target = scalp_cap(levels, target)     # #10 scalp mode
     shares = _first_units(p, ctx.equity, risk, entry)
     if shares < 1:
         return []
@@ -171,12 +199,13 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
             if i >= k830:
                 return []
             if p.sloppy_mode == "stand_aside" and chop is not None and chop.active_before(i):
+                _f("md_x_chop")
                 return []                              # #10: chop known before this bar
             if sl[i] <= entry:                       # retest fills the limit
                 fill = min(entry, so[i])
                 on_chop = chop is not None and chop.active_before(i)
                 if p.sloppy_mode == "scalp" and on_chop:
-                    target = min(target, entry + p.sloppy_scalp_pts * p.es_pt)
+                    levels, target = scalp_cap(levels, target)
                 tag = "|".join(sorted(sloppy | ({"chop"} if on_chop else set())))
                 tr = Trade(day, symbol, "AM", "ma_deuce", "long" if sign > 0 else "short", "daily_fvg",
                            False, None, ctx.idx[k8], ctx.idx[i], x(fill), x(stop), x(levels[0] if len(levels) > 1 else target),

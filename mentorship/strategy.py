@@ -524,8 +524,11 @@ class Params:
     # All OFF by default (the old behaviour) unless noted. Bullish wording; shorts mirror.
     # A19 / Ep08.4 / A19.2 MSS reference (mss_ref also takes "parent" / "origin", see _mss_ref)
     #   "parent" (A19, 010 ~41:31) the start of the staircase of lower swing highs into the sweep
-    #   "origin" (Ep08.4, Ep 08 ~MSS validity) the highest swing high between the swept level's
-    #            creation and the sweep extreme [our interpretation of both]
+    #   "origin" (Ep08.4, Ep 08 ~MSS validity) the swing high that started the down-leg into the
+    #            sweep extreme: walked back from ext_i while no close went above it and no higher
+    #            swing low intervened (review fix: anchored at ext_i) [our interpretation]
+    #   "origin_max" the first build's rule: the highest swing high between the swept level's
+    #            creation and the sweep extreme [our interpretation]
     mss_eq_wait: bool = False            # A19.2 (044 ~42:55): with relative equal lows, no MSS until the
                                          # lower one (within eq_tol below the swept level) is taken too
     mss_on_side: str = "off"             # A19.4 / Ep04.7 (006 ~49:16; Ep 04 ~49:29) two MSSs each leaving an
@@ -592,8 +595,9 @@ class Params:
     cc_fail_pts: float = 5.0             # [our interpretation] "failed to reach" = within N ES pts above the pool
     # M5 / M5.1 / M5.2 / Ep01.13 / Ep01.16 / Ep01.17 / T10 last hour (owner #1 windows)
     last_hour_own_slot: bool = False     # M5.2 / Ep01.13: the last hour is its own slot (LH), apart from PM
-    pm_last_hour_model: bool = False     # M5 (030; 032 ~56:57): LH sweeps 15:15-15:45 only, no entries
-                                         # after 15:45, skip once the HTF objective is done
+    pm_last_hour_model: bool = False     # M5 (030; 032 ~56:57): the 2022 model in the last hour - LH sweeps
+                                         # and entries inside owner #1's 15:00-15:50 (15:15-15:45 only with
+                                         # last_hour_strict), skip once the HTF objective is done
     pm_ep01: bool = False                # M5.1 (001 ~39:03-45:20): nested 4h/1h FVG, refusal at the 1h low,
                                          # breakaway FVG, buy its top, stop below the FVG candle open, one exit
     last_hour_setup: bool = False        # Ep01.13: = last_hour_own_slot + lh_unengaged + lh_htf_done_skip
@@ -701,6 +705,42 @@ class Params:
     md_need_news: bool = False           # an 08:30 release must deliver it
     md_eth: bool = False                 # daily candles from full ETH sessions
     md_blocked: bool = False             # route Ma Deuce through blocked() / skip_news
+    # --- setups_models review pass (2026-10-18; build_log.md "setups_models review fixes") --------
+    ob_pre_gate: str = "cancel"          # owner #11 x the MSS gates (A20 disp_*, M0.4, Ep07.6 mss_max_bars /
+                                         # mss_disp, M1.3 speed_check, A19.2 mss_eq_wait, Ep01.22 clean_*, M1.2
+                                         # displacement_mult, A7 imm_rebalance_disp, the mss_ref variants): the
+                                         # default pre-break OB order is armed BEFORE the break, so these gates
+                                         # act on it through the break its sweep prints later. "cancel": a break
+                                         # that fails them (or the sweep dropped by the timing gates) cancels the
+                                         # still-pending OB order; "hold": the OB order fills only after the
+                                         # gated MSS printed (entry at the OB after the MSS - contradicts #11's
+                                         # "before the break", a contested alternative); "off": the first build
+                                         # (gates inert for the OB order). Every gate is off by default, so
+                                         # the default trades do not change [our interpretation]
+    synth_po3: bool = False              # T10 moc_run / M11a ir / M5.1 pm_ep01 / M16.1 smt_entry skip the PO3
+                                         # open filter (use_bias): they join a run in progress, and the CC
+                                         # SMT model predates PO3 [our interpretation]; True = the first build
+    lh_no_lock: bool = False             # M5.2 / Ep01.13 own LH slot: False (owner #9) = the slot locks its
+                                         # own draw at 15:00; True = the first build (no lock once the PM
+                                         # draw was delivered)
+    pm_ep01_adds: bool = False           # M5.1 (001 ~37:45-45:02): the Ep 01 add sequence (in the FVG, in the
+                                         # breakaway gap -> stop below its bodies, on a breaker) and trail
+                                         # under the bodies of each new FVG, instead of the generic adds
+    sick_depth: float = 0.25             # M16.2 "deep discount" [our interpretation]: entry below this
+                                         # fraction of the day's range (0.5 = the EQ, the first build)
+    mmxm_rel_eq: bool = False            # Ep05.8 (the MM model's liquidity = relative equal lows / highs):
+                                         # the MMXM sweep must be of a relative-equal pool
+    implied_fvg: bool = False            # A24.1 (035 ~29:46) implied FVGs (wick-CE to wick-CE across a
+                                         # displacement candle whose outer wicks overlap) are entry gaps too
+                                         # [our interpretation: named once, never defined]
+    adv_breaker_pre: bool = False        # M4.3 (070 ~34:59) "with bias on side buy inside the A-B leg ...
+                                         # without waiting for the break": with the bias this way (lock side
+                                         # / htf_bias), the first close back above A after the run below it ->
+                                         # market entry, stop beyond L2, target B + 1x(B-A) [our interpretation]
+    cc_profile: str = "off"              # T13 [CC] (cc10_013 / cc10_014) the six index day profiles classified
+                                         # at 13:30 from the AM: "tag" (lv_tags cc_<profile>) / "gate" (PM
+                                         # trades only in the profile's PM direction; consolidation profiles
+                                         # out by 14:00) [our interpretation of the classification]
 
     def __post_init__(self):
         if self.unicorn_sides not in ("both", "long", "short"):
@@ -724,7 +764,7 @@ class Params:
                          ("ts_entry", ("array", "level")), ("round_pool_from", ("session", "midnight")), ("ts_stop", ("array", "gap", "ext")),
                          ("stop_flip", ("off", "breaker", "smt")),
                          # levels_detectors
-                         ("ipda_eq_day", ("off", "tag", "skip")), ("mss_ref", ("stl", "itl", "ltl", "parent", "origin")),
+                         ("ipda_eq_day", ("off", "tag", "skip")), ("mss_ref", ("stl", "itl", "ltl", "parent", "origin", "origin_max")),
                          ("ipda_session", ("rth", "eth")),
                          ("mss_ref_fallback", ("lower", "highest", "none")),
                          ("pd_hl_session", ("rth", "eth")), ("matrix_days", ("bot", "ict")),
@@ -743,7 +783,8 @@ class Params:
                          ("cc_swings", ("off", "breaker", "failure", "both")), ("ifvg_entry", ("edge", "ce")),
                          ("ote", ("off", "filter", "limit")), ("smt_pick", ("first", "leader", "laggard")),
                          ("news_profile", ("off", "tag", "require")), ("nfp_sd", ("off", "tag", "skip")),
-                         ("candle_draw_bias", ("off", "daily", "weekly"))):
+                         ("candle_draw_bias", ("off", "daily", "weekly")),
+                         ("ob_pre_gate", ("off", "cancel", "hold")), ("cc_profile", ("off", "tag", "gate"))):
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
         bad = [x for x in self.htf_resist_src if x not in CF_SRC]       # review: validate here, not
@@ -1040,6 +1081,11 @@ class Side:
         """A15 opposing (bearish, side space) mitigation blocks - targets above a long."""
         return self._lazy("opp_mit", lambda: [z for z in L.mitigation_blocks(self.o, self.h, self.l, self.c, self.n,
                                                                              self.mit_legacy) if z.kind == "bear"])
+
+    def implied(self):
+        """A24.1 implied FVGs (bull kind, side space; setups_models implied_fvg)."""
+        return self._lazy("implied", lambda: [z for z in L.implied_fvgs(self.o, self.h, self.l, self.c)
+                                              if z.kind == "bull" and z.top - z.bottom >= self.min_gap])
 
     # lazily built arrays (only the switches that use them pay for them)
     def ifvgs(self):
@@ -2211,6 +2257,11 @@ def _lock_times(p, day, pre_windows) -> dict:
     out = {"AM": max([a] + rs), "PM": p.pm[0] or 810}
     for name, a_, _ in pre_windows:
         out[name] = 420 if name == "PRE7" else 540
+    if _SM.lh_on(p, "last_hour_own_slot") and not p.lh_no_lock:
+        # setups_models review fix (owner #9 x M5.2 / Ep01.13): the own last-hour slot locks ITS
+        # draw at 15:00 (bars closed by then, htf table cut at 15:00), like the MD / SB own locks
+        # [our interpretation, owner open question 3]
+        out["LH"] = p.last_hour[0]
     return out
 
 
@@ -2600,6 +2651,11 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                     tr.adds.append((ts, sd.x(px), a["q"]))
                     pos["left"] += a["q"]; pos["basis"] += px * a["q"]; pos["n"] += a["q"]
                     pos["add"] = None
+                    if a.get("stop_to") is not None and a["stop_to"] < px:
+                        pos["stop_to_next"] = (a["stop_to"], i)   # M5.1: from the next bar (stop already
+                                                             # tested on this bar after the fill)
+            if pos.get("stop_to_next") is not None and pos["stop_to_next"][1] < i:   # M5.1 Ep 01: after the
+                pos["stop"] = max(pos["stop"], pos.pop("stop_to_next")[0])   # breakaway-gap add, below its bodies
             stop = pos["stop"]
             if p.ambiguous == "target" and o > stop and not pos["t1_done"] and h >= pos["t1"]:
                 stop = -np.inf                        # optimistic bound: target before stop
@@ -2651,7 +2707,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             if pos["left"] and p.ep07_trail and not pos.get("trailed") and h > pos["swing_body"]:
                 pos["stop"] = max(pos["stop"], pos["retr_low"] - p.stop_buffer)
                 pos["trailed"] = True
-            if pos["left"] and p.ce_hold and i > pos["fill_i"] and c < pos["fvg_ce"] and not pos["t1_done"]:
+            if (pos["left"] and (p.ce_hold or pos.get("ce_hold")) and i > pos["fill_i"] and c < pos["fvg_ce"]
+                    and not pos["t1_done"]):
                 tr.exits.append((ts, sd.x(c), pos["left"], "ce_close")); pos["left"] = 0
             if (pos["left"] and pos.get("bz_mt") is not None and i > pos["fill_i"]
                     and (not pos["t1_done"] or p.breaker_mt_exit_after_t1) and c < pos["bz_mt"]):
@@ -2720,6 +2777,9 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 new = [g for g in sd.gaps if g.i == i and g.i - 2 > pos["fill_i"]]
                 can_add = (p.adds and not pos["t1_done"] and pos["add"] is None and not pos.get("no_adds")
                            and not (chop.on and p.sloppy_mode == "stand_aside"))
+                if p.pm_ep01_adds and pos.get("kind") == "pm_ep01":
+                    _SM.ep01_manage(ctx, sd, pos, tr, i, p, bool(can_add))   # M5.1: the Ep 01 sequence
+                    new, can_add = [], False
                 if new:
                     g = new[-1]
                     if p.trail or (p.mgmt == "ladder" and p.ladder_trail == "fvg" and pos["t1_done"]
@@ -2754,6 +2814,12 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 pending = None
             elif ob_pre and i - 1 > pending["i"] and sd.c[i - 1] < pending["ob_body_low"]:
                 pending = None                       # #11: a close below the OB bodies (bar i-1)
+            elif (ob_pre and pending.get("sw_ref") is not None and pending["sw_ref"].get("ob_void")
+                  and pending["sw_ref"].get("ext_i") == pending.get("sw_ext_i")):
+                pending = None                       # setups_models: the break failed the MSS gates
+            elif (ob_pre and pending.get("ob_hold") and not (pending["sw_ref"].get("broke") is not None
+                                                             and pending["sw_ref"].get("ext_i") == pending.get("sw_ext_i"))):
+                pass                                 # ob_pre_gate "hold": no fill before the gated MSS
             elif ("release_open" in (pending.get("lvx") or {}) and i - 1 > pending["i"]
                   and sd.c[i - 1] < pending["lvx"]["release_open"][0]):
                 pending = None                       # T2 (review fix): bar i-1 closed below the 08:30 open
@@ -2785,6 +2851,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                            fracs=(1.0,) if o.get("scalp") else (o.get("fracs") or _split(p, ctx, hist, day, i, t)),
                            leg=o.get("leg"), bz_side=o.get("bz_side"), kind=o.get("entry_kind"),
                            exit_at=o.get("exit_at"), runner=o.get("runner", False), po3_open=o.get("po3_open"),
+                           ce_hold=o.get("ce_hold", False),
                            **_swing_ref(sd, o["ext_i"], i))
                 if pos["runner"]:                    # Ep04.3: the last fraction has no target
                     lv0 = pos["levels"][:-1] if (pos["final_T"] and len(pos["levels"]) > 1) else pos["levels"]
@@ -2792,7 +2859,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 if p.mss_on_side == "tag" and _SM.on_side_since(sd, o, i):   # A19.4
                     tr.lv_tags = "|".join(x for x in (tr.lv_tags, "on_side") if x)
                 done[o.get("done_key", o["session"])] = True
-                lk = ctx.lock.get(o["session"])
+                lk = ctx.lock.get("LH" if o.get("done_key") == "LH" and "LH" in ctx.lock else o["session"])
                 if lk is not None:
                     lk["traded"] = True
                 pending = None
@@ -2879,13 +2946,15 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                     break
             if skip_main or armed:
                 continue
-        lk = ctx.lock.get(session) if lock_t else None
-        if lock_t and session in lock_t and lk is None:
+        lks = "LH" if (lh_slot and "LH" in lock_t) else session   # the own LH slot has its own lock
+        lk = ctx.lock.get(lks) if lock_t else None
+        if lock_t and lks in lock_t and lk is None:
             continue                                  # #9: not locked yet - nothing to trade toward
         if lk is not None and lk["delivered"]:
-            if not (lh_slot and not _SM.lh_on(p, "lh_htf_done_skip") and not p.pm_last_hour_model):
-                continue
-            lk = None                                 # own LH slot: the PM draw no longer gates it
+            if not (lh_slot and p.lh_no_lock and not _SM.lh_on(p, "lh_htf_done_skip") and not p.pm_last_hour_model):
+                continue                              # #9: the session's draw delivered - done
+            lk = None                                 # lh_no_lock (the first build, a switch): the LH
+                                                      # slot trades on without a locked draw
         if p.ipda_eq_day == "skip":                   # B21: range day until the first release
             if session not in state.setdefault("ipda_eq", {}):
                 state["ipda_eq"][session] = _ipda_eq(ctx, p, i)
@@ -3032,7 +3101,8 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
     for s_, tl in lock_t.items():
         if s_ not in ctx.lock and t >= tl:
             row = (bias_by_cut or {}).get(tl)
-            lk = mark_levels(ctx, row, tl, s_, p, spent)
+            lk = mark_levels(ctx, row, tl, "PM" if s_ == "LH" else s_, p, spent)   # LH: a PM mark-up
+            lk["session"] = s_
             ctx.lock[s_] = lk
             if lk["side"] == 0 and p.draw_lock_neutral == "skip":
                 done[s_] = True
@@ -3042,7 +3112,9 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
         if lk["name"] == "org_far" and _org_break(ctx, p, i):
             # L7 (review fix): the ORG acted as a breakaway (no attempt by 09:30 + org_break_min) -
             # its far edge is no longer the draw: the lock as marked at its time without it
-            nl = mark_levels(ctx, (bias_by_cut or {}).get(lk["t_lock"]), lk["t_lock"], s_, p, spent, org_pref=False)
+            nl = mark_levels(ctx, (bias_by_cut or {}).get(lk["t_lock"]), lk["t_lock"], "PM" if s_ == "LH" else s_, p,
+                             spent, org_pref=False)
+            nl["session"] = s_
             nl.update(org_break_i=i, traded=lk["traded"])   # (the lock report shows the replacement)
             lk = nl
             ctx.lock[s_] = lk
@@ -3055,11 +3127,12 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
             lk.update(delivered=True, delivered_t=ctx.idx[i], delivered_i=i)
             spent.append(lk["target"])
             _f("x_draw_delivered")
-            if pending is not None and pending["session"] == s_:
+            if pending is not None and ("LH" if pending.get("done_key") == "LH" else pending["session"]) == s_:
                 pending = None
             if p.draw_relock:                         # test: lock the next draw from here
                 all_locks.append(lk)
-                nl = mark_levels(ctx, None, int(t + ctx.tf), s_, p, spent)
+                nl = mark_levels(ctx, None, int(t + ctx.tf), "PM" if s_ == "LH" else s_, p, spent)
+                nl["session"] = s_
                 ctx.lock[s_] = nl
                 if nl["side"] == 0 and p.draw_lock_neutral == "skip":
                     done[s_] = True
@@ -3226,7 +3299,7 @@ def _mss_ref(ctx, sd, sw, i, p):
     sweep extreme known by bar i; mss_ref_fallback "lower" tries the lower tiers, then (like
     "highest") the highest high of the 3*pivot_n bars before the extreme (the old rule); "none" =
     no reference. Returns (ref_i, ref, real_pivot) or None."""
-    if p.mss_ref in ("parent", "origin") or p.mss_ref_sibi or p.mss_ref_tf:
+    if p.mss_ref in ("parent", "origin", "origin_max") or p.mss_ref_sibi or p.mss_ref_tf:
         r = _SM.mss_ref(ctx, sd, sw, i, p)      # setups_models A19 / Ep08.4 / Ep07.6 / Ep08.16
         if r is not None:
             return r
@@ -3295,6 +3368,24 @@ def _breaker_order(ctx, sd, sw, bz, i, p, session, risk_mult):
                          sd.h[sw["ext_i"]:i + 1].max(), tags, pctx_free=True)
 
 
+def _fvg_wait_from(sw) -> int:
+    """The bar the no-FVG timeout (fvg_wait) runs from: the MSS bar, or with Ep04.7
+    mss_on_side="require" ready, the SECOND break (review fix: the first one emptied the leg-2
+    gap list at once unless its FVG already existed on the second-break bar)."""
+    if sw.get("leg2_from") is not None and sw.get("broke2") is not None:
+        return sw["broke2"]
+    return sw["broke"]
+
+
+def _smt_window_ok(p, t: int) -> bool:
+    """B18.2: SMT only inside smt_windows (+ 05:00-09:30 with smt_pre); no windows = any time
+    (review fix: smt_pre alone used to narrow "any time" to 05:00-09:30)."""
+    if p is None or not p.smt_windows:
+        return True
+    wins = tuple(p.smt_windows) + (((300, 570),) if p.smt_pre else ())
+    return any(a <= t < b for a, b in wins)
+
+
 def _fvg_state(sd, g, i) -> str:
     """A5 state of a gap at bar i (021 ~12:28; 050 ~30:29): "open" untouched since it formed,
     "repriced" traded into, "rebalanced" traded through its far edge (and left: still open by
@@ -3337,7 +3428,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     if l[i] < sw["ext"]:
         sw.update(ext=l[i], ext_i=i, broke=None, ob=None, ob_sent=False, ob_frozen=False, ts_sent=False,
                   ts_ok=False, follow_i=None, wce_sent=False, cisd_sent=False, leg2_from=None, broke2=None,
-                  on_side=False)
+                  on_side=False, f1=None, reaper_dead=False, ob_void=False, adv_pre_sent=False, smt_sent=False)
     if p.ts_gate_mss and sw["broke"] is None:    # M12.5: the depth/back test gates the MSS / OB model
         if not sw.get("ts_ok"):
             sw["ts_ok"] = L.turtle_soup(l, c, sw["level"], sw["ext_i"], i, p.ts_max_pts * p.es_pt, p.ts_back_bars)
@@ -3357,22 +3448,32 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
             ref = float(sd.o[blk.src])
     if sw["broke"] is None:
         if (p.mss_max_bars or p.speed_check) and _SM.drop_before_break(ctx, sd, sw, i, p):
-            sd.sweep = None                   # setups_models Ep07.6 / M1.3 timing
-            return None
+            sw["ob_void"] = True              # review fix (owner #11 x gates): the OB order armed
+            sd.sweep = None                   # before the break is cancelled with the sweep
+            return None                       # setups_models Ep07.6 / M1.3 timing
         order = None
         if p.smt_entry or p.cisd_ob_entries or p.wick_ce_entries:   # setups_models M16.1 / M11b / M11c
             order = _SM.pre_break(ctx, sd, sw, i, p, session, risk_mult, ref)
+            if order is not None:             # review fix: the model's own entry is not replaced by
+                sw["ob_sent"] = True          # the #11 OB order armed on a later bar [our interpretation]
+        if order is None and p.adv_breaker_pre and not sw.get("adv_pre_sent"):     # M4.3 bias on side
+            order = _SM.adv_breaker_pre(ctx, sd, sw, i, p, session, risk_mult, ref_i, ref, real_ref)
+            if order is not None:
+                sw["ob_sent"] = True          # [our interpretation] it takes the OB order's place
         if order is None and p.ob_entry in ("pre_break", "both") and not sw.get("ob_sent"):
             order = _ob_pre(ctx, sd, sw, i, p, session, risk_mult)      # owner #11 (default)
         if order is None and p.turtle_soup and not sw.get("ts_sent"):
             order = _turtle(ctx, sd, sw, i, p, session, risk_mult)      # M12 core (off)
         fi, brk_i = sw.get("follow_i"), i
+        gate_fail = False                # a close through the reference that the MSS gates reject
         if fi is not None:               # A20 disp_follow: the bar after the break must follow
             sw["follow_i"] = None
         if fi is not None and i == fi + 1 and c[i] > c[fi]:
             brk, brk_i = True, fi
         else:
-            brk = i > sw["ext_i"] and (h[i] if p.mss_mode == "wick" else c[i]) > ref
+            gate_fail = fi is not None   # the follow-through failed
+            raw = i > sw["ext_i"] and (h[i] if p.mss_mode == "wick" else c[i]) > ref
+            brk = raw
             if brk and p.displacement_mult:  # M1.2 option: the breaking candle must displace
                 body = abs(c[i] - sd.o[i])
                 prev = np.abs(c[max(0, i - 10):i] - sd.o[max(0, i - 10):i])
@@ -3385,8 +3486,16 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
                 _f("x_no_imm_rebalance")
             if brk:                          # setups_models A20 / M0.4 / Ep07.6 / A19.2 / Ep01.22
                 brk = _SM.break_ok(ctx, sd, sw, i, p, ref, lv, tol, tk)
+            if raw and not brk:
+                gate_fail = True
             if brk and p.disp_follow:
                 sw["follow_i"], brk = i, False
+        if gate_fail and p.ob_pre_gate == "cancel":
+            # review fix (owner #11 x setups_models MSS gates): the break the OB order was armed for
+            # failed the displacement / MSS-validity gates - the pending OB order of this sweep is
+            # cancelled at the next bar (run_day, before any fill there) [our interpretation]
+            sw["ob_void"] = True
+            _f("x_ob_pre_gate")
         if brk:
             sw["broke"] = brk_i
             _f("2_mss")
@@ -3436,6 +3545,10 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
             gaps = [g for g in gaps if any(g.overlaps(z) for z in live5)]
     if p.ifvg_entries:                 # bearish gaps inverted by the move up from the sweep
         gaps = sorted(gaps + [z for z in sd.ifvgs() if sw["ext_i"] < z.i <= i], key=lambda z: z.i)
+    imp = []
+    if p.implied_fvg:                  # setups_models A24.1: implied FVGs of the leg are entry gaps too
+        imp = [z for z in sd.implied() if z.i <= i and z.i - 2 >= sw["ext_i"]]
+        gaps = sorted(gaps + imp, key=lambda z: z.i)
     # Ep01.5 / Ep02.9 breakaway gap: the first FVG formed at / after the structure break
     ba = next((g for g in sd.gaps if g.i >= sw["broke"] and g.i - 2 >= sw["ext_i"] and g.i <= i), None)
     if p.breakaway == "next_fvg" and ba is not None:
@@ -3466,7 +3579,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
             return _breaker_order(ctx, sd, sw, bz, i, p, session, risk_mult)
     if not gaps:
         wait = p.fvg_wait * (p.setup_minutes // ctx.tf if p.entry_tf == "5m" and ctx.tf < p.setup_minutes else 1)
-        if i - sw["broke"] >= wait:
+        if i - _fvg_wait_from(sw) >= wait:
             sd.sweep = None
             _f("x_no_fvg_after_mss")
             if p.entry_arrays or p.reclaimed_ob:      # setups_models M0.5: any PD array, not only FVGs
@@ -3515,6 +3628,11 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         elif uo and (p.unicorn_open_only or p.unicorn_only or p.unicorn_rules or p.unicorn_entry != "edge"):
             sm_tags.append("unicorn_open")
     pick = (uni or fresh) if p.unicorn_pref else fresh   # D6 unicorn_pref
+    if p.unicorn_only:                         # A14 / Ep05.4 review fix: pick among the unicorns
+        if not uni:                            # (a fresh non-unicorn gap no longer rejects a
+            _f("x_unicorn_only")               # setup that has a unicorn)
+            return None
+        pick = uni
     if p.fvg_pick == "2022":                   # setups_models M2 / M2.3
         g = _SM.pick_2022(ctx, sd, sw, pick, i, p)
     else:
@@ -3524,6 +3642,9 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         return None
     if p.mmxm_breaker and bz is None:          # Ep05.8: the smart money reversal leaves a breaker
         _f("x_mmxm_breaker")
+        return None
+    if p.mmxm_rel_eq and not str(sw.get("key", "")).startswith("rel_eq"):
+        _f("x_mmxm_rel_eq")                    # Ep05.8: the MM model runs relative equal lows (highs)
         return None
     top, bottom = g.top, g.bottom
     vi_exact = None
@@ -3554,7 +3675,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         if nvi >= p.vi_porous_n:
             _f("x_vi_porous")
             return None
-    is_ifvg = p.ifvg_entries and g not in sd.gaps
+    is_imp = any(g is z for z in imp)
+    is_ifvg = p.ifvg_entries and g not in sd.gaps and not is_imp
     mit = any(z.i <= i and g.overlaps(z) for z in sd.mitigations()) if p.tag_blocks else False
     prop = any(z.i <= i and z.bottom <= g.top and z.top >= sw["ext"] for z in sd.propulsions()) if p.tag_blocks else False
     # order block: the blended last down-close candle(s) before the structure break (A12)
@@ -3603,8 +3725,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     lvx = {}
     if is_ifvg and p.ifvg_hold:
         lvx["ifvg_fail"] = (g.bottom, True)    # A8: a body close back below the IFVG
-    if p.mmxm_ctx:
-        lvx["mmxm_ce"] = ((top + bottom) / 2, True)    # Ep05.8: fails to hold the imbalance's CE
+    ce_hold_ = bool(p.mmxm_ctx)                # Ep05.8: fails to hold the imbalance's CE = the ce_hold
+                                               # rule (review fix: reused, no new exit)
     if sw.get("on_side"):
         lvt.append("on_side")
     if ba is not None and g is ba and p.breakaway in ("tag", "hold"):
@@ -3616,7 +3738,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     ir = _ir_in_leg(sd, sw, i, p)
     tags = dict(unicorn=bool(uni) and g in uni if not p.unicorn_pref else bool(uni), fvg_bottom=bottom,
                 fvg_ce=(top + bottom) / 2,
-                entry_kind="ifvg" if is_ifvg else "fvg", mitigation=bool(mit), propulsion=bool(prop),
+                entry_kind="ifvg" if is_ifvg else "implied_fvg" if is_imp else "fvg", mitigation=bool(mit),
+                propulsion=bool(prop), ce_hold=ce_hold_,
                 unicorn_side=("bull" if sd.sign > 0 else "bear") if (uni and (p.unicorn_pref or g in uni)) else "",
                 bz_top=None if bz is None else float(max(sd.x(bz.top), sd.x(bz.bottom))),
                 bz_bottom=None if bz is None else float(min(sd.x(bz.top), sd.x(bz.bottom))),
@@ -3708,7 +3831,10 @@ def _ob_pre(ctx, sd, sw, i, p, session, risk_mult):
         stop = sw["ext"] - p.stop_buffer        # [our interpretation] fallback to the sweep extreme
     tags = dict(unicorn=False, fvg_bottom=ob["body_low"], fvg_ce=ob["mt"], entry_kind="ob_pre",
                 mitigation=False, propulsion=False, ob_pre=True, ob_body_low=ob["body_low"],
-                ob_lo=ob["lo"])
+                ob_lo=ob["lo"],
+                # setups_models review fix: the sweep this order belongs to, so the MSS gates acting
+                # at the later break can cancel (ob_pre_gate "cancel") or release ("hold") it
+                sw_ref=sw, sw_ext_i=sw["ext_i"], ob_hold=p.ob_pre_gate == "hold")
     return _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult,
                          sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True)
 
@@ -3981,7 +4107,11 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     if not (p.min_risk_pts * p.es_pt <= risk <= p.max_risk_pts * p.es_pt):
         _f("x_risk_too_small" if risk < p.min_risk_pts * p.es_pt else "x_risk_too_big")
         return None
-    if p.use_bias:                       # T2 / D22 bias_open: the AM reference open
+    # setups_models review fix (T10 / M11a / M5.1): moc_run joins the run at 15:40, the IR entry
+    # enters at once in the trend and the Ep 01 last hour buys in the PM run - the PO3 open filter
+    # does not gate them unless synth_po3 (the first build's behaviour) [our interpretation]
+    skip_po3 = bool(tags.pop("skip_po3", False))
+    if p.use_bias and not skip_po3:      # T2 / D22 bias_open: the AM reference open
         ref_open = _open_known(ctx, "1330" if session == "PM" else p.bias_open, i)
         if ref_open is None and session != "PM":     # review fix: a pre-09:30 window (PRE7 / PRE9 /
             ref_open = _open_known(ctx, "midnight", i)   # NEWS) reads the midnight open until it prints
@@ -4293,7 +4423,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             order["level_kinds"] = order["level_kinds"][:js[0] + 1]
             order["final_T"] = False
     if p.pm_last_hour_model and lh_ and "cut" not in order:
-        order["cut"] = p.last_hour_sweet[1]      # M5: no entries after 15:45
+        order["cut"] = _SM.lh_window(p)[1]       # M5: the owner #1 window end (15:50; strict 15:45)
     if p.po3_runner:
         order["runner"] = True                   # Ep04.3: the last fraction rides to the close
     return order
@@ -4305,10 +4435,8 @@ def _smt(ctx, sd, i, key, level, session, pctx, psides, ppos, p=None):
     (swing lows are keyed by bar index - no twin)."""
     if pctx is None:
         return None
-    if p is not None and (p.smt_windows or p.smt_pre):   # setups_models B18.2: SMT windows
-        wins = tuple(p.smt_windows) + (((300, 570),) if p.smt_pre else ())
-        if not any(a <= ctx.t[i] < b for a, b in wins):
-            return None
+    if not _smt_window_ok(p, ctx.t[i]):    # setups_models B18.2: SMT windows (smt_pre adds 05:00-09:30)
+        return None
     ps = psides[sd.sign]
     j = ppos.index.searchsorted(ctx.idx[i], side="right") - 1
     if j < pctx.start:
