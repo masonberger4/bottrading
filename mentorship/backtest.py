@@ -130,7 +130,7 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             n_wk = sum(1 for r in rows if r["date"].isocalendar()[:2] == wk) if p.max_trades_week else 0
             if p.max_trades_week and n_wk >= p.max_trades_week:
                 continue
-            day_trades = run_day(g, [rth(x) for x in ds[max(0, k - 21):k]], symbol, p, tf, pa, bias=b, conf=cf,
+            day_trades = run_day(g, [rth(x) for x in ds[max(0, k - 45):k]], symbol, p, tf, pa, bias=b, conf=cf,
                                  gaps=htf.gaps_for_day(og, d, p.nwog_keep, p.nwog_days) if og is not None else None,
                                  closes=closes, evening=_evening(df, d) if p.globex_pool else None,
                                  partner2=pa2, intermarket=(intermarket or INTERMARKET()).get(d))

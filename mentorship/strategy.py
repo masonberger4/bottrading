@@ -66,6 +66,9 @@ class Params:
                                    # the open of the down-close candle(s) into the low (075 ~1:16:40)
     globex_pool: bool = False      # overnight pool from the prior 18:00 reopen, not midnight (023)
     tag_blocks: bool = True        # tag trades with mitigation / propulsion blocks (measurement)
+    pool_prev_week: bool = False   # previous week's high/low as sweep pools and targets (L3)
+    pool_prev_month: bool = False  # previous month's high/low as sweep pools and targets (L3)
+    pool_swings: bool = False      # ordinary short-term swing highs/lows (not only equal ones)
     extra_pools: bool = True       # London 02:00-05:00, prior PM 13:30-16:00 and lunch 12:00-13:30
                                    # highs/lows as sweep pools and targets (067)
     es_pt: float = 0.10            # instrument price units per ES point (SPY ~ ES / 10)
@@ -413,6 +416,15 @@ class DayCtx:
         # session pools (067): London 02:00-05:00 and prior PM 13:30-16:00 for the AM; lunch
         # 12:00-13:30 for the PM. Each with the bar index from which it is complete.
         self.sess = {}
+        self.pw = self.pm_ = None
+        d0 = df.index[0].date()
+        wk = [x for x in hist if x.index[0].date().isocalendar()[:2] == (d0 - timedelta(days=7)).isocalendar()[:2]]
+        if wk:
+            self.pw = (max(float(x.high.max()) for x in wk), min(float(x.low.min()) for x in wk))
+        pmo = (d0.replace(day=1) - timedelta(days=1))
+        mo = [x for x in hist if (x.index[0].year, x.index[0].month) == (pmo.year, pmo.month)]
+        if mo:
+            self.pm_ = (max(float(x.high.max()) for x in mo), min(float(x.low.min()) for x in mo))
         lon = df[(tt >= 120) & (tt < 300)]
         if len(lon):
             self.sess["london"] = (float(lon.high.max()), float(lon.low.min()), 300)
@@ -493,6 +505,12 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
         pools.append(sd.x(ctx.or_hl[0] if sd.sign > 0 else ctx.or_hl[1]))
     if ctx.t[i] >= 810 and ctx.am_hl:
         pools.append(sd.x(ctx.am_hl[0] if sd.sign > 0 else ctx.am_hl[1]))
+    for on, hl in ((p.pool_prev_week, ctx.pw), (p.pool_prev_month, ctx.pm_)):
+        if on and hl is not None:
+            pools.append(sd.x(hl[0] if sd.sign > 0 else hl[1]))
+    if p.pool_swings:                       # untaken short-term swing highs known by bar i
+        pools += [q.price for q in sd.ph if q.known <= i and q.i >= ctx.start - 1
+                  and sd.h[q.i + 1:i + 1].max(initial=-np.inf) < q.price]
     seen = sd.h[ctx.start:ext_i].max() if ext_i is not None and ext_i > ctx.start else -np.inf
     lv = [(v, "pool") for v in pools if v > seen]
     if getattr(ctx, "gaps", None) is not None:
@@ -604,6 +622,10 @@ def _judas(ctx, sd, sw, session) -> bool:
     if ref is None:
         return False
     return bool(t0 <= ctx.t[sw["ext_i"]] < t0 + 60 and sw["ext"] < sd.x(ref))
+
+
+def l_min_after(sd, q, i):
+    return sd.l[q.i + 1:i].min(initial=np.inf)
 
 
 def _in_sb(t: int, p: Params) -> bool:
@@ -816,9 +838,17 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
 
 
 def _sell_side(ctx: DayCtx, sd: Side, session: str, i: int | None = None,
-               extra: bool = False) -> dict[str, float]:
+               extra: bool = False, p: "Params | None" = None) -> dict[str, float]:
     keys = ("pdl1", "pdl2", "pdl3") if sd.sign > 0 else ("pdh1", "pdh2", "pdh3")
     out = {k: sd.x(ctx.pd[k]) for k in keys if k in ctx.pd}
+    if p is not None:
+        for name, on, hl in (("pwl", p.pool_prev_week, ctx.pw), ("pml_month", p.pool_prev_month, ctx.pm_)):
+            if on and hl is not None:
+                out[name] = sd.x(hl[1] if sd.sign > 0 else hl[0])
+        if p.pool_swings and i is not None:     # untaken short-term swing lows (side terms)
+            for q in sd.pl:
+                if q.known <= i - 1 and q.i >= ctx.start - 1 and l_min_after(sd, q, i) > q.price:
+                    out[f"swing_low{q.i}"] = q.price
     if session == "AM":
         k = "pml" if sd.sign > 0 else "pmh"
         if k in ctx.pd:
@@ -850,7 +880,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
     """Advance this side's sweep -> MSS -> FVG machine at bar i; return an order or None."""
     l, h, c = sd.l, sd.h, sd.c
     tol = p.eq_tol_pts * p.es_pt
-    lv = _sell_side(ctx, sd, session, i, p.extra_pools)
+    lv = _sell_side(ctx, sd, session, i, p.extra_pools, p)
     created = ctx.start if session == "AM" else ctx.start + int(np.searchsorted(ctx.t[ctx.start:], 810))
     or_made = ctx.start + int(np.searchsorted(ctx.t[ctx.start:], ctx.or_end))
     lon_made = ctx.start + int(np.searchsorted(ctx.t[ctx.start:], 300))
