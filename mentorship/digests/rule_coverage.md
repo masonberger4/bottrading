@@ -1083,3 +1083,22 @@ defaults except #3 year end and #10 sloppy days, which wait for the owner's answ
 | A15 | FULL | swing order fixed (legacy switch in levels), `mit_targets`, `mit_body_respect` |
 | D6 | FULL | `unicorn_pref` added (leg / last / errors built earlier) |
 | L8 | FULL | `levels.vacuum_block`, `vacuum_blocks` |
+
+### setups_models package (2026-10-18)
+
+Built on branch `mentorship` (`mentorship/setups.py` + hooks; `build_log.md` "Package setups_models"
+lists every item with its switches). All new switches are off; with all of them off the engine's
+trades are identical to the commit before. FVG-path switches act with `ob_entry="post_mss"` / `"both"`.
+
+| Id | New status | Note |
+|---|---|---|
+| A19, A19.2, A19.4, A20, M0.4, Ep07.6, Ep08.4, Ep08.16, Ep04.7, Ep01.22 | FULL | MSS reference parent / origin / SIBI / higher-tf, eq wait, on-side tag / require, displacement tests (also in the SB), speed, clean leg |
+| M0, M0.5, M1, M1.1, M1.3, M2, M2.3, M2.7, M13 | FULL | candle draw, entry arrays, MM context, speed check, 2022 pick / stops / add cut / target, three drives, OTE |
+| M4, M4.1, M4.2, M4.4, M4.5, A14, A18, A24.2, Ep05.4, Ep05.8 | FULL | classic breaker, unicorn rules / only / open / overlap, adds (VI, in breaker, retest), turtle-breaker pyramid, CC breaker / failure swing, reclaimed OB, Reaper, MMXM |
+| M4.3, M5.1, A24, T13 | SIMPLIFIED | advanced breaker without the pre-break A-B entry; Ep 01 last hour with the generic adds / trail; implied FVG / inducement not codeable; profiles = expected profile from D / 4h |
+| M5, M5.2, M6, M7, M7.2, M7.3, T10, Ep01.13, Ep01.16, Ep01.17 | FULL | own last-hour slot, 2022 model in 15:15-15:45, PM reversal, lunch target / ORG, 13:30 Judas into an array, MOC run / pool exit, 4h CE hold, started by 15:25 |
+| M10, A8, M11, M11a, M11b, M11c | FULL | IFVG entry / stop / depth / hold / 061 / after HTF; IR, CISD OB and wick-CE entries |
+| M12, M12.2, Ep08.15 | FULL | turtle soup order flow, breaker adds, max run |
+| M16, M16.1, M16.2, Ep03.11, B18, B18.1, B18.2 | FULL | SMT stop / turtle entry (ES only, 05:00 low, 11:00 exit), sick sister, leader / laggard pick, SMT gap / array / rel-eq twin / windows |
+| N6, Ep04.3, Ep04.4, Ep01.15, M15 | FULL | news profile / CE / no unicorn; Judas required, runner, bias, inclusive; nested FVGs; Ma Deuce big candle / 2nd entry / ladder / news / ETH / blocked |
+| Ep05.6 | SIMPLIFIED | study variant only (one observation) |

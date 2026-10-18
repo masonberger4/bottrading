@@ -228,7 +228,14 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None):
     ref = refs[-1].price
     if not (c[li + 1:i + 1] > ref).any():             # displacement closed beyond the swing (MSS)
         return None
+    kb = li + 1 + int(np.flatnonzero(c[li + 1:i + 1] > ref)[0])   # the first breaking close
+    if p.disp_mult or p.disp_body_mult or p.disp_through_pts or p.disp_follow or p.mss_disp:
+        from .setups import disp_ok_sb                 # setups_models A20 / M0.4 "also in SB"
+        ok, kb = disp_ok_sb(sd, li, i, ref, p)
+        if not ok:
+            return None
     gaps = [g for g in sd.gaps if li <= g.i - 2 and g.i <= i and g.top > ref
+            and (not p.disp_fvg_after_break or g.i >= kb)   # A20: the gap left by the break
             and c[g.i + 1:i + 1].min(initial=np.inf) >= g.bottom          # still open
             and l[g.i + 1:i + 1].min(initial=np.inf) > g.top]             # not yet traded back in
     if not gaps:

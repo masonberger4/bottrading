@@ -504,3 +504,134 @@ def propulsion_blocks(o, h, l, c, obs: list[Zone]) -> list[Zone]:
                 out.append(Zone("bull", float(h[k]), float(l[k]), k, k, float((o[k] + c[k]) / 2)))
                 break
     return out
+
+
+# --- package setups_models detectors (rule_coverage.md section 3 "setups_models") ------------
+# All in bullish terms (the engine mirrors prices for shorts); every one reads closed bars only,
+# up to the index the caller passes.
+
+OTE_LO, OTE_HI, OTE_SWEET = 0.62, 0.79, 0.705      # M13 (cc01_004 ~9:44-53:45)
+
+
+def ote_band(ext: float, hi: float) -> tuple[float, float, float]:
+    """M13 OTE of the impulse leg ext (swing low) -> hi: the 62-79% retracement as prices
+    (lower, upper) and the 70.5% sweet spot. Bullish: lower = hi - 0.79 x leg."""
+    leg = hi - ext
+    return hi - OTE_HI * leg, hi - OTE_LO * leg, hi - OTE_SWEET * leg
+
+
+def three_drives(lows: list, ext: float, ext_i: int, i: int, min_i: int = 0) -> bool:
+    """M2.7 three drives ("three Indians", 093 ~10:37; 074 ~32:49) [our interpretation of the bar
+    test]: the last two confirmed swing lows (Pivot list `lows`, known by bar i, before the sweep
+    extreme ext_i, at or after bar min_i) and the extreme are three successively LOWER lows, and
+    the pushes fail - the third drive extends below the second by less than the second extended
+    below the first. Bullish: drives down into the swept level."""
+    pl = [q for q in lows if min_i <= q.i < ext_i and q.known <= i]
+    if len(pl) < 2:
+        return False
+    a, b = pl[-2], pl[-1]
+    if not (a.price > b.price > ext):
+        return False
+    return (b.price - ext) < (a.price - b.price)
+
+
+def wick_ce(o, l, c, k: int) -> float:
+    """M11c / M0.5: the CE (50%) of candle k's lower wick (body low -> low)."""
+    b = min(o[k], c[k])
+    return float((b + l[k]) / 2)
+
+
+def leg_sibi(h, l, o, c, a: int, ext_i: int, c2_dir: bool = False) -> Zone | None:
+    """M1.3 / Ep07.6: the last bearish FVG (SIBI) formed in the leg down into the low - third
+    candle in [a, ext_i]. None when the leg left none."""
+    a = max(int(a), 2)
+    last = None
+    for k in range(a, int(ext_i) + 1):
+        if h[k] < l[k - 2] and (not c2_dir or c[k - 1] < o[k - 1]):
+            last = Zone("bear", float(l[k - 2]), float(h[k]), k, k - 1)
+    return last
+
+
+def ifvg_passes(h, l, top: float, bottom: float, a: int, b: int) -> str:
+    """A8 depth rule (102 ~1:09:00) for an inversion FVG, bullish terms (an old bearish gap
+    top/bottom that a later close went above): how price used the gap between its formation
+    (bar a) and the inverting close (bar b), exclusive. "none" = untouched (one pass: the
+    inversion itself -> may reach the far edge), "partial" = traded into it, "both" = traded
+    through it and back (near edge, CE at most)."""
+    if b - a <= 1:
+        return "none"
+    hh = h[a + 1:b].max()
+    if hh > top:
+        return "both"
+    return "partial" if hh >= bottom else "none"
+
+
+def reaper(o, h, l, c, a0: int, hk: int, ext_i: int, c2_dir: bool = False) -> Zone | None:
+    """A24.2 Reaper (076 ~18:30-22:20) [our interpretation of the bar test]: of a bullish breaker,
+    the FVG in the DISCOUNT half of its impulse leg L1 (bar a0) -> H (bar hk) - CE at or below the
+    leg's midpoint - that price cut through (a close below its bottom) on the way to the lower low
+    (bars hk+1 .. ext_i). The newest such gap; None if none."""
+    if hk <= a0:
+        return None
+    mid = (float(l[a0]) + float(h[hk])) / 2
+    out = None
+    for z in fvgs(h[:hk + 1], l[:hk + 1], o[:hk + 1], c[:hk + 1], c2_dir):
+        if z.kind != "bull" or z.i - 2 < a0 or z.i > hk or z.mid > mid:
+            continue
+        seg = c[hk + 1:ext_i + 1]
+        if len(seg) and seg.min() < z.bottom:
+            out = z
+    return out
+
+
+def reclaimed_obs(o, h, l, c, a: int, ext_i: int, i: int) -> list[Zone]:
+    """A18 reclaimed OB (cc04_007 ~0:50-5:00; 104 ~46:56): down-close candles on the sell side of
+    the curve (bars a .. ext_i-1) each followed by a bounce (the next candle closes up), reclaimed
+    after the low - a close above the candle's high in ext_i+1 .. i. Zone = the candle's range,
+    known at the reclaiming close."""
+    out = []
+    for k in range(max(int(a), 0), int(ext_i)):
+        if not (c[k] < o[k] and k + 1 <= ext_i and c[k + 1] > o[k + 1]):
+            continue
+        seg = c[ext_i + 1:i + 1]
+        hit = np.flatnonzero(seg > h[k])
+        if len(hit):
+            out.append(Zone("bull", float(h[k]), float(l[k]), int(ext_i + 1 + hit[0]), k,
+                            float((o[k] + c[k]) / 2)))
+    return out
+
+
+def tf_pivots(idx, h, l, base: int, m: int, n: int = 1) -> tuple[list, list]:
+    """Ep08.16: swing highs/lows on clock-aligned m-minute bars built from base-minute bars
+    (h / l arrays, side space). Pivot.i = the base bar holding the m-minute extreme, Pivot.known =
+    the last base bar of the m-minute bar that confirms it (n bars later), only buckets that are
+    complete. Returns (highs, lows) sorted by bar."""
+    import pandas as pd
+    b = pd.Series(np.arange(len(idx)), index=idx).groupby(idx.floor(f"{m}min"))
+    first, last = b.min().values, b.max().values
+    done = np.asarray((idx[last] - b.min().index) >= pd.Timedelta(minutes=m - base))
+    hh = np.array([h[a:z + 1].max() for a, z in zip(first, last)])
+    ll = np.array([l[a:z + 1].min() for a, z in zip(first, last)])
+    ph, pl = pivots(hh, ll, n)
+    out_h = [Pivot(int(first[q.i] + np.argmax(h[first[q.i]:last[q.i] + 1])), q.price, int(last[q.known]))
+             for q in ph if done[q.known]]
+    out_l = [Pivot(int(first[q.i] + np.argmin(l[first[q.i]:last[q.i] + 1])), q.price, int(last[q.known]))
+             for q in pl if done[q.known]]
+    return out_h, out_l
+
+
+def failure_swing(highs: list, lows: list, level: float, max_above: float, i: int,
+                  min_i: int = 0) -> tuple | None:
+    """M4.5 failure swing (cc05_005) [CC], bullish terms: the last confirmed swing low B (known by
+    bar i, at or after min_i) sits above the key level `level` by at most `max_above` - it failed
+    to reach it - and the swing high H before B is the breaking point. Returns (B, H) or None."""
+    pl = [q for q in lows if q.i >= min_i and q.known <= i]
+    if not pl:
+        return None
+    B = pl[-1]
+    if not (level < B.price <= level + max_above):
+        return None
+    hs = [q for q in highs if q.i < B.i and q.known <= i]
+    if not hs:
+        return None
+    return B, hs[-1]

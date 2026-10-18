@@ -411,12 +411,28 @@ def save(t: pd.DataFrame, rep: dict, out: str) -> None:
     Path(out).with_suffix(".json").write_text(json.dumps(rep, indent=1, default=str))
 
 
-def combine(*runs: pd.DataFrame) -> pd.DataFrame:
+def combine(*runs: pd.DataFrame, pick: str = "first") -> pd.DataFrame:
     """Trade one instrument per session (watch one market, rules Ep 05): of the setups the
     instruments produced, keep the first to fill. On a tie, keep the one whose SMT check
-    didn't show its partner holding stronger. Uses only what was known at the fill."""
+    didn't show its partner holding stronger. Uses only what was known at the fill.
+    setups_models Ep03.11 / D15 `pick` (Params.smt_pick): "leader" keeps only fills whose own SMT
+    check did NOT show the sister holding stronger (smt is not True: this index made the cleaner
+    extreme, 003); "laggard" only those where it did (the sick sister, 045 / 053). Each fill's
+    smt tag is known at its sweep, so skipping one instrument's fills is causal. Same-bar ties:
+    the larger (leader) / smaller (laggard) relative leg (leg_hi_px - ext_px) / ext_px."""
     t = pd.concat([r for r in runs if len(r)], ignore_index=True)
     if not len(t):
         return t
+    if pick not in ("first", "leader", "laggard"):
+        raise ValueError(f"pick {pick!r}")
+    if pick != "first":
+        lag = t.smt.eq(True)
+        t = t[lag if pick == "laggard" else ~lag]
+        if not len(t):
+            return t
+        if {"ext_px", "leg_hi_px"} <= set(t.columns):
+            rel = ((t.leg_hi_px - t.ext_px).abs() / t.ext_px.abs()).fillna(0.0)
+            t = t.assign(_rel=-rel if pick == "leader" else rel).sort_values(["entry_time", "_rel"], kind="stable")
+            return t.groupby(["date", "session"], sort=False).head(1).drop(columns="_rel").sort_values("entry_time")
     t = t.assign(_weak=t.smt.eq(True)).sort_values(["entry_time", "_weak"])
     return t.groupby(["date", "session"], sort=False).head(1).drop(columns="_weak").sort_values("entry_time")

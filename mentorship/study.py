@@ -37,7 +37,7 @@ def _real(job):
     p = replace(Params(), **VARIANTS[name])
     a = B.run(spy, tf, "SPY", p, qqq)
     b = B.run(qqq, tf, "QQQ", replace(p, es_pt=q_pt), spy)
-    out = {"SPY": a, "QQQ": b, "combined": B.combine(a, b)}
+    out = {"SPY": a, "QQQ": b, "combined": B.combine(a, b, pick=p.smt_pick)}
     for k, v in out.items():
         if len(v):
             v["variant"], v["tf"], v["book"] = name, tf, k
@@ -119,7 +119,8 @@ def main_index(out="runs/mentorship", variants=None, tfs=(5, 1), workers=6):
     t = pd.concat([x for x in parts if len(x)], ignore_index=True)
     books = []
     for (tf, v), g in t.groupby(["tf", "variant"]):
-        books.append(B.combine(g[g.symbol == "SPX"], g[g.symbol == "NDX"]).assign(book="combined"))
+        books.append(B.combine(g[g.symbol == "SPX"], g[g.symbol == "NDX"],
+                               pick=IVARIANTS.get(v, {}).get("smt_pick", "first")).assign(book="combined"))
     t = pd.concat([t.assign(book=t.symbol)] + books, ignore_index=True)
     t.to_csv(f"{out}/index_trades.csv", index=False)
     rep = {"all": {f"{tf}m/{b}/{v}": B.stats(g) for (tf, b, v), g in t.groupby(["tf", "book", "variant"])}}
@@ -541,6 +542,107 @@ DECISIONS = {
     "L5_gap_run_tol_4": dict(gap_run_stop=True, gap_run_tol_pts=4.0),
     "A11_bpr_targets_any_pair": dict(bpr_targets=True, bpr_max_gap_bars=0),
     "A11_bpr_abort_gap12": dict(bpr_abort=True, bpr_max_gap_bars=12),
+    # --- package setups_models (rule_coverage.md section 3; build_log.md). FVG-path switches run
+    # with ob_entry="post_mss" (the owner #11 default enters at the OB before the break) ---------
+    "A19_mss_ref_parent": dict(ob_entry="post_mss", mss_ref="parent"),
+    "A19.2_mss_eq_wait": dict(ob_entry="post_mss", mss_eq_wait=True),
+    "A19.4_on_side_tag": dict(ob_entry="post_mss", mss_on_side="tag"),
+    "Ep04.7_on_side_require": dict(ob_entry="post_mss", mss_on_side="require"),
+    "Ep08.4_mss_ref_origin": dict(ob_entry="post_mss", mss_ref="origin"),
+    "A20_disp_mult2": dict(ob_entry="post_mss", disp_mult=2.0),
+    "A20_disp_through_1": dict(ob_entry="post_mss", disp_through_pts=1.0),
+    "A20_disp_fvg_after_break": dict(ob_entry="post_mss", disp_fvg_after_break=True),
+    "A20_disp_all_sb": dict(sb_model=True, disp_mult=2.0, disp_follow=True, disp_fvg_after_break=True),
+    "M0.4_disp_body_mult1": dict(ob_entry="post_mss", disp_body_mult=1.0),
+    "M0.4_disp_follow": dict(ob_entry="post_mss", disp_follow=True),
+    "Ep07.6_mss_max_bars6": dict(ob_entry="post_mss", mss_max_bars=6),
+    "Ep07.6_mss_disp15": dict(ob_entry="post_mss", mss_disp=1.5),
+    "Ep07.6_mss_ref_sibi": dict(ob_entry="post_mss", mss_ref_sibi=True),
+    "Ep08.16_mss_ref_tf5": dict(ob_entry="post_mss", mss_ref_tf=5),
+    "M1_am_htf_draw": dict(am_htf_draw=True),
+    "M1_am_discount_array": dict(am_discount_array=True),
+    "M1_stop_ob_near": dict(ob_entry="post_mss", stop_mode="ob_near"),
+    "M1.1_mm_context_require": dict(mm_context="require"),
+    "M1.1_daily_vi_targets": dict(vi_arrays=True, daily_vi_targets=True),
+    "M1.3_speed_check": dict(ob_entry="post_mss", speed_check=True, speed_bars=3),
+    "M1.3_body_low_cancel": dict(ob_entry="post_mss", body_low_cancel=True),
+    "M2_no_breakout_fvg": dict(ob_entry="post_mss", no_breakout_fvg=True),
+    "M2_stop_fvg_candle": dict(ob_entry="post_mss", stop_mode="fvg_candle"),
+    "M2_stop_ce2": dict(ob_entry="post_mss", stop_mode="ce2"),
+    "M2_add_leg_cut": dict(ob_entry="post_mss", add_leg_cut=True),
+    "M2_m2_target": dict(ob_entry="post_mss", draw_lock="off", m2_target=True),
+    "M2.3_fvg_pick_2022": dict(ob_entry="post_mss", fvg_pick="2022"),
+    "M2.7_three_drives_require": dict(three_drives="require"),
+    "M4_unicorn_open_only": dict(ob_entry="post_mss", unicorn_open_only=True),
+    "M4_breaker_retest_add": dict(ob_entry="post_mss", breaker_retest_add=True),
+    "M4.1_breaker_classic": dict(ob_entry="post_mss", breaker_entry="classic"),
+    "M4.2_unicorn_rules": dict(ob_entry="post_mss", unicorn_rules=True),
+    "M4.3_adv_breaker": dict(ob_entry="post_mss", adv_breaker=True),
+    "M4.4_ts_breaker_pyramid": dict(turtle_soup="2023", ts_breaker_pyramid=True),
+    "M4.5_cc_swings_breaker": dict(cc_swings="breaker"),
+    "M4.5_cc_swings_failure": dict(cc_swings="failure", cc_fail_pts=5.0),
+    "A14_unicorn_only": dict(ob_entry="post_mss", unicorn_only=True, unicorn_open_min=30),
+    "Ep05.4_unicorn_overlap": dict(ob_entry="post_mss", unicorn_entry="overlap"),
+    "Ep05.4_add_on_vi": dict(ob_entry="post_mss", add_on_vi=True),
+    "Ep05.4_adds_in_breaker": dict(ob_entry="post_mss", adds_in_breaker=True),
+    "M5_pm_last_hour_model": dict(ob_entry="post_mss", pm_last_hour_model=True),
+    "M5.1_pm_ep01": dict(pm_ep01=True, last_hour_own_slot=True),
+    "M5.2_last_hour_own_slot": dict(last_hour_own_slot=True),
+    "M5.2_entry_arrays_vi_ob": dict(ob_entry="post_mss", entry_arrays=("vi", "ob")),
+    "Ep01.13_last_hour_setup": dict(last_hour_setup=True),
+    "Ep01.13_lh_parts": dict(last_hour_own_slot=True, lh_unengaged=True, lh_htf_done_skip=True),
+    "Ep01.16_pm_4h_ce": dict(pm_4h_ce=True),
+    "Ep01.17_lh_start_by_1525": dict(last_hour_own_slot=True, lh_start_by=925),
+    "T10_moc_run": dict(moc_run=True, moc_cap_pts=10.0),
+    "T10_moc_pool_exit": dict(moc_pool_exit=True),
+    "M6_pm_reversal": dict(pm_reversal=True),
+    "M7_pm_lunch_target": dict(ob_entry="post_mss", draw_lock="off", pm_lunch_target=True),
+    "M7.2_pm_lunch_org": dict(pm_lunch_org=True),
+    "M7.3_pm_judas_array": dict(pm_judas_array=True),
+    "M10_ifvg_ce_stop3": dict(ob_entry="post_mss", ifvg_entries=True, ifvg_entry="ce", ifvg_stop_pts=3.0,
+                              ifvg_min_risk_pts=2.0),
+    "M10_ifvg_061": dict(ob_entry="post_mss", ifvg_entries=True, ifvg_061=True),
+    "A8_ifvg_depth_hold": dict(ob_entry="post_mss", ifvg_entries=True, ifvg_depth=True, ifvg_hold=True),
+    "A8_ifvg_after_htf": dict(ob_entry="post_mss", ifvg_entries=True, ifvg_after_htf=True),
+    "M11a_ir_entries": dict(ir_entries=True),
+    "M11b_cisd_ob_entries": dict(cisd_ob_entries=True),
+    "M11c_wick_ce_entries": dict(wick_ce_entries=True),
+    "M12_ts_need_flow": dict(turtle_soup="2023", ts_need_flow=True),
+    "M12.2_ts_adds_breakers": dict(turtle_soup="2023", ts_adds_breakers=True),
+    "Ep08.15_ts_max_run": dict(turtle_soup="2023", ts_need_htf=True, ts_max_run=15),
+    "M13_ote_filter": dict(ob_entry="post_mss", ote="filter"),
+    "M13_ote_limit_stop": dict(ob_entry="post_mss", ote="limit", ote_leg_stop=True),
+    "M13_leg_pd_strict": dict(ob_entry="post_mss", leg_pd_strict=True, ote_stack_tag=True),
+    "M16.1_smt_entry": dict(smt_entry=True, smt_exit=660, smt_entry_syms=("ES", "MES")),
+    "M16.1_smt_turtle": dict(smt_entry=True, smt_turtle=True),
+    "M16.2_sick_sister": dict(sick_sister=True),
+    "Ep03.11_smt_pick_leader": dict(smt_pick="leader"),
+    "Ep03.11_smt_pick_laggard": dict(smt_pick="laggard"),
+    "B18.1_smt_min_gap1": dict(smt_min=1, smt_min_gap_pts=1.0),
+    "B18.1_smt_rel_eq": dict(smt_min=1, smt_rel_eq=True),
+    "B18_smt_need_array": dict(smt_min=1, smt_need_array=True),
+    "B18.2_smt_windows": dict(smt_min=1, smt_windows=((570, 660), (720, 900)), smt_pre=True),
+    "N6_news_profile": dict(news_profile="require"),
+    "N6_news_ce_target": dict(news_ce_target=True),
+    "N6_news_no_unicorn": dict(ob_entry="post_mss", news_no_unicorn=True),
+    "T13_po3_hold_profiles": dict(po3_hold=True, profile_tags=True),
+    "T13_nfp_sd_skip": dict(nfp_sd="skip"),
+    "Ep04.3_require_judas": dict(require_judas=True, judas_window=60),
+    "Ep04.3_po3_runner": dict(po3_runner=True),
+    "Ep04.4_po3_bias_inclusive": dict(po3_require_bias=True, po3_inclusive=True),
+    "Ep01.15_nest_tfs": dict(nest_tfs=("4h", "1h", "15m")),
+    "Ep05.6_0800_ob_move": dict(pre_0700=True),            # test variant only (one observation)
+    "Ep05.8_mmxm": dict(ob_entry="post_mss", draw_lock="off", mmxm_ctx=True, mmxm_breaker=True),
+    "Ep01.22_clean_leg2": dict(ob_entry="post_mss", clean_leg=2, clean_body=0.5),
+    "A18_reclaimed_ob": dict(ob_entry="post_mss", reclaimed_ob=True),
+    "A24.2_reaper": dict(ob_entry="post_mss", reaper=True),
+    "A24.2_reaper_confirm": dict(ob_entry="post_mss", reaper=True, reaper_confirm=True),
+    "M0_candle_draw_daily": dict(candle_draw_bias="daily"),
+    "M0_candle_draw_weekly": dict(candle_draw_bias="weekly"),
+    "M0.5_entry_arrays_all": dict(ob_entry="post_mss", entry_arrays=("ob", "breaker", "ote", "wick_ce", "vi",
+                                                                      "reclaimed_ob")),
+    "M15_ma_deuce_full": dict(ma_deuce=True, md_big_candle=1.5, md_second=True, md_ladder=True, md_need_news=True,
+                              md_eth=True, md_blocked=True),
 }
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
 

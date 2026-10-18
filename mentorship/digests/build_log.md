@@ -178,3 +178,96 @@ sloppy_mode="stand_aside"; not part of this commit) - with those two hunks rever
 
 Limits after this pass: the eq_pref DRAW still acts only without the lock (the rel-eq sweep pick
 applies with it); vi_news_draw still acts only in the lock (it needs the htf table row).
+
+## Package setups_models (2026-10-18)
+
+Sources: `rule_coverage.md` section 3 "setups_models" (incl. the M0.4 / M1.2 placement notes),
+`mentorship_rules.md` 2.1 / 2.6 / Appendix A, `digests/models.md`. Code: `mentorship/setups.py` (new:
+the setup branches and gates, side space), hooks in `strategy._scan_core` (sweep / MSS block),
+`_finish_order`, `run_day` (slots, order types, adds, exits), `_smt`, `_mss_ref`, `_turtle`;
+detectors in `levels.py` (ote_band, three_drives, wick_ce, leg_sibi, ifvg_passes, reaper,
+reclaimed_obs, tf_pivots, failure_swing); `sb_model._arm` (A20 in the SB), `pre_open.run_ma_deuce`
+(M15), `backtest.combine(pick=)` (Ep03.11). Tests: `tests/test_setups_models.py`. Study:
+`study.DECISIONS` variants prefixed with the rule id. Every new switch is OFF by default.
+New engine order flags (run_day `_fill_at`): market (next open), stop_entry (buy stop), through
+(limit needing N beyond), cancel_low, exit_at, runner, po3_open; new slots LH (own last hour),
+PMR (PM reversal), MOC.
+NOTE: the FVG-path switches (unicorn / IFVG / 2022 pick / stops / OTE / on-side / reaper / arrays)
+act after the MSS, i.e. with `ob_entry="post_mss"` or `"both"`; under the owner #11 default
+(`pre_break`) the sweep is consumed at the break (as for the existing FVG-path switches). The
+study variants set `ob_entry="post_mss"` where needed.
+
+- A19 MSS after a sweep | done | `mss_ref` += "parent" (start of the staircase of lower highs [our interpretation]), `mss_ref_fallback` (existing), `mss_on_side` | "stl", "lower", "off" | "last" = the existing "stl"
+- A19.2 which swing / equal lows | done | `mss_ref` "itl" (existing), `mss_eq_wait`, `mss_ref_fallback` (= mss_fallback) | False | no MSS while a relative-equal low within eq_tol below the swept level is untaken
+- A20 displacement | done | `disp_mult`, `disp_follow`, `disp_through_pts`, `disp_fvg_after_break` (also in the SB: `setups.disp_ok_sb`) | 0 / False | disp_mult = (break close - OB body top) >= N x OB body (cc04_003); disp_follow confirms the MSS at the next close (above the break close)
+- M1 AM market maker model | done | `am_htf_draw`, `am_discount_array`, `speed_check` (= rip_through), `ob_entry` "pre_break" (existing, D10), `stop_mode="ob_near"` | off | HTF draw = the htf table draw_up / draw_dn beyond the entry; discount array = a 1m BISI open by closes or a 5m OB (zones_tf) at the sweep extreme
+- M2 2022 model | done | `fvg_pick="2022"`, `no_breakout_fvg`, `stop_mode="ce2"` / `"fvg_candle"`, `add_leg_cut`, `m2_target`, `three_drives` | off | m2_target [our interpretation]: the draw beyond the day's range EQ, rel-eq ("larger") pool first; add_leg_cut: adds at or below the leg EQ, none once price traded past 75% of the leg
+- M12 turtle soup | done | `turtle_soup` (earlier), `ts_need_htf` (earlier), `ts_need_flow` (new: daily D structure its way) | off |
+- M12.1 2023 no-MSS turtle | done (review pass, earlier) | `turtle_soup="2023"`, `ts_entry`, `ts_stop` | off | unchanged
+- Ep08.4 MSS swing validity | done | `mss_ref="origin"` | "stl" | the highest swing high between the swept level's creation and the sweep extreme [our interpretation]
+- A19.4 two MSS = on side | done | `mss_on_side="tag"` | "off" | lv_tags "on_side" at the fill when a higher low + a close above the high before it printed between arming and the bar before the fill
+- M0 common skeleton | done | `candle_draw_bias` ("daily"/"weekly"), `session_priority` (existing L1 / M0.2 = pool priority), `entry_arrays` | off | candle draw [our interpretation]: the nearer untaken prior-candle extreme from the midnight open; once one side is taken today the other is the draw
+- M0.5 enter on any PD array | done | `entry_arrays` = ob / breaker / ote / wick_ce / vi / reclaimed_ob (turtle soup = `turtle_soup`) | () | the highest array between the sweep extreme and the close (the first the retrace reaches) beats the FVG; with no FVG by fvg_wait the arrays are used before the sweep is reset (entry_kind arr_<name>)
+- M1.1 HTF draw and discount array | done | `mm_context` ("tag"/"require"), `daily_vi_targets` | off | daily VIs need vi_arrays (warned when inert)
+- M1.3 speed check | done | `speed_check`, `speed_bars`, `body_low_cancel` | False, 3, False | the leg's last SIBI closed above within speed_bars of the extreme, else the sweep is dropped; a trade below the swing low's lowest body cancels the pending order / is a stop on the fill bar
+- M2.3 FVG choice | done | `fvg_pick="2022"` | "last" | VI + OB aligned, else the first in the leg's discount, else the deeper of the last two
+- M4 breakers / unicorns | done | `breaker_entry` (+ "classic"), `breaker_mt_entry_floor` (existing = unicorn_mt_floor), `unicorn_open_only`, `breaker_zone="leg"` (existing) + `adv_breaker`, `breaker_retest_add`, `cc_swings` | off |
+- M4.1 classic breaker entry | done | `breaker_entry="classic"` | "off" | the breaker top when it sits above the FVG entry (reached first), MT cancel (#6), stop beyond L2; breaker fallback when no FVG
+- M5 PM last hour / MOC | done | `pm_last_hour_model`, `pm_ep01` | off | last-hour sweeps 15:15-15:45 only, orders cut at 15:45, skip once the HTF objective is done (a lock this way delivered / the htf draw traded today [our interpretation])
+- M5.1 Ep 01 last-hour version | partial | `pm_ep01` | False | nested 1h-in-4h FVG known by 15:00, 4h CE body hold, refusal at the 1h low from 15:15, breakaway FVG -> its top, stop below the FVG candle's open, single exit at the draw; the adds (FVG / breakaway / breaker) and the trail are the engine's generic add / trail switches, not an Ep 01-specific sequence
+- M10 IFVG entry | done | `ifvg_entries` (existing), `ifvg_entry`, `ifvg_stop_pts`, `ifvg_min_risk_pts`, `ifvg_depth`, `ifvg_061` | off | 061: a body close at the lower FVG's high / CE triggers a market entry
+- M11 IR / CISD / wick CE | done | `ir_entries`, `cisd_ob_entries`, `wick_ce_entries` | off | see M11a-c
+- M12.2 short at an old high | done | `turtle_soup` (mirrored side, no MSS), `ts_adds_breakers` | off | turtle-soup trades add at each new breaker (L.breakers) formed after the fill
+- M12.3 CC variants | done (review pass, earlier) | `turtle_soup` cc_limit / cc_1h_ob / or60 | off | unchanged
+- M12.5 depth / back gate | done (review pass, earlier) | `ts_gate_mss` | off | unchanged
+- M13 OTE | done | `ote` ("filter"/"limit"), `leg_pd_strict`, `ote_leg_stop`, `ote_stack_tag` | off | 62-79% band, 70.5% limit; the target rule uses the existing targets (pools / HTF OBs)
+- M16 index SMT / sick sister | done | `smt_entry`, `sick_sister` | off | see M16.1 / M16.2
+- M16.1 CC AM SMT entry | done | `smt_entry`, `smt_turtle`, `smt_exit`, `smt_entry_syms` | False, False, 660, ("ES","MES") | pool "l0500" (05:00-09:30 low, from 09:30) + London / overnight; an SMT-confirmed sweep -> buy STOP above the last down-close candle since the low (or a turtle-soup limit), stop below the low, out at 11:00
+- D10 early OB / turtle entries | done (owner #11, earlier) | `ob_entry`, `turtle_soup` | "pre_break" | unchanged
+- Ep01.13 last-hour run | done | `last_hour_setup` (= `last_hour_own_slot` + `lh_unengaged` + `lh_htf_done_skip`) | off | own LH slot after the PM trade; LH draw beyond today's high so far
+- Ep01.15 nested FVGs | done | `nest_tfs` | () | the sweep extreme inside an open same-side FVG (confluence FVG rows only) on every listed timeframe, known by the extreme's close; no confluence -> no trade
+- Ep03.11 stronger index | done | `smt_pick` ("leader"/"laggard"; `backtest.combine(pick=)`), Trade `ext_px` / `leg_hi_px` | "first" | causal: each fill's smt tag is known at its sweep; same-bar ties by the relative leg
+- Ep04.3 PO3 bullish | done | `require_judas`, `po3_runner`, `judas_window` | off, 60 | runner: the last ladder fraction has no target (BE / close)
+- Ep04.5 news dealing range | done (owner #4, earlier) | `news_wait`, `news_range_target` | "range" | unchanged
+- Ep04.7 two MSS | done | `mss_on_side="require"` | "off" | a higher low after the first MSS, a close above the high before it, entry from the second leg's FVGs, the first leg's FVG still open (timeout pending_minutes)
+- Ep05.4 unicorn rules | done | `unicorn_only`, `unicorn_entry="overlap"`, `add_on_vi`, `unicorn_open_only` / tag unicorn_open (`unicorn_open_min`), `adds_in_breaker` | off, 30 |
+- Ep05.8 MM sell model | done | `mmxm_ctx`, `mmxm_breaker` | off | draw = the parent swing (the original consolidation's far side) [our interpretation]; a body close beyond the entry FVG's CE exits (the ce_hold rule)
+- Ep07.6 speed and distance | done | `mss_max_bars`, `mss_disp`, `mss_ref_sibi` | 0, 0, False | mss_disp = breaking candle range >= N x mean range of the prior 10 bars [our interpretation]
+- Ep08.15 turtle soup | done | `turtle_soup`, `ts_need_htf`, `ts_max_run` | off | ts_max_run [our interpretation]: the failure close within N minutes of the spike extreme
+- Ep08.16 5m equal lows MSS | done | `mss_ref_tf` | 0 | the last swing high on m-minute bars (complete buckets only); two equal ones -> the higher
+- A8 IFVG rules | done | `ifvg_depth` (passes / both-way count), `ifvg_hold`, `ifvg_after_htf` | off | depth: untouched -> far edge, re-traded / both ways -> CE at most (stop beyond)
+- A14 unicorn | done | tag unicorn_open, `unicorn_only`, `unicorn_open_only` | off |
+- A18 reclaimed OB | done | `reclaimed_ob` (and entry_arrays "reclaimed_ob") | False | down-close candles on the sell side of the curve followed by a bounce, reclaimed by a close above their high after the low; limit at the highest one's top
+- A24 not codeable (umbrella) | partial | `reaper` | off | the Reaper is built; implied FVG (never defined) and inducement (= the sweep step) stay as they are
+- A24.2 Reaper | done | `reaper`, `reaper_confirm` | off | the FVG in the discount half of the breaker's L1 -> H leg cut through on the way to the lower low; limit at its top (or market after a reaction candle), out on a body close below its CE
+- B18 SMT (umbrella) | done | `smt_windows`, `smt_need_array` (smt_at_pd), `smt_min_gap_pts`, `smt_pick` | off |
+- B18.1 SMT qualifier | done | `smt_min_gap_pts`, `smt_need_array`, `smt_rel_eq` | off | rel-eq twin [our interpretation]: the partner's lowest swing low within pivot_n bars of the cluster's swing times
+- B18.2 SMT windows | done | `smt_windows`, `smt_pre` | (), False | outside the windows the sweep's smt is None
+- N6 news profile | done | `news_profile`, `news_ce_target`, `news_no_unicorn` | off | first leg = which news-range extreme printed first; NFP / CPI / FOMC days: no unicorn / breaker entries
+- T10 last hour / MOC | done | `moc_run`, `moc_cap_pts`, `moc_pool_exit` | False, 10, False | 15:40 bar: market entry toward the nearest liquidity untouched today (lock / bias side), stop below the low since 15:10, target capped at 10 handles, needs min_draw_pts; pool exit = all off at the first pool
+- T13 day templates / PO3 | partial | `require_judas`, `po3_hold`, `profile_tags`, `nfp_sd` | off | profile tags are the EXPECTED profile from D / 4h structure at arming [our interpretation] (the CC classification needs a discretionary HTF map); po3_hold: after a close above the reference open, a close back below exits
+- M2.7 three drives | done | `three_drives` | "off" | levels.three_drives: the last two confirmed swing lows + the sweep extreme are lower lows with a smaller last push
+- M4.2 unicorn conditions | done | `unicorn_rules` | False | the unicorn needs the Judas, entry inside the overlap, MT floor
+- M4.3 advanced breaker | partial | `adv_breaker` | False | limit at the A-B leg MT with 1 tick through to fill, stop beyond L2, target B + 1x(B - A); the "bias on side" entry inside the A-B leg / on the sell-side run before the break is not built
+- M4.4 turtle soup + breaker pyramid | done | `ts_breaker_pyramid` | False | one add at the first breaker formed after a turtle-soup fill
+- M4.5 CC breaker / failure swing | done | `cc_swings`, `cc_fail_pts` | "off", 5.0 | breaker swing: retest of the broken high, stop below the new low; failure swing: a higher low within cc_fail_pts above an intact pool, the first close above the high before it, retest limit, stop below the failed low
+- M5.2 2022 model in the window | done | `last_hour_strict` (existing #1), `last_hour_own_slot`, `entry_arrays` vi / ob, `pm_last_hour_model` | off |
+- M6 PM reversal | done | `pm_reversal` | False | slot PMR; needs a delivered lock the other way, the AM extreme taken in the PM, an IFVG at the extreme; targets the old daily levels and the lunch extreme (side space)
+- M7 PM off lunch | done | `pm_lunch_target`, `pm_lunch_org`, `pm_judas_1330` (existing = pm_judas_filter) | off |
+- M7.2 lunch into the ORG | done | `pm_lunch_org` | False | the lunch sweep extreme inside today's ORG
+- M7.3 13:30 Judas into an array | done | `pm_judas_array` | False | pseudo-pool = the top of the nearest same-side HTF array beyond the 13:30 open
+- M11a immediate-rebalance entry | done | `ir_entries` | False | with a bias (lock / htf), market after an A7 IR; stop below the IR candle; out on a close below the displacement candle's EQ [our interpretation of the range]
+- M11b CISD OB entry | done | `cisd_ob_entries` | False | wick CISD over the OB body top; limit min(EQ, OB top); OB-low cancel; stop below the OB
+- M11c wick-CE long | done | `wick_ce_entries` | False | limit at the sweep candle's wick CE once the next candle closed above it; target 0.5 pt before the swing high
+- M12.4 external turtle soup | done (review pass, earlier) | `turtle_soup="external"` | off | unchanged
+- M15 Ma Deuce | done | `md_big_candle`, `md_second`, `md_ladder`, `md_need_news`, `md_eth`, `md_blocked` | off | ladder CE / lower quadrant / 1h BISI low (no lock); 2nd entry = one add before 08:30; blocked() + skip_news routing
+- M16.2 sick sister | done | `sick_sister` | False | fewest reference highs (PDH 1-3, overnight, London, prior PM) taken by the session start among the index and its partners; the day's discount; targets its untaken references
+- Ep01.16 hold above the 4h CE | done | `pm_4h_ce` | False | from 15:00 every close above the nearest same-side 4h FVG's CE (known by 15:00)
+- Ep01.17 started by 15:25 | done | `lh_start_by` | 0 | last-hour sweep extreme at or before the minute; the breakaway check = pm_ep01 / `breakaway` (existing)
+- Ep01.22 clean delivery | done | `clean_leg`, `clean_body` | -1, 0 | at most N down-close candles from the low to the break; their bodies <= N x the mean up-close body
+- Ep04.4 PO3 bearish | done | `po3_require_bias`, `po3_inclusive`, `require_judas` | off |
+- Ep05.6 08:00 OB move | done (test variant only) | `pre_0700` (existing) | False | study variant Ep05.6_0800_ob_move
+- M0.4 MSS displacement leaves an FVG | done | `disp_body_mult`, `disp_follow` (+ `disp_fvg_after_break`) | 0, False |
+- M1.2 swing-low intact bug | done (owner directives, earlier) | `displacement_mult` | 0 | unchanged
+
+Results (setups_models): tests/test_setups_models.py 31 passed (unit + 15 synthetic + 2 ES/NQ no-look-ahead runs); test_mentorship -k look_ahead 12 passed; the other suites (non-look-ahead) 102 passed, 3 failed - the same 3 fail at HEAD (year_end, PRE_OWNER golden, sloppy alias: owner-answer defaults). With every new switch off, ES Jan-Mar 2024 trades (defaults and PRE_OWNER, SB + Ma Deuce on) are identical to HEAD.
