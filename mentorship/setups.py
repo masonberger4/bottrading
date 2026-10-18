@@ -370,11 +370,11 @@ def ifvg_stop(sd, g, entry: float, stop: float, p) -> tuple[float, float]:
     if p.ifvg_depth:
         orig = g.src + 1                     # the original gap's third candle
         ps = L.ifvg_passes(sd.h, sd.l, g.top, g.bottom, orig, g.i)
-        stop = (g.bottom if ps == "none" else ce) - p.stop_buffer
+        stop = (g.bottom if ps == "none" else ce) - p.pad
     if p.ifvg_stop_pts:
-        stop = ce - p.ifvg_stop_pts * p.es_pt - p.stop_buffer
+        stop = ce - p.ifvg_stop_pts * p.es_pt - p.pad
     if stop >= entry:
-        stop = g.bottom - p.stop_buffer
+        stop = g.bottom - p.pad
     return entry, stop
 
 
@@ -392,7 +392,7 @@ def ifvg_061(ctx, sd, sw, i, p, session, risk_mult):
         f = max(lows, key=lambda g: g.top)
         if not (f.mid <= c[i] <= f.top + tol and min(sd.o[i], c[i]) >= f.mid - 1e-12):
             continue
-        stop = f.bottom - p.stop_buffer
+        stop = f.bottom - p.pad
         tags = dict(unicorn=False, fvg_bottom=f.bottom, fvg_ce=f.mid, entry_kind="ifvg_061", mitigation=False,
                     propulsion=False, market=True, no_leg_wait=True)
         return S._finish_order(ctx, sd, i, p, session, sw, float(c[i]), stop, risk_mult,
@@ -418,9 +418,9 @@ def ote_adjust(sd, sw, i, p, entry, stop, kind, lvt):
         S._f("x_leg_pd_strict")
         return None
     if p.ote_leg_stop:
-        stop = sw["ext"] - p.stop_buffer
+        stop = sw["ext"] - p.pad
     if stop >= entry - p.min_risk_pts * p.es_pt:
-        stop = min(stop, sw["ext"] - p.stop_buffer)
+        stop = min(stop, sw["ext"] - p.pad)
     # review fix: any swept sell-side pool of the sweep machine counts as the "swept low" (PDL,
     # London, overnight, swing / rel-eq lows ...), not only swing_low / rel_eq keys; synthetic never
     if p.ote_stack_tag and lo <= entry <= hi and kind in ("fvg", "ifvg") and S._ob_at_low(sd, sw, i) is not None \
@@ -434,7 +434,7 @@ def ote_adjust(sd, sw, i, p, entry, stop, kind, lvt):
 def array_cands(ctx, sd, sw, i, p, bz) -> list:
     """M0.5 [our interpretation of "enter on any PD array"]: (entry, bottom, kind) of each listed
     array after the MSS that sits between the sweep extreme and the last close."""
-    ea = set(p.entry_arrays) | ({"reclaimed_ob"} if p.reclaimed_ob else set())
+    ea = set(p.entry_arrays) | ({"reclaimed_ob"} if p.reclaimed_ob else set()) |         ({"ob"} if "ob" in p.irl_entries else set())            # L14b: the OB is an allowed IRL entry
     e, ext = sw["ext_i"], sw["ext"]
     out = []
     if "ob" in ea:
@@ -468,9 +468,9 @@ def array_order(ctx, sd, sw, i, p, session, risk_mult, fvg_entry, bz):
     if not cs:
         return None
     entry, bottom, kind = max(cs)
-    stop = bottom - p.stop_buffer
+    stop = bottom - p.pad
     if entry - stop < p.min_risk_pts * p.es_pt:
-        stop = sw["ext"] - p.stop_buffer
+        stop = sw["ext"] - p.pad
     tags = dict(unicorn=False, fvg_bottom=bottom, fvg_ce=(entry + bottom) / 2, entry_kind="arr_" + kind,
                 mitigation=False, propulsion=False)
     return S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult,
@@ -515,7 +515,7 @@ def reaper_order(ctx, sd, sw, i, p, session, risk_mult, ref_i, real_ref, wait: i
         return None
     tags = dict(unicorn=False, fvg_bottom=z.bottom, fvg_ce=z.mid, entry_kind="reaper", mitigation=False,
                 propulsion=False, market=market, no_leg_wait=True, lvx={"reaper_ce": (z.mid, True)})
-    return S._finish_order(ctx, sd, i, p, session, sw, entry, z.bottom - p.stop_buffer, risk_mult,
+    return S._finish_order(ctx, sd, i, p, session, sw, entry, z.bottom - p.pad, risk_mult,
                            sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True)
 
 
@@ -533,7 +533,7 @@ def adv_breaker_order(ctx, sd, sw, i, p, session, risk_mult, ref_i, ref, real_re
     fixed = [(S._exit_px(tgt, "array", p), "array")]
     tags = dict(unicorn=False, fvg_bottom=A, fvg_ce=mt, entry_kind="adv_breaker", mitigation=False,
                 propulsion=False, through=tk, no_leg_wait=True)
-    return S._finish_order(ctx, sd, i, p, session, sw, mt, sw["ext"] - p.stop_buffer, risk_mult,
+    return S._finish_order(ctx, sd, i, p, session, sw, mt, sw["ext"] - p.pad, risk_mult,
                            sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True, fixed=fixed)
 
 
@@ -558,7 +558,7 @@ def adv_breaker_pre(ctx, sd, sw, i, p, session, risk_mult, ref_i, ref, real_ref)
     fixed = [(S._exit_px(B + (B - A), "array", p), "array")]
     tags = dict(unicorn=False, fvg_bottom=A, fvg_ce=(A + B) / 2, entry_kind="adv_breaker_pre", mitigation=False,
                 propulsion=False, market=True, no_leg_wait=True)
-    return S._finish_order(ctx, sd, i, p, session, sw, float(sd.c[i]), sw["ext"] - p.stop_buffer, risk_mult,
+    return S._finish_order(ctx, sd, i, p, session, sw, float(sd.c[i]), sw["ext"] - p.pad, risk_mult,
                            sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True, fixed=fixed)
 
 
@@ -568,7 +568,7 @@ def cc_breaker_order(ctx, sd, sw, i, p, session, risk_mult, ref):
     the new low."""
     tags = dict(unicorn=False, fvg_bottom=sw["ext"], fvg_ce=(ref + sw["ext"]) / 2, entry_kind="cc_breaker_swing",
                 mitigation=False, propulsion=False, no_leg_wait=True)
-    return S._finish_order(ctx, sd, i, p, session, sw, ref, sw["ext"] - p.stop_buffer, risk_mult,
+    return S._finish_order(ctx, sd, i, p, session, sw, ref, sw["ext"] - p.pad, risk_mult,
                            sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True)
 
 
@@ -603,7 +603,7 @@ def cc_failure_order(ctx, sd, i, p, session, risk_mult):
                   sweep_i=B.i, smt=None, smt2=None, **{SYNTH: True})
         tags = dict(unicorn=False, fvg_bottom=B.price, fvg_ce=(H.price + B.price) / 2,
                     entry_kind="cc_failure_swing", mitigation=False, propulsion=False, no_leg_wait=True)
-        return S._finish_order(ctx, sd, i, p, session, sw, H.price, B.price - p.stop_buffer, risk_mult,
+        return S._finish_order(ctx, sd, i, p, session, sw, H.price, B.price - p.pad, risk_mult,
                                sd.h[B.i:i + 1].max(), tags, skip_leg_pd=True)
     return None
 
@@ -628,7 +628,7 @@ def pre_break(ctx, sd, sw, i, p, session, risk_mult, ref):
             tgt = ref - 0.5 * p.es_pt                    # "TP ~0.5 pt before the high" (100 ~38:13)
             tags = dict(unicorn=False, fvg_bottom=sw["ext"], fvg_ce=ce, entry_kind="wick_ce", mitigation=False,
                         propulsion=False, no_leg_wait=True)
-            return S._finish_order(ctx, sd, i, p, session, sw, ce, sw["ext"] - p.stop_buffer, risk_mult,
+            return S._finish_order(ctx, sd, i, p, session, sw, ce, sw["ext"] - p.pad, risk_mult,
                                    sd.h[e:i + 1].max(), tags, skip_leg_pd=True, fixed=[(tgt, "array")])
     return None
 
@@ -644,7 +644,7 @@ def _smt_order(ctx, sd, sw, i, p, session, risk_mult):
         return None
     e = sw["ext_i"]
     o, h, l, c = sd.o, sd.h, sd.l, sd.c
-    stop = sw["ext"] - p.stop_buffer
+    stop = sw["ext"] - p.pad
     if p.smt_turtle:
         if not L.turtle_soup(l, c, sw["level"], e, i, p.ts_max_pts * p.es_pt, p.ts_back_bars):
             return None
@@ -689,7 +689,7 @@ def _cisd_ob(ctx, sd, sw, i, p, session, risk_mult):
         return None
     tags = dict(unicorn=False, fvg_bottom=ob.bottom, fvg_ce=ob.mid, entry_kind="cisd_ob", mitigation=False,
                 propulsion=False, cancel_low=ob.bottom, no_leg_wait=True)
-    return S._finish_order(ctx, sd, i, p, session, sw, entry, ob.bottom - p.stop_buffer, risk_mult, rng_hi,
+    return S._finish_order(ctx, sd, i, p, session, sw, entry, ob.bottom - p.pad, risk_mult, rng_hi,
                            tags, skip_leg_pd=True)
 
 
@@ -730,7 +730,7 @@ def ir_entry(ctx, sd, i, p, session, risk_mult):
     tags = dict(unicorn=False, fvg_bottom=float(sd.l[i]), fvg_ce=eq, entry_kind="ir", mitigation=False,
                 propulsion=False, market=True, no_leg_wait=True, imm_rebal=True, lvx={"ir_eq": (eq, False)},
                 skip_po3=not p.synth_po3)
-    return S._finish_order(ctx, sd, i, p, session, sw, float(sd.c[i]), float(sd.l[i]) - p.stop_buffer,
+    return S._finish_order(ctx, sd, i, p, session, sw, float(sd.c[i]), float(sd.l[i]) - p.pad,
                            risk_mult, float(sd.h[i]), tags, skip_leg_pd=True)
 
 
@@ -823,7 +823,7 @@ def pm_ep01(ctx, sd, i, p, session, risk_mult):
                   broke=g.i, sweep_i=kt, smt=None, smt2=None, **{SYNTH: True})
         tags = dict(unicorn=False, fvg_bottom=g.bottom, fvg_ce=g.mid, entry_kind="pm_ep01", mitigation=False,
                     propulsion=False, single_exit=True, cut=wb, skip_po3=not p.synth_po3, no_leg_wait=True)
-        return S._finish_order(ctx, sd, i, p, session, sw, g.top, float(sd.o[g.src]) - p.stop_buffer, risk_mult,
+        return S._finish_order(ctx, sd, i, p, session, sw, g.top, float(sd.o[g.src]) - p.pad, risk_mult,
                                sd.h[e:i + 1].max(), tags, skip_leg_pd=True)
     return None
 
@@ -840,10 +840,10 @@ def ep01_manage(ctx, sd, pos, tr, i, p, can_add: bool) -> None:
     st = pos.setdefault("ep01_stage", 0)
     new = [g for g in sd.gaps if g.i == i and g.i - 2 > pos["fill_i"]]
     for g in new:                                      # the trail under each new gap's bodies
-        b = min(min(sd.o[k], sd.c[k]) for k in range(g.i - 2, g.i + 1)) - p.stop_buffer
+        b = min(min(sd.o[k], sd.c[k]) for k in range(g.i - 2, g.i + 1)) - p.pad
         if b < sd.c[i] and pos.get("ep01_trail_ok"):
             pos["stop"] = max(pos["stop"], b)
-    if not (can_add and pos["add"] is None and len(tr.adds) < len(p.adds)):
+    if not (can_add and pos["add"] is None and S._nadds(pos, tr) < len(p.adds)):
         return
     if st == 0 and i > pos["fill_i"] and sd.c[i] > pos["fvg_ce"] > pos["stop"]:
         pos["ep01_stage"] = 1
@@ -856,7 +856,7 @@ def ep01_manage(ctx, sd, pos, tr, i, p, can_add: bool) -> None:
         if g.top > pos["stop"] and add_ok(sd, pos, g.top, i, p):
             S._arm_add(pos, tr, g.top, i, p, ctx.equity)
             if pos["add"] is not None:
-                pos["add"]["stop_to"] = min(min(sd.o[k], sd.c[k]) for k in range(g.i - 2, g.i + 1)) - p.stop_buffer
+                pos["add"]["stop_to"] = min(min(sd.o[k], sd.c[k]) for k in range(g.i - 2, g.i + 1)) - p.pad
         return
     if st == 2:
         zs = [z for z in _breakers(sd, p) if z.i == i and z.i > pos["fill_i"] and z.top > pos["stop"]
@@ -878,7 +878,7 @@ def moc_run(ctx, sd, i, p, session, risk_mult):
     if getattr(ctx, "cur_bias", 0) != sd.sign or htf_done(ctx, sd, i):
         return None
     entry = float(sd.c[i])
-    stop = float(sd.l[S._idx_at(ctx, 910):i + 1].min()) - p.stop_buffer
+    stop = float(sd.l[S._idx_at(ctx, 910):i + 1].min()) - p.pad
     tol = p.eq_tol_pts * p.es_pt
     eq_hi = S._eq_levels(sd, i, tol, lows=False, p=p)
     today = float(sd.h[ctx.start:i + 1].max())
@@ -886,7 +886,7 @@ def moc_run(ctx, sd, i, p, session, risk_mult):
     if not lv:
         return None
     x = min(S._exit_px(lv[0], "pool", p), entry + p.moc_cap_pts * p.es_pt)
-    sw = dict(session=session, name="moc", level=entry, key="moc", ext=stop + p.stop_buffer, ext_i=i, broke=i,
+    sw = dict(session=session, name="moc", level=entry, key="moc", ext=stop + p.pad, ext_i=i, broke=i,
               sweep_i=i, smt=None, smt2=None, **{SYNTH: True})
     tags = dict(unicorn=False, fvg_bottom=stop, fvg_ce=entry, entry_kind="moc_run", mitigation=False,
                 propulsion=False, market=True, no_leg_wait=True, done_key="MOC", skip_po3=not p.synth_po3)
@@ -940,7 +940,7 @@ def pm_reversal(ctx, sd, i, p, risk_mult):
               broke=z.i, sweep_i=e, smt=None, smt2=None, **{SYNTH: True})
     tags = dict(unicorn=False, fvg_bottom=z.bottom, fvg_ce=z.mid, entry_kind="pm_reversal", mitigation=False,
                 propulsion=False, done_key="PMR", no_leg_wait=True)
-    return S._finish_order(ctx, sd, i, p, "PM", sw, entry, z.bottom - p.stop_buffer, risk_mult,
+    return S._finish_order(ctx, sd, i, p, "PM", sw, entry, z.bottom - p.pad, risk_mult,
                            sd.h[e:i + 1].max(), tags, skip_leg_pd=True, fixed=fixed)
 
 
@@ -1312,7 +1312,7 @@ def more_adds(ctx, sd, pos, tr, i, p) -> None:
             arm(vs[-1].top)
             if pos["add"] is not None:
                 return
-    if p.breaker_retest_add and pos.get("bz_side") and not pos.get("bz_add"):
+    if (p.breaker_retest_add or p.add_on == "breaker") and pos.get("bz_side") and not pos.get("bz_add"):
         top = pos["bz_side"][0]
         if i > pos["fill_i"] and sd.c[i] > top and top > pos["stop"]:
             pos["bz_add"] = True

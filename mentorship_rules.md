@@ -771,7 +771,9 @@ and to the notes for context, charts and trade examples. This file states each r
   probability", rarely filled: 007; 024 ~23:19; 035 ~53:42), or IOFED = the FVG-forming candle's
   extreme or 1 tick past the gap edge, a shallow touch that does not reach CE (003 ~30:30; 006
   ~50:09; 010 ~47:38; 024 ~23:43) [2023]. Ladder when bullish: FVG high, then 75%, then CE (030
-  ~15:46). Bot: `entry="edge"`. D11.
+  ~15:46). Bot: `entry="edge"` (default) | `"ce"` | `"edge_1tick"` | `"iofed"` (`iofed_ref`) | `"ladder"`
+  (`entry_ladder_fracs`; later rungs fill as entry-ladder units); the Silver Bullet has its own `sb_entry`;
+  unknown values raise. D11.
 - **E3 Fill rule**: a limit fills only if price prints at least 1 tick through it (042 ~59:04; 070
   ~56:01; 105 ~1:27:00) [2023]. Bot: requires low < entry (strict), gap-through fills at the open.
 - **E4 Retrace candle**: buy into down-close candles, sell into up-close candles ("market
@@ -781,7 +783,9 @@ and to the notes for context, charts and trade examples. This file states each r
   cc01_001 ~10:28); move the limit to a newer FVG in the same window (057); cancel if the target
   trades first (057 ~3:35; bot does); entry must be inside the time window, exit need not (058
   ~44:37); don't enter early when the stop would be too wide (057 ~2:54). Bot: pending orders
-  expire after `pending_minutes=30` or at the session end.
+  expire after `pending_minutes=30` or at the session end; `evolve_fvg` (a newer untouched FVG replaces
+  the order, the sweep stays alive), `wait_structural` (a too-wide stop waits for a newer entry),
+  `no_new_extreme` (a new low before the fill cancels), `run_cancel` ("t1" | "last" | "off").
 
 **Stops**
 - **E6 Stop placement** (several variants, all [2023] unless noted):
@@ -800,7 +804,12 @@ and to the notes for context, charts and trade examples. This file states each r
     markets; under 2 pts is too tight except on 15s-1m charts (102 ~1:40:20). NFP: wider, behind all
     HTF bodies (105 ~0:51).
   - Bot: `stop_mode="ob_mt"` = min(FVG bottom, full-range MT of the last down-close candle between
-    sweep-3 and the FVG) minus `stop_buffer=0.01`; risk must be 1-15 ES pts.
+    sweep-3 and the FVG) minus the pad; risk must be 1-15 ES pts. The pad is ONE TICK by default
+    (`stop_tick_pts=0.25`, Ep 08; `stop_pad_ticks` replaces it, `stop_tick_pts=0` restores the old 0.01
+    `stop_buffer`). Other modes: `fvg_c1_low`, `fvg_bodies`, `fvg_open`, `fvg_candle`, `ce2`, `sweep`
+    (E6c), `ob_mt_pure` (MT - 2 pts); modifiers `stop_all_ineff` (E6d), `ce_stop_pad_pts`,
+    `nfp_stop_wide` (E6f), `mohawk_ticks` (A4: a wick may poke, a body close beyond the raw level
+    exits), `mt_close_stop` (hard stop at the OB far edge, body close below the MT exits).
 - **E7 Never widen a stop; if you want to, close instead** (Ep 03; 044 ~1:13:38; 045 ~1:19:58;
   cc02_005 ~15:44) [both].
 
@@ -817,26 +826,33 @@ and to the notes for context, charts and trade examples. This file states each r
   (092 ~9:44; 102 ~1:23:50).
 - **E10 After a loss**: halve size, win back ~50%, then step back up; never raise size to recover
   (061 ~2:26:40; cc02_005 ~5:20-15:44; cc06_003 ~23:24) [both]. Ep 08: after a loss on the day, no max
-  size (010 ~49:51). Bot: fixed risk (P2
-  `loss_halving`).
+  size (010 ~49:51). Bot: `loss_halving` (halve per loss to `halving_floor`, back to full after
+  `winback_frac` of the drawdown is won back; carried across days), `after_loss_mult`,
+  `after_loss_adds`, `no_max_after_loss`.
 - **E11 Caps**: ~6 contracts initial, building to 10-16 by pyramiding (Ep 08; 010 ~49:51; 076
   ~27:54) [2023]. Max open risk 1.3% including adds (Ep 07 ~8:24, ~19:21); 2% is not stated in Ep
-  01-08 (cc02_004 only) [owner correction #12]. Bot: `max_total_risk_pct=0.013`; adds shrink to fit.
+  01-08 (cc02_004 only) [owner correction #12]. Bot: `max_total_risk_pct=0.013`; adds shrink to fit;
+  `max_contracts_initial` / `max_contracts_total` (+ `units_per_contract`) cap the contract counts.
 
 **Pyramiding**
 - **E12 Adds** [2023]:
   - Sizes decrease: largest unit first, never a larger add (Ep 04; 006 ~51:52: 6/3/2/1; 021; 050;
     060; 083/085: 5/4/3/2/1). Exceptions 067 and 070 (1, 3, 6) when entering early in a breaker leg.
-    Bot: `adds=()` off; units as fractions of the first.
+    Bot: `adds=(0.5, 0.33, 0.17)` (fractions of the first unit, Ep 04 pyramid; ON by default - the
+    first build of this line said `adds=()` off, which the code never did); `add_points` top | ce | q75.
   - Where: retests of new FVGs that hold; down-close candles into a bullish OB/VI; breaker retests;
     IFVGs; the next VI (003 ~44:20; 009 ~12:07; 001 ~44:00; 026 ~1:44:04; 085 ~30:08).
   - If price closes into the FVG instead of rejecting it, add once more at its low end (006
-    ~51:52).
+    ~51:52). Bot: `add_low_end` (= `add_fvg_low_end` = `add_fvg_low`).
+  - Owner #7 (revised): an FVG BEHIND the trade that price has already traded through (Ep 02: the 15m
+    FVG on the short) is support/resistance and an ADD zone, never a target: `add_arrays=("htf_fvg",)`
+    (default; also "vi", "ifvg", "ob", "breaker"), `add_hold`.
   - No adds after partials (006 ~53:53). Bot: adds only before T1.
   - No adds past equilibrium: stop once price passes the 25% line of the displacement leg or EQ of
     the implied range to the target (022 ~49:26; 025 ~47:56; 045 ~1:51:09; 058 ~43:12; 092
-    ~1:15:24). Bot: missing (P1).
-  - No pyramiding on NFP or on low-probability/decoupled days (105 ~9:13; 045 ~1:01:43).
+    ~1:15:24). Bot: `add_cutoff` (0.25 = the 25% line), `add_cut` ("eq" | "leg75"), `add_cut_ref`.
+  - No pyramiding on NFP or on low-probability/decoupled days (105 ~9:13; 045 ~1:01:43). Bot:
+    `nfp_no_adds` (default on), `decoupled_no_adds`, `low_prob_no_adds`.
 
 ### 2.8 Management and exits
 

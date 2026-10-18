@@ -123,7 +123,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
         _f("md_x_no_inverted_fvg")
         return []
     entry = inv.top                                    # near edge from above (side space)
-    stop = inv.bottom - p.stop_buffer
+    stop = inv.bottom - p.pad
     # at 08:00 price must already be past the inverted gap (the retest comes later)
     if sc[k8 - 1] <= entry:
         _f("md_x_not_past_at_0800")
@@ -201,7 +201,9 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
             if p.sloppy_mode == "stand_aside" and chop is not None and chop.active_before(i):
                 _f("md_x_chop")
                 return []                              # #10: chop known before this bar
-            if sl[i] <= entry:                       # retest fills the limit
+            if sl[i] <= entry - p.fill_through * p.tick - (0.0 if p.fill_through else 1e-9):
+                                                     # retest fills the limit - E3: it must print THROUGH it
+                                                     # (the first build filled on a touch, `<=`)
                 fill = min(entry, so[i])
                 on_chop = chop is not None and chop.active_before(i)
                 if p.sloppy_mode == "scalp" and on_chop:
@@ -243,14 +245,14 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
             tr.exits.append((ctx.idx[i], x(stop), left, "be" if kl else "stop")); return [tr]
         if len(levels) > 1:                           # M15 md_ladder: scale out, BE after the first
             fr = p.ladder_fracs
-            while kl < len(levels) and left and sh[i] >= levels[kl]:
+            while kl < len(levels) and left and sh[i] >= levels[kl] + p.exit_fill_through * p.tick:
                 q = left if kl == len(levels) - 1 else min(left, max(p.lot, _lots(n_units * fr[min(kl, len(fr) - 1)], p.lot)))
                 tr.exits.append((ctx.idx[i], x(levels[kl]), q, f"t{kl + 1}")); left -= q
                 kl += 1
                 stop = max(stop, basis / n_units)
             if not left:
                 return [tr]
-        elif sh[i] >= target:
+        elif sh[i] >= target + p.exit_fill_through * p.tick:
             tr.exits.append((ctx.idx[i], x(target), left, "t1")); return [tr]
         if p.md_second and not tr.adds and add is None and not kl and i < k830 and p.adds:
             # 2nd entry before 08:30: a new small SIBI (side space: a bullish gap after the fill) or
@@ -272,7 +274,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
                 tr.exits.append((ctx.idx[i], x(sc[i]), left, "am_exit")); return [tr]
             if not tightened:
                 tightened = True
-                new = max(stop, fill, sl[i] - p.stop_buffer)
+                new = max(stop, fill, sl[i] - p.pad)
                 if new >= sc[i]:
                     tr.exits.append((ctx.idx[i], x(sc[i]), left, "am_exit")); return [tr]
                 stop = new

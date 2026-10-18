@@ -616,54 +616,54 @@ Low:
 Owns: the `_scan` entry/stop block, the pending-fill and add-arming blocks in run_day, the SB stop and the PO fill.
 
 High:
-- **E6:** Add stop_mode choices (fvg_c1_low, fvg_bodies, sweep), plus `stop_all_ineff`, `stop_pad_ticks`, `ce_stop_pad_pts`, `mohawk_ticks` and `nfp_stop_wide`.
-- **E6c:** Add stop_mode='sweep' (sw.ext - buffer), tested with max_risk 25.
+- **E6:** Add stop_mode choices (fvg_c1_low, fvg_bodies, sweep), plus `stop_all_ineff`, `stop_pad_ticks`, `ce_stop_pad_pts`, `mohawk_ticks` and `nfp_stop_wide`. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E6c:** Add stop_mode='sweep' (sw.ext - buffer), tested with max_risk 25. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
 
 Medium:
-- **A4:** Add `mohawk_ticks` for all structural stops and trails, with a close-based exit beyond the raw level and a mohawk-tolerant fresh test. Add `sweep_body` (unranked, off).
-- **A12:** Add `ob_zone` (range/sensitive) with the stubby/long wick rule, `mt_close_stop`, `ob_disp_mult`, an ob_cisd tag with a cancel, `ob_targets_1m` and `opp_ob_mt`.
-- **A13.4:** Add `breaker_entry`. Compute bz before the no-FVG return. Enter at the breaker top with the stop beyond the sweep. Cancel on a body close below the MT.
+- **A4:** Add `mohawk_ticks` for all structural stops and trails, with a close-based exit beyond the raw level and a mohawk-tolerant fresh test. Add `sweep_body` (unranked, off). **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **A12:** Add `ob_zone` (range/sensitive) with the stubby/long wick rule, `mt_close_stop`, `ob_disp_mult`, an ob_cisd tag with a cancel, `ob_targets_1m` and `opp_ob_mt`. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **A13.4:** Add `breaker_entry`. Compute bz before the no-FVG return. Enter at the breaker top with the stop beyond the sweep. Cancel on a body close below the MT. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
 - **M1.4:** ~~Add `early_entry` (pre-MSS OB limit, HTF+SMT gates, half risk).~~ **Owner #11: the OB entry before the break is the DEFAULT (`ob_entry="pre_break"`), no HTF/SMT gates, full risk; `post_mss` / `both` are switches.** **[built 2026-10-18, owner directives; see build_log.md]**
-- **M2.4:** Add `no_new_extreme` (freeze leg_hi0 and cancel on a new extreme before the fill).
-- **E2:** Extend entry to iofed/ladder, with an `iofed_ref` option. Pass it to SB.
-- **E5:** Add `evolve_fvg` (keep the sweep alive, replace only with a newer untouched FVG) and `wait_structural`.
-- **E6b:** Add stop_mode fvg_candle and fvg_bodies.
-- **E6d:** Add `stop_all_ineff` (open FVGs/VIs below the entry, overshoot wick).
-- **E6f:** Add `stop_pad_ticks` to replace the 0.01 buffer, plus `ce_stop_pad_pts` and `nfp_stop_wide`.
-- **E9:** Add `size_rules` multipliers (news eve, FOMC week, August, against macro, decoupled, low probability) and test-only size-ups (BPR, HTF 5000).
-- **E10:** Add `loss_halving` with halving_floor and winback_frac carried across days, plus `no_max_after_loss`.
-- **E12:** Add `add_points`, `add_fvg_low_end`, `add_cutoff` and `no_adds_nfp`/low probability. Reconcile the adds default with the docs.
-- **E12e:** Add `add_cut` (EQ of the range or leg 75%) with a cancel once progress passes it.
-- **D11:** Extend entry to edge_1tick/iofed/ladder, raise on unknown values, and loosen the touch cancel.
-- **D12:** Add `add_cutoff=0.25` (mirrored for the 022 short) and `leg_pd_min`. Fix the OTE study variant.
-- **Ep02.2:** Add `round_pools` and `entry_arrays` (ob, breaker).
-- **Ep02.3:** Add `mt_close_stop` when the MT is the binding stop, with the far-edge hard stop.
-- **Ep01.20:** Add stop_mode fvg_open and `trail_ref` body.
-- **Ep07.2:** Add `vi_entries` (VI index offset, not is_ifvg). Add an ep07 preset.
-- **Ep07.4:** Add `vi_stop` and `vi_hold` (body close below the VI).
-- **Ep08.5:** Add ob_entries off/fallback/prefer at the anchor open with the MT stop, run before the no-gap return.
-- **Ep08.17:** Add `stop_tick_pts=0.25` (default on) and `engage_range_pts`.
-- **L14b (reassigned):** Add `irl_entries` (fvg/ob/void), `erl_range_swings` and `erl_exits_only`.
+- **M2.4:** Add `no_new_extreme` (freeze leg_hi0 and cancel on a new extreme before the fill). **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E2:** Extend entry to iofed/ladder, with an `iofed_ref` option. Pass it to SB. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E5:** Add `evolve_fvg` (keep the sweep alive, replace only with a newer untouched FVG) and `wait_structural`. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E6b:** Add stop_mode fvg_candle and fvg_bodies. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E6d:** Add `stop_all_ineff` (open FVGs/VIs below the entry, overshoot wick). **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E6f:** Add `stop_pad_ticks` to replace the 0.01 buffer, plus `ce_stop_pad_pts` and `nfp_stop_wide`. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E9:** Add `size_rules` multipliers (news eve, FOMC week, August, against macro, decoupled, low probability) and test-only size-ups (BPR, HTF 5000). **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E10:** Add `loss_halving` with halving_floor and winback_frac carried across days, plus `no_max_after_loss`. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E12:** Add `add_points`, `add_fvg_low_end`, `add_cutoff` and `no_adds_nfp`/low probability. Reconcile the adds default with the docs. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E12e:** Add `add_cut` (EQ of the range or leg 75%) with a cancel once progress passes it. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **D11:** Extend entry to edge_1tick/iofed/ladder, raise on unknown values, and loosen the touch cancel. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **D12:** Add `add_cutoff=0.25` (mirrored for the 022 short) and `leg_pd_min`. Fix the OTE study variant. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **Ep02.2:** Add `round_pools` and `entry_arrays` (ob, breaker). **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **Ep02.3:** Add `mt_close_stop` when the MT is the binding stop, with the far-edge hard stop. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **Ep01.20:** Add stop_mode fvg_open and `trail_ref` body. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **Ep07.2:** Add `vi_entries` (VI index offset, not is_ifvg). Add an ep07 preset. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **Ep07.4:** Add `vi_stop` and `vi_hold` (body close below the VI). **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **Ep08.5:** Add ob_entries off/fallback/prefer at the anchor open with the MT stop, run before the no-gap return. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **Ep08.17:** Add `stop_tick_pts=0.25` (default on) and `engage_range_pts`. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **L14b (reassigned):** Add `irl_entries` (fvg/ob/void), `erl_range_swings` and `erl_exits_only`. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
 
 Low:
-- **A16:** Add `prop_entry` (top - 1 tick), `prop_mt_exit` and `prop_zone`.
-- **A21.3:** Add `ote` (62-79% band, 70.5% entry, 79% cancel) and a leg_depth tag.
-- **M2.5:** Add stop_mode ob_mt_pure (2 pt pad), fvg_candle and ce2.
-- **E1:** Add `add_order` market-on-retest and `entry_order` stop_cc.
-- **E3:** Add `tick_pts`/`fill_through` in all paths. Fix Ma Deuce `<=`. Add `exit_fill_through`.
-- **E4:** Add `retrace_candle` intrabar/closed.
+- **A16:** Add `prop_entry` (top - 1 tick), `prop_mt_exit` and `prop_zone`. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **A21.3:** Add `ote` (62-79% band, 70.5% entry, 79% cancel) and a leg_depth tag. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **M2.5:** Add stop_mode ob_mt_pure (2 pt pad), fvg_candle and ce2. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E1:** Add `add_order` market-on-retest and `entry_order` stop_cc. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E3:** Add `tick_pts`/`fill_through` in all paths. Fix Ma Deuce `<=`. Add `exit_fill_through`. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E4:** Add `retrace_candle` intrabar/closed. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
 - **E8:** ~~Add `risk_pct` with running equity, a 2% clamp and `risk_incl_costs`.~~ **Owner #12: 1.2% open risk at entry (`risk_pct=0.012`), at most 1.3% incl. adds (`max_total_risk_pct=0.013`); no 2% anywhere; `risk_basis="equity"` switch; legacy 1%/2% = study preset.** **[built 2026-10-18, owner directives; see build_log.md]**
-- **E11:** Add `max_contracts_initial`/`total` with `units_per_contract`. (The 1.3% total cap of owner #12 is built: adds shrink to fit, open risk clamped at 0.)
-- **E12b:** Add `add_arrays` (vi/ifvg/ob/breaker) and `add_hold`.
-- **E12c:** Add `add_low_end` (body closes into the FVG -> add at its bottom, once).
-- **E12f:** Add `nfp_no_adds=True` and `decoupled_no_adds`.
-- **Ep01.18:** Add `add_on` retest/breaker.
-- **Ep01.19:** Add `add_body_stop`.
-- **Ep03.9:** Add `ob_entry` high/open.
-- **Ep04.6:** Use entry_arrays ob. Add `mo_tol_pts` (tolerance above the open).
-- **Ep04.10:** Add `add_fvg_low`.
-- **Ep05.5:** Add `breaker_entry` fallback at bz.top.
-- **Ep08.12:** Add `after_loss_mult` and `after_loss_adds`.
+- **E11:** Add `max_contracts_initial`/`total` with `units_per_contract`. (The 1.3% total cap of owner #12 is built: adds shrink to fit, open risk clamped at 0.) **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E12b:** Add `add_arrays` (vi/ifvg/ob/breaker) and `add_hold`. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E12c:** Add `add_low_end` (body closes into the FVG -> add at its bottom, once). **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **E12f:** Add `nfp_no_adds=True` and `decoupled_no_adds`. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **Ep01.18:** Add `add_on` retest/breaker. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **Ep01.19:** Add `add_body_stop`. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **Ep03.9:** Add `ob_entry` high/open. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **Ep04.6:** Use entry_arrays ob. Add `mo_tol_pts` (tolerance above the open). **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **Ep04.10:** Add `add_fvg_low`. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **Ep05.5:** Add `breaker_entry` fallback at bz.top. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
+- **Ep08.12:** Add `after_loss_mult` and `after_loss_adds`. **[built 2026-10-18, entries_stops_sizing; see build_log.md]**
 - **Ep08.17:** Covered under the medium items above.
 
 ### targets_partials (36 items)

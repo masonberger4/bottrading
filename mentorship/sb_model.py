@@ -90,7 +90,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                     pos["left"] = 0
                 elif p.sb_mgmt == "ladder":            # scale out through the draw levels
                     lv_, fr = pos["levels"], pos["fracs"]
-                    while pos["k"] < len(lv_) and pos["left"] and h >= lv_[pos["k"]]:
+                    while pos["k"] < len(lv_) and pos["left"] and h >= lv_[pos["k"]] + p.exit_fill_through * p.tick:
                         k = pos["k"]
                         q = pos["left"] if k == len(lv_) - 1 else min(pos["left"], max(p.lot, _lots(pos["n"] * fr[min(k, len(fr) - 1)], p.lot)))
                         tr.exits.append((ts, sd.x(lv_[k]), q, f"t{k + 1}")); pos["left"] -= q
@@ -100,23 +100,23 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                             pos["stop"] = max(pos["stop"], pos["entry"])
                         pos["away"] = lv_[k]
                     if pos["left"] and pos["away"] is not None and c >= pos["away"] + p.away_pts * p.es_pt:
-                        pos["stop"] = max(pos["stop"], pos["away"] - p.stop_buffer)
+                        pos["stop"] = max(pos["stop"], pos["away"] - p.pad)
                         pos["away"] = None
                 else:
-                    if not pos["t1_done"] and h >= pos["t1"]:
+                    if not pos["t1_done"] and h >= pos["t1"] + p.exit_fill_through * p.tick:
                         q = pos["left"] if pos["t2"] is None else max(p.lot, _lots(pos["left"] * 0.8, p.lot))
                         q = min(q, pos["left"])
                         tr.exits.append((ts, sd.x(pos["t1"]), q, "t1")); pos["left"] -= q
                         pos["t1_done"] = True
                         pos["stop"] = max(pos["stop"], pos["entry"])
-                    if pos["left"] and pos["t2"] is not None and pos["t1_done"] and h >= pos["t2"]:
+                    if pos["left"] and pos["t2"] is not None and pos["t1_done"] and h >= pos["t2"] + p.exit_fill_through * p.tick:
                         tr.exits.append((ts, sd.x(pos["t2"]), pos["left"], "t2")); pos["left"] = 0
                 if (pos["left"] and session == "AM" and p.am_exit and p.am_exit_extras
                         and t + ctx.tf >= p.am_exit):  # owner #8: close (not tighten) at 12:00
                     if p.am_exit_mode == "close":
                         tr.exits.append((ts, sd.x(c), pos["left"], "am_exit")); pos["left"] = 0
                     elif not pos.get("am_tightened"):
-                        new = max(pos["stop"], pos["entry"], l - p.stop_buffer)
+                        new = max(pos["stop"], pos["entry"], l - p.pad)
                         pos["am_tightened"] = True
                         if new >= c:
                             tr.exits.append((ts, sd.x(c), pos["left"], "am_exit")); pos["left"] = 0
@@ -145,7 +145,9 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                     pending = None                    # traded into before the window: not valid
                 elif sd.h[i] >= pending["t1"] and sd.l[i] >= pending["entry"]:
                     pending = None                    # target traded before the fill
-                if pending is not None and a <= t < b and sd.l[i] < pending["entry"]:
+                ft_ = p.fill_through * p.tick                  # E3: ticks the limit must print through
+                if pending is not None and a <= t < b and (sd.l[i] <= pending["entry"] - ft_ + 1e-12 if ft_
+                                                           else sd.l[i] < pending["entry"]):
                     o_ = pending
                     fill = min(o_["entry"], sd.o[i])
                     tr = Trade(day, symbol, session, setup, "long" if sd.sign > 0 else "short",
@@ -241,12 +243,13 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None):
     if not gaps:
         return None
     g = gaps[-1]                                       # evolving: the newest untouched FVG
-    entry = g.top
+    from .entries import entry_px                      # E2 / D11: the SB's own entry price mode
+    entry = entry_px(sd, g, g.top, g.bottom, p, p.sb_entry)
     ob = L.order_block_blend(sd.o, h, l, c, li - 3, g.i - 2, "bull")
     stop = l[g.i - 2]
     if ob is not None and ob.mt == ob.mt:
         stop = min(stop, ob.mt)
-    stop -= p.stop_buffer
+    stop -= p.pad
     risk = entry - stop
     if not (p.min_risk_pts * p.es_pt <= risk <= p.max_risk_pts * p.es_pt):
         return None

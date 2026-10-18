@@ -12,6 +12,7 @@ import pandas as pd
 
 from claude_hf.daytypes import JOBS, is_trading_day
 from . import htf
+from .entries import new_risk_state
 from .strategy import ROUND_STEP, Params, resolve_session_close, run_day
 
 DATA = Path("data/mentorship")
@@ -284,6 +285,7 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     hist_p: list[pd.DataFrame] = []
     hist_p2: list[pd.DataFrame] = []
     rows = []
+    rs = new_risk_state() if p.loss_halving else None     # E10: carried across days
     for k, g in enumerate(ds):
         d = g.index[0].date()
         pa = None
@@ -299,7 +301,7 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             if p.risk_basis == "equity":               # #12: start-of-day equity, closed trades only
                 eq = p.account_equity + sum(r["net"] for r in rows)
             kw = day_kwargs(pr, k, eq, (intermarket or INTERMARKET()).get(d))
-            day_trades = run_day(partner=pa, partner2=pa2, locks=locks, skips=skips, **kw)
+            day_trades = run_day(partner=pa, partner2=pa2, locks=locks, skips=skips, risk_state=rs, **kw)
             if p.max_trades_week:
                 day_trades = day_trades[:p.max_trades_week - n_wk]
             for tr in day_trades:

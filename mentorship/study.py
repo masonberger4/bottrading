@@ -14,7 +14,7 @@ from dataclasses import replace
 import pandas as pd
 
 from . import backtest as B
-from .strategy import Params
+from .strategy import PRESET_EP07, Params
 
 VARIANTS = {
     "base": {},
@@ -210,7 +210,9 @@ CURRENT = dict(mt_mode="range", exit_mode="before", min_draw_pts=0.0, leg_pd=0.0
                risk_dollars=1000.0, max_total_risk=2000.0, last_hour=(915, 945), flatten=960,
                sb_target_mode="fixed", price_frame="back_adjusted", round_pools=False,
                seen_from_created=False, sweep_ticks=0.0, fvg_c2_dir=False, nwog_trading_days=False,
-               breaker_ll=False, breaker_cand_to="ext")   # review fix: Ep01.6 defaults pinned back
+               breaker_ll=False, breaker_cand_to="ext",   # review fix: Ep01.6 defaults pinned back
+               stop_tick_pts=0.0, nfp_no_adds=False,      # entries_stops_sizing: the old 0.01 pad, adds on NFP days,
+               add_arrays=())                              # no HTF-FVG add zone (owner #7 revised)
 # the defaults just before the owner directives of 2026-10-18 (A/B baseline for the new defaults).
 # Bug fixes it can NOT undo (no switch, by design): the London-pool look-ahead (London 02:00-05:00
 # pools hidden before 05:00), the _split news-ahead holiday skip (N3.4), the M1.2 swing-low intact
@@ -228,7 +230,9 @@ PRE_OWNER = dict(ob_entry="post_mss", draw_lock="off", htf_resist_cap=False, new
                  breaker_ll=False, breaker_cand_to="ext",
                  # owner answers 2026-10-18 (year end against December; stand aside on sloppy days)
                  # came after the golden numbers were recorded
-                 year_end="off", sloppy_mode="off")
+                 year_end="off", sloppy_mode="off",
+                 # entries_stops_sizing defaults (Ep08.17 one-tick pad; E12f no adds on NFP days)
+                 stop_tick_pts=0.0, nfp_no_adds=False, add_arrays=())
 LEGACY_1PCT_2PCT = dict(risk_dollars=1000.0, max_total_risk=2000.0)   # E8 / owner #12 preset
 # setups_models review: the FVG-path variants need the FVG path to trade at all - post_mss with the
 # owner #9 lock and #7 cap produced 0 trades on ES 5m 2023H2, so those variants drop both too
@@ -248,7 +252,7 @@ DECISIONS = {
     "D8_nfp_thu": dict(nfp_thu=True),
     "D9_skip_cpi": dict(skip_cpi=True),
     "D11_entry_ce": dict(entry="ce"),
-    "D12_leg_062": dict(leg_pd=0.62),
+    "D12_leg_062": dict(leg_pd=0.38, leg_pd_min=0.21),   # fixed: 62-79% RETRACE = entry at 21-38% of the leg
     "D12_leg_off": dict(leg_pd=0.0),
     "D13_partial_08": dict(partial=0.8),
     "D14_trail": dict(trail=True),
@@ -685,6 +689,115 @@ DECISIONS = {
     "M4.3_adv_breaker_pre": dict(adv_breaker_pre=True),
     "T13_cc_profile_tag": dict(cc_profile="tag"),
     "T13_cc_profile_gate": dict(cc_profile="gate"),
+    # --- package entries_stops_sizing (one per new switch; name prefix = rule id) ----------------
+    # FVG-path variants run with SM_POST (the default OB-before-break entry never uses them)
+    "Ep08.17_stop_tick_off": dict(stop_tick_pts=0.0),                    # DEFAULT ON: the old 0.01 pad
+    "Ep08.17_engage_range10": dict(engage_range_pts=10.0),
+    "E6_stop_fvg_c1_low": dict(SM_POST, stop_mode="fvg_c1_low", max_risk_pts=25),
+    "E6_stop_fvg_bodies": dict(SM_POST, stop_mode="fvg_bodies", max_risk_pts=25),
+    "E6_stop_all_ineff": dict(SM_POST, stop_all_ineff=True, max_risk_pts=25),
+    "E6_stop_all_ineff_no_wick": dict(SM_POST, stop_all_ineff=True, stop_ineff_wick=False, max_risk_pts=25),
+    "E6_ce_stop_pad3": dict(SM_POST, entry="ce", ce_stop_pad_pts=3.0),
+    "E6_nfp_stop_wide": dict(SM_POST, nfp_day=True, nfp_stop_wide=True, max_risk_pts=25),
+    "E6c_stop_sweep": dict(SM_POST, stop_mode="sweep", max_risk_pts=25),
+    "E6b_stop_fvg_candle": dict(SM_POST, stop_mode="fvg_candle"),
+    "E6d_stop_all_ineff_ob": dict(stop_all_ineff=True, max_risk_pts=25),
+    "E6f_stop_pad_3ticks": dict(stop_pad_ticks=3.0),
+    "E6f_stop_pad_0ticks": dict(stop_pad_ticks=0.0001),
+    "E6f_nfp_stop_wide_ob": dict(nfp_stop_wide=True, max_risk_pts=25),
+    "Ep01.20_stop_fvg_open": dict(SM_POST, stop_mode="fvg_open", max_risk_pts=25),
+    "Ep01.20_trail_pad_mohawk": dict(trail=True, mohawk_ticks=2.0),
+    "Ep01.20_trail_ref_body": dict(trail=True, trail_ref="body"),
+    "M2.5_stop_ob_mt_pure": dict(SM_POST, stop_mode="ob_mt_pure", max_risk_pts=25),
+    "M2.5_stop_fvg_candle": dict(SM_POST, stop_mode="fvg_candle"),
+    "M2.5_stop_ce2": dict(SM_POST, stop_mode="ce2"),
+    "A4_mohawk2": dict(mohawk_ticks=2.0),
+    "A4_mohawk4_post": dict(SM_POST, mohawk_ticks=4.0),
+    "A4_sweep_body": dict(sweep_body=True),
+    "A12_ob_zone_range": dict(ob_zone="range"),
+    "A12_ob_zone_sensitive": dict(ob_zone="sensitive"),
+    "A12_ob_zone_sensitive_stub10": dict(ob_zone="sensitive", ob_stub_frac=0.1),
+    "A12_mt_close_stop": dict(mt_close_stop=True),
+    "A12_ob_disp_mult2": dict(SM_POST, ob_disp_mult=2.0),
+    "A12_ob_cisd_tag": dict(ob_cisd="tag"),
+    "A12_ob_cisd_cancel": dict(ob_cisd="cancel"),
+    "A12_ob_targets_1m": dict(ob_targets_1m=True),
+    "A12_opp_ob_mt": dict(ob_targets_1m=True, opp_ob_mt=True),
+    "Ep02.3_mt_close_stop_post": dict(SM_POST, mt_close_stop=True),
+    "A13.4_breaker_entry_classic": dict(SM_POST, breaker_entry="classic"),
+    "Ep05.5_breaker_entry_fallback": dict(SM_POST, breaker_entry="fallback"),
+    "M1.4_ob_entry_pre_break": dict(ob_entry="pre_break"),
+    "M2.4_no_new_extreme": dict(no_new_extreme=True),
+    "M2.4_no_new_extreme_post": dict(SM_POST, no_new_extreme=True),
+    "E2_entry_edge_1tick": dict(SM_POST, entry="edge_1tick"),
+    "E2_entry_iofed": dict(SM_POST, entry="iofed"),
+    "E2_entry_iofed_q75": dict(SM_POST, entry="iofed", iofed_ref="q75"),
+    "E2_entry_ladder": dict(SM_POST, entry="ladder", max_risk_pts=25),
+    "E2_sb_entry_edge_1tick": dict(sb_model=True, sb_entry="edge_1tick"),
+    "E2_sb_entry_iofed": dict(sb_model=True, sb_entry="iofed"),
+    "D11_entry_edge_1tick": dict(SM_POST, entry="edge_1tick"),
+    "D11_entry_ladder_532": dict(SM_POST, entry="ladder", entry_ladder_fracs=(0.5, 0.3, 0.2), max_risk_pts=25),
+    "D11_run_cancel_last": dict(run_cancel="last"),
+    "D11_run_cancel_off": dict(run_cancel="off"),
+    "D12_leg_ote_62_79": dict(leg_pd=0.38, leg_pd_min=0.21),            # fixed: the OTE band (62-79% retrace)
+    "D12_leg_pd_min": dict(SM_POST, leg_pd_min=0.21),
+    "D12_add_cutoff25": dict(add_cutoff=0.25),
+    "A21.3_ote_limit_cancel": dict(SM_POST, ote="limit", ote_cancel=True, max_risk_pts=40),
+    "A21.3_leg_depth_tag": dict(SM_POST, leg_depth_tag=True),
+    "E5_evolve_fvg": dict(SM_POST, evolve_fvg=True),
+    "E5_wait_structural": dict(SM_POST, wait_structural=True, max_risk_pts=12),
+    "E1_stop_cc": dict(SM_POST, entry_order="stop_cc"),
+    "E1_add_order_market": dict(add_order="market"),
+    "E3_fill_through1": dict(fill_through=1.0),
+    "E3_exit_fill_through1": dict(exit_fill_through=1.0),
+    "E3_fill_through1_sb": dict(sb_model=True, fill_through=1.0, exit_fill_through=1.0, ma_deuce=True),
+    "E4_retrace_closed": dict(SM_POST, retrace_candle="closed"),
+    "E4_retrace_intrabar": dict(SM_POST, retrace_candle="intrabar"),
+    "Ep04.6_mo_tol1": dict(mo_tol_pts=1.0),
+    "Ep03.9_ob_px_open": dict(ob_entry_px="open"),
+    "Ep03.9_ob_px_high": dict(ob_entry_px="high"),
+    "Ep08.5_ob_entries_fallback": dict(SM_POST, ob_entries="fallback"),
+    "Ep08.5_ob_entries_prefer": dict(SM_POST, ob_entries="prefer"),
+    "Ep07.2_vi_entries": dict(SM_POST, vi_entries=True, max_risk_pts=25),
+    "Ep07.2_ep07_preset": dict(PRESET_EP07),
+    "Ep07.4_vi_stop": dict(SM_POST, vi_stop=True, vi_hold=True),
+    "Ep07.4_vi_hold": dict(SM_POST, vi_hold=True),
+    "A16_prop_entry": dict(SM_POST, prop_entry=True),
+    "A16_prop_mt_exit": dict(SM_POST, prop_mt_exit=True, prop_zone="body"),
+    "L14b_irl_fvg_ob_void": dict(SM_POST, irl_entries=("fvg", "ob", "void"), max_risk_pts=25),
+    "L14b_irl_void_only": dict(SM_POST, irl_entries=("void",), max_risk_pts=25),
+    "L14b_erl_range_swings": dict(erl_range_swings=True),
+    "L14b_erl_exits_only": dict(erl_exits_only=True),
+    "E9_size_news_eve": dict(size_rules=("news_eve",)),
+    "E9_size_fomc_week": dict(size_rules=("fomc_week",)),
+    "E9_size_august": dict(size_rules=("august",)),
+    "E9_size_all_down": dict(size_rules=("news_eve", "fomc_week", "august", "against_macro", "decoupled", "low_prob")),
+    "E9_size_up_bpr_htf": dict(size_up_rules=("bpr", "htf_target")),
+    "E10_loss_halving": dict(loss_halving=True),
+    "E10_loss_halving_floor1_8": dict(loss_halving=True, halving_floor=0.125, winback_frac=1.0),
+    "E10_no_max_after_loss": dict(no_max_after_loss=True),
+    "Ep08.12_after_loss_half": dict(after_loss_mult=0.5),
+    "Ep08.12_after_loss_no_adds": dict(after_loss_adds=False),
+    "E11_max_contracts_6_16": dict(max_contracts_initial=6, max_contracts_total=16, units_per_contract=1),
+    "E12_add_points_ce": dict(add_points="ce"),
+    "E12_add_cutoff25": dict(add_cutoff=0.25),
+    "E12_adds_off_nfp_default": dict(nfp_no_adds=False),                 # DEFAULT ON: adds also on NFP days
+    "E12_no_adds_nfp_alias": dict(no_adds_nfp=True),
+    "E12b_add_arrays_vi_ifvg": dict(add_arrays=("vi", "ifvg"), ifvg_entries=True),
+    "E12b_add_arrays_ob_breaker": dict(add_arrays=("ob", "breaker"), ob_adds=False),
+    "E12b_add_hold": dict(add_hold=True),
+    "E12c_add_low_end": dict(add_low_end=True),
+    "E12e_add_cut_eq": dict(add_cut="eq"),
+    "E12e_add_cut_leg75": dict(add_cut="leg75"),
+    "E12e_add_cut_eq_leg": dict(add_cut="eq", add_cut_ref="leg"),
+    "E12f_decoupled_no_adds": dict(decoupled_no_adds=True),
+    "E12f_low_prob_no_adds": dict(low_prob_no_adds=True, low_prob_tests=("against_bias", "no_htf")),
+    "Ep01.18_add_on_retest": dict(add_on="retest"),
+    "Ep01.18_add_on_breaker": dict(SM_POST, add_on="breaker"),
+    "Ep01.19_add_body_stop": dict(add_body_stop=True),
+    "Ep04.10_add_fvg_low": dict(add_fvg_low=True),
+    "E12_add_fvg_low_end": dict(add_fvg_low_end=True),
+    "Ep02.2_add_htf_fvg_off": dict(add_arrays=()),                       # owner #7 revised: the add zone is the default
 }
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
 

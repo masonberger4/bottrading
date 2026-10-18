@@ -58,6 +58,12 @@ item: `build_log.md`. Effect note: with every owner default on, ES 5m produces f
 than before - mostly the #7 resistance cap (an opposing 15m-D FVG within 1R of the entry, or
 price inside one) and the #9 session lock (one side, session over once the draw is delivered).
 
+Update (entries_stops_sizing): the revised #7 add zone is built as the default - `add_arrays=("htf_fvg",)`:
+an HTF FVG behind the trade that price already traded through (the position was filled at or under its
+top) takes one add at its top (before the first partial, within the 1.3% cap); it is never a target.
+`add_arrays=()` switches it off. Also new DEFAULTS from the build specs: the one-tick stop pad
+(`stop_tick_pts=0.25`, Ep 08) and no adds on NFP days (`nfp_no_adds=True`, E12f).
+
 ## Open questions for the owner (review pass, 2026-10-18)
 Built as switches; the defaults stay as they are until the owner answers.
 1. **#5 / #6 / #14 are inactive under the default entry.** The bearish-unicorn tag (#5), the

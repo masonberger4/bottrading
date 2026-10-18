@@ -344,7 +344,7 @@ def test_ob_pre_break_fills_next_bar_no_fvg_after_mss_no_resend():
     tr, _, log, _ = run(day(A_ROWS, spike=True), hist, Params(**BASE), A_LOCK)
     t = tr[0]
     assert t.entry_kind == "ob_pre" and str(t.armed)[11:16] == "09:45" and str(t.entry_time)[11:16] == "09:50"
-    assert t.stop == pytest.approx(98.49)                         # MT stop < 1 pt -> sweep extreme
+    assert t.stop == pytest.approx(98.25)                         # MT stop < 1 pt -> sweep extreme - one tick (Ep 08 pad)
     assert len(log) == 1                                          # armed once, no FVG order after MSS
     # scenario B (MSS at 10:05): the OB order arms at the MSS bar, the FVG never replaces it
     tr, log = _b([(102.3, 102.4, 100.3, 101.0)], Params(**dict(B_POST, ob_entry="pre_break")))
@@ -445,7 +445,7 @@ def test_am_exit_close_hold_tighten_and_widened_window():
     t = run(df, hist, replace(q, am_exit=0))[0][0]
     assert t.exits[-1][3] == "eod" and str(t.exits[-1][0])[11:16] == "16:10"
     t = run(df, hist, replace(q, am_exit_mode="tighten"))[0][0]
-    assert t.exits[-1][3] == "stop" and t.exits[-1][1] == pytest.approx(100.79)   # set once at 11:55
+    assert t.exits[-1][3] == "stop" and t.exits[-1][1] == pytest.approx(100.55)   # set once at 11:55 (bar low 100.8 - one tick)
     # AM window widened to 12:30: the order armed at 11:50 is not filled into 12:00
     late = day(A_ROWS, start="11:35", spike=True)
     p = Params(**BASE, draw_lock="off", am=(570, 750), min_draw_pts=0.0)

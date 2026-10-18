@@ -287,7 +287,7 @@ def test_breaker_entry_prefer_ll_time_and_tags():
     assert base and base[0].unicorn and base[0].entry == 101.3
     assert base[0].fvg_state == "open"
     tr = _b(after, breaker_entry="prefer")
-    assert tr and tr[0].entry_kind == "breaker" and tr[0].entry == 101.0 and tr[0].stop == pytest.approx(97.99)
+    assert tr and tr[0].entry_kind == "breaker" and tr[0].entry == 101.0 and tr[0].stop == pytest.approx(97.75)
     assert _b(after, breaker_ll=True)[0].unicorn                       # real L1/H, L2 < L1, close above H
     assert _b(after, breaker_time="all")[0].unicorn                    # all in the NY AM block
     assert _b(after, unicorn_pref=False)[0].entry == 101.3
