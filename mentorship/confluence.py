@@ -58,14 +58,19 @@ def _structure(h, l, c) -> np.ndarray:
 SRC = {"fvg": 0, "ob": 1, "gap": 2, "vi": 3, "breaker": 4}   # array source codes (column `src`)
 
 
-def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=False):
+def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=False, c2_dir=False,
+           vi_min_gap=0.0, vi_body_death=False):
     """Arrays as columns: kind (+1 bull / -1 bear), top, bottom, inv (invalidation level),
     known (time the array can first be used), src (SRC code: FVG 0, OB 1, opening gap 2,
     volume imbalance 3, breaker 4), plus the bar index the invalidation scan starts from.
     `vi` adds volume imbalances (shared VI wiring; dies on a close beyond the far edge like an
-    FVG); `breakers` adds breaker zones with inv = the breaker MT (owner #6, conf_breakers)."""
+    FVG); `breakers` adds breaker zones with inv = the breaker MT (owner #6, conf_breakers).
+    levels_detectors: `c2_dir` (A5) keeps FVGs whose middle candle closes their way; `vi_min_gap`
+    (A9) drops narrow VIs; `vi_body_death` (A9 / Ep03.3) kills a VI when a later body of its
+    timeframe spans it (instead of a close beyond its far edge)."""
     rows = []
-    for z in L.fvgs(h, l):
+    vi_dead = {}
+    for z in L.fvgs(h, l, o, c, c2_dir):
         s = 1 if z.kind == "bull" else -1
         rows.append((s, z.top, z.bottom, z.bottom if s > 0 else z.top, z.i, 0))
         ob = L.order_block_blend(o, h, l, c, z.i - 4, z.i - 2, z.kind)
@@ -74,8 +79,10 @@ def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=F
             if (s > 0 and disp > ob.top) or (s < 0 and disp < ob.bottom):
                 rows.append((s, ob.top, ob.bottom, ob.mt, z.i, 1))
     if vi:
-        for z in L.volume_imbalances(o, h, l, c):
+        for z in L.volume_imbalances(o, h, l, c, vi_min_gap):
             s = 1 if z.kind == "bull" else -1
+            if vi_body_death:
+                vi_dead[len(rows)] = L.vi_body_dead(o, c, z, end=None if max_bars is None else z.i + max_bars)
             rows.append((s, z.top, z.bottom, z.bottom if s > 0 else z.top, z.i, 3))
     if breakers:
         for z in L.breakers(o, h, l, c, 1):
@@ -91,6 +98,10 @@ def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=F
     dead = np.full(len(a), np.inf)
     n = len(c)
     for j in range(len(a)):
+        if j in vi_dead:                                  # A9 body death rule
+            if vi_dead[j] is not None:
+                dead[j] = end_times[vi_dead[j]]
+            continue
         seg = c[i[j] + 1:] if max_bars is None else c[i[j] + 1:i[j] + 1 + max_bars]
         if not len(seg):
             continue
@@ -103,7 +114,9 @@ def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=F
 
 class Confluence:
     def __init__(self, df: pd.DataFrame, base_minutes: int, es_pt: float = 1.0, vi: bool = False,
-                 breakers: bool = False):
+                 breakers: bool = False, c2_dir: bool = False, vi_min_gap: float = 0.0,
+                 vi_body_death: bool = False):
+        zk = dict(c2_dir=c2_dir, vi_min_gap=vi_min_gap, vi_body_death=vi_body_death)
         self.tol = 0.25 * es_pt
         self.z = {}
         self.st = {}                   # tf -> (bar end times, structure state)
@@ -119,7 +132,7 @@ class Confluence:
             end = (b.index + pd.Timedelta(minutes=m)).as_unit("ns").asi8
             life_bars = int(pd.Timedelta(LIFE[tf]).total_seconds() // 60 // m)
             z = _zones(*(b[k].values.astype(float) for k in ("open", "high", "low", "close")),
-                       end.astype(float), max_bars=life_bars, vi=vi, breakers=breakers)
+                       end.astype(float), max_bars=life_bars, vi=vi, breakers=breakers, **zk)
             self.st[tf] = (end.astype(float), _structure(b.high.values, b.low.values, b.close.values))
             if z:
                 z["life"] = pd.Timedelta(LIFE[tf]).value
@@ -143,7 +156,7 @@ class Confluence:
                                   "close": g.close.last()})
                 ends = pd.Series(dend, index=d.index).groupby(grp).max().values
             z = _zones(*(b[k].values.astype(float) for k in ("open", "high", "low", "close")),
-                       np.asarray(ends, float), vi=vi, breakers=breakers)
+                       np.asarray(ends, float), vi=vi, breakers=breakers, **zk)
             self.st[tf] = (np.asarray(ends, float), _structure(b.high.values, b.low.values, b.close.values))
             if z:
                 z["life"] = np.full(len(z["kind"]), float(pd.Timedelta(LIFE[tf]).value))
@@ -299,6 +312,34 @@ def _valid_impl(self, t: pd.Timestamp, side: int, tfs, src=(0, 1, 3), known_by: 
 
 
 Confluence.valid = _valid_impl
+
+
+def _opposing_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs, src=(0,), keep_dead: bool = False):
+    """levels_detectors (A5 htf_ce_draw / fvg_keep_filled, A9 vi_htf_draw, Ep08.1 daily_fvg_exact):
+    opposing arrays on `tfs` with a source in `src`, wholly beyond `beyond` in the trade's direction
+    (long: bearish arrays with bottom > beyond), valid at t. keep_dead=True (A5 "reuse after
+    fills", 015 / 051) ignores the invalidation close but keeps the life limit (D ~60 sessions).
+    Returns [(near, ce, far, tf, src)], real prices, nearest first."""
+    now = float(t.value)
+    out = []
+    for tf in tfs:
+        z = self.z.get(tf)
+        if z is None:
+            continue
+        m = ((z["kind"] == -side) & (z["known"] <= now) & (now - z["known"] <= z["life"])
+             & np.isin(z["src"], list(src)))
+        if not keep_dead:
+            m &= z["dead"] > now
+        m &= (z["bottom"] > beyond) if side > 0 else (z["top"] < beyond)
+        for k in np.flatnonzero(m):
+            top, bot = float(z["top"][k]), float(z["bottom"][k])
+            near, far = (bot, top) if side > 0 else (top, bot)
+            out.append((near, (top + bot) / 2, far, tf, int(z["src"][k])))
+    out.sort(key=lambda r: r[0] * side)
+    return out
+
+
+Confluence.opposing = _opposing_impl
 
 
 def score(tfs: list[str]) -> tuple[int, int]:

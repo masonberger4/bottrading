@@ -177,11 +177,26 @@ def lock_tables(df: pd.DataFrame, p: Params, bias_table: pd.DataFrame | None = N
         if m == 570 and bias_table is not None:
             out[m] = bias_table
         else:
-            out[m] = htf.table(df, p.es_pt, cut_min=m, vi=p.vi_arrays, flip_triggers=p.flip_triggers)
+            out[m] = htf.table(df, p.es_pt, cut_min=m, vi=p.vi_arrays, flip_triggers=p.flip_triggers,
+                               **htf_kw(p))
     return out
 
 
-HIST_DAYS = 45                    # prior sessions handed to run_day (backtest and paper alike)
+HIST_DAYS = 61                    # prior sessions handed to run_day (backtest and paper alike); 61 =
+                                  # the IPDA 60-day look-back + 1 (B21, levels_detectors; was 45)
+
+
+def htf_kw(p: Params) -> dict:
+    """levels_detectors switches that change the htf table / confluence arrays (A5 c2 check, A9 VI
+    size and death rule). Empty at the old values, so cached tables keep their meaning."""
+    kw = {}
+    if p.fvg_c2_dir:
+        kw["c2_dir"] = True
+    if p.vi_min_gap_pts:
+        kw["vi_min_gap"] = p.vi_min_gap_pts * p.es_pt
+    if p.vi_body_death:
+        kw["vi_body_death"] = True
+    return kw
 
 
 @dataclass
@@ -200,6 +215,7 @@ class Prepared:
     closes: dict
     cf: object
     meta: pd.DataFrame | None
+    eth: dict | None = None        # L2 / L3 / L10 / Ep08.10: {date: (open, high, low, close)} of full sessions
 
 
 def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
@@ -214,18 +230,22 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
                       f"meta {'missing' if meta is None else 'given'}): no front-month mapping",
                       stacklevel=3)
     bt = bias_table if bias_table is not None else (
-        htf.table(df, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers) if ov else None)
+        htf.table(df, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers, **htf_kw(p)) if ov else None)
     cuts = lock_cuts if lock_cuts is not None else lock_tables(df, p, bt)
     og = htf.opening_gaps(df, p.es_pt) if ov else None
     tt = df.index.hour * 60 + df.index.minute
-    pre = df[(tt >= 570) & (tt < p.org_close)]
+    pre = df[(tt >= 570) & (tt < (p.org_close or p.session_close or 960))]   # L7: per symbol
     closes = pre.groupby(pre.index.date).close.last().to_dict()     # ORG close per day
     cf = None
     if confluence and ov:
         from .confluence import Confluence
-        cf = Confluence(df, tf, p.es_pt, vi=p.vi_arrays, breakers=p.conf_breakers)
+        cf = Confluence(df, tf, p.es_pt, vi=p.vi_arrays, breakers=p.conf_breakers, **htf_kw(p))
     ds = days(df, tf, partial_last, p.session_close)
-    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta)
+    eth = None
+    if p.pd_hl_session == "eth" or p.matrix_full or p.wick_session == "eth" or p.pw_pm_full_session:
+        se = htf.sessions(df)                  # full sessions (evening reopen -> close), by trading date
+        eth = {t.date(): (float(r.open), float(r.high), float(r.low), float(r.close)) for t, r in se.iterrows()}
+    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth)
 
 
 def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: dict | None = None) -> dict:
@@ -235,7 +255,9 @@ def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: d
     return dict(df=g, hist=[rth(x) for x in pr.ds[max(0, k - HIST_DAYS):k]], symbol=pr.symbol, p=p, tf=pr.tf,
                 bias=pr.bt.loc[d].to_dict() if pr.bt is not None and d in pr.bt.index else None,
                 conf=pr.cf,
-                gaps=htf.gaps_for_day(pr.og, d, p.nwog_keep, p.nwog_days) if pr.og is not None else None,
+                gaps=htf.gaps_for_day(pr.og, d, p.nwog_keep, p.nwog_days, p.nwog_skip_holiday,
+                                      p.nwog_trading_days) if pr.og is not None else None,
+                eth=pr.eth,
                 closes=pr.closes, evening=_evening(pr.df, d) if p.globex_pool else None,
                 intermarket=intermarket, equity=equity,
                 bias_by_cut={m: t_.loc[d].to_dict() for m, t_ in pr.cuts.items() if d in t_.index},

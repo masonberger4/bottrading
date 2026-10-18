@@ -63,12 +63,17 @@ def weeks(d: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _arrays(o, h, l, c, tf: str, known_of, vi: bool = False) -> list[Arr]:
+def _arrays(o, h, l, c, tf: str, known_of, vi: bool = False, c2_dir: bool = False,
+            vi_min_gap: float = 0.0) -> list[Arr]:
+    """Daily / weekly arrays. levels_detectors: `c2_dir` (A5 fvg_c2_dir) keeps only FVGs whose
+    middle candle closes their way; `vi_min_gap` (A9) drops narrower VIs."""
     out = []
     if vi:                       # shared VI wiring (Ep02.8 / Ep03.3 / B1): daily/weekly volume
-        for z in L.volume_imbalances(o, h, l, c):      # imbalances as arrays and draws
-            out.append(Arr(z.kind, "vi", tf, z.top, z.bottom, z.mid, known_of(z.i)))
-    for z in L.fvgs(h, l):
+        for z in L.volume_imbalances(o, h, l, c, vi_min_gap):   # imbalances as arrays and draws
+            a = Arr(z.kind, "vi", tf, z.top, z.bottom, z.mid, known_of(z.i))
+            a.src_i = z.i                                     # its own-TF bar (A9 body death)
+            out.append(a)
+    for z in L.fvgs(h, l, o, c, c2_dir):
         out.append(Arr(z.kind, "fvg", tf, z.top, z.bottom, z.mid, known_of(z.i)))
         # order block: last opposite-close candle before the displacement candle
         kind = "bull" if z.kind == "bull" else "bear"
@@ -89,23 +94,28 @@ def bar_minutes(df: pd.DataFrame) -> int:
 
 def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: int = 60,
           min_gap_pts: float = 1.0, cut_min: int = 570, vi: bool = False,
-          flip_triggers: tuple = ("ob_mt", "wk_dc")) -> pd.DataFrame:
+          flip_triggers: tuple = ("ob_mt", "wk_dc"), c2_dir: bool = False, vi_min_gap: float = 0.0,
+          vi_body_death: bool = False) -> pd.DataFrame:
     """One row per trading day: react / draw / pd / combo bias and the draw levels.
     `cut_min`: the row describes the market as known at that minute of the day - the overnight
     high/low/last use only bars that have CLOSED by cut_min (bar start + bar length <= cut_min).
     The default 570 (09:30) gives the original table; the draw lock (owner #9) builds one table
     per session lock time (13:30 for the PM, ...). `vi` adds daily/weekly volume imbalances as
-    arrays/draws (shared VI wiring). `flip` is the stateful bias column (B8; shared): see _flip."""
+    arrays/draws (shared VI wiring). `flip` is the stateful bias column (B8; shared): see _flip.
+    levels_detectors: `c2_dir` / `vi_min_gap` (see _arrays); `vi_body_death` (A9 / Ep03.3): a VI
+    dies once a later body of its own timeframe spans it (not on a close beyond its far edge).
+    With `vi`, the columns vi_up / vi_dn hold the nearest live VI draw each way (vi_news_draw)."""
     d = sessions(df)
     D = len(d)
     o, h, l, c = (d[k].values.astype(float) for k in ("open", "high", "low", "close"))
-    arrs = _arrays(o, h, l, c, "D", lambda i: i + 1, vi)
+    arrs = _arrays(o, h, l, c, "D", lambda i: i + 1, vi, c2_dir, vi_min_gap)
     # weekly arrays become usable the day after the week's last session
     w = weeks(d)
     pos = {t: k for k, t in enumerate(d.index)}
     wl = [pos[t] + 1 for t in w["last"]]
+    wo, wc = w.open.values.astype(float), w.close.values.astype(float)
     arrs += _arrays(*(w[k].values.astype(float) for k in ("open", "high", "low", "close")), "W",
-                    lambda i: wl[i], vi)
+                    lambda i: wl[i], vi, c2_dir, vi_min_gap)
     # opening gaps (ICT 039/051/052): NWOG Fri close -> Sun 18:00, NDOG 17:00 -> 18:00 Mon-Thu
     pos_of = {t: k for k, t in enumerate(d.index)}
     for r in opening_gaps(df, es_pt, min_gap_pts).itertuples():
@@ -147,7 +157,15 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
             cl, hi_after, lo_after = c[s:k], h[s:k], l[s:k]
             lo_after = np.append(lo_after, ol); hi_after = np.append(hi_after, oh)
             gap = a.typ in ("ndog", "nwog")              # gaps are never retired by a fill (039)
-            if a.kind == "bull" and not gap:
+            if a.typ == "vi" and vi_body_death:          # A9: a later own-TF body spans it
+                if a.tf == "D":
+                    ob_, cb_ = o[s:k], c[s:k]
+                else:                                    # weekly bodies completed before day k
+                    done_w = [j for j in range(len(wl)) if a.known < wl[j] <= k]   # later weeks only
+                    ob_, cb_ = wo[done_w], wc[done_w]
+                if len(cb_) and ((np.minimum(ob_, cb_) <= a.bottom) & (np.maximum(ob_, cb_) >= a.top)).any():
+                    continue
+            elif a.kind == "bull" and not gap:
                 lvl = a.ce if a.typ == "ob" else a.bottom
                 if len(cl) and cl.min() < lvl:
                     continue                                   # closed through: invalid
@@ -202,6 +220,8 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
                 draws_dn.append((px - pwl, "PWL", pwl))
         up = min(draws_up) if draws_up else None
         dn = min(draws_dn) if draws_dn else None
+        vu = min((x for x in draws_up if x[1].endswith("_vi")), default=None)   # vi_news_draw
+        vd = min((x for x in draws_dn if x[1].endswith("_vi")), default=None)
         if up and dn:
             draw = 1 if up[0] < dn[0] else -1
         else:
@@ -216,9 +236,10 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         rows.append(dict(date=day.date(), px=px, react=rb, react_score=react, draw=draw, pd=pdb,
                          combo=rb if rb else pdb,
                          draw_up=up[2] if up else np.nan, draw_up_name=up[1] if up else "",
-                         draw_dn=dn[2] if dn else np.nan, draw_dn_name=dn[1] if dn else ""))
+                         draw_dn=dn[2] if dn else np.nan, draw_dn_name=dn[1] if dn else "",
+                         vi_up=vu[2] if vu else np.nan, vi_dn=vd[2] if vd else np.nan))
     cols = ["date", "px", "react", "react_score", "draw", "pd", "combo", "draw_up", "draw_up_name",
-            "draw_dn", "draw_dn_name"]
+            "draw_dn", "draw_dn_name"] + (["vi_up", "vi_dn"] if vi else [])
     out = pd.DataFrame(rows, columns=cols).set_index("date")
     if flip_triggers and len(out):
         fl = _flip(d, w, arrs, flip_triggers)
@@ -371,18 +392,35 @@ def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0
     return pd.DataFrame(rows)
 
 
-def gaps_for_day(g: pd.DataFrame, day, nwog_keep: int = 5, nwog_days: int = 0) -> list[tuple[str, float, float, float]]:
+def gaps_for_day(g: pd.DataFrame, day, nwog_keep: int = 5, nwog_days: int = 0, skip_holiday: bool = False,
+                 trading_days: bool = False) -> list[tuple[str, float, float, float]]:
     """Gaps in force at 09:30 of `day`: NWOGs (the last `nwog_keep`, or with `nwog_days` > 0
     every NWOG from the last that many trading days - ICT's 60-day maximum, 051 ~18:02,
-    "60 market days", 065) and this week's NDOGs. Returns (kind, high, low, ce)."""
+    "60 market days", 065) and this week's NDOGs. Returns (kind, high, low, ce).
+    levels_detectors L5: `trading_days` counts nwog_days in real trading days (calendar module)
+    instead of the old calendar estimate; `skip_holiday` (046 ~16:01; 048 ~2:54) drops the NWOG
+    of a holiday-shortened week (fewer than 5 trading days) - the nearest normal ones remain."""
     if g is None or not len(g):
         return []
     cut = pd.Timestamp(day, tz=NY_TZ) + pd.Timedelta(hours=9, minutes=30)
     k = g[g.known < cut]
     wk = pd.Timestamp(day).to_period("W-FRI")
     nw = k[k.kind == "nwog"]
+    if skip_holiday and len(nw):
+        from .calendar import is_trading_day
+        full = [sum(is_trading_day((w.start_time + pd.Timedelta(days=j)).date()) for j in range(7)) >= 5
+                for w in nw.week]
+        nw = nw[np.asarray(full, bool)]
     if nwog_days:
-        nw = nw[nw.known >= cut - pd.Timedelta(days=round(nwog_days * 7 / 5) + 2)]
+        if trading_days:
+            from .calendar import prev_trading_day
+            d0 = day
+            for _ in range(nwog_days):
+                d0 = prev_trading_day(d0)
+            # formed at or after the start of the earliest counted session (its 18:00 reopen)
+            nw = nw[nw.known >= pd.Timestamp(d0, tz=NY_TZ) - pd.Timedelta(hours=6)]
+        else:
+            nw = nw[nw.known >= cut - pd.Timedelta(days=round(nwog_days * 7 / 5) + 2)]
     else:
         nw = nw.tail(nwog_keep)
     nd = k[(k.kind == "ndog") & (k.week == wk)]

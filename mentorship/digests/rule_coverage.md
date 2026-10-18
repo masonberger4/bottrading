@@ -1063,3 +1063,23 @@ defaults except #3 year end and #10 sloppy days, which wait for the owner's answ
 | L17 | FULL | review pass: `round_step_pts` on the shared front-month mapping (off) |
 | M3.10 | FULL | review pass: `sb_rebalance_ext` (A7 immediate rebalance in the SB window -> extended draw; off) |
 | DATA1 roll_kind="calendar" / roll_spread | MISSING | needs paid ES.c.0 data - owner go-ahead |
+| B21, L3 | FULL | levels_detectors: `ipda_pools`, `ipda_next`, `ipda_eq_day` (61-session history), `or_extra`, `pw_pm_full_session` (all off) |
+| A1 | FULL | `levels.swing_tiers`, `mss_ref` / `mss_ref_fallback` (default stl / lower = old); rulebook pivot_n note fixed |
+| A2 | FULL | `sweep_ticks=1.0` (spec default: 1 tick through to book a level, in the sweep, intact, SMT, seen filter and SB tag), `sb_draw_pools_only` |
+| A5 | FULL | `fvg_c2_dir=True` (spec default) + quadrants, VI extension, skip-above-pool, HTF CE draw, upper-quarter hold, state tag / filter, keep-filled (off) |
+| B1 | FULL | `vi_targets`, `wick_days`, `no_draw` / `skip_no_draw` (off) |
+| L1, M0.2 | FULL | `am_range_end`, `prev_am_pool`, `session_priority`, `org_pools` (off) |
+| L2, Ep08.10 | FULL | `daily_level_needs_array` / `_flow`, `pd_hl_session="eth"` / `matrix_full`, `pool_today_hl`, `matrix_days="ict"` (m3h / m3l) (off) |
+| L5, D21, M2.1 | FULL | `gap_quarters`, `nwog_quarters`, `nwog_skip_holiday`, `nwog_halfway`, `gap_run_stop`, `nwog_trading_days` (fix, on), `monday_ce`, `org_sweep`, `pool_gaps` / `gap_pool_edge` |
+| L7 | FULL | ORG history max(org_days,5)+1, `org_close` per symbol (0 = auto), `org_draw`, `org_half_draw`, `org_q_hold` |
+| L10, A23 (levels part), Ep08.1 | FULL | `wick_days`, `wick_weekly`, `wick_both`, `wick_session`, `wick_invalidate`, `wick_partial`, `wick_react`, `daily_fvg_exact`; default doc mismatch fixed (wick_levels ON) |
+| T2 | FULL | `release_open`, `release_open_stop`, `bias_open` |
+| Ep01.5, Ep02.9 | FULL | `breakaway` tag / hold / next_fvg (first FVG after the MSS) |
+| Ep01.6, A13.1, A13.4 (shared), A13.5, Ep05.1 | FULL | `breaker_ll`, `breaker_cand_to`, `breaker_entry` (fallback / prefer), `breaker_time`, `breaker_levels` |
+| Ep02.8, Ep03.3, A9 | FULL | `vi_news_draw`, `vi_body_death`, `vi_min_gap_pts`, `vi_stop`, `vi_porous_n`, `vi_htf_draw` |
+| Ep06.7, A3 | FULL | `eq_pref` (kind pool_eq), `eq_bodies`, `eq_rank` |
+| A7 | FULL | `levels.immediate_rebalances`, `imm_rebalance_disp`, Trade.imm_rebal, open_to_pdh / pdl tag |
+| A11, Ep01.4 | FULL | `bpr_max_gap_bars`, `bpr_targets`, `bpr_abort`, `bpr_rule` |
+| A15 | FULL | swing order fixed (legacy switch in levels), `mit_targets`, `mit_body_respect` |
+| D6 | FULL | `unicorn_pref` added (leg / last / errors built earlier) |
+| L8 | FULL | `levels.vacuum_block`, `vacuum_blocks` |

@@ -211,7 +211,7 @@ def immediate_rebalance(sd, a: int, i: int, tick: float) -> bool:
 
 
 def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None):
-    from .strategy import _targets, _eq_levels, _first_units, CF_SRC, _idx_at
+    from .strategy import _targets, _eq_levels, _first_units, CF_SRC, _idx_at, _thru, _tick, POOL_KINDS
     l, h, c = sd.l, sd.h, sd.c
     if i <= k0 + 2:
         return None
@@ -243,9 +243,11 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None):
     risk = entry - stop
     if not (p.min_risk_pts * p.es_pt <= risk <= p.max_risk_pts * p.es_pt):
         return None
-    eq_hi = _eq_levels(sd, i, tol, lows=False)
+    eq_hi = _eq_levels(sd, i, tol, lows=False, p=p)
     lv = _targets(ctx, sd, i, entry, eq_hi, p, None, li)
     dr = [(v, kind) for v, kind in lv if v > entry]
+    if p.sb_draw_pools_only:                           # A2 (033 ~24:34): an imbalance is not liquidity
+        dr = [(v, kind) for v, kind in dr if kind in POOL_KINDS]
     if not dr:
         return None
     capped = False
@@ -260,7 +262,7 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None):
         t2 = draw if p.sb_runner and draw > t1 + p.es_pt else None
         levels = [t1] + [v for v in draws if v > t1 + p.es_pt][:2]
     else:                                              # owner #2: exit AT the draw levels
-        ex = lambda v, k: v + p.pool_beyond_pts * p.es_pt if (p.exit_mode == "split" and k == "pool") \
+        ex = lambda v, k: v + p.pool_beyond_pts * p.es_pt if (p.exit_mode == "split" and k in POOL_KINDS) \
             else v - p.exit_before_pts * p.es_pt
         draws = sorted(ex(v, k) for v, k in dr)
         if lock is not None:                           # #9: only toward the locked draw, out at it
@@ -304,9 +306,9 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None):
     swept = "none"
     for name, v in ctx.pd.items():                      # tag a sweep of a prior level
         lv_ = sd.x(v)
-        if name.startswith(("pdl", "pml")) and sd.sign > 0 and lo_seg < lv_:
+        if name.startswith(("pdl", "pml")) and sd.sign > 0 and _thru(lo_seg, lv_, _tick(p)):   # A2 tick
             swept = name
-        if name.startswith(("pdh", "pmh")) and sd.sign < 0 and lo_seg < lv_:
+        if name.startswith(("pdh", "pmh")) and sd.sign < 0 and _thru(lo_seg, lv_, _tick(p)):
             swept = name
     return dict(side=sd, i=i, fvg_i=g.i, entry=entry, stop=stop, t1=t1, t2=t2, shares=shares,
                 swept=swept, levels=levels, capped=capped, scalp=scalp, sloppy=sl,

@@ -46,7 +46,8 @@ and to the notes for context, charts and trade examples. This file states each r
   5-candle Williams fractal (012 ~30:08; 050 ~6:02; cc01_004 ~11:56; cc01_005 ~11:49) [both].
   Hierarchy: STL = plain swing; ITL = low with a higher STL on each side; LTL = low with higher
   ITLs on each side (014 ~0:12; cc05_002 ~20:14) [both]. A swing high is "confirmed" once a later
-  candle trades lower (cc01_004 ~9:44) [CC]. Bot: `pivot_n=2` (D17).
+  candle trades lower (cc01_004 ~9:44) [CC]. Bot: `pivot_n=1` (3-candle, default; 2 = the
+  5-candle switch, D17); ITL/LTL tiers `levels.swing_tiers`, MSS reference tier `mss_ref`.
 - **A2 Buy-side liquidity (BSL)** = buy stops above old highs and relative equal highs;
   **sell-side (SSL)** = sell stops below old lows and relative equal lows (001 ~13:02; cc01_007
   ~1:09; cc04_011 ~4:11) [both]. A level is "booked" only when price trades 1 tick through it
@@ -194,7 +195,8 @@ and to the notes for context, charts and trade examples. This file states each r
 - **A23 Wick CE** = 50% from body edge to wick tip; a wick is a gap (012 ~4:14; 021 ~21:06; 028
   ~16:43) [2023]. A long wick in the bias direction often stops dead at its CE; a next-candle close
   beyond the CE = continuation, close back = revisit (025 ~25:37; 100 ~38:13). Bot:
-  `wick_midpoints` for the prior daily candle only.
+  `wick_midpoints`; `wick_levels` (on) for the prior day, `wick_days` / `wick_weekly` /
+  `wick_both` / `wick_session` switches (levels_detectors).
 - **A24 Not codeable as stated:** implied FVG (035 ~29:49, named once, never defined); Reaper
   (076 ~18:30); "inducement" (not an ICT term in the notes; the bot's sweep step is the closest
   codeable form).
@@ -548,7 +550,8 @@ and to the notes for context, charts and trade examples. This file states each r
   owner correction #7). Bot: HTF arrays as targets (`htf_targets`), `htf_resist_cap=True`.
 - **L10 Wick CE levels**: prior daily (and weekly) wick CEs are targets, partial levels and
   invalidation levels (Ep 08; 012 ~4:12; 035 ~24:54; 101 ~78:20) [2023]. Bot: `wick_levels`
-  (prior day only, off).
+  (prior day, ON by default - the old "off" note was stale); `wick_days`, `wick_weekly`,
+  `wick_both`, `wick_session`, `wick_invalidate`, `wick_partial`, `wick_react` switches (off).
 - **L11 Rejection-block level**: cover at the old low's lowest body, not its wick (cc04_006
   ~14:14; 059 ~9:38) [both].
 

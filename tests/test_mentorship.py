@@ -202,10 +202,11 @@ def test_inversion_fvg_void_and_mitigation():
     assert len(inv) == 1 and inv[0].kind == "bull" and (inv[0].top, inv[0].bottom, inv[0].i) == (9, 7, 4)
     v = L.voids(h, l)
     assert [(z.kind, z.i) for z in v] == [("bear", 2), ("bull", 4)]
-    # high A (idx 2), swing low (idx 4), higher low (idx 6), close above A (idx 8)
+    # the OLD swing order (legacy=True; A15 fixed in levels_detectors): high (idx 2), two later lows
+    # (idx 4, then the higher low idx 6), close above the high (idx 8)
     h2 = np.array([5, 6, 8, 6, 4, 5, 6, 7, 9, 9.5]); l2 = np.array([4, 5, 6, 4, 2, 3.5, 3, 5, 7, 8])
     o2 = np.array([4.5, 5.5, 6.5, 5.5, 3.5, 3.5, 5.5, 5.5, 7.5, 8.5]); c2 = np.array([5, 6, 7.5, 4.5, 3, 4.5, 4.5, 6.5, 8.8, 9])
-    m = L.mitigation_blocks(o2, h2, l2, c2, 1)
+    m = L.mitigation_blocks(o2, h2, l2, c2, 1, legacy=True)
     assert m and m[0].kind == "bull" and m[0].src == 2
 
 

@@ -205,7 +205,7 @@ CURRENT = dict(mt_mode="range", exit_mode="before", min_draw_pts=0.0, leg_pd=0.0
                breaker_mt_respect=False, breaker_mt_entry_floor=False,
                risk_dollars=1000.0, max_total_risk=2000.0, last_hour=(915, 945), flatten=960,
                sb_target_mode="fixed", price_frame="back_adjusted", round_pools=False,
-               seen_from_created=False)
+               seen_from_created=False, sweep_ticks=0.0, fvg_c2_dir=False, nwog_trading_days=False)
 # the defaults just before the owner directives of 2026-10-18 (A/B baseline for the new defaults).
 # Bug fixes it can NOT undo (no switch, by design): the London-pool look-ahead (London 02:00-05:00
 # pools hidden before 05:00), the _split news-ahead holiday skip (N3.4), the M1.2 swing-low intact
@@ -215,7 +215,10 @@ PRE_OWNER = dict(ob_entry="post_mss", draw_lock="off", htf_resist_cap=False, new
                  breaker_mt_respect=False, breaker_mt_entry_floor=False, breaker_zone="body",
                  risk_dollars=1000.0, max_total_risk=2000.0, last_hour=(915, 945), flatten=960,
                  sb_target_mode="fixed", price_frame="back_adjusted", round_pools=False,
-                 seen_from_created=False, am_exit_extras=False)
+                 seen_from_created=False, am_exit_extras=False,
+                 # levels_detectors defaults that change the engine (A2 booking tick, A5 c2 check, L5 NWOG
+                 # trading-day count): switched back so the golden window still reproduces 833350f
+                 sweep_ticks=0.0, fvg_c2_dir=False, nwog_trading_days=False)
 LEGACY_1PCT_2PCT = dict(risk_dollars=1000.0, max_total_risk=2000.0)   # E8 / owner #12 preset
 DECISIONS = {
     "current": CURRENT,
@@ -415,6 +418,104 @@ DECISIONS = {
     "M12.4_turtle_external": dict(turtle_soup="external"),
     "M12.5_ts_gate_mss": dict(ts_gate_mss=True),
     "M3.10_sb_rebalance_ext10": dict(sb_model=True, sb_rebalance_ext=10.0),
+    # --- package levels_detectors (one per new switch; name prefix = rule id) -----------------
+    "B21_ipda_pools": dict(ipda_pools=True),
+    "B21_ipda_next": dict(ipda_next=True),
+    "B21_ipda_eq_day_skip": dict(ipda_eq_day="skip"),
+    "B21_ipda_eq_day_tag": dict(ipda_eq_day="tag"),
+    "A1_mss_ref_itl": dict(ob_entry="post_mss", mss_ref="itl"),
+    "A1_mss_ref_ltl": dict(ob_entry="post_mss", mss_ref="ltl"),
+    "A1_mss_ref_itl_no_fallback": dict(ob_entry="post_mss", mss_ref="itl", mss_ref_fallback="none"),
+    "A1_mss_ref_fallback_highest": dict(mss_ref="itl", mss_ref_fallback="highest"),
+    "A2_sweep_ticks_off": dict(sweep_ticks=0.0),
+    "A2_sweep_ticks_2": dict(sweep_ticks=2.0),
+    "A2_pool_swings": dict(pool_swings=True),
+    "A2_sb_draw_pools_only": dict(sb_model=True, sb_draw_pools_only=True),
+    "A5_fvg_c2_dir_off": dict(fvg_c2_dir=False),
+    "A5_fvg_quadrants": dict(fvg_quadrants=True),
+    "A5_fvg_vi_extend": dict(ob_entry="both", fvg_vi_extend=True),
+    "A5_fvg_skip_above_pool": dict(ob_entry="both", fvg_skip_above_pool=True),
+    "A5_htf_ce_draw": dict(htf_ce_draw=True),
+    "A5_htf_ce_draw_nolock": dict(htf_ce_draw=True, draw_lock="off"),
+    "A5_fvg_q_hold": dict(ob_entry="both", fvg_q_hold=True),
+    "A5_fvg_state_open": dict(ob_entry="both", fvg_state_filter=("open",)),
+    "A5_fvg_keep_filled": dict(fvg_keep_filled=True),
+    "B1_vi_targets": dict(vi_targets=True),
+    "B1_wick_days3": dict(wick_days=3),
+    "B1_no_draw_tag": dict(no_draw=True),
+    "B1_skip_no_draw": dict(skip_no_draw=True),
+    "L1_am_range_1200": dict(am_range_end=720),
+    "L1_prev_am_pool": dict(prev_am_pool=True),
+    "L1_session_priority": dict(session_priority=True, prev_am_pool=True),
+    "L1_org_pools": dict(org_pools=True),
+    "L2_daily_needs_array": dict(daily_level_needs_array=True),
+    "L2_daily_needs_flow": dict(daily_level_needs_array=True, daily_level_needs_flow=True),
+    "L2_pd_hl_eth": dict(pd_hl_session="eth"),
+    "L2_pool_today_hl": dict(pool_today_hl=True),
+    "L5_gap_quarters": dict(gap_quarters=True),
+    "L5_nwog_skip_holiday": dict(nwog_skip_holiday=True),
+    "L5_nwog_halfway": dict(nwog_halfway=True),
+    "L5_nwog_halfway_nolock": dict(nwog_halfway=True, draw_lock="off"),
+    "L5_gap_run_stop": dict(gap_run_stop=True),
+    "L5_nwog_calendar_days": dict(nwog_trading_days=False),
+    "L7_org_draw": dict(org_draw="draw"),
+    "L7_org_draw_nolock": dict(org_draw="draw", draw_lock="off"),
+    "L7_org_half_draw": dict(org_half_draw=True, draw_lock="off"),
+    "L7_org_q_hold_tag": dict(org_q_hold=True, org_draw="tag"),
+    "L7_org_days60": dict(org_days=60),
+    "L10_wick_weekly": dict(wick_weekly=True),
+    "L10_wick_both": dict(wick_both=True),
+    "L10_wick_eth": dict(wick_session="eth"),
+    "L10_wick_invalidate": dict(wick_invalidate=True),
+    "L10_wick_partial": dict(wick_partial=True),
+    "M2.1_pool_gaps_far": dict(pool_gaps=True),
+    "M2.1_pool_gaps_ce": dict(pool_gaps=True, gap_pool_edge="ce"),
+    "T2_release_open": dict(release_open=True),
+    "T2_release_open_stop_open": dict(release_open=True, release_open_stop="open"),
+    "T2_release_open_stop_wick": dict(release_open=True, release_open_stop="wick_ce"),
+    "T2_bias_open_0930": dict(bias_open="0930"),
+    "T2_bias_open_0830": dict(bias_open="0830"),
+    "Ep01.5_breakaway_tag": dict(ob_entry="both", breakaway="tag"),
+    "Ep01.5_breakaway_hold": dict(ob_entry="both", breakaway="hold"),
+    "Ep01.5_breakaway_next_fvg": dict(ob_entry="both", breakaway="next_fvg"),
+    "Ep01.6_breaker_cand_h": dict(ob_entry="both", breaker_cand_to="h"),
+    "Ep01.6_breaker_entry_fallback": dict(ob_entry="post_mss", breaker_entry="fallback"),
+    "Ep01.6_breaker_entry_prefer": dict(ob_entry="post_mss", breaker_entry="prefer"),
+    "Ep02.8_vi_news_draw": dict(vi_arrays=True, vi_news_draw=True),
+    "Ep03.3_vi_body_death": dict(vi_arrays=True, vi_body_death=True),
+    "Ep05.1_breaker_levels": dict(ob_entry="both", breaker_levels=True),
+    "Ep06.7_eq_pref_rank": dict(eq_pref="rank"),
+    "Ep06.7_eq_pref_require": dict(eq_pref="require"),
+    "Ep08.10_matrix_ict": dict(matrix_days="ict"),
+    "Ep08.10_matrix_full": dict(matrix_full=True),
+    "A3_eq_bodies": dict(eq_bodies=True),
+    "A3_eq_rank": dict(eq_rank=True, eq_pref="rank"),
+    "A3_eq_tol_025": dict(eq_tol_pts=0.25),
+    "A3_eq_tol_1": dict(eq_tol_pts=1.0),
+    "A7_imm_rebalance_or": dict(displacement_mult=1.5, imm_rebalance_disp="or", ob_entry="post_mss"),
+    "A7_imm_rebalance_require": dict(imm_rebalance_disp="require", ob_entry="post_mss"),
+    "A9_vi_min_gap1": dict(vi_arrays=True, vi_min_gap_pts=1.0),
+    "A9_vi_stop": dict(ob_entry="both", vi_stop=True),
+    "A9_vi_porous3": dict(ob_entry="both", vi_porous_n=3),
+    "A9_vi_htf_draw": dict(vi_arrays=True, vi_htf_draw=True, draw_lock="off"),
+    "A11_bpr_targets": dict(bpr_targets=True, bpr_max_gap_bars=12),
+    "A11_bpr_abort": dict(bpr_abort=True),
+    "A13.1_breaker_ll": dict(ob_entry="both", breaker_ll=True),
+    "A13.5_breaker_time": dict(ob_entry="both", breaker_time="hl2"),
+    "A13.5_breaker_time_all": dict(ob_entry="both", breaker_time="all"),
+    "A15_mit_targets": dict(mit_targets=True),
+    "A15_mit_targets_respect": dict(mit_targets=True, mit_body_respect=True),
+    "D6_unicorn_pref_off": dict(ob_entry="both", unicorn_pref=False),
+    "D21_monday_ce": dict(gap_mode="monday", monday_ce=True),
+    "D21_nwog_quarters": dict(nwog_quarters=True),
+    "D21_org_sweep": dict(org_sweep=True),
+    "L3_or_extra": dict(or_extra=True),
+    "L3_pw_pm_full_session": dict(pool_prev_week=True, pool_prev_month=True, pw_pm_full_session=True),
+    "L8_vacuum_blocks": dict(vacuum_blocks=True),
+    "Ep01.4_bpr_rule": dict(bpr_rule=True, bpr_max_gap_bars=12),
+    "Ep08.1_wick_react_tag": dict(wick_react="tag"),
+    "Ep08.1_wick_react_require": dict(wick_react="require"),
+    "Ep08.1_daily_fvg_exact": dict(daily_fvg_exact=True),
 }
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
 
@@ -424,15 +525,19 @@ SRC = os.environ.get("MENTORSHIP_SRC", "histdata")      # "histdata" (SPX/NDX CF
 SYMS = {"histdata": ("SPX", "NDX"), "merged": ("SPX", "NDX"), "databento": ("ES", "NQ", "YM")}[SRC]
 
 
-def _bias_cache(tf: int, cut: int = 570, vi: bool = False, flip: tuple = ("ob_mt", "wk_dc")) -> pd.DataFrame:
+def _bias_cache(tf: int, cut: int = 570, vi: bool = False, flip: tuple = ("ob_mt", "wk_dc"),
+                kw: dict | None = None) -> pd.DataFrame:
     """The htf table (cut at `cut` minutes; 570 = the ordinary bias table), cached per source,
-    VI wiring and flip triggers (review: the VI_arrays variant used to get the non-VI table)."""
+    VI wiring and flip triggers (review: the VI_arrays variant used to get the non-VI table), and
+    the levels_detectors table switches `kw` (backtest.htf_kw: A5 c2 check, A9 VI size / death)."""
     from . import htf
+    kw = kw or {}
     tag = ("" if cut == 570 else f"_cut{cut}") + ("_vi" if vi else "") + \
-        ("" if tuple(flip) == ("ob_mt", "wk_dc") else "_" + "-".join(flip))
+        ("" if tuple(flip) == ("ob_mt", "wk_dc") else "_" + "-".join(flip)) + \
+        "".join(f"_{k}{v}" for k, v in sorted(kw.items()))
     f = Path(f"runs/mentorship/htf_table_{SRC}_{tf}m{tag}.csv")
     if not f.exists() or "flip" not in pd.read_csv(f, nrows=1).columns:     # B8 flip column
-        htf.table(B.load(SYMS[0], tf, source=SRC), cut_min=cut, vi=vi, flip_triggers=tuple(flip)).to_csv(f)
+        htf.table(B.load(SYMS[0], tf, source=SRC), cut_min=cut, vi=vi, flip_triggers=tuple(flip), **kw).to_csv(f)
     t = pd.read_csv(f, index_col=0)
     t.index = pd.to_datetime(t.index).date
     return t
@@ -442,7 +547,7 @@ def _lock_cache(tf: int, p: Params) -> dict:
     """#9: the per-lock-time tables of backtest.lock_tables (same cuts: B.lock_cuts), from the cache."""
     if p.draw_lock == "off":
         return {}
-    return {m: _bias_cache(tf, m, p.vi_arrays, p.flip_triggers) for m in sorted(B.lock_cuts(p))}
+    return {m: _bias_cache(tf, m, p.vi_arrays, p.flip_triggers, B.htf_kw(p)) for m in sorted(B.lock_cuts(p))}
 
 
 def _dec_job(job):
@@ -457,7 +562,7 @@ def _dec_job(job):
         p2 = p2[(p2.index >= lo) & (p2.index < b)]
     t = B.run(df[(df.index >= lo) & (df.index < b)], tf, SYMS[0], p, pa[(pa.index >= lo) & (pa.index < b)],
               partner2=p2,
-              bias_table=_bias_cache(tf, 570, p.vi_arrays, p.flip_triggers), meta=B.load_meta(SYMS[0], tf, SRC),
+              bias_table=_bias_cache(tf, 570, p.vi_arrays, p.flip_triggers, B.htf_kw(p)), meta=B.load_meta(SYMS[0], tf, SRC),
               lock_cuts=_lock_cache(tf, p))
     if len(t):
         t = t[pd.to_datetime(t.entry_time.astype(str).str[:10]) >= f"{year}-01-01"].copy()
@@ -468,7 +573,7 @@ def _dec_job(job):
 def main_decisions(out="runs/mentorship", workers=6, tfs=(5, 1), variants=None, tag="dec"):
     variants = variants or list(DECISIONS)
     for tf in tfs:
-        _bias_cache(tf)
+        _bias_cache(tf, kw=B.htf_kw(Params()))
     jobs = [(tf, y, v) for tf in tfs for v in variants for y in range(2019, 2027)]
     jobs.sort(key=lambda j: (j[0] == 1, j[2] not in ("current", "defaults")))
     cache = Path(out) / f"{tag}_jobs"

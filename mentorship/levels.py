@@ -28,6 +28,11 @@ class Zone:
     def overlaps(self, other: "Zone") -> bool:
         return self.bottom < other.top and self.top > other.bottom
 
+    def q(self, frac: float) -> float:
+        """A5 quadrant level (020 ~8:21; 029 ~30:44): `frac` of the way from the bottom to the
+        top (0.25 / 0.5 = CE / 0.75)."""
+        return self.bottom + frac * (self.top - self.bottom)
+
 
 @dataclass(frozen=True)
 class Pivot:
@@ -36,29 +41,52 @@ class Pivot:
     known: int      # first bar at which it is confirmed (i + n)
 
 
-def fvgs(h, l) -> list[Zone]:
+def fvgs(h, l, o=None, c=None, c2_dir: bool = False) -> list[Zone]:
     """Fair value gaps (3-candle). BISI: low[i] > high[i-2]; SIBI: high[i] < low[i-2].
-    Known at the third candle i."""
+    Known at the third candle i. A5 `c2_dir` (Params.fvg_c2_dir; 001 ~13:02, 024 ~23:22: "c2 is
+    the displacement candle"): the middle candle must close in the gap's direction (up-close for
+    a BISI, down-close for a SIBI); needs o and c."""
     out = []
+    chk = c2_dir and o is not None and c is not None
     for i in range(2, len(h)):
         if l[i] > h[i - 2]:
+            if chk and not c[i - 1] > o[i - 1]:
+                continue
             out.append(Zone("bull", l[i], h[i - 2], i, i - 1))
         elif h[i] < l[i - 2]:
+            if chk and not c[i - 1] < o[i - 1]:
+                continue
             out.append(Zone("bear", l[i - 2], h[i], i, i - 1))
     return out
 
 
-def volume_imbalances(o, h, l, c) -> list[Zone]:
-    """Gap between two consecutive candle bodies where only the wicks overlap."""
+def volume_imbalances(o, h, l, c, min_gap: float = 0.0) -> list[Zone]:
+    """Gap between two consecutive candle bodies where only the wicks overlap. A9 `min_gap`
+    (Params.vi_min_gap_pts, in price units): body gaps narrower than this are ignored."""
     out = []
     for i in range(1, len(o)):
         pb_hi, pb_lo = max(o[i - 1], c[i - 1]), min(o[i - 1], c[i - 1])
         cb_hi, cb_lo = max(o[i], c[i]), min(o[i], c[i])
         if cb_lo > pb_hi and l[i] <= h[i - 1]:
-            out.append(Zone("bull", cb_lo, pb_hi, i, i))
+            if cb_lo - pb_hi >= min_gap:
+                out.append(Zone("bull", cb_lo, pb_hi, i, i))
         elif cb_hi < pb_lo and h[i] >= l[i - 1]:
-            out.append(Zone("bear", pb_lo, cb_hi, i, i))
+            if pb_lo - cb_hi >= min_gap:
+                out.append(Zone("bear", pb_lo, cb_hi, i, i))
     return out
+
+
+def vi_body_dead(o, c, z: Zone, start: int | None = None, end: int | None = None) -> int | None:
+    """A9 / Ep03.3 VI death rule (035 ~5:50; 090 ~13:01): a VI is dead once a LATER candle body on
+    its own timeframe closes fully across it - the body spans the whole VI, bottom to top. Returns
+    the first such candle index in [start (default z.i + 1), end] (known at its close) or None.
+    Wicks never kill it."""
+    a = z.i + 1 if start is None else start
+    b = len(c) - 1 if end is None else min(end, len(c) - 1)
+    for k in range(a, b + 1):
+        if min(o[k], c[k]) <= z.bottom and max(o[k], c[k]) >= z.top:
+            return k
+    return None
 
 
 def pivots(h, l, n: int = 2) -> tuple[list[Pivot], list[Pivot]]:
@@ -71,6 +99,71 @@ def pivots(h, l, n: int = 2) -> tuple[list[Pivot], list[Pivot]]:
         if l[k] < min(l[k - n:k]) and l[k] < min(l[k + 1:k + n + 1]):
             lows.append(Pivot(k, float(l[k]), k + n))
     return highs, lows
+
+
+def swing_tiers(h, l, n: int = 1) -> dict:
+    """A1 swing hierarchy (014 ~0:12; cc05_002 ~20:14). STL = plain swing (pivots(n)); ITL low =
+    an STL low with a HIGHER STL low on each side (its neighbours in the STL-low sequence); LTL low
+    = an ITL low with higher ITL lows on each side; highs mirror it. A tier is known only once its
+    right neighbour is known: Pivot.known = max(own known, right neighbour's known).
+    Returns {"stl": (highs, lows), "itl": (highs, lows), "ltl": (highs, lows)}, sorted by bar."""
+    ph, pl = pivots(h, l, n)
+
+    def up(seq, lows: bool):
+        out = []
+        for k in range(1, len(seq) - 1):
+            a, b, r = seq[k - 1], seq[k], seq[k + 1]
+            ok = (b.price < a.price and b.price < r.price) if lows else (b.price > a.price and b.price > r.price)
+            if ok:
+                out.append(Pivot(b.i, b.price, max(b.known, r.known)))
+        return out
+
+    ih, il = up(ph, False), up(pl, True)
+    return {"stl": (ph, pl), "itl": (ih, il), "ltl": (up(ih, False), up(il, True))}
+
+
+def immediate_rebalances(o, h, l, c, tick: float) -> list[tuple[int, str]]:
+    """A7 immediate rebalance (048 ~39:02; 060 ~7:20; 092 ~1:41:14) [our interpretation of the bar
+    test, the same as sb_model.immediate_rebalance]: an up-close displacement candle k-1 whose NEXT
+    candle k trades straight back to the high of the candle before it, h[k-2], within one tick and
+    leaves no gap (an FVG is the deferred rebalance) -> (k, "bull"); bearish mirror (down-close
+    k-1, h[k] back up to l[k-2]) -> (k, "bear"). Known at candle k's close."""
+    out = []
+    for k in range(2, len(c)):
+        if c[k - 1] > o[k - 1] and abs(l[k] - h[k - 2]) <= tick and l[k] <= h[k - 2] + 1e-12:
+            out.append((k, "bull"))
+        elif c[k - 1] < o[k - 1] and abs(h[k] - l[k - 2]) <= tick and h[k] >= l[k - 2] - 1e-12:
+            out.append((k, "bear"))
+    return out
+
+
+def vacuum_block(o, c, k: int, min_gap: float = 0.0) -> Zone | None:
+    """L8 vacuum block (cc04_009 ~3:58-10:05): the gap between the last close before an event
+    (bar k-1) and the first open after it (bar k), treated as a candle with high / low / MT.
+    "bull" when the open is above the prior close (the gap lies below price). Known at bar k (the
+    caller uses it from bar k's close). None when the gap is not wider than `min_gap`."""
+    if k < 1 or k >= len(o):
+        return None
+    a, b = float(c[k - 1]), float(o[k])
+    if abs(b - a) <= max(min_gap, 0.0) or a == b:
+        return None
+    return Zone("bull" if b > a else "bear", max(a, b), min(a, b), k, k)
+
+
+def session_block(minute: int) -> int:
+    """A13.5 time blocks [our interpretation of "the wrong time of day" (070 ~6:24)]: 0 Asia
+    (18:00-02:00), 1 London (02:00-07:00), 2 NY AM (07:00-12:00), 3 lunch (12:00-13:30), 4 NY PM
+    (13:30-18:00). A breaker's H, L2 and break must sit in one block."""
+    m = int(minute) % 1440
+    if m >= 1080 or m < 120:
+        return 0
+    if m < 420:
+        return 1
+    if m < 720:
+        return 2
+    if m < 810:
+        return 3
+    return 4
 
 
 def order_block(o, h, l, c, start: int, end: int, kind: str) -> Zone | None:
@@ -228,6 +321,21 @@ def turtle_soup(l, c, level: float, ext_i: int, i: int, max_depth: float,
     return bool((c[ext_i:i + 1] > level).any()) and bool(l[ext_i + 1:i + 1].min(initial=np.inf) >= l[ext_i])
 
 
+def equal_clusters(prices, tol: float) -> list[list[int]]:
+    """A3: the clusters of equal_levels (>= 2 prices within `tol` of the cluster's lowest price),
+    as lists of indices into `prices`, each ascending by price."""
+    order = sorted(range(len(prices)), key=lambda k: prices[k])
+    out, k = [], 0
+    while k < len(order):
+        j = k
+        while j + 1 < len(order) and prices[order[j + 1]] - prices[order[k]] <= tol:
+            j += 1
+        if j > k:
+            out.append(order[k:j + 1])
+        k = j + 1
+    return out
+
+
 def equal_levels(prices, tol: float) -> list[float]:
     """Relative equal highs (or lows): clusters of >= 2 swing prices within `tol` of each
     other. Returns the extreme of each cluster (max for highs; pass negated lows)."""
@@ -274,13 +382,17 @@ def rejection_blocks(o, h, l, c, n: int = 2) -> list[Zone]:
     return sorted(out, key=lambda z: z.i)
 
 
-def balanced_ranges(h, l) -> list[Zone]:
+def balanced_ranges(h, l, max_gap_bars: int = 0) -> list[Zone]:
     """Balanced price range: where a bullish and a bearish FVG overlap, price has been
-    delivered both ways. Kind follows the later gap; known when the later gap forms."""
+    delivered both ways. Kind follows the later gap; known when the later gap forms.
+    A11 `max_gap_bars` (Params.bpr_max_gap_bars): the two gaps must form within this many bars of
+    each other [our interpretation: one delivery up and back]; 0 = any pair (the old rule)."""
     g = fvgs(h, l)
     out = []
     for k, b in enumerate(g):
         for a in g[:k]:
+            if max_gap_bars and b.i - a.i > max_gap_bars:
+                continue
             if a.kind != b.kind and a.overlaps(b):
                 out.append(Zone(b.kind, min(a.top, b.top), max(a.bottom, b.bottom), b.i, a.i))
     return out
@@ -324,11 +436,13 @@ def voids(h, l) -> list[Zone]:
     return out
 
 
-def mitigation_blocks(o, h, l, c, n: int = 1) -> list[Zone]:
-    """Bullish mitigation block (cc04_004 ~2:42-14:35; 033 ~1:03:50): swing high A, swing low,
-    a HIGHER low (no stop run below the swing low), then a body close above A; the zone is the
-    last up-close candle at A (the failed high). The breaker's sibling without the sweep.
-    Bearish mirrors it. Known at the closing break."""
+def mitigation_blocks(o, h, l, c, n: int = 1, legacy: bool = False) -> list[Zone]:
+    """Bullish mitigation block (A15; 033 ~1:03:50, the mirror of cc04_004 ~2:42-14:35): swing low
+    A, then swing high X, then a HIGHER swing low B (no stop run below A: the breaker's failure-swing
+    twin), then a body close above X; the zone is the last up-close candle at X (the failed high).
+    Bearish mirrors it (high A, low X, lower high B, close below X). Known at the closing break.
+    Review fix (rule_coverage A15): the old code took two lows AFTER X and never checked the A low
+    before X; `legacy=True` keeps the old order."""
     ph, pl = pivots(h, l, n)
     out, used = [], set()
     for i in range(len(c)):
@@ -336,11 +450,22 @@ def mitigation_blocks(o, h, l, c, n: int = 1) -> list[Zone]:
             hk = [p for p in hs if p.known <= i]
             if not hk or (kind, hk[-1].i) in used:
                 continue
-            H = hk[-1]
-            later = [p for p in ls if p.i > H.i and p.known <= i]
-            if len(later) < 2:
-                continue
-            L0, L1 = later[-2], later[-1]              # swing low after A, then the next low
+            H = hk[-1]                                 # X: the swing high the close breaks
+            if legacy:
+                later = [p for p in ls if p.i > H.i and p.known <= i]
+                if len(later) < 2:
+                    continue
+                L0, L1 = later[-2], later[-1]
+            else:
+                before = [p for p in ls if p.i < H.i]
+                later = [p for p in ls if p.i > H.i and p.known <= i]
+                if not before or not later:
+                    continue
+                L0, L1 = before[-1], later[0]          # A (before X), then B (after X)
+                seg = l[H.i + 1:i] if sign > 0 else h[H.i + 1:i]
+                if len(seg) and (seg.min() < L0.price if sign > 0 else seg.max() > L0.price):
+                    used.add((kind, H.i))              # A's stops were run: a breaker, not this
+                    continue
             higher_low = L1.price > L0.price if sign > 0 else L1.price < L0.price
             broke = c[i] > H.price if sign > 0 else c[i] < H.price
             if higher_low and broke:
@@ -349,6 +474,16 @@ def mitigation_blocks(o, h, l, c, n: int = 1) -> list[Zone]:
                     out.append(Zone(kind, blk.top, blk.bottom, i, blk.src))
                 used.add((kind, H.i))
     return out
+
+
+def mitigation_alive(c, z: Zone, i: int) -> bool:
+    """A15 `mit_body_respect` (bodies respect the block, wicks may poke) [our interpretation]: no
+    close after the block formed, through bar i, beyond its far side (bullish block: below its
+    bottom; bearish: above its top)."""
+    seg = c[z.i + 1:i + 1]
+    if not len(seg):
+        return True
+    return bool(seg.min() >= z.bottom) if z.kind == "bull" else bool(seg.max() <= z.top)
 
 
 def propulsion_blocks(o, h, l, c, obs: list[Zone]) -> list[Zone]:
