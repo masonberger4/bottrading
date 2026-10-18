@@ -103,14 +103,16 @@ class Params:
     weekly_bias: bool = False
     sd_targets: bool = False
     sd_levels: tuple = (1.0, 1.5, 2.0, 2.5)
-    wick_levels: bool = False
+    wick_levels: bool = True       # A23: the prior day's wick CEs as targets
+    ce_hold: bool = True           # A5/A6: the entry FVG is a breakaway gap - once filled, a candle BODY closing
+                                   # beyond its CE (wicks may poke) exits the trade before T1
     skip_news: bool = False        # no trades at all on 08:30 / 10:00 release days
     # decisions in mentorship_rules.md section 3 (D#); defaults are the recommended ones
     mss_mode: str = "close"        # D3: structure shift on a candle "close" or a "wick" through
     mt_mode: str = "body"          # D4: order-block mean threshold of the "body" or full "range"
     exit_mode: str = "split"       # D5: "split" = before arrays, just beyond pools; "before" = all
     pool_beyond_pts: float = 0.25  # ES pts beyond a liquidity pool (one tick)
-    min_draw_pts: float = 10.0     # L15: T2 (else T1) at least this many ES pts from entry
+    min_draw_pts: float = 5.0      # L15: T2 (else T1) at least this many ES pts from entry
     leg_pd: float = 0.5            # D12: entry at/below this fraction of the displacement leg; 0 off
     leg_pd_at: str = "fill"        # check it when the order is armed ("arm") or, as ICT waits for
                                    # the retrace, against the leg high reached before the fill ("fill")
@@ -122,8 +124,11 @@ class Params:
     fvg_abort: bool = False        # X6: body close beyond the FVG, next bar beyond it -> out
     time_stop_min: int = 0         # X9: no `time_stop_pts` of progress within N minutes -> out
     time_stop_pts: float = 2.0
-    fomc_pm_from: int = 0          # D8 test: FOMC-day PM entries allowed from this time (885)
-    nfp_thu: bool = False          # D8 test: trade the Thursday of NFP week
+    nfp_day: bool = True           # experienced (101, 105, 071): trade NFP Friday (entries from 09:30)
+    nfp_week_block: bool = False   # beginner rule: no NFP-week Wed PM / Thu / Fri
+    reverse_after_loss: bool = True    # experienced (001 ~47:32): may reverse after a losing trade
+    fomc_pm_from: int = 885          # D8 test: FOMC-day PM entries allowed from this time (885)
+    nfp_thu: bool = True           # D8 test: trade the Thursday of NFP week
     skip_cpi: bool = False         # D9 test
     skip_monday: bool = False      # D20 test (NFP / FOMC weeks still traded)
     no_pm_after_am_win: bool = False   # D19 test
@@ -134,6 +139,8 @@ class Params:
     gap_mode: str = "ict"          # opening-gap targets: "ict" = NWOG (Fri close -> Sun 18:00, last
                                    # 5) + this week's NDOGs, high/CE/low; "monday" = the old
                                    # Fri 16:00 -> Mon 09:30 edges (also the fallback without overnight bars)
+    nwog_days: int = 60            # NWOGs from the last 60 trading days (ICT's maximum, 051/065);
+    nwog_keep: int = 5             # used when nwog_days = 0: the last N NWOGs (039: "4, preferably 5")
     org_days: int = 5              # opening range gaps (prior 16:00 close -> 09:30 open) kept as
                                    # targets (high / 75% / CE / 25% / low); 0 = off (L7, D21)
     org_close: int = 975           # ORG uses the last price before this minute: 975 = 16:15 ES
@@ -166,13 +173,14 @@ def _lots(x: float, lot: int) -> int:
 def blocked(d: date, session: str, p: "Params | None" = None, t: int = 0) -> str | None:
     """Day-type rule that blocks this session (at minute t), or None."""
     tags = events(d)
-    if "jobs" in tags:
+    if "jobs" in tags and not (p is not None and p.nfp_day):
         return "nfp_day"
     mon = d - timedelta(days=d.weekday())
     jd = [j for j in JOBS if mon <= j <= mon + timedelta(days=4)]
-    if jd and d.weekday() >= 3 and not (p is not None and p.nfp_thu and d.weekday() == 3):
+    week_block = p is None or p.nfp_week_block
+    if jd and week_block and d.weekday() >= 3 and "jobs" not in tags and not (p is not None and p.nfp_thu and d.weekday() == 3):
         return "nfp_week_thu_fri"
-    if jd and d.weekday() == 2 and session == "PM":
+    if jd and week_block and d.weekday() == 2 and session == "PM":
         return "nfp_week_wed_pm"
     if "fomc" in tags and session == "PM" and not (p is not None and p.fomc_pm_from and t >= p.fomc_pm_from):
         return "fomc_pm"
@@ -674,6 +682,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                     pos["stop"] = max(pos["stop"], pos["basis"] / pos["n"])
                 if pos["left"] and pos["t2"] is not None and pos["t1_done"] and h >= pos["t2"]:
                     tr.exits.append((ts, sd.x(pos["t2"]), pos["left"], "t2")); pos["left"] = 0
+            if pos["left"] and p.ce_hold and i > pos["fill_i"] and c < pos["fvg_ce"] and not pos["t1_done"]:
+                tr.exits.append((ts, sd.x(c), pos["left"], "ce_close")); pos["left"] = 0
             if pos["left"] and p.fvg_abort:
                 if pos["abort"] is not None and l < pos["abort"]:
                     tr.exits.append((ts, sd.x(min(o, pos["abort"])), pos["left"], "abort")); pos["left"] = 0
@@ -745,7 +755,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 pos = dict(trade=tr, side=sd, stop=o["stop"], t1=o["t1"], t2=o["t2"],
                            left=o["shares"], n=o["shares"], basis=fill * o["shares"],
                            t1_done=False, fill_i=i, fill_t=t, add=None, fvg_bottom=o["fvg_bottom"],
-                           abort=None, best=fill, ext_i=o["ext_i"], broken=set())
+                           abort=None, best=fill, ext_i=o["ext_i"], broken=set(), fvg_ce=o["fvg_ce"])
                 done[o.get("done_key", o["session"])] = True
                 pending = None
                 if sd.l[i] <= pos["stop"]:           # same-bar stop (conservative)
@@ -769,7 +779,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             continue
         for sd in sides:
             sname = "long" if sd.sign > 0 else "short"
-            if lost_side is not None and sname != lost_side:
+            if not p.reverse_after_loss and lost_side is not None and sname != lost_side:
                 continue                              # no reversals after a loss
             if p.weekly_bias and ctx.wbias == -sd.sign:
                 continue
@@ -1002,7 +1012,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
                                               else "pm_sb" if 840 <= t < 900 else "pm")
     return dict(side=sd, session=session, setup=setup, swept=sw["name"], unicorn=bool(uni),
                 smt=sw["smt"], smt2=sw.get("smt2"), smt_n=smt_n,
-                i=i, entry=entry, stop=stop, t1=lv[0], fvg_bottom=g.bottom,
+                i=i, entry=entry, stop=stop, t1=lv[0], fvg_bottom=g.bottom, fvg_ce=g.mid,
                 ext=sw["ext"], ext_i=sw["ext_i"],
                 t2=lv[1] if len(lv) > 1 else None, shares=shares, htf=htf,
                 conf_n=None if cf is None else len(cf), conf_top=(cf[-1] if cf else ""),

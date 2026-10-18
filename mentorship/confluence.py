@@ -9,7 +9,7 @@ Arrays per timeframe (bullish shown; bearish mirrors):
         block's high; valid until a close below its body mean threshold.
   gap   ICT's opening gaps (htf.opening_gaps): NDOG (17:00 close -> 18:00 reopen, Mon-Thu,
         > 1 handle) on the daily timeframe through the end of its week; NWOG (Friday close ->
-        Sunday 18:00) on the weekly until 5 newer exist. Gaps are never retired by a fill.
+        Sunday 18:00) on the weekly for 60 trading days. Gaps are never retired by a fill.
 Each array is usable from the close of the bar that completes it and for a limited life
 (LIFE). "Aligned at price P" = P within the array (plus a small tolerance).
 
@@ -135,7 +135,7 @@ class Confluence:
                 z["life"] = np.full(len(z["kind"]), float(pd.Timedelta(LIFE[tf]).value))
                 self.z[tf] = z
         # opening gaps as ICT defines them (htf.opening_gaps): NDOGs count on the daily
-        # timeframe through the end of their week; NWOGs on the weekly until 5 newer exist.
+        # timeframe through the end of their week; NWOGs on the weekly for 60 trading days.
         # Neither is retired by a fill.
         og = htf.opening_gaps(df, es_pt)
         if len(og):
@@ -143,11 +143,8 @@ class Confluence:
             nd = (og.kind == "ndog").values
             week_end = pd.DatetimeIndex([(w.end_time + pd.Timedelta(hours=17)).tz_localize(NY)
                                          for w in og.week]).as_unit("ns").asi8.astype(float)
-            nw_idx = np.flatnonzero(~nd)
-            nw_dead = np.full(len(og), np.inf)
-            for j, q in enumerate(nw_idx):
-                if j + 5 < len(nw_idx):
-                    nw_dead[q] = known[nw_idx[j + 5]]
+            # NWOGs stay in force for 60 trading days (~86 calendar days; 051 ~18:02, 065)
+            nw_dead = known + float(pd.Timedelta(days=86).value)
             for tf, m, dead in (("D", nd, week_end), ("W", ~nd, nw_dead)):
                 if not m.any():
                     continue

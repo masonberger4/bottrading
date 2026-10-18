@@ -118,7 +118,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         oh, ol = float(on.at[day, "high"]), float(on.at[day, "low"])
         lo_k = max(0, k - lookback)
         live = [a for a in arrs if lo_k <= a.known - 1 and a.known <= k and a.typ != "nwog"]
-        live += [a for a in arrs if a.typ == "nwog" and a.known <= k][-5:]   # last 5 NWOGs
+        live += [a for a in arrs if a.typ == "nwog" and k - lookback <= a.known <= k]   # 60 days (051)
         # NDOGs live through the week they form in (Mon-Fri)
         wk = day.to_period("W-FRI")
         live = [a for a in live if a.typ != "ndog" or d.index[a.known].to_period("W-FRI") == wk]
@@ -238,15 +238,20 @@ def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0
     return pd.DataFrame(rows)
 
 
-def gaps_for_day(g: pd.DataFrame, day, nwog_keep: int = 5) -> list[tuple[str, float, float, float]]:
-    """Gaps in force at 09:30 of `day`: the last `nwog_keep` NWOGs and this week's NDOGs.
-    Returns (kind, high, low, ce)."""
+def gaps_for_day(g: pd.DataFrame, day, nwog_keep: int = 5, nwog_days: int = 0) -> list[tuple[str, float, float, float]]:
+    """Gaps in force at 09:30 of `day`: NWOGs (the last `nwog_keep`, or with `nwog_days` > 0
+    every NWOG from the last that many trading days - ICT's 60-day maximum, 051 ~18:02,
+    "60 market days", 065) and this week's NDOGs. Returns (kind, high, low, ce)."""
     if g is None or not len(g):
         return []
     cut = pd.Timestamp(day, tz=NY_TZ) + pd.Timedelta(hours=9, minutes=30)
     k = g[g.known < cut]
     wk = pd.Timestamp(day).to_period("W-FRI")
-    nw = k[k.kind == "nwog"].tail(nwog_keep)
+    nw = k[k.kind == "nwog"]
+    if nwog_days:
+        nw = nw[nw.known >= cut - pd.Timedelta(days=round(nwog_days * 7 / 5) + 2)]
+    else:
+        nw = nw.tail(nwog_keep)
     nd = k[(k.kind == "ndog") & (k.week == wk)]
     return [(r.kind, r.high, r.low, r.ce) for r in pd.concat([nw, nd]).itertuples()]
 
