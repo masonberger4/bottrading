@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -10,7 +12,7 @@ import pandas as pd
 
 from claude_hf.daytypes import JOBS, is_trading_day
 from . import htf
-from .strategy import Params, resolve_session_close, run_day
+from .strategy import ROUND_STEP, Params, resolve_session_close, run_day
 
 DATA = Path("data/mentorship")
 NY = "America/New_York"
@@ -149,11 +151,10 @@ def load_meta(symbol: str, minutes: int, source: str = "databento") -> pd.DataFr
     return m
 
 
-def lock_tables(df: pd.DataFrame, p: Params, bias_table: pd.DataFrame | None = None) -> dict:
-    """#9: one htf table per draw-lock minute in use (bars closed by that minute), cut 570 being
-    the ordinary bias table. {cut: table}; empty without overnight bars or with draw_lock off."""
-    if p.draw_lock == "off" or not htf.has_overnight(df):
-        return {}
+def lock_cuts(p: Params) -> set:
+    """#9: the draw-lock minutes in use (one htf table each): the AM / PM session starts, the
+    09:45 / 10:00 release locks, 07:00 / 09:00 pre-open windows, Ma Deuce 08:00 and the London
+    Silver Bullet 02:00 (review fix: London now gets its own cut table like the others)."""
     cuts = {p.am[0] or 570, p.pm[0] or 810, 585, 600}
     if p.pre_0700:
         cuts.add(420)
@@ -161,13 +162,84 @@ def lock_tables(df: pd.DataFrame, p: Params, bias_table: pd.DataFrame | None = N
         cuts.add(540)
     if p.ma_deuce:
         cuts.add(480)
+    if p.sb_model and p.sb_london:
+        cuts.add(120)
+    return cuts
+
+
+def lock_tables(df: pd.DataFrame, p: Params, bias_table: pd.DataFrame | None = None) -> dict:
+    """#9: one htf table per draw-lock minute in use (bars closed by that minute), cut 570 being
+    the ordinary bias table. {cut: table}; empty without overnight bars or with draw_lock off."""
+    if p.draw_lock == "off" or not htf.has_overnight(df):
+        return {}
     out = {}
-    for m in sorted(cuts):
+    for m in sorted(lock_cuts(p)):
         if m == 570 and bias_table is not None:
             out[m] = bias_table
         else:
-            out[m] = htf.table(df, p.es_pt, cut_min=m, vi=p.vi_arrays)
+            out[m] = htf.table(df, p.es_pt, cut_min=m, vi=p.vi_arrays, flip_triggers=p.flip_triggers)
     return out
+
+
+HIST_DAYS = 45                    # prior sessions handed to run_day (backtest and paper alike)
+
+
+@dataclass
+class Prepared:
+    """Everything run_day needs that is built once per instrument frame. Shared by backtest.run
+    and paper mode, so the paper lock / cap / gaps / confluence equal the backtest's (owner #9
+    test i; review: paper used to pass no conf, gaps or closes)."""
+    p: Params
+    df: pd.DataFrame
+    tf: int
+    symbol: str
+    ds: list
+    bt: pd.DataFrame | None
+    cuts: dict
+    og: pd.DataFrame | None
+    closes: dict
+    cf: object
+    meta: pd.DataFrame | None
+
+
+def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
+            partial_last: bool = False, bias_table: pd.DataFrame | None = None,
+            confluence: bool = True, meta: pd.DataFrame | None = None,
+            lock_cuts: dict | None = None) -> Prepared:
+    p = resolve_session_close(p or Params(), df, symbol)        # owner #1: 16:15 futures, 16:00 SPY
+    ov = htf.has_overnight(df)
+    inert = meta is None or p.price_frame == "back_adjusted"
+    if p.round_pools and symbol.upper() in ROUND_STEP and inert and p.price_frame != "raw":
+        warnings.warn(f"#13: round_pools is on but inert for {symbol} (price_frame={p.price_frame!r}, "
+                      f"meta {'missing' if meta is None else 'given'}): no front-month mapping",
+                      stacklevel=3)
+    bt = bias_table if bias_table is not None else (
+        htf.table(df, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers) if ov else None)
+    cuts = lock_cuts if lock_cuts is not None else lock_tables(df, p, bt)
+    og = htf.opening_gaps(df, p.es_pt) if ov else None
+    tt = df.index.hour * 60 + df.index.minute
+    pre = df[(tt >= 570) & (tt < p.org_close)]
+    closes = pre.groupby(pre.index.date).close.last().to_dict()     # ORG close per day
+    cf = None
+    if confluence and ov:
+        from .confluence import Confluence
+        cf = Confluence(df, tf, p.es_pt, vi=p.vi_arrays, breakers=p.conf_breakers)
+    ds = days(df, tf, partial_last, p.session_close)
+    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta)
+
+
+def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: dict | None = None) -> dict:
+    """run_day inputs for day k of pr.ds (the partner / log / locks plumbing is the caller's)."""
+    p, g = pr.p, pr.ds[k]
+    d = g.index[0].date()
+    return dict(df=g, hist=[rth(x) for x in pr.ds[max(0, k - HIST_DAYS):k]], symbol=pr.symbol, p=p, tf=pr.tf,
+                bias=pr.bt.loc[d].to_dict() if pr.bt is not None and d in pr.bt.index else None,
+                conf=pr.cf,
+                gaps=htf.gaps_for_day(pr.og, d, p.nwog_keep, p.nwog_days) if pr.og is not None else None,
+                closes=pr.closes, evening=_evening(pr.df, d) if p.globex_pool else None,
+                intermarket=intermarket, equity=equity,
+                bias_by_cut={m: t_.loc[d].to_dict() for m, t_ in pr.cuts.items() if d in t_.index},
+                meta=pr.meta)
 
 
 def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
@@ -178,18 +250,8 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     """Backtest one instrument. `meta` (#13): databento meta (load_meta) for the front-month
     price frame; `lock_cuts` (#9): {minute: htf table cut there} (built here when None).
     The result's attrs carry "days", "locks" (one row per session lock) and "skips"."""
-    p = resolve_session_close(p or Params(), df, symbol)        # owner #1: 16:15 futures, 16:00 SPY
-    bt = bias_table if bias_table is not None else (htf.table(df, p.es_pt, vi=p.vi_arrays) if htf.has_overnight(df) else None)
-    cuts = lock_cuts if lock_cuts is not None else lock_tables(df, p, bt)
-    og = htf.opening_gaps(df, p.es_pt) if htf.has_overnight(df) else None
-    tt = df.index.hour * 60 + df.index.minute
-    pre = df[(tt >= 570) & (tt < p.org_close)]
-    closes = pre.groupby(pre.index.date).close.last().to_dict()     # ORG close per day
-    cf = None
-    if confluence and htf.has_overnight(df):
-        from .confluence import Confluence
-        cf = Confluence(df, tf, p.es_pt, vi=p.vi_arrays, breakers=p.conf_breakers)
-    ds = days(df, tf, partial_last, p.session_close)
+    pr = prepare(df, tf, symbol, p, partial_last, bias_table, confluence, meta, lock_cuts)
+    p, ds = pr.p, pr.ds
     pmap = {g.index[0].date(): g for g in days(partner, tf, partial_last, p.session_close)} if partner is not None else {}
     pmap2 = {g.index[0].date(): g for g in days(partner2, tf, partial_last, p.session_close)} if partner2 is not None else {}
     locks, skips = [], []
@@ -203,7 +265,6 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             pa = (pmap[d], hist_p)
         pa2 = (pmap2[d], hist_p2) if d in pmap2 and len(hist_p2) >= warmup else None
         if k >= warmup:
-            b = bt.loc[d].to_dict() if bt is not None and d in bt.index else None
             wk = d.isocalendar()[:2]
             n_wk = sum(1 for r in rows if r["date"].isocalendar()[:2] == wk) if p.max_trades_week else 0
             if p.max_trades_week and n_wk >= p.max_trades_week:
@@ -211,12 +272,8 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             eq = None
             if p.risk_basis == "equity":               # #12: start-of-day equity, closed trades only
                 eq = p.account_equity + sum(r["net"] for r in rows)
-            bbc = {m: t_.loc[d].to_dict() for m, t_ in cuts.items() if d in t_.index}
-            day_trades = run_day(g, [rth(x) for x in ds[max(0, k - 45):k]], symbol, p, tf, pa, bias=b, conf=cf,
-                                 gaps=htf.gaps_for_day(og, d, p.nwog_keep, p.nwog_days) if og is not None else None,
-                                 closes=closes, evening=_evening(df, d) if p.globex_pool else None,
-                                 partner2=pa2, intermarket=(intermarket or INTERMARKET()).get(d),
-                                 equity=eq, bias_by_cut=bbc, meta=meta, locks=locks, skips=skips)
+            kw = day_kwargs(pr, k, eq, (intermarket or INTERMARKET()).get(d))
+            day_trades = run_day(partner=pa, partner2=pa2, locks=locks, skips=skips, **kw)
             if p.max_trades_week:
                 day_trades = day_trades[:p.max_trades_week - n_wk]
             for tr in day_trades:
@@ -285,8 +342,8 @@ def report(t: pd.DataFrame) -> dict:
     out = {"all": stats(t)}
     if not len(t):
         return out
-    for col in ("setup", "side", "day_type", "unicorn", "unicorn_side", "lh_sweet", "capped", "sloppy",
-                "draw_side", "smt", "swept", "exit_reason"):
+    for col in ("setup", "side", "day_type", "unicorn", "unicorn_side", "lh_sweet", "capped", "lock_capped",
+                "sloppy", "draw_side", "entry_kind", "smt", "swept", "exit_reason"):
         if col not in t:
             continue
         out[f"by_{col}"] = {str(k): stats(g) for k, g in t.groupby(t[col].astype(str))}

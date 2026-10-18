@@ -51,3 +51,30 @@ and 10 are built as switches that stay off until the owner answers. Details, swi
 item: `build_log.md`. Effect note: with every owner default on, ES 5m produces far fewer trades
 than before - mostly the #7 resistance cap (an opposing 15m-D FVG within 1R of the entry, or
 price inside one) and the #9 session lock (one side, session over once the draw is delivered).
+
+## Open questions for the owner (review pass, 2026-10-18)
+Built as switches; the defaults stay as they are until the owner answers.
+1. **#5 / #6 / #14 are inactive under the default entry.** The bearish-unicorn tag (#5), the
+   breaker-MT respect / floor / cancel / exit (#6) and the full-range breaker zone (#14) act only on
+   the FVG entry path. With the default `ob_entry="pre_break"` (#11) the sweep is dropped at the
+   MSS, so no default trade ever uses them (ES 5m 2023-01..2024-06: every default trade is
+   `ob_pre`, none a unicorn). Choose: (a) make `ob_entry="both"` the default (OB order first, FVG /
+   unicorn order after the MSS, lower entry kept), or (b) also apply breaker-MT respect to OB-pre
+   entries, or (c) keep as is. Study variants: `A13.3_ob_both_breaker_mt`,
+   `A13.3_ob_both_breaker_mt_off`, `A13.3_post_mss_breaker_mt_off`.
+2. **#7 x #9: the HTF cap replaces the locked draw in most trades.** When an unbroken opposing HTF
+   FVG lies before the locked draw, the trade exits at the cap (`lock_capped` tag, reported by
+   `backtest.report`). Choose: (a) keep that, or (b) `draw_lock_near_cap=True`: the lock only
+   picks draws on the near side of the nearest opposing HTF FVG, so the "one exact target" is
+   always the draw. Numbers in `build_log.md` (review pass).
+3. **Own lock times for London SB (02:00) and Ma Deuce (08:00)** [our interpretation]: each locks
+   its own draw at its leg start with the htf table cut there. Confirm, or tie them to the AM lock.
+4. **Round pools are anchored at the session** (`round_pool_from="session"`): on 2023-01-03 ES
+   traded 3906.75 overnight, yet Ep 02's buy side at the open was "3 900" (spec test c), so a round
+   handle counts as untaken if the session so far has not traded it. "midnight" is the switch.
+5. **#10 extra sloppy tests** (opt-in): `premium_run` (044 ~1:14:47), `inside_bisi` (091 ~6:12),
+   `fomc_week` (Ep 03 00:18:23, FOMC + NFP in the same week). Which belong in the default set?
+   (The nfp_thu question above still stands.)
+6. **Paid data:** `roll_kind="calendar"` / `roll_spread` need Databento ES.c.0 (paid). Not built
+   without a go-ahead (and a `quote()` first).
+

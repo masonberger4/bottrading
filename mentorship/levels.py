@@ -104,7 +104,7 @@ def order_block_blend(o, h, l, c, start: int, end: int, kind: str) -> Zone | Non
     return None
 
 
-BREAKER_MODES = ("range", "body")
+BREAKER_MODES = ("range", "body", "leg", "last")
 
 
 def breaker_candle(o, c, a0: int, ext_i: int, kind: str = "bull") -> int | None:
@@ -139,12 +139,34 @@ def breaker_zone(o, h, l, c, a0: int, ext_i: int, i: int, kind: str = "bull",
       "range"  the candle's full high-low (default; Ep 02 ~3:37, Ep 05 ~11:34/~15:20/~22:49,
                Ep 07's OB "entire range" [our interpretation])
       "body"   open-close only (Ep 01 ~56:19 switch)
+      "leg"    D6 C (070): the whole A->B leg, from the swing low L1 (A, bar a0) to the swing high
+               H (B = the highest high in [a0, ext_i]): low of L1's bar .. high of H's bar; MT =
+               its midpoint [our interpretation of "inside the A-B leg"]
+      "last"   D6 D (cc05_014): the LAST up-close candle before the sweep extreme (not the highest
+               close), its full range [our interpretation]
     `mt` = breaker_mt(mt_mode) - by default it follows the zone mode, so the default MT is 50%
-    of the full range. "leg"/"last" are planned (D6). Known at bar i (the caller's bar)."""
-    if mode in ("leg", "last"):
-        raise NotImplementedError("planned D6")
+    of the full range (the leg's midpoint for "leg"). Known at bar i (the caller's bar)."""
     if mode not in BREAKER_MODES:
         raise ValueError(f"breaker_zone mode {mode!r}: expected one of {BREAKER_MODES}")
+    a0, ext_i = max(int(a0), 0), int(ext_i)
+    if mode == "leg":
+        if ext_i <= a0:
+            return None
+        hk = a0 + int(np.argmax(h[a0:ext_i + 1])) if kind == "bull" else a0 + int(np.argmin(l[a0:ext_i + 1]))
+        if kind == "bull":
+            top, bot = float(h[hk]), float(min(l[a0:hk + 1]))
+        else:
+            top, bot = float(max(h[a0:hk + 1])), float(l[hk])
+        mt = (top + bot) / 2 if (mt_mode or "range") in ("range", "leg") else breaker_mt(o, h, l, c, hk, mt_mode)
+        return Zone(kind, top, bot, i, hk, mt)
+    if mode == "last":
+        up = (lambda k: c[k] > o[k]) if kind == "bull" else (lambda k: c[k] < o[k])
+        cand = [k for k in range(a0, ext_i + 1) if up(k)]
+        if not cand:
+            return None
+        k = cand[-1]
+        mt = breaker_mt(o, h, l, c, k, "range" if (mt_mode or "range") in ("range", "last") else mt_mode)
+        return Zone(kind, float(h[k]), float(l[k]), i, k, mt)
     k = breaker_candle(o, c, a0, ext_i, kind)
     if k is None:
         return None

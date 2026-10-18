@@ -226,35 +226,97 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     return out
 
 
+FLIP_TRIGGERS = ("ob_mt", "wk_dc", "flip_pd3", "flip_close_above", "flip_thu_wopen")
+
+
 def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple) -> dict:
     """Stateful bias column (B8; shared helper for B8a-f, B9, B13, B17.3). The state persists
     from day to day and changes only on a trigger, evaluated at each completed session's close
-    and applied from the NEXT session (no look-ahead):
-      ob_mt  (B7/B8a) a daily close through the mean threshold of the most recent bullish daily
-             OB (from above -> -1) or bearish daily OB (from below -> +1)
-      wk_dc  (B8c) a week closing above the high of the last down-close week (+1) or below the
-             low of the last up-close week (-1)
-    Further triggers (flip_pd3, flip_close_above, flip_thu_wopen, stop_flip) belong to bias_htf
-    and plug in here. Returns {session date: state known before that session}."""
-    known = set(triggers) - {"ob_mt", "wk_dc"}
-    if known:
-        raise NotImplementedError(f"flip triggers {sorted(known)}: planned (bias_htf B8b/d/e/f)")
-    c = d.close.values.astype(float)
+    and applied from the NEXT session (no look-ahead). Triggers:
+      ob_mt   (B7/B8a) a daily close through the mean threshold of the most recent bullish daily
+              OB (from above -> -1) or bearish daily OB (from below -> +1)
+      wk_dc   (B8c) a week closing above the high of the last down-close week (+1) or below the
+              low of the last up-close week (-1)
+      flip_pd3  (B8b; 098 ~47:00, 078 ~1:02:38) bodies closing through THREE supporting daily /
+              weekly PD arrays (FVG bottom / OB MT for a bullish state) since the state began ->
+              the other side [our interpretation: distinct arrays, each counted once]
+      flip_close_above  (B8d; 077 ~10:53, 098 ~67:30, 102 ~6:45, 103 ~2:29) in a bearish state a
+              daily close above the last Friday's high, the prior session's upper-wick CE or the
+              last completed week's upper-wick upper quadrant -> neutral (rule_coverage B8d: the
+              result is set to neutral); mirrored for a bullish state [our interpretation: any one]
+      flip_thu_wopen  (B8e; cc08_001 ~24:20) a Thursday body close back across the week's
+              opening price against the state -> the other side
+    stop_flip (B8f) is intraday and lives in the engine (Params.stop_flip), not in this column.
+    Returns {session date: state known before that session}."""
+    if "stop_flip" in triggers:
+        raise ValueError("stop_flip (B8f) is an intraday engine switch: Params.stop_flip, not a flip trigger")
+    bad = set(triggers) - set(FLIP_TRIGGERS)
+    if bad:
+        raise ValueError(f"flip triggers {sorted(bad)}: expected from {FLIP_TRIGGERS}")
+    o = d.open.values.astype(float)
+    h, l, c = (d[k].values.astype(float) for k in ("high", "low", "close"))
     obs = [a for a in arrs if a.typ == "ob" and a.tf == "D"]
+    pd_arrs = [a for a in arrs if a.typ in ("fvg", "ob") and a.tf in ("D", "W")]
     wk_last = {}                                   # session index -> its week's row (last session)
     pos = {t: k for k, t in enumerate(d.index)}
     for r in w.itertuples():
         wk_last[pos[r.last]] = r
+    wk_of = d.index.to_period("W-FRI")
+    wk_open = {}
+    for k in range(len(d)):
+        wk_open.setdefault(wk_of[k], o[k])
     state, out = 0, {}
     last_dn_week = last_up_week = None
+    last_week = None                               # the last COMPLETED week's row
+    last_fri = None                                # index of the last completed Friday session
+    broken: set = set()                            # flip_pd3: arrays closed through in this state
     for k in range(len(d)):
         out[d.index[k]] = state                     # known before session k
+        prev = state
         if "ob_mt" in triggers and k >= 1:
             bull = [a for a in obs if a.kind == "bull" and a.known <= k]
             bear = [a for a in obs if a.kind == "bear" and a.known <= k]
             if bull and c[k] < bull[-1].ce <= c[k - 1]:
                 state = -1
             if bear and c[k] > bear[-1].ce >= c[k - 1]:
+                state = 1
+        if "flip_pd3" in triggers and state != 0 and k >= 1:
+            for j, a in enumerate(pd_arrs):
+                if j in broken or a.known > k or a.kind != ("bull" if state > 0 else "bear"):
+                    continue
+                lvl = a.ce if a.typ == "ob" else (a.bottom if state > 0 else a.top)
+                was = c[a.known:k]
+                intact = (was.min(initial=np.inf) >= lvl) if state > 0 else (was.max(initial=-np.inf) <= lvl)
+                if intact and (c[k] < lvl if state > 0 else c[k] > lvl):
+                    broken.add(j)
+            if len(broken) >= 3:
+                state = -state
+        if "flip_close_above" in triggers and state != 0 and k >= 1:
+            ub = max(o[k - 1], c[k - 1])
+            lb = min(o[k - 1], c[k - 1])
+            if state < 0:
+                lv = [ub + (h[k - 1] - ub) / 2]
+                if last_fri is not None:
+                    lv.append(h[last_fri])
+                if last_week is not None:
+                    wb = max(last_week.open, last_week.close)
+                    lv.append(last_week.high - 0.25 * (last_week.high - wb))
+                if any(c[k] > x for x in lv):
+                    state = 0
+            else:
+                lv = [lb - (lb - l[k - 1]) / 2]
+                if last_fri is not None:
+                    lv.append(l[last_fri])
+                if last_week is not None:
+                    wb = min(last_week.open, last_week.close)
+                    lv.append(last_week.low + 0.25 * (wb - last_week.low))
+                if any(c[k] < x for x in lv):
+                    state = 0
+        if "flip_thu_wopen" in triggers and d.index[k].weekday() == 3 and state != 0:
+            wo = wk_open[wk_of[k]]
+            if state > 0 and c[k] < wo < o[k]:
+                state = -1
+            elif state < 0 and c[k] > wo > o[k]:
                 state = 1
         if "wk_dc" in triggers and k in wk_last:
             r = wk_last[k]
@@ -266,6 +328,12 @@ def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple) -> dict
                 last_dn_week = r.high
             elif r.close > r.open:
                 last_up_week = r.low
+        if k in wk_last:
+            last_week = wk_last[k]
+        if d.index[k].weekday() == 4:
+            last_fri = k
+        if state != prev:
+            broken = set()
     return out
 
 

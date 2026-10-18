@@ -57,6 +57,7 @@ from .confluence import TFS as CF_TFS
 MACROS = ((530, 550), (590, 610), (650, 670), (710, 730), (790, 820), (890, 910), (915, 945))
 NEWS_1000 = {"ism_manufacturing", "ism_services", "jolts", "sentiment"}
 NEWS_0830 = {"cpi", "jobs", "ppi", "pce", "retail_sales", "gdp"}
+CF_SRC = {"fvg": 0, "ob": 1, "gap": 2, "vi": 3, "breaker": 4}   # confluence array sources (#7)
 
 
 @dataclass
@@ -156,7 +157,9 @@ class Params:
     am_exit: int = 720             # D16: AM leftovers out at 12:00 (minutes); 0 = hold to flatten
     pm_done_by: int = 0            # D16 test: PM out at this time once T1 filled (900 = 15:00)
     breaker_zone: str = "range"    # owner #14 (D6): Ep 02/05 (and Ep 07 OB, [our interpretation]) use the
-                                   # breaker candle's full high-low range; "body" = Ep 01 switch
+                                   # breaker candle's full high-low range; "body" = Ep 01 switch;
+                                   # "leg" = the A->B leg (070), "last" = the last up-close candle
+                                   # (cc05_014) - see levels.breaker_zone
     sb_only: bool = False          # D2 test: fills only inside the Silver Bullet windows
     sb_windows: tuple = ((600, 660), (840, 900))
     fvg_abort: bool = False        # X6: body close beyond the FVG, next bar beyond it -> out
@@ -216,6 +219,9 @@ class Params:
     smt_min: int = 0               # B18: at least this many sister indices (NQ, YM) must have
                                    # failed to take their version of the swept level; 0 = tag only
     htf_bias: str = "off"          # daily HTF bias filter: off / react / draw / pd / combo / flip (htf.py)
+    flip_triggers: tuple = ("ob_mt", "wk_dc")   # B8 triggers of the htf "flip" column: ob_mt (B8a),
+                                   # wk_dc (B8c), flip_pd3 (B8b), flip_close_above (B8d), flip_thu_wopen
+                                   # (B8e); B8f is the engine switch stop_flip
     bias_neutral: str = "skip"     # with a bias filter, a 0 day: "skip" it or trade "both" sides
     lot: int = 1                   # units per contract: 1 for shares; 5 for MES, 2 for MNQ
                                    # (a unit is $1 per point, so P&L = points x units)
@@ -254,6 +260,8 @@ class Params:
                                          # exits a unicorn trade (wicks may poke; Ep 02 ~3:37-3:54)
     breaker_mt_entry_floor: bool = True  # unicorn entry not below the breaker MT (+1 tick)
     breaker_mt_exit_after_t1: bool = False
+    breaker_mt_floor_strict: bool = False  # [our interpretation] switch: a unicorn gap wholly below the
+                                         # MT is dropped as a plain-FVG entry too (spec 6b: unicorn pick only)
     conf_breakers: bool = False          # confluence: breaker zones with inv = MT (slow on 1m data)
     # #7 opposing HTF FVG = resistance cap (Ep02.10, L9, X3f)
     htf_resist_cap: bool = True
@@ -286,6 +294,16 @@ class Params:
     sloppy_chop_from: int = 120          # checked from 02:00
     sloppy_release_frac: float = 0.25    # released by a close 0.25x ADR5 beyond the chop range
     sloppy_scalp_pts: float = 5.0        # scalp mode: single exit at min(+5, T1)
+    # further sloppy tests (opt-in, add the name to sloppy_tests) [our interpretation throughout]:
+    #   "premium_run" (B17, 044 ~1:14:47) a one-way run of sloppy_run_days sessions with no real
+    #       retracement (each close and low above the prior one) whose last day traded into an old
+    #       daily high of the last sloppy_run_lookback sessions (mirror for a run down)
+    #   "fomc_week" (Ep03 00:18:23-00:18:49) the Mon-Fri week holds an FOMC day and the NFP
+    #       release (sloppy_fomc_nfp=False: any FOMC week)
+    #   "inside_bisi" (B17, 091 ~6:12) yesterday's whole range sat inside one open daily FVG
+    sloppy_run_days: int = 3
+    sloppy_run_lookback: int = 20
+    sloppy_fomc_nfp: bool = True
     # #11 Ep 07 advanced entry at the order-block bodies before the break (M1.4, D10, Ep07.2/5)
     ob_entry: str = "pre_break"          # "post_mss" = FVG after the MSS (old); "both"
     ob_entry_px: str = "body_top"        # "mt" (body midpoint) / "range_top"
@@ -305,6 +323,15 @@ class Params:
     round_pools: bool = True             # untaken round handles (ES 00/50) as pools and targets (Ep 02
                                          # "3 900"); futures with meta only
     round_pool_step_pts: float = 0.0     # 0 = per symbol (ES 50, NQ 100, YM 500); 25 = alternative
+    round_pool_from: str = "session"     # #13 [our interpretation, Ep 02 ~2:37]: a round handle is untaken
+                                         # if the SESSION so far (09:30 AM / 13:30 PM; midnight before
+                                         # 09:30) has not traded it - on 2023-01-03 ES traded 3906.75
+                                         # overnight, yet ICT's buy side at the 09:30 open was "3 900"
+                                         # (spec test c); "midnight" = untaken since midnight
+    round_step_pts: float = 0.0          # L17 (cc12_001 ~34:00, CC only; 2023 index work does not round):
+                                         # targets rounded DOWN and limit entries UP toward price to this
+                                         # step (ES pts) on the real front-month price (#13 mapping; SPY:
+                                         # its own price); stops are not rounded. 0 = off
     # --- verified bugs -----------------------------------------------------------------------
     seen_from_created: bool = True       # M7.1 fix: a pool is spent only if traded through AFTER it
                                          # formed (the lunch / overnight / AM highs could never be targets)
@@ -314,16 +341,43 @@ class Params:
                                          # 10 bars before it [our interpretation]; 0 = off
     # --- shared helpers (rule_coverage.md "Shared pieces to build first") -------------------
     vi_arrays: bool = False              # VI wiring: volume imbalances in confluence / htf arrays
-    turtle_soup: str = ""                # M12 core: "2023" (no MSS: close back above the swept level)
-    ts_max_pts: float = 5.0              # false break "by a little": at most this many ES pts
-    ts_back_bars: int = 3                # close back above within this many bars of the extreme
+    turtle_soup: str = ""                # M12 turtle soup (off). Variants, one at a time:
+                                         #  "2023"     M12.1 (022 ~2:47:29): no MSS; the sweep takes the level by
+                                         #             <= ts_max_pts and closes back above within ts_back_bars;
+                                         #             limit at the PD array's top, stop at the array / a gap
+                                         #  "cc_limit" M12.3 (cc04_011 ~9:45): with a bias (lock side / htf_bias)
+                                         #             a resting buy limit at (ts_cc_below_pts under) the old low
+                                         #  "cc_1h_ob" M12.3 (cc02_001 ~17:41-25:21): 1h sweep into a daily bullish
+                                         #             OB, buy limit at the 1h last down candle's open; half at
+                                         #             1R, BE after 2R, runner 5R (ts_r_mults / ts_be_r)
+                                         #  "or60"     M12.3 (cc10_010 ~6:51): turtle soup below the OR60 low after
+                                         #             10:30, target the OR60 high
+                                         #  "external" M12.4 (cc12_004 ~29:35): a false low that stopped short of an
+                                         #             unreached HTF discount array is run into the array; buy there
+    ts_max_pts: float = 5.0              # false break "by a little": at most this many ES pts (M12.5 depth)
+    ts_back_bars: int = 3                # close back above within this many bars of the extreme (M12.5 back)
     ts_need_htf: bool = False            # the sweep must reach into an HTF array (htf tag)
+    ts_entry: str = "array"              # 2023: "array" = limit at the PD array top (M12.1), capped at the swept
+                                         # level [our interpretation]; "level" = at the swept level (old reading)
+    ts_stop: str = "array"               # 2023/external: "array" below the array (022); "gap" the nearest
+                                         # NWOG/NDOG/ORG level below the old low (038 ~41:58); "ext" below
+                                         # the false-break extreme. No array / gap found -> "ext"
+    ts_cc_below_pts: float = 0.0         # cc_limit: the limit this many ES pts under the old low ("at or
+                                         # just below"); stop = level - ts_max_pts (a deeper run = a real decline)
+    ts_r_mults: tuple = (1.0, 5.0)       # cc_1h_ob management: half off at 1R, the runner at 5R
+    ts_be_r: float = 2.0                 # cc_1h_ob: breakeven once price reaches 2R
+    ts_gate_mss: bool = False            # M12.5: the turtle-soup depth/back test also gates the MSS / OB model
+    # B8f (042 ~1:08:19): stopped out beyond a breaker's far edge cancels the idea -> the other side
+    # for the rest of that day. "breaker": the stop lay beyond the trade's breaker zone; "smt": an
+    # SMT trade's stop-out (SMT-only option); "off"
+    stop_flip: str = "off"
+    # M3.10 (048 ~39:02): an immediate rebalance (A7) printed inside the SB window -> expect more
+    # than 5 handles: the SB draw must be at least this many ES pts away (0 = off)
+    sb_rebalance_ext: float = 0.0
 
     def __post_init__(self):
         if self.unicorn_sides not in ("both", "long", "short"):
             raise ValueError(f"unicorn_sides {self.unicorn_sides!r}")
-        if self.breaker_zone in ("leg", "last"):
-            raise NotImplementedError("planned D6")
         if self.breaker_zone not in L.BREAKER_MODES:
             raise ValueError(f"breaker_zone {self.breaker_zone!r}")
         if self.breaker_mt_mode not in ("range", "body"):
@@ -339,9 +393,24 @@ class Params:
                          ("year_end", ("december", "long", "tag", "off")),
                          ("year_end_map", ("squaring", "with")), ("am_exit_mode", ("close", "tighten")),
                          ("sb_target_mode", ("draw", "fixed")), ("runner_htf_exit", ("", "15m", "30m", "1h")),
-                         ("turtle_soup", ("", "2023"))):
+                         ("turtle_soup", ("", "2023", "cc_limit", "cc_1h_ob", "or60", "external")),
+                         ("ts_entry", ("array", "level")), ("round_pool_from", ("session", "midnight")), ("ts_stop", ("array", "gap", "ext")),
+                         ("stop_flip", ("off", "breaker", "smt"))):
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
+        bad = [x for x in self.htf_resist_src if x not in CF_SRC]       # review: validate here, not
+        if bad:                                                          # as a KeyError mid-run
+            raise ValueError(f"htf_resist_src {bad}: expected names from {tuple(CF_SRC)}")
+        bad = [x for x in self.htf_resist_tfs if x not in CF_TFS]
+        if bad or not self.htf_resist_tfs:
+            raise ValueError(f"htf_resist_tfs {self.htf_resist_tfs!r}: expected a non-empty subset of {CF_TFS}")
+        from .htf import FLIP_TRIGGERS
+        if set(self.flip_triggers) - set(FLIP_TRIGGERS):
+            raise ValueError(f"flip_triggers {self.flip_triggers!r}: expected from {FLIP_TRIGGERS} "
+                             "(B8f = Params.stop_flip)")
+        known = {"big_prev", "chop", "nfp_week", "premium_run", "fomc_week", "inside_bisi"}
+        if set(self.sloppy_tests) - known:
+            raise ValueError(f"sloppy_tests {sorted(set(self.sloppy_tests) - known)}: expected from {sorted(known)}")
 
 
 def _eff_flat(p: "Params") -> int:
@@ -497,6 +566,7 @@ class Trade:
     draw_px: float | None = None
     draw_name: str = ""
     draw_kind: str = ""
+    lock_capped: bool = False      # #7 x #9: the locked draw lay beyond the HTF cap - exit at the cap
     sloppy: str = ""               # #10: sloppy-day reasons active at arming (tag in every mode)
     news_wait_min_actual: float | None = None   # #4: minutes from the release to the range's completion
     news_pd: bool | None = None    # #4: entry in the news range's discount (long) / premium (short)
@@ -748,22 +818,33 @@ ROUND_STEP = {"ES": 50.0, "MES": 50.0, "SPX": 50.0, "NQ": 100.0, "MNQ": 100.0, "
               "YM": 500.0, "MYM": 500.0}
 
 
+def _round_anchor(ctx, i: int) -> int:
+    """#13 round_pool_from: the first bar whose trading can take a round handle at bar i."""
+    if getattr(ctx, "round_from", "session") == "midnight":
+        return ctx.start
+    t = ctx.t[i] if i < len(ctx.t) else ctx.t[-1]
+    return _idx_at(ctx, 810) if t >= 810 else (_idx_at(ctx, 570) if t >= 570 else ctx.start)
+
+
 def _round_levels(ctx, sd, i: int, beyond: bool, n: int = 1) -> list[float]:
     """#13 / Ep02.2: untaken round handles in side space. beyond=False: the nearest round level
-    below today's low so far (sell-side, bars start..i-1); beyond=True: the next n above today's
-    high through bar i (buy-side targets). Real (front-month) level R maps to the engine at
-    R + adj of the latest closed bar (look-ahead free)."""
+    below the low so far (sell-side, bars a..i-1; no bar yet -> below the last close);
+    beyond=True: the next n above the high through bar i (buy-side targets). a = the session's
+    first bar (round_pool_from="session") or midnight. Real (front-month) level R maps to the
+    engine at R + adj of the latest closed bar (look-ahead free)."""
     st = getattr(ctx, "round_step", 0.0)
     if not st or getattr(ctx, "adj", None) is None:
         return []
+    if i < ctx.start:
+        return []
+    a = _round_anchor(ctx, i)
     if beyond:
-        if i < ctx.start:
-            return []
-        ext, adj = sd.h[ctx.start:i + 1].max(), float(ctx.adj[i])
+        ext, adj = sd.h[a:i + 1].max(), float(ctx.adj[i])
     else:
         if i - 1 < ctx.start:
             return []
-        ext, adj = sd.l[ctx.start:i].min(), float(ctx.adj[i - 1])
+        ext = sd.l[a:i].min() if i - 1 >= a else sd.c[i - 1]
+        adj = float(ctx.adj[i - 1])
     raw = sd.x(ext) - adj                     # real front-month price of today's extreme
     up = (sd.sign > 0) == beyond              # real direction to look in
     out = []
@@ -882,6 +963,15 @@ def _after_close(pos, trades, p, done, state):
     """Record the trade; apply the session rules that depend on how it ended."""
     lost = _close(pos, trades, p)
     tr = pos["trade"]
+    if p.stop_flip != "off" and lost is not None and tr.exits and tr.exits[-1][3] in ("stop", "stop_gap"):
+        s_ = 1 if tr.side == "long" else -1           # B8f (042 ~1:08:19) [our interpretation]
+        if p.stop_flip == "smt":
+            hit_ = tr.smt is True
+        else:                                         # the stop lay beyond the breaker's far edge
+            hit_ = (tr.bz_bottom is not None and tr.stop <= tr.bz_bottom) if s_ > 0 else \
+                   (tr.bz_top is not None and tr.stop >= tr.bz_top)
+        if hit_:
+            state["flip"] = -s_
     if lost is None and tr.session == "AM" and p.no_pm_after_am_win:
         done["PM"] = True
     if lost is not None and p.reentry_half and not state["reentered"].get(tr.session):
@@ -991,9 +1081,64 @@ def sloppy_day(hist: list[pd.DataFrame], day, p: "Params") -> set:
             out.add("nfp_week")
         if blocked(day, "PM", q) == "nfp_week_wed_pm":
             out.add("nfp_week:PM")
-    if "premium_run" in p.sloppy_tests:
-        raise NotImplementedError("sloppy test premium_run: planned (B17.4)")
+    if "premium_run" in p.sloppy_tests and _premium_run(hist, p):
+        out.add("premium_run")
+    if "fomc_week" in p.sloppy_tests:
+        mon = day - timedelta(days=day.weekday())
+        wk = [mon + timedelta(days=k) for k in range(5)]
+        fomc = any("fomc" in events(x) for x in wk)
+        if fomc and (not p.sloppy_fomc_nfp or any(x in JOBS for x in wk)):
+            out.add("fomc_week")
+    if "inside_bisi" in p.sloppy_tests and _inside_daily_fvg(hist):
+        out.add("inside_bisi")
     return out
+
+
+def _daily(hist: list[pd.DataFrame]) -> tuple:
+    o = np.array([float(x.open.iloc[0]) for x in hist]); c = np.array([float(x.close.iloc[-1]) for x in hist])
+    h = np.array([float(x.high.max()) for x in hist]); l = np.array([float(x.low.min()) for x in hist])
+    return o, h, l, c
+
+
+def _premium_run(hist: list[pd.DataFrame], p: "Params") -> bool:
+    """#10 / B17 (044 ~1:14:47 "we've moved essentially parabolically from Tuesday one direction
+    with no real retracements ... we traded to an old high") [our interpretation]: the last
+    sloppy_run_days completed sessions each closed above the prior close with a higher low, and the
+    last one traded up into a daily high of the sloppy_run_lookback sessions before the run that no
+    session had taken until the run (mirror: a run down into an old low). Completed days only."""
+    n, lb = p.sloppy_run_days, p.sloppy_run_lookback
+    if n < 1 or len(hist) < n + 3:
+        return False
+    o, h, l, c = _daily(hist)
+    for sgn, hh, ll, cc in ((1, h, l, c), (-1, -l, -h, -c)):
+        if not (all(cc[-k] > cc[-k - 1] for k in range(1, n + 1)) and all(ll[-k] > ll[-k - 1] for k in range(1, n + 1))):
+            continue
+        a = len(hh) - n                                # first session of the run
+        before = range(max(0, a - lb), a)
+        for j in before:
+            untaken = hh[j + 1:a].max(initial=-np.inf) < hh[j]   # an old high still standing
+            if untaken and hh[a:-1].max(initial=-np.inf) < hh[j] <= hh[-1]:
+                return True                            # the run's last day traded into it
+    return False
+
+
+def _inside_daily_fvg(hist: list[pd.DataFrame]) -> bool:
+    """#10 / B17 (091 ~6:12 "price inside one daily BISI range = don't trade that index") [our
+    interpretation]: yesterday's whole range sat inside one daily FVG (either direction) formed
+    before it and not closed through since."""
+    if len(hist) < 4:
+        return False
+    o, h, l, c = _daily(hist)
+    k = len(h) - 1
+    for z in L.fvgs(h[:k], l[:k]):
+        after = c[z.i + 1:k]
+        if z.kind == "bull" and len(after) and after.min() < z.bottom:
+            continue
+        if z.kind == "bear" and len(after) and after.max() > z.top:
+            continue
+        if z.bottom <= l[k] and h[k] <= z.top:
+            return True
+    return False
 
 
 class Chop:
@@ -1176,60 +1321,82 @@ def _lock_times(p, day, pre_windows) -> dict:
 def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=()) -> dict:
     """Mark up the levels before the session opens and lock ONE draw (owner #9). Uses only bars
     that closed by t_lock (bar start + tf <= t_lock). Candidates, each with its kind (pool /
-    array): the HTF draws from the htf table cut at t_lock (draw_up / draw_dn), PDH/PDL 1-3, the
-    overnight high/low known by t_lock, previous week / month (if on), NWOG/NDOG edges and CE,
-    opening range gaps (today's only once 09:30 has printed), PM: the AM and lunch highs/lows,
-    and the nearest untaken round handles (#13). Levels traded through today before t_lock
-    (L14d) and levels delivered earlier today (`spent`, L14e) are dropped. "nearest": the nearer
-    remaining level sets the side; no candidate on a side loses; none / a tie = neutral."""
+    array), its direction (+1 buy-side high, -1 sell-side low, 0 array / round handle) and the
+    bar from which it exists: the HTF draws from the htf table cut at t_lock (draw_up /
+    draw_dn), PDH/PDL 1-3, the overnight high/low known by t_lock, previous week / month (if
+    on), NWOG/NDOG edges and CE, opening range gaps (today's only once 09:30 has printed), PM:
+    the AM and lunch highs/lows (complete at 13:30), and the nearest round handles (#13).
+    L14d (review fix, as M7.1 in _targets): a level is dropped only when bars AFTER it formed
+    and up to the lock traded through it, so the lunch / AM highs can be the PM draw. Levels
+    delivered earlier today (`spent`, L14e) are dropped. "nearest" [our interpretation]: the
+    nearer remaining level at least draw_lock_min_pts away sets the side; no candidate on a
+    side loses; none / a tie = neutral. `marked` keeps EVERY intact level on both sides,
+    (v, kind, name, dir), nearest first - the frozen ladder rungs between the entry and the
+    draw come from it (review fix: it used to hold only the far side's candidates)."""
     t = ctx.t
-    kl = ctx.start + int(np.searchsorted(t[ctx.start:] + ctx.tf, t_lock, side="right"))
+    S = ctx.start
+    kl = S + int(np.searchsorted(t[S:] + ctx.tf, t_lock, side="right"))
     px = float(ctx.c[kl - 1])
-    cands = []
+    at = lambda m: _idx_at(ctx, m)
+    cands = []                                         # (v, kind, name, dir, created)
     if row:
-        for key in ("draw_up", "draw_dn"):
+        for key, dr in (("draw_up", 1), ("draw_dn", -1)):
             v = row.get(key)
             if v is not None and v == v:
                 nm = str(row.get(key + "_name", ""))
-                cands.append((float(v), "pool" if nm in POOL_NAMES else "array", "htf_" + nm))
+                cands.append((float(v), "pool" if nm in POOL_NAMES else "array", "htf_" + nm,
+                              dr if nm in POOL_NAMES else 0, S))
     for k, v in ctx.pd.items():
         if k.startswith(("pdh", "pdl")):
-            cands.append((v, "pool", k))
+            cands.append((v, "pool", k, 1 if k.startswith("pdh") else -1, S))
     if t_lock >= 570:
-        for k in ("pmh", "pml"):
+        for k, dr in (("pmh", 1), ("pml", -1)):
             if k in ctx.pd:
-                cands.append((ctx.pd[k], "pool", k))
+                cands.append((ctx.pd[k], "pool", k, dr, at(570)))
     else:
         m = max((m for m in ctx.pre_at if m <= t_lock), default=None)
         if m is not None:
-            cands += [(ctx.pre_at[m][0], "pool", "overnight_high"), (ctx.pre_at[m][1], "pool", "overnight_low")]
-    for on, hl, nm in ((p.pool_prev_week, ctx.pw, "pw"), (p.pool_prev_month, ctx.pm_, "pm")):
+            cands += [(ctx.pre_at[m][0], "pool", "overnight_high", 1, at(m)),
+                      (ctx.pre_at[m][1], "pool", "overnight_low", -1, at(m))]
+    for on, hl, nm in ((p.pool_prev_week, ctx.pw, "pw"), (p.pool_prev_month, ctx.pm_, "pmonth_")):
         if on and hl is not None:
-            cands += [(hl[0], "pool", nm + "h"), (hl[1], "pool", nm + "l")]
+            cands += [(hl[0], "pool", nm + "h", 1, S), (hl[1], "pool", nm + "l", -1, S)]
     if getattr(ctx, "gaps", None) is not None:
         for kind, hi, lo, ce in ctx.gaps:
-            cands += [(hi, "array", kind + "_high"), (ce, "array", kind + "_ce"), (lo, "array", kind + "_low")]
+            cands += [(hi, "array", kind + "_high", 0, S), (ce, "array", kind + "_ce", 0, S),
+                      (lo, "array", kind + "_low", 0, S)]
     else:
         for a, b in ctx.nwog:
-            cands += [(a, "array", "nwog"), (b, "array", "nwog")]
+            cands += [(a, "array", "nwog", 0, S), (b, "array", "nwog", 0, S)]
     if p.org_days:
         orgs = ctx.org[:-1] if (ctx.org_today and t_lock <= 570) else ctx.org
-        for a, b in orgs[-p.org_days:]:
-            cands += [(a, "array", "org"), ((a + b) / 2, "array", "org_ce"), (b, "array", "org")]
+        orgs = orgs[-p.org_days:]
+        for j, (a, b) in enumerate(orgs):
+            cr = at(570) if (ctx.org_today and t_lock > 570 and j == len(orgs) - 1) else S
+            cands += [(a, "array", "org", 0, cr), ((a + b) / 2, "array", "org_ce", 0, cr), (b, "array", "org", 0, cr)]
     if session == "PM" and t_lock >= 810:
         if ctx.am_hl:
-            cands += [(ctx.am_hl[0], "pool", "am_high"), (ctx.am_hl[1], "pool", "am_low")]
+            cands += [(ctx.am_hl[0], "pool", "am_high", 1, at(810)), (ctx.am_hl[1], "pool", "am_low", -1, at(810))]
         if "lunch" in ctx.sess:
-            cands += [(ctx.sess["lunch"][0], "pool", "lunch_high"), (ctx.sess["lunch"][1], "pool", "lunch_low")]
+            cands += [(ctx.sess["lunch"][0], "pool", "lunch_high", 1, at(810)),
+                      (ctx.sess["lunch"][1], "pool", "lunch_low", -1, at(810))]
     st = getattr(ctx, "round_step", 0.0)
     if st and getattr(ctx, "adj", None) is not None and kl - 1 >= 0:
         adj = float(ctx.adj[kl - 1])
         raw = px - adj
-        cands += [(float(np.ceil(raw / st) * st + adj), "pool", "round"),
-                  (float(np.floor(raw / st) * st + adj), "pool", "round")]
-    hi_t = ctx.h[ctx.start:kl].max() if kl > ctx.start else -np.inf
-    lo_t = ctx.l[ctx.start:kl].min() if kl > ctx.start else np.inf
+        cr = S if getattr(ctx, "round_from", "session") == "midnight" else (
+            at(810) if t_lock >= 810 else at(570) if t_lock >= 570 else S)   # untaken this session
+        cands += [(float(np.ceil(raw / st) * st + adj), "pool", "round", 0, cr),
+                  (float(np.floor(raw / st) * st + adj), "pool", "round", 0, cr)]
     near = lambda v: any(abs(v - s) <= p.es_pt for s in spent)
+
+    def intact(v, dr, cr):
+        """L14d: not traded through by the bars after it formed, up to the lock."""
+        a = max(cr, S)
+        if a >= kl:
+            return True
+        return (ctx.h[a:kl].max() <= v) if v > px else (ctx.l[a:kl].min() >= v)
+
     if p.draw_lock_near_cap and p.htf_resist_cap and getattr(ctx, "conf", None) is not None:
         # switch: candidates beyond the nearest opposing HTF FVG wholly beyond the lock price
         # (as known at the lock) are not draws
@@ -1240,9 +1407,19 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=()) -
             if r is not None:          # [our interpretation] arrays wholly beyond the lock price
                 cands = [x for x in cands if (x[0] <= r[0] if sgn > 0 else x[0] >= r[0])
                          or (x[0] < px if sgn > 0 else x[0] > px)]
+    marked = {}
+    for v, k, n, dr, cr in cands:
+        if v == px or near(v) or not intact(v, dr, cr):
+            continue
+        if (v > px and dr < 0) or (v < px and dr > 0):
+            continue                                   # a low above / high below price: taken
+        key = (round(v, 9), k)
+        if key not in marked:
+            marked[key] = (abs(v - px), v, k, n, dr)
+    mk = sorted(marked.values())
     mn = p.draw_lock_min_pts * p.es_pt
-    up = sorted({(v - px, v, k, n) for v, k, n in cands if v - px >= mn and v > px and v >= hi_t and not near(v)})
-    dn = sorted({(px - v, v, k, n) for v, k, n in cands if px - v >= mn and v < px and v <= lo_t and not near(v)})
+    up = [x for x in mk if x[1] > px and x[0] >= mn]
+    dn = [x for x in mk if x[1] < px and x[0] >= mn]
     side = 0
     if up and (not dn or up[0][0] < dn[0][0]):
         side = 1
@@ -1251,7 +1428,7 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=()) -
     pick = up if side > 0 else dn
     lock = dict(day=ctx.day, session=session, side=side, t_lock=t_lock, px=px,
                 target=pick[0][1] if side else None, kind=pick[0][2] if side else "",
-                name=pick[0][3] if side else "", marked=[(v, k, n) for _, v, k, n in pick],
+                name=pick[0][3] if side else "", marked=[(v, k, n, dr) for _, v, k, n, dr in mk],
                 delivered=False, delivered_t=None, delivered_i=None, traded=False)
     return lock
 
@@ -1295,7 +1472,7 @@ def _make_trade(ctx, day, symbol, o, sd, ts, fill, i, t, p, btag):
                resist_hi=o.get("resist_hi"), capped=o.get("capped", False),
                draw_side=o.get("draw_side", 0), draw_px=o.get("draw_px"),
                draw_name=o.get("draw_name", ""), draw_kind=o.get("draw_kind", ""),
-               sloppy=o.get("sloppy", ""), news_wait_min_actual=o.get("news_wait_min_actual"),
+               lock_capped=o.get("lock_capped", False), sloppy=o.get("sloppy", ""), news_wait_min_actual=o.get("news_wait_min_actual"),
                news_pd=o.get("news_pd"), **btag)
     eq = ctx.equity
     tr.entry_risk_pct = round(o["shares"] * (fill - o["stop"]) / eq, 5) if eq else None
@@ -1311,7 +1488,8 @@ def _stamp_frame(ctx, tr, i):
     if getattr(ctx, "contract", None) is not None:
         v = ctx.contract[i]
         tr.contract = None if v != v else int(v)
-    tr.roll_day = bool(getattr(ctx, "roll_day", False))
+    ra = getattr(ctx, "roll_at", None)               # review: only a roll known by the fill bar
+    tr.roll_day = bool(ra is not None and i >= ra)
 
 
 def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, tf: int,
@@ -1371,6 +1549,9 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             skips.append((day, symbol, "sloppy", "|".join(sorted(sl_all_day))))
         return []
     ctx.sl_day = sl_day
+    tt_ = df.index.hour * 60 + df.index.minute    # M12.3 or60: the 09:30-10:30 range (read from 10:30)
+    o60 = df[(tt_ >= 570) & (tt_ < 630)]
+    ctx.or60 = (float(o60.high.max()), float(o60.low.min())) if len(o60) else None
     ctx.bias_by_cut = bias_by_cut or {}
     chop = Chop(ctx, hist, p)
     ctx.chop = chop
@@ -1460,6 +1641,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             if pos["left"] and p.ep07_body_exit and l < pos["body_low"]:
                 px = min(o, pos["body_low"])           # traded below the swing low's lowest body
                 tr.exits.append((ts, sd.x(px), pos["left"], "body_low")); pos["left"] = 0
+            if pos["left"] and pos.get("be_at") is not None and h >= pos["be_at"]:
+                pos["stop"] = max(pos["stop"], pos["basis"] / pos["n"])   # M12.3 cc_1h_ob: BE after 2R
             if pos["left"] and p.ep07_trail and not pos.get("trailed") and h > pos["swing_body"]:
                 pos["stop"] = max(pos["stop"], pos["retr_low"] - p.stop_buffer)
                 pos["trailed"] = True
@@ -1566,7 +1749,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                            level_kinds=o.get("level_kinds"), final_T=o.get("final_T", False),
                            bz_mt=o.get("bz_mt"), ob_pre=ob_pre, no_adds=o.get("no_adds", False),
                            heavy_dead=o.get("heavy_dead"), ob_add_used=set(),
-                           fracs=(1.0,) if o.get("scalp") else _split(p, ctx, hist, day, i, t),
+                           be_at=o.get("be_at"),
+                           fracs=(1.0,) if o.get("scalp") else (o.get("fracs") or _split(p, ctx, hist, day, i, t)),
                            **_swing_ref(sd, o["ext_i"], i))
                 done[o.get("done_key", o["session"])] = True
                 lk = ctx.lock.get(o["session"])
@@ -1653,7 +1837,10 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 continue                              # #3 (off by default)
             if lk is not None and lk["side"] and sd.sign != lk["side"]:
                 continue                              # #9: trade only toward the locked draw
+            if state.get("flip") and sd.sign != state["flip"]:
+                continue                              # B8f stop_flip: the other side for the day
             ctx.cur_lock = lk if (lk is not None and lk["side"] == sd.sign) else None
+            ctx.cur_bias = lk["side"] if (lk is not None and lk["side"]) else (want or 0)
             o_ = _scan(ctx, sd, i, p, session, w0, pctx, psides, ppos,
                        0.5 if state["reentered"].get(session) else 1.0)
             if o_ is not None:
@@ -1774,7 +1961,7 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
 
 def _attach_meta(ctx, meta, p, symbol):
     """#13: per-bar adj / contract for the day frame, the roll-day tag and the round step."""
-    ctx.adj = ctx.contract = None
+    ctx.adj = ctx.contract = ctx.roll_at = None
     ctx.real_px = False
     ctx.round_step = 0.0
     ctx.roll_day = False
@@ -1790,11 +1977,19 @@ def _attach_meta(ctx, meta, p, symbol):
             ctx.contract = m["instrument_id"].values.astype(float)
         a = pd.Timestamp(ctx.day, tz=ctx.idx.tz) - pd.Timedelta(hours=6)
         seg = meta.iloc[int(meta.index.searchsorted(a)):a1]
-        if "roll" in seg and bool(seg["roll"].astype(bool).any()):
+        ev = []                                       # N7.5: roll events from the prior 18:00
+        if "roll" in seg:
+            ev += list(seg.index[seg["roll"].astype(bool).values])
+        if "instrument_id" in seg and len(seg):
+            iid = seg["instrument_id"].values
+            ch = np.flatnonzero(iid[1:] != iid[0])
+            if len(ch):
+                ev.append(seg.index[ch[0] + 1])
+        if ev:
             ctx.roll_day = True
-        if "instrument_id" in seg and seg["instrument_id"].nunique() > 1:
-            ctx.roll_day = True
+            ctx.roll_at = int(ctx.idx.searchsorted(min(ev)))   # the bar from which it is known
     ctx.real_px = ctx.adj is not None and p.price_frame == "front_month"
+    ctx.round_from = p.round_pool_from
     if p.round_pools and ctx.adj is not None and p.price_frame != "back_adjusted":
         ctx.round_step = p.round_pool_step_pts or ROUND_STEP.get(symbol.upper(), 0.0)
 
@@ -1844,6 +2039,9 @@ def _sell_side(ctx: DayCtx, sd: Side, session: str, i: int | None = None,
                     out[name] = sd.x(lo if sd.sign > 0 else hi)
         if ctx.or_hl is not None and i is not None and ctx.t[i] >= ctx.or_end:
             out["opening_range"] = sd.x(ctx.or_hl[1] if sd.sign > 0 else ctx.or_hl[0])
+        o60 = getattr(ctx, "or60", None)           # M12.3 or60 turtle soup: the 09:30-10:30 range
+        if o60 is not None and i is not None and ctx.t[i] >= 630 and p is not None and p.turtle_soup == "or60":
+            out["or60"] = sd.x(o60[1] if sd.sign > 0 else o60[0])
     elif ctx.am_hl:
         out["am_session"] = sd.x(ctx.am_hl[1] if sd.sign > 0 else ctx.am_hl[0])
         if extra and "lunch" in ctx.sess and i is not None and ctx.t[i] >= ctx.sess["lunch"][2]:
@@ -1860,33 +2058,46 @@ def _f(key):
         FUNNEL[key] += 1
 
 
+def _level_intact(ctx, l, i, k, v, session) -> bool:
+    """A sell-side level (side space) not traded through between its creation and bar i-1."""
+    at = lambda m: ctx.start + int(np.searchsorted(ctx.t[ctx.start:], m))
+    if k.startswith("swing_low"):          # M1.2 fix: from the bar after the swing low itself
+        a = int(k[len("swing_low"):]) + 1
+    elif k.startswith("news_range_"):
+        a = ctx.news_dr[int(k[len("news_range_"):])]["made"]
+    elif k == "news_range" and 510 in getattr(ctx, "news_dr", {}):
+        a = ctx.news_dr[510]["made"]
+    else:
+        created = ctx.start if session == "AM" else at(810)
+        a = {"am_session": created, "lunch": created, "opening_range": at(ctx.or_end),
+             "london": at(300), "or60": at(630),
+             "news_range": getattr(ctx, "news_made", at(540))}.get(k, ctx.start)
+    return k.startswith(("rel_eq", "round")) or i <= a or l[a:i].min() >= v
+
+
 def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mult=1.0):
+    """Advance this side's sweep machine at bar i (_scan_core); with the M12.3 cc_limit / M12.4
+    external turtle-soup variants, also their resting-limit setups (not sweep-driven)."""
+    o_ = _scan_core(ctx, sd, i, p, session, w0, pctx, psides, ppos, risk_mult)
+    if o_ is None and p.turtle_soup == "cc_limit" and sd.sweep is None:
+        o_ = _cc_limit(ctx, sd, i, p, session, risk_mult)
+    elif o_ is None and p.turtle_soup == "external":
+        o_ = _external(ctx, sd, i, p, session, risk_mult)
+    return o_
+
+
+def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mult=1.0):
     """Advance this side's sweep -> (OB before the break | MSS -> FVG) machine at bar i;
     return an order or None."""
     l, h, c = sd.l, sd.h, sd.c
     tol = p.eq_tol_pts * p.es_pt
     lv = _sell_side(ctx, sd, session, i, p.extra_pools, p)
-    created = ctx.start if session == "AM" else ctx.start + int(np.searchsorted(ctx.t[ctx.start:], 810))
-    or_made = ctx.start + int(np.searchsorted(ctx.t[ctx.start:], ctx.or_end))
-    lon_made = ctx.start + int(np.searchsorted(ctx.t[ctx.start:], 300))
-    news_made = getattr(ctx, "news_made", ctx.start + int(np.searchsorted(ctx.t[ctx.start:], 540)))
     for k, eq in enumerate(_eq_levels(sd, i - 1, tol, lows=True)):
         lv[f"rel_eq_lows{k}"] = eq
     sw = sd.sweep
     if sw is not None and sw["session"] != session:
         sw = sd.sweep = None
-
-    def intact(k, v):   # not traded through between the level's creation and bar i-1
-        if k.startswith("swing_low"):          # M1.2 fix: from the bar after the swing low itself
-            a = int(k[len("swing_low"):]) + 1
-        elif k.startswith("news_range_"):
-            a = ctx.news_dr[int(k[len("news_range_"):])]["made"]
-        elif k == "news_range" and 510 in getattr(ctx, "news_dr", {}):
-            a = ctx.news_dr[510]["made"]
-        else:
-            a = {"am_session": created, "lunch": created, "opening_range": or_made,
-                 "london": lon_made, "news_range": news_made}.get(k, ctx.start)
-        return k.startswith(("rel_eq", "round")) or i <= a or l[a:i].min() >= v
+    intact = lambda k, v: _level_intact(ctx, l, i, k, v, session)
     hit = [(k, v) for k, v in lv.items() if l[i] < v and intact(k, v)]
     if sw is None and hit:
         k, v = min(hit, key=lambda kv: kv[1])
@@ -1898,7 +2109,16 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
     if sw is None:
         return None
     if l[i] < sw["ext"]:
-        sw.update(ext=l[i], ext_i=i, broke=None, ob=None, ob_sent=False, ob_frozen=False, ts_sent=False)
+        sw.update(ext=l[i], ext_i=i, broke=None, ob=None, ob_sent=False, ob_frozen=False, ts_sent=False,
+                  ts_ok=False)
+    if p.ts_gate_mss and sw["broke"] is None:    # M12.5: the depth/back test gates the MSS / OB model
+        if not sw.get("ts_ok"):
+            sw["ts_ok"] = L.turtle_soup(l, c, sw["level"], sw["ext_i"], i, p.ts_max_pts * p.es_pt, p.ts_back_bars)
+        if not sw["ts_ok"]:
+            if sw["level"] - sw["ext"] > p.ts_max_pts * p.es_pt or i - sw["ext_i"] >= p.ts_back_bars:
+                sd.sweep = None                  # too deep, or no close back above in time
+                _f("x_ts_gate")
+            return None
     # reference: the swing high that led into the sweep extreme
     refs = [q for q in sd.ph if q.i < sw["ext_i"] and q.known <= i]
     if refs:
@@ -1973,12 +2193,13 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
     uni = [g for g in fresh if bz is not None and g.overlaps(bz)] if uni_ok else []
     if uni and p.breaker_mt_entry_floor:       # #6 (b): a unicorn gap wholly below the MT is out
         below = [g for g in uni if g.top <= bz.mt]
-        if below:
-            _f("x_unicorn_below_mt")
+        if below:                              # of the unicorn pick; re-pick (spec 6b: it may
+            _f("x_unicorn_below_mt")           # still be the plain-FVG entry)
             uni = [g for g in uni if g.top > bz.mt]
-            fresh = [g for g in fresh if g not in below]
-            if not uni and not fresh:
-                return None
+            if p.breaker_mt_floor_strict:      # [our interpretation] switch: not as a plain FVG either
+                fresh = [g for g in fresh if g not in below]
+                if not uni and not fresh:
+                    return None
     pick = uni or fresh
     g = pick[-1] if p.fvg_pick == "last" else pick[0]
     entry = g.top if p.entry == "edge" else g.mid
@@ -2038,31 +2259,240 @@ def _ob_pre(ctx, sd, sw, i, p, session, risk_mult):
                          sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True)
 
 
+TS_TFS = ("15m", "30m", "1h", "4h", "D", "W")
+
+
+def _ts_arrays(ctx, sd, i, known_by, tfs=TS_TFS, src=(0, 1, 3)) -> list:
+    """Same-side HTF PD arrays (FVG / OB / VI) valid at bar i's close and complete by `known_by`,
+    in side space: [(top, bottom, known_ts)]. From the confluence table; without it (no overnight
+    bars) from the session's 15m/60m FVGs (DayCtx.hzones, not closed through by bar i)."""
+    now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
+    out = []
+    if getattr(ctx, "conf", None) is not None:
+        for top, bot, tf_, sc, kn in ctx.conf.valid(now, sd.sign, tfs, src, known_by):
+            a, b = sd.x(top), sd.x(bot)
+            out.append((max(a, b), min(a, b), pd.Timestamp(int(kn), tz="UTC").tz_convert(ctx.idx.tz)))
+        return out
+    if not getattr(ctx, "hzones", None):
+        return out
+    j = ctx.full_off + i
+    for z, known, m in ctx.hzones:
+        if known > known_by or z.kind != ("bull" if sd.sign > 0 else "bear"):
+            continue
+        top, bot = (z.top, z.bottom) if sd.sign > 0 else (-z.bottom, -z.top)
+        k = int(ctx.full_idx.searchsorted(known))
+        if (sd.sign * ctx.full_c[k:j + 1]).min(initial=np.inf) < bot:
+            continue                                     # closed through
+        out.append((top, bot, known))
+    return out
+
+
+def _gap_below(ctx, sd, i, x) -> float | None:
+    """038 ~41:58: the nearest NWOG / NDOG / opening-range-gap level below x (side space) known
+    at bar i (today's ORG only from 09:30)."""
+    lv = []
+    if getattr(ctx, "gaps", None) is not None:
+        for _, hi, lo, ce in ctx.gaps:
+            lv += [hi, lo, ce]
+    else:
+        for a, b in ctx.nwog:
+            lv += [a, b]
+    orgs = ctx.org[:-1] if (ctx.t[i] < 570 and ctx.org_today) else ctx.org
+    for a, b in orgs[-5:]:
+        lv += [a, b, (a + b) / 2]
+    below = [sd.x(v) for v in lv if sd.x(v) < x]
+    return max(below) if below else None
+
+
+def _ts_stop(ctx, sd, sw, i, p, arr, entry) -> float:
+    """Turtle-soup stop by ts_stop: below the PD array (022 ~2:47:29), the nearest gap level below
+    the false-break low (038 ~41:58), else below the extreme ("ext"). Falls back to the extreme
+    when the choice is missing or leaves less than min_risk_pts."""
+    st = None
+    if p.ts_stop == "array" and arr is not None:
+        st = arr[1] - p.stop_buffer
+    elif p.ts_stop == "gap":
+        g = _gap_below(ctx, sd, i, sw["ext"])
+        st = None if g is None else g - p.stop_buffer
+    if st is None or entry - st < p.min_risk_pts * p.es_pt:
+        st = sw["ext"] - p.stop_buffer
+    return st
+
+
 def _turtle(ctx, sd, sw, i, p, session, risk_mult):
-    """M12 turtle soup, 2023 variant (shared core L.turtle_soup): the sweep took the level by at
-    most ts_max_pts and a candle closed back above it within ts_back_bars - no MSS needed. Limit
-    at the swept level (the old low), stop below the false-break extreme (022 ~2:47:29)."""
+    """M12 turtle soup on an active sweep (shared core L.turtle_soup: the level taken by at most
+    ts_max_pts, a close back above it within ts_back_bars - no MSS needed; M12.5 depth/back).
+      "2023" (M12.1; 022 ~2:47:29; rule_coverage M12.1 "limit at the array top, stop at the array
+             or a gap"): limit at the top of the HTF PD array the sweep reached into, capped at the
+             swept level [our interpretation]; ts_entry="level" = at the level (the first
+             reading); stop below that array / the nearest gap (ts_stop); no array -> at the
+             level, stop below the false-break extreme [our interpretation]
+      "or60" (M12.3; cc10_010 ~6:51): only the OR60 low after 10:30; one target, the OR60 high
+      "cc_1h_ob" (M12.3): see _cc_1h_ob. cc_limit / external are not sweep-driven (see _scan)."""
+    v = p.turtle_soup
+    if v in ("cc_limit", "external"):
+        return None
+    if v == "cc_1h_ob":
+        return _cc_1h_ob(ctx, sd, sw, i, p, session, risk_mult)
+    if v == "or60" and sw["key"] != "or60":
+        return None
     if not L.turtle_soup(sd.l, sd.c, sw["level"], sw["ext_i"], i, p.ts_max_pts * p.es_pt, p.ts_back_bars):
         return None
     if p.ts_need_htf and not _htf_tag(ctx, sd, i, sw["ext"], p.eq_tol_pts * p.es_pt):
         return None
     sw["ts_sent"] = True
-    entry, stop = sw["level"], sw["ext"] - p.stop_buffer
-    tags = dict(unicorn=False, fvg_bottom=sw["ext"], fvg_ce=(entry + sw["ext"]) / 2,
-                entry_kind="turtle_soup", mitigation=False, propulsion=False)
+    entry, stop, fixed, arr = sw["level"], sw["ext"] - p.stop_buffer, None, None
+    if v == "2023":
+        tol = p.eq_tol_pts * p.es_pt
+        kb = ctx.idx[sw["ext_i"]] + pd.Timedelta(minutes=ctx.tf)
+        ins = [a for a in _ts_arrays(ctx, sd, i, kb) if a[1] - tol <= sw["ext"] <= a[0] + tol]
+        if ins:
+            arr = min(ins, key=lambda a: a[0])           # [our interpretation] the tightest array
+        if arr is not None and p.ts_entry == "array":
+            entry = min(arr[0], sw["level"])
+        stop = _ts_stop(ctx, sd, sw, i, p, arr, entry)
+    else:                                                # or60: target the OR60 high
+        hi = sd.x(ctx.or60[0] if sd.sign > 0 else ctx.or60[1])
+        fixed = [(hi + p.pool_beyond_pts * p.es_pt if p.exit_mode == "split" else hi - p.exit_before_pts * p.es_pt, "pool")]
+    tags = dict(unicorn=False, fvg_bottom=sw["ext"] if arr is None else arr[1], fvg_ce=(entry + sw["ext"]) / 2,
+                entry_kind="turtle_soup" if v == "2023" else "ts_or60", mitigation=False, propulsion=False)
     return _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult,
-                         sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True)
+                         sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True, fixed=fixed)
 
 
-CF_SRC = {"fvg": 0, "ob": 1, "gap": 2, "vi": 3, "breaker": 4}
+def _hour_down_candle(ctx, sd, ext_i: int, i: int):
+    """cc_1h_ob: the last DOWN-close clock-aligned 1h candle (side space) that started at or before
+    the sweep extreme's bar and is complete by bar i: (open, high, index of its last base bar)."""
+    hc = sd.__dict__.get("_h60")
+    if hc is None:
+        key = ctx.idx.floor("60min")
+        b = pd.Series(np.arange(len(key)), index=key).groupby(level=0)
+        first, last = b.min().values, b.max().values
+        done = np.asarray((ctx.idx[last] - b.min().index) >= pd.Timedelta(minutes=60 - ctx.tf))
+        o = sd.o[first]; c = sd.c[last]
+        hh = np.array([sd.h[a:z + 1].max() for a, z in zip(first, last)])
+        hc = sd.__dict__["_h60"] = (first, last, done, o, hh, c)
+    first, last, done, o, hh, c = hc
+    ok = np.flatnonzero(done & (last <= i) & (first <= ext_i) & (c < o))
+    if not len(ok):
+        return None
+    j = ok[-1]
+    return float(o[j]), float(hh[j]), int(last[j])
+
+
+def _cc_1h_ob(ctx, sd, sw, i, p, session, risk_mult):
+    """M12.3 CC turtle soup into a daily OB (cc02_001 ~17:41-25:21) [our interpretation of the
+    bar mechanics]: the sweep extreme sits in a valid daily bullish OB (known by the extreme's
+    close); once a closed bar trades above the high of the last down-close 1h candle at the low,
+    a buy limit at that candle's open; stop below the OB's MT (ts_stop "array") or the sweep low;
+    half off at 1R, breakeven after 2R, runner to 5R (ts_r_mults / ts_be_r)."""
+    if getattr(ctx, "conf", None) is None:
+        return None
+    tol = p.eq_tol_pts * p.es_pt
+    kb = ctx.idx[sw["ext_i"]] + pd.Timedelta(minutes=ctx.tf)
+    obs = [a for a in _ts_arrays(ctx, sd, i, kb, ("D",), (1,)) if a[1] - tol <= sw["ext"] <= a[0] + tol]
+    if not obs:
+        return None
+    hc = _hour_down_candle(ctx, sd, sw["ext_i"], i)
+    if hc is None:
+        return None
+    ho, hh, hlast = hc
+    if not (sd.h[hlast + 1:i + 1] > hh).any():
+        return None                                      # not yet traded back up through it
+    sw["ts_sent"] = True
+    ob = min(obs, key=lambda a: a[0])
+    entry = ho
+    stop = (ob[0] + ob[1]) / 2 - p.stop_buffer if p.ts_stop == "array" else sw["ext"] - p.stop_buffer
+    if entry - stop < p.min_risk_pts * p.es_pt:
+        stop = sw["ext"] - p.stop_buffer
+    risk = entry - stop
+    fixed = [(entry + r * risk, "array") for r in p.ts_r_mults]
+    tags = dict(unicorn=False, fvg_bottom=ob[1], fvg_ce=(ob[0] + ob[1]) / 2, entry_kind="ts_cc_1h_ob",
+                mitigation=False, propulsion=False, fracs=tuple([1.0 / len(fixed)] * len(fixed)),
+                be_at=entry + p.ts_be_r * risk)
+    return _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult,
+                         sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True, fixed=fixed)
+
+
+def _cc_limit(ctx, sd, i, p, session, risk_mult):
+    """M12.3 CC buy-limit raid (cc04_011 ~9:45) [our interpretation of the bar mechanics]: with a
+    bias for this side (the session's locked draw, else the htf_bias side; none -> no trade), a
+    resting buy limit at (ts_cc_below_pts under) the nearest untaken sell-side level below the
+    close, armed once per level; stop ts_max_pts under the level (a deeper run is a real decline)."""
+    if getattr(ctx, "cur_bias", 0) != sd.sign:
+        return None
+    lv = _sell_side(ctx, sd, session, i, p.extra_pools, p)
+    sent = sd.__dict__.setdefault("_cc_sent", set())
+    cand = [(v, k) for k, v in lv.items() if v < sd.c[i] and sd.l[i] >= v
+            and _level_intact(ctx, sd.l, i, k, v, session) and (session, k, round(v, 9)) not in sent]
+    if not cand:
+        return None
+    v, k = max(cand)
+    sent.add((session, k, round(v, 9)))
+    entry = v - p.ts_cc_below_pts * p.es_pt
+    stop = v - p.ts_max_pts * p.es_pt - p.stop_buffer
+    sw = dict(session=session, name=k, level=v, key=k, ext=entry, ext_i=i, broke=None, sweep_i=i,
+              smt=None, smt2=None)
+    tags = dict(unicorn=False, fvg_bottom=stop, fvg_ce=(entry + stop) / 2, entry_kind="ts_cc_limit",
+                mitigation=False, propulsion=False)
+    return _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, sd.h[i], tags, skip_leg_pd=True)
+
+
+def _external(ctx, sd, i, p, session, risk_mult):
+    """M12.4 external turtle soup (cc12_004 ~29:35) [our interpretation of the bar mechanics]: a
+    swing low formed today (the false low) stopped short of a same-side HTF array below it that
+    was known when the low was confirmed and not reached since; bar i runs the false low's sell
+    stops and is the first to trade into the array, closing at or above its bottom -> buy limit
+    at the array top, stop below it (ts_stop). Once per false low."""
+    used = sd.__dict__.setdefault("_ts_ext", set())
+    l, c = sd.l, sd.c
+    for q in reversed(sd.pl):
+        if q.i < ctx.start - 1:
+            break
+        if q.known > i - 1 or q.i in used or l[i] >= q.price:
+            continue
+        kq = ctx.idx[q.known] + pd.Timedelta(minutes=ctx.tf)
+        arrs = []
+        for top, bot, kn in _ts_arrays(ctx, sd, i, kq):
+            if top >= q.price:
+                continue
+            k0 = max(0, int(ctx.idx.searchsorted(kn)))
+            if l[k0:i].min(initial=np.inf) > top >= l[i] and c[i] >= bot:
+                arrs.append((top, bot, kn))
+        if not arrs:
+            continue
+        used.add(q.i)
+        top, bot, _ = max(arrs)                          # the nearest array below the false low
+        sw = dict(session=session, name="ts_external", level=q.price, key="ts_external", ext=float(l[i]),
+                  ext_i=i, broke=None, sweep_i=i, smt=None, smt2=None)
+        stop = _ts_stop(ctx, sd, sw, i, p, (top, bot), top)
+        tags = dict(unicorn=False, fvg_bottom=bot, fvg_ce=(top + bot) / 2, entry_kind="ts_external",
+                    mitigation=False, propulsion=False)
+        return _finish_order(ctx, sd, i, p, session, sw, top, stop, risk_mult, sd.h[i], tags, skip_leg_pd=True)
+    return None
+
+
+def _round_px(ctx, sd, i, x: float, p, up: bool) -> float:
+    """L17 (cc12_001 ~34:00): round a side-space price to round_step_pts on the REAL front-month
+    price (#13 mapping: real = engine - adj of bar i; SPY / no meta: adj 0). up=True rounds toward
+    higher side-space prices (limit entries toward price), up=False lower (targets toward price)."""
+    st = p.round_step_pts * p.es_pt
+    adj = getattr(ctx, "adj", None)
+    off = sd.sign * (float(adj[i]) if adj is not None else 0.0)
+    q = (x - off) / st
+    return float((np.ceil(q - 1e-9) if up else np.floor(q + 1e-9)) * st + off)
 
 
 def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, tags,
-                  skip_leg_pd=False, pctx_free=False):
+                  skip_leg_pd=False, pctx_free=False, fixed=None):
     """Shared order tail for every entry path: risk, bias / leg / HTF / confluence filters,
-    targets (#2 room, #7 cap, #9 locked draw), size (#12) and the order dict."""
+    targets (#2 room, #7 cap, #9 locked draw), size (#12) and the order dict. `fixed` (side
+    space [(level, kind)]): the setup's own targets (turtle-soup or60 / cc_1h_ob) instead of the
+    liquidity list; the #7 cap still trims them, the #9 lock gates the side only."""
     l, h, c = sd.l, sd.h, sd.c
     tol = p.eq_tol_pts * p.es_pt
+    if p.round_step_pts:                 # L17: limit entries rounded toward price; stops are not
+        entry = _round_px(ctx, sd, i, entry, p, up=True)
     risk = entry - stop
     if not (p.min_risk_pts * p.es_pt <= risk <= p.max_risk_pts * p.es_pt):
         _f("x_risk_too_small" if risk < p.min_risk_pts * p.es_pt else "x_risk_too_big")
@@ -2111,23 +2541,32 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         if p.news_range_pd and not news_pd:
             _f("x_news_range_premium")
             return None
-    eq_hi = _eq_levels(sd, i, tol, lows=False)
     above = max(leg_hi, entry)
-    lv = _targets(ctx, sd, i, above, eq_hi, p, (sw["ext"], leg_hi), sw["ext_i"])
-    htf_t = tuple(p.htf_targets) + (("30m",) if p.htf_targets_30m and "30m" not in p.htf_targets else ())
-    if htf_t and getattr(ctx, "conf", None) is not None:
-        now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
-        real = ctx.conf.targets(now, sd.x(above), sd.sign, htf_t, p.htf_far_edge)
-        lv = sorted(set(lv) | {(sd.x(v), "array") for v in real})
-    if p.fvg_targets:                  # untouched opposing FVGs / voids: near edge, then CE (L9)
-        extra = []
-        for z in sd.opposing():
-            if z.i <= i and z.bottom > above and h[z.i + 1:i + 1].max(initial=-np.inf) < z.bottom:
-                extra += [(z.bottom, "array"), (z.mid, "array")]
-        lv = sorted(set(lv) | set(extra))
-    kinds = [kind for v, kind in lv]
-    lv = [v + p.pool_beyond_pts * p.es_pt if (p.exit_mode == "split" and kind == "pool")
-          else v - p.exit_before_pts * p.es_pt for v, kind in lv]
+    if fixed is not None:
+        lv = sorted(fixed)
+        kinds = [k for _, k in lv]
+        lv = [v for v, _ in lv]
+    else:
+        eq_hi = _eq_levels(sd, i, tol, lows=False)
+        lv = _targets(ctx, sd, i, above, eq_hi, p, (sw["ext"], leg_hi), sw["ext_i"])
+        htf_t = tuple(p.htf_targets) + (("30m",) if p.htf_targets_30m and "30m" not in p.htf_targets else ())
+        if htf_t and getattr(ctx, "conf", None) is not None:
+            now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
+            real = ctx.conf.targets(now, sd.x(above), sd.sign, htf_t, p.htf_far_edge)
+            lv = sorted(set(lv) | {(sd.x(v), "array") for v in real})
+        if p.fvg_targets:                  # untouched opposing FVGs / voids: near edge, then CE (L9)
+            extra = []
+            for z in sd.opposing():
+                if z.i <= i and z.bottom > above and h[z.i + 1:i + 1].max(initial=-np.inf) < z.bottom:
+                    extra += [(z.bottom, "array"), (z.mid, "array")]
+            lv = sorted(set(lv) | set(extra))
+        kinds = [kind for v, kind in lv]
+        lv = [v + p.pool_beyond_pts * p.es_pt if (p.exit_mode == "split" and kind == "pool")
+              else v - p.exit_before_pts * p.es_pt for v, kind in lv]
+    if p.round_step_pts:               # L17: targets rounded toward price (down for a long)
+        pairs = sorted({(_round_px(ctx, sd, i, v, p, up=False), k) for v, k in zip(lv, kinds)})
+        pairs = [(v, k) for v, k in pairs if v > entry]
+        lv, kinds = [v for v, _ in pairs], [k for _, k in pairs]
     # owner #7 (Ep 02): an unbroken opposing HTF FVG between the entry and the target caps it
     capped, resist, capx = False, None, None
     if p.htf_resist_cap:
@@ -2148,19 +2587,25 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
                 pairs.sort()
                 lv, kinds = [v for v, _ in pairs], [k for _, k in pairs]
                 capped, resist = True, r
-    keep = [(v, k) for v, k in zip(lv, kinds) if v - entry >= p.min_rr * risk]
+    eps = 1e-9 if fixed is not None else 0.0      # fixed R-multiple rungs: exactly 1R passes
+    keep = [(v, k) for v, k in zip(lv, kinds) if v - entry >= p.min_rr * risk - eps]
     pools = [v for v, k in keep if k == "pool"]
     lk = getattr(ctx, "cur_lock", None) if p.draw_lock == "session" else None
-    final_T = False
-    if lk is not None:                 # owner #9: ONE exact target, locked before the session
+    lk_t = lk if fixed is None else None       # fixed-target setups: the lock gates the side only
+    final_T = lock_capped = False
+    if lk_t is not None:               # owner #9: ONE exact target, locked before the session
         tv = sd.x(lk["target"])
         T = tv + p.pool_beyond_pts * p.es_pt if (p.exit_mode == "split" and lk["kind"] == "pool") \
             else tv - p.exit_before_pts * p.es_pt
+        if p.round_step_pts:
+            T = _round_px(ctx, sd, i, T, p, up=False)
         kT = lk["kind"]
         if capx is not None and T > capx:
             # owner #7 x #9: the draw's exit must be on the near side of the cap - an unbroken
-            # opposing HTF FVG before the draw ends the trade in front of it [our interpretation]
-            T, kT = capx, "array"
+            # opposing HTF FVG before the draw ends the trade in front of it [our interpretation;
+            # OWNER QUESTION: or lock only near-side draws, draw_lock_near_cap=True]. Tagged
+            # lock_capped so the share of trades whose locked draw was replaced is reported.
+            T, kT, lock_capped = capx, "array", True
             _f("x_lock_capped")
         if T - entry < p.min_draw_pts * p.es_pt or T - entry < p.min_rr * risk:
             _f("x_room_lt_min")
@@ -2169,7 +2614,9 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             rungs = []
         elif p.draw_lock_levels == "frozen":
             rungs = []
-            for v, k, _ in lk["marked"]:
+            for v, k, _, dr in lk["marked"]:     # levels marked at the lock, either side of the
+                if k == "pool" and dr not in (0, sd.sign):   # lock price; pools only on the
+                    continue                         # trade's side (buy-side highs for a long)
                 x = sd.x(v)
                 x = x + p.pool_beyond_pts * p.es_pt if (p.exit_mode == "split" and k == "pool") else x - p.exit_before_pts * p.es_pt
                 if entry + p.min_rr * risk <= x < T - p.es_pt:
@@ -2183,8 +2630,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         if not keep:
             _f("x_no_target_1R")
             return None
-        draw = pools[0] if pools else keep[-1][0]     # the draw: the nearest liquidity pool
-        if p.pm_off_lunch and session == "PM" and "lunch" in ctx.sess and ctx.t[i] >= ctx.sess["lunch"][2]:
+        draw = pools[0] if (pools and fixed is None) else keep[-1][0]   # the draw: the nearest pool
+        if fixed is None and p.pm_off_lunch and session == "PM" and "lunch" in ctx.sess and ctx.t[i] >= ctx.sess["lunch"][2]:
             lu = sd.x(ctx.sess["lunch"][0] if sd.sign > 0 else ctx.sess["lunch"][1])
             lu = lu + p.pool_beyond_pts * p.es_pt if p.exit_mode == "split" else lu - p.exit_before_pts * p.es_pt
             if lu - entry >= p.min_rr * risk and sd.h[_idx_at(ctx, 810):i + 1].max(initial=-np.inf) < lu:
@@ -2216,7 +2663,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     lh = p.last_hour[0] <= t < p.last_hour[1]
     setup = "am_mm" if session == "AM" else session.lower() if session != "PM" else (
         "pm_last_hour" if lh else "pm_sb" if 840 <= t < 900 else "pm")
-    if final_T:
+    if final_T or fixed is not None:
         levels = lv
     else:
         levels = lv[:max(1, len(p.ladder_fracs))]
@@ -2243,7 +2690,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
                  resist_lo=None if resist is None else resist[3], resist_hi=None if resist is None else resist[2],
                  draw_side=0 if lk is None else lk["side"], draw_px=None if lk is None else lk["target"],
                  draw_name="" if lk is None else lk["name"], draw_kind="" if lk is None else lk["kind"],
-                 sloppy=sl, scalp=scalp, no_adds=scalp, news_pd=news_pd, news_wait_min_actual=news_wait,
+                 lock_capped=lock_capped, sloppy=sl, scalp=scalp, no_adds=scalp, news_pd=news_pd, news_wait_min_actual=news_wait,
                  heavy_dead=heavy)
     order.update(tags)
     return order

@@ -206,12 +206,16 @@ CURRENT = dict(mt_mode="range", exit_mode="before", min_draw_pts=0.0, leg_pd=0.0
                risk_dollars=1000.0, max_total_risk=2000.0, last_hour=(915, 945), flatten=960,
                sb_target_mode="fixed", price_frame="back_adjusted", round_pools=False,
                seen_from_created=False)
-# the defaults just before the owner directives of 2026-10-18 (A/B baseline for the new defaults)
+# the defaults just before the owner directives of 2026-10-18 (A/B baseline for the new defaults).
+# Bug fixes it can NOT undo (no switch, by design): the London-pool look-ahead (London 02:00-05:00
+# pools hidden before 05:00), the _split news-ahead holiday skip (N3.4), the M1.2 swing-low intact
+# start and the mark_levels / causal roll_day fixes - so "reproduces 833350f exactly" holds on the
+# tested window (ES 5m 2024 Q1), not on every window.
 PRE_OWNER = dict(ob_entry="post_mss", draw_lock="off", htf_resist_cap=False, news_wait="off",
                  breaker_mt_respect=False, breaker_mt_entry_floor=False, breaker_zone="body",
                  risk_dollars=1000.0, max_total_risk=2000.0, last_hour=(915, 945), flatten=960,
                  sb_target_mode="fixed", price_frame="back_adjusted", round_pools=False,
-                 seen_from_created=False)
+                 seen_from_created=False, am_exit_extras=False)
 LEGACY_1PCT_2PCT = dict(risk_dollars=1000.0, max_total_risk=2000.0)   # E8 / owner #12 preset
 DECISIONS = {
     "current": CURRENT,
@@ -382,6 +386,35 @@ DECISIONS = {
     "M12_turtle_2023": dict(turtle_soup="2023"),
     "M12_turtle_2023_htf": dict(turtle_soup="2023", ts_need_htf=True),
     "B8_bias_flip": dict(htf_bias="flip"),
+    # --- review fixes / not-built items of package owner_directives_and_bugs (2026-10-18) ------
+    "A13.3_ob_both_breaker_mt": dict(ob_entry="both"),                   # #5/#6/#14 act only with an
+    "A13.3_ob_both_breaker_mt_off": dict(ob_entry="both", breaker_mt_respect=False,   # FVG entry path
+                                         breaker_mt_entry_floor=False),
+    "A13.3_post_mss_breaker_mt_off": dict(ob_entry="post_mss", breaker_mt_respect=False,
+                                          breaker_mt_entry_floor=False),
+    "A13.3_floor_strict": dict(ob_entry="both", breaker_mt_floor_strict=True),
+    "D6_breaker_leg": dict(ob_entry="both", breaker_zone="leg"),
+    "D6_breaker_last": dict(ob_entry="both", breaker_zone="last"),
+    "L17_round_5": dict(round_step_pts=5.0),
+    "B17.4_sloppy_premium_run": dict(sloppy_mode="stand_aside", sloppy_tests=("big_prev", "chop", "nfp_week", "premium_run")),
+    "B17.4_sloppy_fomc_week": dict(sloppy_mode="stand_aside", sloppy_tests=("big_prev", "chop", "nfp_week", "fomc_week")),
+    "B17.4_sloppy_inside_bisi": dict(sloppy_mode="stand_aside", sloppy_tests=("big_prev", "chop", "nfp_week", "inside_bisi")),
+    "B17.4_sloppy_all": dict(sloppy_mode="stand_aside", sloppy_tests=("big_prev", "chop", "nfp_week", "premium_run",
+                                                                      "fomc_week", "inside_bisi")),
+    "B8b_flip_pd3": dict(htf_bias="flip", flip_triggers=("ob_mt", "wk_dc", "flip_pd3")),
+    "B8d_flip_close_above": dict(htf_bias="flip", flip_triggers=("ob_mt", "wk_dc", "flip_close_above")),
+    "B8e_flip_thu_wopen": dict(htf_bias="flip", flip_triggers=("ob_mt", "wk_dc", "flip_thu_wopen")),
+    "B8_flip_all": dict(htf_bias="flip", flip_triggers=("ob_mt", "wk_dc", "flip_pd3", "flip_close_above", "flip_thu_wopen")),
+    "B8f_stop_flip_breaker": dict(ob_entry="both", stop_flip="breaker"),
+    "B8f_stop_flip_smt": dict(stop_flip="smt"),
+    "M12.1_turtle_2023_level": dict(turtle_soup="2023", ts_entry="level", ts_stop="ext"),
+    "M12.1_turtle_2023_gap": dict(turtle_soup="2023", ts_stop="gap"),
+    "M12.3_turtle_cc_limit": dict(turtle_soup="cc_limit"),
+    "M12.3_turtle_cc_1h_ob": dict(turtle_soup="cc_1h_ob"),
+    "M12.3_turtle_or60": dict(turtle_soup="or60"),
+    "M12.4_turtle_external": dict(turtle_soup="external"),
+    "M12.5_ts_gate_mss": dict(ts_gate_mss=True),
+    "M3.10_sb_rebalance_ext10": dict(sb_model=True, sb_rebalance_ext=10.0),
 }
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
 
@@ -391,29 +424,25 @@ SRC = os.environ.get("MENTORSHIP_SRC", "histdata")      # "histdata" (SPX/NDX CF
 SYMS = {"histdata": ("SPX", "NDX"), "merged": ("SPX", "NDX"), "databento": ("ES", "NQ", "YM")}[SRC]
 
 
-def _bias_cache(tf: int, cut: int = 570) -> pd.DataFrame:
-    """The htf table (cut at `cut` minutes; 570 = the ordinary bias table), cached per source."""
+def _bias_cache(tf: int, cut: int = 570, vi: bool = False, flip: tuple = ("ob_mt", "wk_dc")) -> pd.DataFrame:
+    """The htf table (cut at `cut` minutes; 570 = the ordinary bias table), cached per source,
+    VI wiring and flip triggers (review: the VI_arrays variant used to get the non-VI table)."""
     from . import htf
-    f = Path(f"runs/mentorship/htf_table_{SRC}_{tf}m{'' if cut == 570 else f'_cut{cut}'}.csv")
+    tag = ("" if cut == 570 else f"_cut{cut}") + ("_vi" if vi else "") + \
+        ("" if tuple(flip) == ("ob_mt", "wk_dc") else "_" + "-".join(flip))
+    f = Path(f"runs/mentorship/htf_table_{SRC}_{tf}m{tag}.csv")
     if not f.exists() or "flip" not in pd.read_csv(f, nrows=1).columns:     # B8 flip column
-        htf.table(B.load(SYMS[0], tf, source=SRC), cut_min=cut).to_csv(f)
+        htf.table(B.load(SYMS[0], tf, source=SRC), cut_min=cut, vi=vi, flip_triggers=tuple(flip)).to_csv(f)
     t = pd.read_csv(f, index_col=0)
     t.index = pd.to_datetime(t.index).date
     return t
 
 
 def _lock_cache(tf: int, p: Params) -> dict:
-    """#9: the per-lock-time tables of backtest.lock_tables, from the cache."""
+    """#9: the per-lock-time tables of backtest.lock_tables (same cuts: B.lock_cuts), from the cache."""
     if p.draw_lock == "off":
         return {}
-    cuts = {p.am[0] or 570, p.pm[0] or 810, 585, 600}
-    if p.pre_0700:
-        cuts.add(420)
-    if p.pre_0900 or p.post_news:
-        cuts.add(540)
-    if p.ma_deuce:
-        cuts.add(480)
-    return {m: _bias_cache(tf, m) for m in sorted(cuts)}
+    return {m: _bias_cache(tf, m, p.vi_arrays, p.flip_triggers) for m in sorted(B.lock_cuts(p))}
 
 
 def _dec_job(job):
@@ -428,7 +457,7 @@ def _dec_job(job):
         p2 = p2[(p2.index >= lo) & (p2.index < b)]
     t = B.run(df[(df.index >= lo) & (df.index < b)], tf, SYMS[0], p, pa[(pa.index >= lo) & (pa.index < b)],
               partner2=p2,
-              bias_table=_bias_cache(tf), meta=B.load_meta(SYMS[0], tf, SRC),
+              bias_table=_bias_cache(tf, 570, p.vi_arrays, p.flip_triggers), meta=B.load_meta(SYMS[0], tf, SRC),
               lock_cuts=_lock_cache(tf, p))
     if len(t):
         t = t[pd.to_datetime(t.entry_time.astype(str).str[:10]) >= f"{year}-01-01"].copy()

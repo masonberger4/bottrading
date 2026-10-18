@@ -280,6 +280,27 @@ def _support_impl(self, t: pd.Timestamp, price: float, side: int, tf: str, src=(
 Confluence.support = _support_impl
 
 
+def _valid_impl(self, t: pd.Timestamp, side: int, tfs, src=(0, 1, 3), known_by: pd.Timestamp | None = None):
+    """Every same-side array (side +1: bullish) valid at time t on `tfs` with a source in `src`,
+    complete by `known_by` (default t): [(top, bottom, tf, src, known_ns)], real prices. Used by
+    the turtle-soup variants (M12.1 / M12.3 / M12.4) to find the PD array at a sweep."""
+    now = float(t.value)
+    kb = now if known_by is None else float(known_by.value)
+    out = []
+    for tf in tfs:
+        z = self.z.get(tf)
+        if z is None:
+            continue
+        m = ((z["kind"] == side) & (z["known"] <= kb) & (z["dead"] > now)
+             & (now - z["known"] <= z["life"]) & np.isin(z["src"], list(src)))
+        for k in np.flatnonzero(m):
+            out.append((float(z["top"][k]), float(z["bottom"][k]), tf, int(z["src"][k]), float(z["known"][k])))
+    return out
+
+
+Confluence.valid = _valid_impl
+
+
 def score(tfs: list[str]) -> tuple[int, int]:
     """(number of aligned timeframes, index of the highest one in TFS; -1 if none)."""
     return len(tfs), max((TFS.index(t) for t in tfs), default=-1)

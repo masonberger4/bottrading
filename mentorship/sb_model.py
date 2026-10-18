@@ -52,8 +52,9 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
             made = drv["made"]
         lock = None                                   # #9: the parent session's locked draw
         if p.draw_lock == "session":
-            if setup == "sb_london":                  # [our interpretation] London precedes every
-                lock = "lazy"                         # session lock: its own lock at 03:00
+            if setup == "sb_london":                  # [our interpretation; OWNER TO CONFIRM] London
+                lock = "lazy"                         # precedes every session lock: its own lock at
+                                                      # 02:00 (the leg start), with the htf table cut there
             else:
                 lock = getattr(ctx, "lock", {}).get(session)
                 if lock is None:
@@ -69,10 +70,15 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
             t = ctx.t[i]
             ts = ctx.idx[i]
             if lock == "lazy" and t >= leg_from:      # locked before the leg it trades from
-                lock = mark_levels(ctx, None, leg_from, "LON", p, ())
+                lock = mark_levels(ctx, getattr(ctx, "bias_by_cut", {}).get(leg_from), leg_from, "LON", p, ())
                 ctx.lock["LON"] = lock
                 if lock["side"] == 0 and p.draw_lock_neutral == "skip":
                     break
+            delivered_now = False                     # #9: the London lock's own delivery (the AM /
+            if setup == "sb_london" and isinstance(lock, dict) and lock["side"] and not lock["delivered"]:
+                if (ctx.h[i] >= lock["target"]) if lock["side"] > 0 else (ctx.l[i] <= lock["target"]):
+                    lock.update(delivered=True, delivered_t=ts, delivered_i=i)   # PM ones: run_day)
+                    delivered_now = True
             if pos is not None:                       # manage the open trade
                 sd = pos["side"]
                 o, h, l, c = sd.o[i], sd.h[i], sd.l[i], sd.c[i]
@@ -163,6 +169,8 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                         pos = None
                         break
                     continue
+            if delivered_now:
+                pending = None                        # #9: delivered on this bar's close - done
             if t >= b:
                 if pending is None:
                     break
@@ -180,7 +188,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                 if lk is not None and lk["side"] and sd.sign != lk["side"]:
                     continue
                 o_ = _arm(ctx, sd, i, k0, p, tol, lk if (lk is not None and lk["side"] == sd.sign) else None,
-                          session)
+                          session, a)
                 if o_ is not None and (best is None or o_["fvg_i"] > best["fvg_i"]):
                     best = o_
             if best is not None and (pending is None or best["fvg_i"] != pending["fvg_i"]
@@ -191,11 +199,26 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
     return out
 
 
-def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM"):
-    from .strategy import _targets, _eq_levels, _first_units, CF_SRC
+def immediate_rebalance(sd, a: int, i: int, tick: float) -> bool:
+    """A7 immediate rebalance (048 ~39:02; 060 ~7:20) [our interpretation of the bar test], side
+    space: an up-close displacement candle k-1 whose NEXT candle k trades straight back to the
+    high of the candle before it, h[k-2], within one tick and leaves no gap (an FVG is the deferred
+    rebalance). Candles k in [a, i], closed bars only."""
+    for k in range(max(a, 2), i + 1):
+        if sd.c[k - 1] > sd.o[k - 1] and abs(sd.l[k] - sd.h[k - 2]) <= tick and sd.l[k] <= sd.h[k - 2] + 1e-12:
+            return True
+    return False
+
+
+def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None):
+    from .strategy import _targets, _eq_levels, _first_units, CF_SRC, _idx_at
     l, h, c = sd.l, sd.h, sd.c
     if i <= k0 + 2:
         return None
+    ext_pts = 0.0                                      # M3.10: an immediate rebalance in the window
+    if p.sb_rebalance_ext and win_a is not None:       # -> expect more than 5 handles
+        if immediate_rebalance(sd, _idx_at(ctx, win_a), i, 0.25 * p.es_pt):
+            ext_pts = p.sb_rebalance_ext
     li = k0 + int(np.argmin(l[k0:i + 1]))             # the leg's extreme since the leg start
     if li >= i:
         return None
@@ -229,9 +252,9 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM"):
     if p.sb_target_mode == "fixed":                   # the old list: +sb_target_pts first
         draws = [v for v, kind in dr]
         draw = draws[0]
-        if draw - entry < p.sb_room_pts * p.es_pt:
+        if draw - entry < max(p.sb_room_pts, ext_pts) * p.es_pt:
             return None                                # not enough room (the 10 / 5 framework)
-        t1 = min(entry + p.sb_target_pts * p.es_pt, draw - p.exit_before_pts * p.es_pt)
+        t1 = min(entry + max(p.sb_target_pts, ext_pts) * p.es_pt, draw - p.exit_before_pts * p.es_pt)
         if t1 - entry < p.min_rr * risk * p.sb_min_rr:
             return None
         t2 = draw if p.sb_runner and draw > t1 + p.es_pt else None
@@ -255,7 +278,7 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM"):
                 capped = True
                 if capx - entry < max(p.min_rr * risk, p.sb_room_pts * p.es_pt):
                     return None
-        draws = [d for d in draws if d > entry]
+        draws = [d for d in draws if d > entry + ext_pts * p.es_pt - 1e-9]   # M3.10: the extended draw
         if not draws:
             return None
         t1 = draws[0]

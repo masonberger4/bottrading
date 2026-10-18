@@ -257,7 +257,8 @@ def test_no_look_ahead_smt_htf_targets_sb_topdown():
     cut = lambda d: d[(d.index >= "2024-03-01") & (d.index < "2024-06-01")]
     es, nq, ym = cut(es), cut(nq), cut(ym)
     p = Params(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, leg_pd=0, min_draw_pts=0,
-               htf_targets=("15m", "1h", "4h", "D"), sb_setup=True, topdown=("D", "1h"), topdown_min=1)
+               htf_targets=("15m", "1h", "4h", "D"), sb_setup=True, topdown=("D", "1h"), topdown_min=1,
+               htf_resist_cap=False)   # the #7 cap (own look-ahead tests) left only 2 trades here
     full = B.run(es, 5, "ES", p, nq, partner2=ym)
     assert len(full) > 2
     cols = ["entry_time", "entry", "stop", "t1", "smt", "smt2", "td_agree", "setup", "macro_win"]
@@ -267,7 +268,7 @@ def test_no_look_ahead_smt_htf_targets_sb_topdown():
                      partner2=ym[ym.index <= c])
         a = full[full.entry_time <= c][cols].reset_index(drop=True)
         b = part[part.entry_time <= c][cols].reset_index(drop=True)
-        pd.testing.assert_frame_equal(a, b)
+        pd.testing.assert_frame_equal(a, b, check_dtype=False)   # smt: None (no twin level) vs bool
 
 
 def test_no_look_ahead_day_templates_and_exits():
@@ -336,7 +337,8 @@ def test_ep07_switches_no_look_ahead():
     es = B.load("ES", 5, source="databento")
     es = es[(es.index >= "2024-01-01") & (es.index < "2024-05-01")]
     p = Params(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, leg_pd=0,
-               ep07_stop=True, ep07_body_exit=True, ep07_trail=True, htf_far_edge=True, ce_hold=True)
+               ep07_stop=True, ep07_body_exit=True, ep07_trail=True, htf_far_edge=True, ce_hold=True,
+               htf_resist_cap=False)   # the #7 cap (own look-ahead tests) left only 2 trades here
     full = B.run(es, 5, "ES", p)
     assert len(full) > 2
     cols = ["entry_time", "entry", "stop", "t1"]

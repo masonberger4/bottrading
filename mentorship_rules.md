@@ -141,7 +141,8 @@ and to the notes for context, charts and trade examples. This file states each r
   candle at the swing low (001 ~45:02; 007 ~22:46; 012 ~11:07; cc04_005 ~0:37-3:32) [both].
   - Candle: the highest up-close candle in the swing by body (029 ~24:13; 048 ~1:06:07; 096 ~6:42).
     Bot: last up-close candle within `pivot_n` bars before H.
-  - Zone extent (body, full range, A-B leg): D6. MT of the zone should not be closed through (018
+  - Zone extent (body, full range, A-B leg, last candle): D6 (`breaker_zone` range default /
+    body / leg / last). MT of the zone should not be closed through (018
     ~1:22; 070 ~56:01).
   - First touch is valid; bodies respect, wicks may poke (022 ~2:47:00; 033 ~57:56).
   - A high-low-higher-high at the wrong time of day is "time distortion", not a breaker (070 ~6:24).
@@ -237,6 +238,9 @@ and to the notes for context, charts and trade examples. This file states each r
   - Thursday trade back through the weekly open against the bias (cc08_001 ~24:20) [CC];
   - stopped out above a breaker high cancels the SMT idea -> long bias for the rest of that day
     (042 ~1:08:19).
+  - Bot: the htf `flip` column (`htf_bias="flip"`, `flip_triggers`): ob_mt (B8a), flip_pd3 (B8b),
+    wk_dc (B8c), flip_close_above (B8d, result neutral), flip_thu_wopen (B8e), each applied from
+    the next session; B8f is the intraday engine switch `stop_flip` ("breaker" / "smt").
 - **B9 Not a flip:** HTF target reached (= neutral, B17); two down days inside a daily uptrend (a
   retracement, cc05_003 ~1:34:51); a failed daily array (look to the next weekly array,
   cc05_015 ~18:45); the counter move after the open (= Judas swing, 013 ~4:52; 082 ~8:02) [both].
@@ -280,6 +284,8 @@ and to the notes for context, charts and trade examples. This file states each r
   - Daily chart in a multi-day range = scalping market (031 ~9:20; 043 ~6:51); price inside one daily
     BISI range = don't trade that index (091 ~6:12); after a one-way multi-day run into an HTF
     premium array = sloppy session (044 ~1:14:47).
+    Bot (#10, opt-in `sloppy_tests`): "premium_run", "inside_bisi", "fomc_week" (Ep03 00:18:23) [our
+    interpretation]; `sloppy_mode` decides tag / stand aside / scalp.
   - Indices decoupled (ES/NQ/YM not in step) = high-resistance runs: scalp or skip; SMT both ways
     with no bias = no trade (045 ~1:01:43; 046 ~1:06; 090 ~41:00) [2023].
 - **B18 SMT** (ES vs NQ vs YM): one index fails to confirm the others' lower low (bullish) or higher
@@ -585,7 +591,9 @@ and to the notes for context, charts and trade examples. This file states each r
   ADR reached before 10:00 -> take 80% and keep a runner (cc08_001 ~1:53; cc09_006 ~19:33). Also
   N8 filters. {1m}
 - **L17 Rounding**: CC rounds every level toward price to the nearest round number (cc12_001
-  ~34:00); 2023 index work does not (007 is the one case). Bot: off.
+  ~34:00); 2023 index work does not (007 is the one case). Bot: `round_step_pts` switch (off):
+  targets rounded down and limit entries up toward price on the real front-month price (#13
+  mapping); stops not rounded.
 
 ### 2.6 Models and setups
 
@@ -650,7 +658,9 @@ and to the notes for context, charts and trade examples. This file states each r
     forming the FVG low and below the OB MT (090 ~2:14:00); below the entry candle (086 ~11:35).
   - Session order: London, else AM, else PM; one fires every day in one market; if not in your
     market, don't switch (054 ~18:18; 046 ~55:21; 090). One AM SB trade a day (047 ~8:00).
-  - An immediate rebalance seen in 10:00-11:00 -> expect more than 5 handles (048 ~39:02).
+  - An immediate rebalance seen in 10:00-11:00 -> expect more than 5 handles (048 ~39:02). Bot:
+    `sb_rebalance_ext` switch (off): with an A7 immediate rebalance in the window the SB draw must
+    be at least that many ES points away [our interpretation of the bar test].
   - Exits: layered limits (057: 4/2/4 of 10 at NWOG high/75%/CE); with the weekly profile aligned,
     most off at target and keep 1 runner (048 ~2:02:12).
 - **M4 Breaker and unicorn entries** [both]:
@@ -697,7 +707,9 @@ and to the notes for context, charts and trade examples. This file states each r
   candle validates the OB; its low must hold; buy at or below EQ of the post-CISD range (075
   ~1:16:40). Wick-CE long: buy at a wick CE when the next candle closed above it, TP ~0.5 pt before
   the high (100 ~38:13).
-- **M12 Turtle soup** [both]: a false break beyond an old high/low "by a little", then a fast
+- **M12 Turtle soup** [both] (bot: `turtle_soup` = "2023" / "cc_limit" / "cc_1h_ob" / "or60" /
+  "external", off; `ts_max_pts` / `ts_back_bars` = the M12.5 depth/back test, `ts_gate_mss` puts
+  it on the MSS model too; bar mechanics [our interpretation]): a false break beyond an old high/low "by a little", then a fast
   reversal; it needs an HTF PD array at the level and HTF order flow (cc05_004 ~6:45; cc09_005
   ~3:12-18:56; 010 ~63:38).
   - 2023: no MSS needed; price takes a predefined external level with SMT and one PD array; stop

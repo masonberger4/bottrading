@@ -67,13 +67,11 @@ def test_breaker_zone_range_body_and_mt():
     assert wick.overlaps(z) and not wick.overlaps(b)
     with pytest.raises(ValueError):
         L.breaker_zone(o, h, l, c, 2, 7, 10, mode="bogus")
-    with pytest.raises(NotImplementedError):
-        L.breaker_zone(o, h, l, c, 2, 7, 10, mode="leg")
+    assert L.breaker_zone(o, h, l, c, 2, 7, 10, mode="leg") is not None      # D6 leg / last built
     assert Params().breaker_zone == "range"
     with pytest.raises(ValueError):
         Params(breaker_zone="bogus")
-    with pytest.raises(NotImplementedError):
-        Params(breaker_zone="last")
+    assert Params(breaker_zone="last").breaker_zone == "last"
 
 
 def test_breakers_use_the_helper_both_directions():
@@ -216,7 +214,7 @@ def test_resistance_cap_levels():
 def test_round_levels_map_real_to_engine():
     l = np.array([4520.0, 4506.0, 4512.0]); h = l + 3
     sd = S.Side(1, l + 1, h, l, l + 2, np.array([0]) if False else 1)
-    ctx = SimpleNamespace(start=0, adj=np.full(3, 600.0), round_step=50.0)
+    ctx = SimpleNamespace(start=0, adj=np.full(3, 600.0), round_step=50.0, round_from="midnight")
     # real low so far 3906 -> nearest untaken round below = 3900 -> engine 4500
     assert S._round_levels(ctx, sd, 2, False) == [4500.0]
     # targets above the real high 3923 (4523-600): 3950, 4000 -> engine 4550, 4600
