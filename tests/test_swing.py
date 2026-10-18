@@ -82,3 +82,15 @@ def test_switches_run(frames):
                dict(scale_in=False), dict(ob_entry="open"), dict(cutoff=0.8)):
         t = osok.run(frames, osok.Params(**kw))
         assert isinstance(t, pd.DataFrame)
+
+
+def test_swing_model_runs_and_has_no_look_ahead(df, frames):
+    from swing import swing_model
+    full = swing_model.run(frames)
+    assert isinstance(full, pd.DataFrame)
+    cut = pd.Timestamp("2021-12-15 12:00", tz=NY)
+    part = swing_model.run(bars.resample(df[df.index < cut]))
+    if len(full) and len(part):
+        a = full[full.exit_time <= cut - pd.Timedelta(days=14)].reset_index(drop=True)
+        b = part[part.exit_time <= cut - pd.Timedelta(days=14)].reset_index(drop=True)
+        pd.testing.assert_frame_equal(a, b)

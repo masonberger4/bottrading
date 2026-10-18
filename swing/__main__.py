@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import bars, osok
+from . import bars, osok, swing_model
 
 
 def stats(t: pd.DataFrame) -> dict:
@@ -61,9 +61,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="data/mentorship/ES_1min_db.csv")
     ap.add_argument("--out", default="runs/swing/osok_default")
+    ap.add_argument("--model", default="osok", choices=("osok", "swing"))
     ap.add_argument("set", nargs="*", help="Params overrides, e.g. target=prev_week fib_gate=false")
     a = ap.parse_args()
-    p = osok.Params()
+    p = swing_model.defaults() if a.model == "swing" else osok.Params()
     types = {f.name: f.type for f in fields(p)}
     kw = {}
     for s in a.set:
@@ -71,7 +72,7 @@ def main():
         kw[k] = _cast(v, types[k])
     p = replace(p, **kw)
     f = bars.resample(bars.load(a.data))
-    t = osok.run(f, p)
+    t = swing_model.run(f, p) if a.model == "swing" else osok.run(f, p)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     t.to_csv(out / "trades.csv", index=False)

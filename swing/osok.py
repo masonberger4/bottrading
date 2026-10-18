@@ -43,6 +43,7 @@ class Params:
     fib_gate: bool = True             # target must converge with 1.27 / 1.68 / 1.0 projection
     fib_tol: float = 0.25             # x ADR5 [our interpretation]
     min_rr: float = 1.0               # objective at least this many R away [our interpretation]
+    target_tfs: tuple = ()            # () = one timeframe below the framing array; else these (swing: W, M)
     min_stop_adr: float = 0.25        # stop at least this x ADR5 from entry [our interpretation]
     partials: tuple = (0.5, 0.25, 0.25)   # first array, second array, objective
     be_third: bool = True             # breakeven after the first partial AND price at 1/3 (spec 7)
@@ -156,8 +157,10 @@ def _targets(pr: Prepared, k: int, entry: float, stop: float, side: int, frame_t
             return None
         obj = lvl
     else:
-        tgt_tf = TF_RANK[LOWER[frame_tf]]
-        cand = m & ahead & (b.tf == tgt_tf)
+        if p.target_tfs:
+            cand = m & ahead & np.isin(b.tf, [TF_RANK[x] for x in p.target_tfs])
+        else:
+            cand = m & ahead & (b.tf == TF_RANK[LOWER[frame_tf]])
         if not cand.any():
             return None
         idx = np.flatnonzero(cand)
