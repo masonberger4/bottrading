@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import backtest as B
-from .strategy import Params, run_day
+from .strategy import Params, resolve_session_close, run_day
 
 
 def snapshot(c, symbol: str, partner: str | None, minutes: int, p: Params):
@@ -20,18 +20,22 @@ def snapshot(c, symbol: str, partner: str | None, minutes: int, p: Params):
     df = schwab_history(c, symbol, days=days, minutes=minutes)
     now = pd.Timestamp.now(tz=B.NY)
     df = df[df.index + pd.Timedelta(minutes=minutes) <= now]          # closed bars only
-    ds = B.days(df, minutes, partial_last=True)
+    p = resolve_session_close(p, df, symbol)       # owner #1: resolved once, never from the last bar
+    ds = B.days(df, minutes, partial_last=True, close=p.session_close)
     if len(ds) < 4 or ds[-1].index[0].date() != now.date():
         return [], []
     pa = None
     if partner:
         q = schwab_history(c, partner, days=days, minutes=minutes)
         q = q[q.index + pd.Timedelta(minutes=minutes) <= now]
-        qs = B.days(q, minutes, partial_last=True)
+        qs = B.days(q, minutes, partial_last=True, close=p.session_close)
         if qs and qs[-1].index[0].date() == now.date():
             pa = (qs[-1], [B.rth(x) for x in qs[:-1]][-21:])
     log: list = []
-    trades = run_day(ds[-1], [B.rth(x) for x in ds[:-1]][-21:], symbol, p, minutes, pa, log, live=True)
+    d = ds[-1].index[0].date()                     # #9: the same per-session lock tables as backtest
+    cuts = {m: t_.loc[d].to_dict() for m, t_ in B.lock_tables(df, p).items() if d in t_.index}
+    trades = run_day(ds[-1], [B.rth(x) for x in ds[:-1]][-21:], symbol, p, minutes, pa, log, live=True,
+                     bias_by_cut=cuts)
     return trades, log
 
 

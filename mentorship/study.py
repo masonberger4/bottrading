@@ -66,7 +66,7 @@ def main(out="runs/mentorship"):
            "random_walk": {f"{tf}m/{v}": dict(B.stats(g), R_se=round(g.R.std() / len(g) ** .5, 3))
                            for (tf, v), g in rand.groupby(["tf", "variant"])}}
     base = real[(real.variant == "base") & (real.book == "SPY")]
-    for col in ("setup", "day_type", "news", "macro", "htf", "unicorn", "smt", "wbias", "side"):
+    for col in ("setup", "day_type", "news", "macro", "htf", "unicorn", "unicorn_side", "smt", "wbias", "side"):
         rep[f"SPY_base_by_{col}"] = {f"{tf}m/{k}": B.stats(g) for (tf, k), g in base.groupby(["tf", base[col].astype(str)])}
     with open(f"{out}/study.json", "w") as f:
         json.dump(rep, f, indent=1, default=str)
@@ -124,7 +124,7 @@ def main_index(out="runs/mentorship", variants=None, tfs=(5, 1), workers=6):
     t.to_csv(f"{out}/index_trades.csv", index=False)
     rep = {"all": {f"{tf}m/{b}/{v}": B.stats(g) for (tf, b, v), g in t.groupby(["tf", "book", "variant"])}}
     base = t[(t.variant == "base") & (t.book != "combined")]
-    for col in ("setup", "day_type", "news", "macro", "htf", "unicorn", "smt", "wbias", "side", "year", "swept"):
+    for col in ("setup", "day_type", "news", "macro", "htf", "unicorn", "unicorn_side", "smt", "wbias", "side", "year", "swept"):
         rep[f"base_by_{col}"] = {f"{tf}m/{k}": B.stats(g) for (tf, k), g in base.groupby(["tf", base[col].astype(str)])}
     with open(f"{out}/index_study.json", "w") as f:
         json.dump(rep, f, indent=1, default=str)
@@ -199,7 +199,20 @@ def main_bias(out="runs/mentorship", workers=6, tfs=(5, 1), modes=("off", "react
 # --- the 23 decisions: recommended defaults vs each contradiction -------------------------
 # SPX signals, SPY pricing (AM_SPY costs), AM and PM sessions, 2019-2026.
 CURRENT = dict(mt_mode="range", exit_mode="before", min_draw_pts=0.0, leg_pd=0.0, am_exit=0, mgmt="t1t2", adds=(),
-               breaker_zone="range")                # the engine before the decisions
+               breaker_zone="range",                # the engine before the decisions, pinned to the
+               ob_entry="post_mss", draw_lock="off",  # pre-owner-directive entry / draw / cap / news /
+               htf_resist_cap=False, news_wait="off",  # breaker-MT / risk / session-close behaviour
+               breaker_mt_respect=False, breaker_mt_entry_floor=False,
+               risk_dollars=1000.0, max_total_risk=2000.0, last_hour=(915, 945), flatten=960,
+               sb_target_mode="fixed", price_frame="back_adjusted", round_pools=False,
+               seen_from_created=False)
+# the defaults just before the owner directives of 2026-10-18 (A/B baseline for the new defaults)
+PRE_OWNER = dict(ob_entry="post_mss", draw_lock="off", htf_resist_cap=False, news_wait="off",
+                 breaker_mt_respect=False, breaker_mt_entry_floor=False, breaker_zone="body",
+                 risk_dollars=1000.0, max_total_risk=2000.0, last_hour=(915, 945), flatten=960,
+                 sb_target_mode="fixed", price_frame="back_adjusted", round_pools=False,
+                 seen_from_created=False)
+LEGACY_1PCT_2PCT = dict(risk_dollars=1000.0, max_total_risk=2000.0)   # E8 / owner #12 preset
 DECISIONS = {
     "current": CURRENT,
     "defaults": {},
@@ -209,7 +222,7 @@ DECISIONS = {
     "D3_mss_wick": dict(mss_mode="wick"),
     "D4_mt_range": dict(mt_mode="range"),
     "D5_exit_before": dict(exit_mode="before"),
-    "D6_breaker_range": dict(breaker_zone="range"),
+    "D6_breaker_body": dict(breaker_zone="body"),   # owner #14: range is the default now
     "D7_pm_from_1400": dict(pm=(840, 950)),
     "D8_fomc_pm_1445": dict(fomc_pm_from=885),
     "D8_nfp_thu": dict(nfp_thu=True),
@@ -307,6 +320,68 @@ DECISIONS = {
     "bias_draw": dict(htf_bias="draw"),
     "bias_pd": dict(htf_bias="pd"),
     "bias_combo": dict(htf_bias="combo"),
+    # --- owner directives 2026-10-18 and the shared helpers (variant name = rule id) ---------
+    "D0_pre_owner_directives": PRE_OWNER,
+    "T10_last_hour_strict": dict(last_hour_strict=True),                 # #1
+    "T11_flatten_1600": dict(flatten=960),
+    "Ep03.24_t1_fixed5": dict(t1_fixed_pts=5.0),                         # #2
+    "Ep03.24_t1_fixed5_all": dict(t1_fixed_pts=5.0, t1_fixed_all=True),
+    "X14a_day_target5": dict(day_target_pts=5.0),
+    "M3_sb_target_fixed": dict(sb_model=True, sb_target_mode="fixed"),
+    "M3_sb_target_draw": dict(sb_model=True),
+    "N7.4_year_end_december": dict(year_end="december"),                 # #3 (owner answer pending)
+    "N7.4_year_end_dec_with": dict(year_end="december", year_end_map="with"),
+    "N7.4_year_end_long": dict(year_end="long"),
+    "N7.4_year_end_tag": dict(year_end="tag"),
+    "N5_news_fixed30": dict(news_wait="fixed"),                          # #4
+    "N5_news_off": dict(news_wait="off"),
+    "N5_news_range_pd": dict(news_range_pd=True),
+    "N5_news_no_target": dict(news_range_target=False),
+    "A14_unicorn_long_only": dict(unicorn_sides="long"),                 # #5
+    "A14_unicorn_short_only": dict(unicorn_sides="short"),
+    "A13.3_breaker_mt_off": dict(breaker_mt_respect=False, breaker_mt_entry_floor=False),   # #6
+    "A13.3_breaker_mt_no_floor": dict(breaker_mt_entry_floor=False),
+    "A13.3_breaker_mt_body": dict(breaker_mt_mode="body"),
+    "A13.3_breaker_mt_exit_after_t1": dict(breaker_mt_exit_after_t1=True),
+    "A13.3_conf_breakers": dict(conf_breakers=True),
+    "Ep02.10_resist_cap_off": dict(htf_resist_cap=False),                # #7
+    "Ep02.10_resist_fvg_ob": dict(htf_resist_src=("fvg", "ob")),
+    "Ep02.10_resist_live": dict(htf_resist_live=True),
+    "Ep02.10_resist_room5": dict(htf_resist_min_room=5.0),
+    "Ep02.5_htf_targets_30m": dict(htf_targets_30m=True),
+    "Ep02.5_runner_30m": dict(runner_htf_exit="30m"),
+    "X10_am_tighten": dict(am_exit_mode="tighten"),                      # #8
+    "X10_am_extras_off": dict(sb_model=True, ma_deuce=True, am_exit_extras=False),
+    "B3_draw_lock_off": dict(draw_lock="off"),                           # #9
+    "B3_lock_neutral_both": dict(draw_lock_neutral="both"),
+    "B3_lock_live_levels": dict(draw_lock_levels="live"),
+    "B3_lock_no_partials": dict(draw_lock_partials=False),
+    "B3_lock_relock": dict(draw_relock=True),
+    "B3_lock_near_cap": dict(draw_lock_near_cap=True),
+    "B3_lock_min0": dict(draw_lock_min_pts=0.0),
+    "B17.4_sloppy_stand_aside": dict(sloppy_mode="stand_aside"),         # #10 (owner answer pending)
+    "B17.4_sloppy_scalp": dict(sloppy_mode="scalp"),
+    "M1.4_ob_post_mss": dict(ob_entry="post_mss"),                       # #11
+    "M1.4_ob_both": dict(ob_entry="both"),
+    "M1.4_ob_both_cancel": dict(ob_entry="both", ob_entry_cancel_on_mss=True),
+    "M1.4_ob_px_mt": dict(ob_entry_px="mt"),
+    "M1.4_ob_px_range_top": dict(ob_entry_px="range_top"),
+    "M1.4_ob_arm_touch": dict(ob_arm="touch"),
+    "M1.4_ob_stop_ext": dict(ob_stop="ext"),
+    "M1.4_ob_adds_off": dict(ob_adds=False),
+    "E8_legacy_1pct_2pct": LEGACY_1PCT_2PCT,                             # #12
+    "E8_risk_equity": dict(risk_basis="equity"),
+    "DATA1_back_adjusted": dict(price_frame="back_adjusted"),            # #13
+    "Ep02.2_round_off": dict(round_pools=False),
+    "Ep02.2_round_25": dict(round_pool_step_pts=25.0),
+    "M7.1_seen_old": dict(seen_from_created=False),                      # verified bugs
+    "M7.1_pm_off_lunch": dict(pm_off_lunch=True),
+    "M7.1_pm_judas_1330": dict(pm_judas_1330=True),
+    "M1.2_displacement_1.5": dict(displacement_mult=1.5),
+    "VI_arrays": dict(vi_arrays=True),                                   # shared helpers
+    "M12_turtle_2023": dict(turtle_soup="2023"),
+    "M12_turtle_2023_htf": dict(turtle_soup="2023", ts_need_htf=True),
+    "B8_bias_flip": dict(htf_bias="flip"),
 }
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
 
@@ -316,14 +391,29 @@ SRC = os.environ.get("MENTORSHIP_SRC", "histdata")      # "histdata" (SPX/NDX CF
 SYMS = {"histdata": ("SPX", "NDX"), "merged": ("SPX", "NDX"), "databento": ("ES", "NQ", "YM")}[SRC]
 
 
-def _bias_cache(tf: int) -> pd.DataFrame:
+def _bias_cache(tf: int, cut: int = 570) -> pd.DataFrame:
+    """The htf table (cut at `cut` minutes; 570 = the ordinary bias table), cached per source."""
     from . import htf
-    f = Path(f"runs/mentorship/htf_table_{SRC}_{tf}m.csv")
-    if not f.exists():
-        htf.table(B.load(SYMS[0], tf, source=SRC)).to_csv(f)
+    f = Path(f"runs/mentorship/htf_table_{SRC}_{tf}m{'' if cut == 570 else f'_cut{cut}'}.csv")
+    if not f.exists() or "flip" not in pd.read_csv(f, nrows=1).columns:     # B8 flip column
+        htf.table(B.load(SYMS[0], tf, source=SRC), cut_min=cut).to_csv(f)
     t = pd.read_csv(f, index_col=0)
     t.index = pd.to_datetime(t.index).date
     return t
+
+
+def _lock_cache(tf: int, p: Params) -> dict:
+    """#9: the per-lock-time tables of backtest.lock_tables, from the cache."""
+    if p.draw_lock == "off":
+        return {}
+    cuts = {p.am[0] or 570, p.pm[0] or 810, 585, 600}
+    if p.pre_0700:
+        cuts.add(420)
+    if p.pre_0900 or p.post_news:
+        cuts.add(540)
+    if p.ma_deuce:
+        cuts.add(480)
+    return {m: _bias_cache(tf, m) for m in sorted(cuts)}
 
 
 def _dec_job(job):
@@ -338,7 +428,8 @@ def _dec_job(job):
         p2 = p2[(p2.index >= lo) & (p2.index < b)]
     t = B.run(df[(df.index >= lo) & (df.index < b)], tf, SYMS[0], p, pa[(pa.index >= lo) & (pa.index < b)],
               partner2=p2,
-              bias_table=_bias_cache(tf))
+              bias_table=_bias_cache(tf), meta=B.load_meta(SYMS[0], tf, SRC),
+              lock_cuts=_lock_cache(tf, p))
     if len(t):
         t = t[pd.to_datetime(t.entry_time.astype(str).str[:10]) >= f"{year}-01-01"].copy()
         t["tf"], t["year"], t["variant"] = tf, year, name

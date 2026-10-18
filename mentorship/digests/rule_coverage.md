@@ -576,7 +576,7 @@ Medium:
 - **A1:** Add `swing_tiers()` for ITL/LTL, where a tier is known only once its right neighbour is. Add `mss_ref` (stl/itl/ltl) and `mss_ref_fallback`. Fix the stale rulebook note.
 - **A2:** Add `sweep_ticks=1.0`, applied in `_scan`, intact, `_smt`, the `seen` filter and the SB swept tag. Test pool_swings=True. Add `sb_draw_pools_only`.
 - **A5:** Add `fvg_c2_dir=True`, `Zone.q`, `fvg_quadrants`, `fvg_vi_extend`, `fvg_skip_above_pool`, `htf_ce_draw`, `fvg_q_hold`, a state tag with `fvg_state_filter`, and `fvg_keep_filled`.
-- **A13:** Add a shared `breaker_zone(sd,l1_i,ref_i,ext_i,i,mode)` with body/range/leg modes, an L1-run check and an MT. Replace both definitions with it.
+- **A13:** Add a shared `breaker_zone(sd,l1_i,ref_i,ext_i,i,mode)` with body/range/leg modes, an L1-run check and an MT. Replace both definitions with it. **[built 2026-10-18, owner directives; see build_log.md]** `levels.breaker_zone(o,h,l,c,a0,ext_i,i,kind,mode,mt_mode)`: range (default, owner #14) / body; leg/last raise NotImplementedError; `_scan` and `levels.breakers()` both use it.
 - **B1:** Add `vi_targets`, VI rows in `C._zones` and `H.table`, `wick_days`, and the `no_draw`/`skip_no_draw` consolidation state.
 - **L1:** Add `am_range_end`, a `prev_am` pool, `session_priority` (prev_pm > london > prev_am) and `org_pools`.
 - **L2:** Add `daily_level_needs_array`, `daily_level_needs_flow`, `pd_hl_session='eth'` and `pool_today_hl`.
@@ -609,7 +609,7 @@ Low:
 - **Ep01.4:** Add `bpr_rule` with known-time BPRs, the A11 midpoint body-close exit and a T1 cap.
 - **Ep02.9:** Use the shared breakaway tag (Ep01.5).
 - **Ep08.1:** Add `wick_days` (full session), `wick_react` and `daily_fvg_exact`.
-- **M1.2 (reassigned):** In intact(), for swing_low keys use a = pivot index + 1. Optionally add `displacement_mult`.
+- **M1.2 (reassigned):** In intact(), for swing_low keys use a = pivot index + 1. Optionally add `displacement_mult`. **[built 2026-10-18, owner directives; see build_log.md]** Fixed; `displacement_mult` (default 0 = off).
 
 ### entries_stops_sizing (45 items)
 
@@ -623,7 +623,7 @@ Medium:
 - **A4:** Add `mohawk_ticks` for all structural stops and trails, with a close-based exit beyond the raw level and a mohawk-tolerant fresh test. Add `sweep_body` (unranked, off).
 - **A12:** Add `ob_zone` (range/sensitive) with the stubby/long wick rule, `mt_close_stop`, `ob_disp_mult`, an ob_cisd tag with a cancel, `ob_targets_1m` and `opp_ob_mt`.
 - **A13.4:** Add `breaker_entry`. Compute bz before the no-FVG return. Enter at the breaker top with the stop beyond the sweep. Cancel on a body close below the MT.
-- **M1.4:** Add `early_entry` (pre-MSS OB limit, HTF+SMT gates, half risk). Later MSS FVGs become adds.
+- **M1.4:** ~~Add `early_entry` (pre-MSS OB limit, HTF+SMT gates, half risk).~~ **Owner #11: the OB entry before the break is the DEFAULT (`ob_entry="pre_break"`), no HTF/SMT gates, full risk; `post_mss` / `both` are switches.** **[built 2026-10-18, owner directives; see build_log.md]**
 - **M2.4:** Add `no_new_extreme` (freeze leg_hi0 and cancel on a new extreme before the fill).
 - **E2:** Extend entry to iofed/ladder, with an `iofed_ref` option. Pass it to SB.
 - **E5:** Add `evolve_fvg` (keep the sweep alive, replace only with a newer untouched FVG) and `wait_structural`.
@@ -652,8 +652,8 @@ Low:
 - **E1:** Add `add_order` market-on-retest and `entry_order` stop_cc.
 - **E3:** Add `tick_pts`/`fill_through` in all paths. Fix Ma Deuce `<=`. Add `exit_fill_through`.
 - **E4:** Add `retrace_candle` intrabar/closed.
-- **E8:** Add `risk_pct` with running equity, a 2% clamp and `risk_incl_costs`.
-- **E11:** Add `max_contracts_initial`/`total` with `units_per_contract`.
+- **E8:** ~~Add `risk_pct` with running equity, a 2% clamp and `risk_incl_costs`.~~ **Owner #12: 1.2% open risk at entry (`risk_pct=0.012`), at most 1.3% incl. adds (`max_total_risk_pct=0.013`); no 2% anywhere; `risk_basis="equity"` switch; legacy 1%/2% = study preset.** **[built 2026-10-18, owner directives; see build_log.md]**
+- **E11:** Add `max_contracts_initial`/`total` with `units_per_contract`. (The 1.3% total cap of owner #12 is built: adds shrink to fit, open risk clamped at 0.)
 - **E12b:** Add `add_arrays` (vi/ifvg/ob/breaker) and `add_hold`.
 - **E12c:** Add `add_low_end` (body closes into the FVG -> add at its bottom, once).
 - **E12f:** Add `nfp_no_adds=True` and `decoupled_no_adds`.
@@ -687,7 +687,7 @@ Medium:
 - **X3a:** Add `run_down` and `ladder_max_levels`. Keep level kinds.
 - **X3c:** Add `wick_partials` (multi-TF, longest wick, protected rung).
 - **X3d:** Add `sd_half_partial` (exempt from min_rr) and `halfway_partial`.
-- **Ep02.5:** Add 30m to htf_targets. Add `runner_htf_exit` (test 15m and 30m).
+- **Ep02.5:** Add 30m to htf_targets. Add `runner_htf_exit` (test 15m and 30m). **[built 2026-10-18, owner directives; see build_log.md]** `htf_targets_30m`, `runner_htf_exit` (off). Owner #7: the overhead 15m FVG is RESISTANCE (new row Ep02.10, `htf_resist_cap=True`).
 - **Ep03.5:** Add `measuring_target` with `measuring_anchor` near/ce.
 - **Ep03.22:** Add `final_htf` (last rung = nearest 4h/D/W array or daily VI).
 
@@ -710,7 +710,7 @@ Low:
 - **Ep06.4:** Add sd_anchor manip, `sd_close_hit` and `sd_close_window`.
 - **Ep07.1:** Add `close_draw` (unrealized prior closes, the weekly draw as a pool).
 - **Ep08.9:** Add `mm_targets` with `mm_anchor` ref/leg.
-- **M7.1 (reassigned):** Add `pm_off_lunch` (exempt the lunch high from `seen`, make it the draw) and `pm_judas_1330`.
+- **M7.1 (reassigned):** Add `pm_off_lunch` (exempt the lunch high from `seen`, make it the draw) and `pm_judas_1330`. **[built 2026-10-18, owner directives; see build_log.md]** Bug fixed at the root (`seen_from_created=True`: a pool is spent only by bars after it formed - the lunch, overnight, London and AM highs were always dropped); `pm_off_lunch`, `pm_judas_1330` switches (off).
 
 ### setups_models (75 items)
 
@@ -722,7 +722,7 @@ High:
 - **A20:** Add `disp_mult` (OB body), `disp_follow`, `disp_through_pts` and `disp_fvg_after_break`, also in SB.
 - **M1:** Add `am_htf_draw`, `am_discount_array`, `rip_through`, `ob_pre_mss_entry` and an explicit nearest-OB stop.
 - **M2:** Add fvg_pick m2, `no_breakout_fvg`, stop ce_higher, `add_leg_cut`, `m2_target` and a `three_drives` tag.
-- **M12:** Add `turtle_soup` (2023/cc_limit/cc_1h_ob/or60/external) with `ts_max_pts`, `ts_back_bars`, an HTF array and order-flow check.
+- **M12:** Add `turtle_soup` (2023/cc_limit/cc_1h_ob/or60/external) with `ts_max_pts`, `ts_back_bars`, an HTF array and order-flow check. **[shared core built 2026-10-18]** `levels.turtle_soup()` + `turtle_soup="2023"` (`ts_max_pts`, `ts_back_bars`, `ts_need_htf`); the cc_limit/cc_1h_ob/or60/external variants stay with setups_models.
 - **M12.1:** 2023 variant: limit at the array top, stop at the array or a gap, no MSS needed.
 - **Ep08.4:** Add mss_ref='origin' anchored at ext_i.
 
@@ -745,12 +745,12 @@ Medium:
 - **M13:** Add `ote` filter/limit, a strict leg_pd, a leg stop and an ote_stack tag.
 - **M16:** Add `smt_entry` and `sick_sister`.
 - **M16.1:** Add `smt_entry` (05:00 lows, buy stop above the down-close candle, `smt_turtle`, exit at 11:00, ES only).
-- **D10:** Add `early_entry` and `turtle_soup` (shared core).
+- **D10:** ~~Add `early_entry`~~ **Owner #11: recommended = B (OB before the MSS) as the default `ob_entry="pre_break"`; A (after the MSS) = `ob_entry="post_mss"`; no HTF+SMT gating.** `turtle_soup` shared core built (2023 variant). **[built 2026-10-18, owner directives; see build_log.md]**
 - **Ep01.13:** Add `last_hour_setup` (LH_PM slot, unengaged liquidity, HTF-done skip).
 - **Ep01.15:** Add `nest_tfs` with FVG-only confluence.
 - **Ep03.11:** Add smt_pick leader/laggard with ext/leg_hi fields.
 - **Ep04.3:** Add `require_judas`, `po3_runner` and `judas_window`.
-- **Ep04.5:** Add `news_range` (pools from 09:00, opposite-extreme draw).
+- **Ep04.5:** Add `news_range` (pools from 09:00, opposite-extreme draw). **[built 2026-10-18, owner directives; see build_log.md]** Owner #4: the range completes when it forms (`news_wait="range"`), not at a fixed 09:00; its low/high are pools, the opposite extreme a target.
 - **Ep04.7:** Add `mss_count=2` (higher low, second break, both FVGs open).
 - **Ep05.4:** Add `unicorn_only`, unicorn_entry overlap, `add_on_vi`, `unicorn_open` and `adds_in_breaker`.
 - **Ep05.8:** Add `mmxm_ctx` (consolidation origin, target its low) and `mmxm_breaker`. Reuse ce_hold.
@@ -799,17 +799,17 @@ Owns: `htf.table`, run_day bias filters, `weekly_bias`, `INTERMARKET` and new da
 
 High:
 - **B2:** Add draw_ord / draw_ord_lvl / draw_ext_lvl columns (inefficiency first, then P/D liquidity, then extent). Add htf_bias='ordered' and `draw_ext_target`.
-- **B3:** Add an ordered/largest-draw mode. Remove the look-ahead with `htf.table cut` per session start. Pass `want` to SB/Ma Deuce. Add `judas_required`.
+- **B3:** Add an ordered/largest-draw mode. Remove the look-ahead with `htf.table cut` per session start. Pass `want` to SB/Ma Deuce. Add `judas_required`. **[built 2026-10-18, owner directives; see build_log.md]** Owner #9 `draw_lock="session"` (default): `htf.table(cut_min)` per lock time, ONE locked draw per session, side gate in all engines, exit at it, session done when delivered. Ordered pick / judas_required still open.
 - **B6:** Add an `iof` column (held down-closes, run up-closes, reversed pivot raids) and mode combo2.
 - **L14:** Umbrella: `draw_first`, a conf-target hygiene extension, `conditional_draw`.
-- **L14a:** Add draw_first='session' (B2 order, side gate, stop once the objective is met).
+- **L14a:** Add draw_first='session' (B2 order, side gate, stop once the objective is met). **[built 2026-10-18, owner directives; see build_log.md]** (as owner #9 draw_lock; B2 ordering still open).
 
 Medium:
 - **A21:** Add `pd_day_range`, `ote_band`, `pd_zone` and `pd_body_multiday`.
 - **A21.2:** Add day_pd='20d' (body range of 20 prior sessions) and a pd20 column.
 - **B5:** Add `weekly_gate`, VI rows in C, `news_topdown` and `bellwether_15m`.
 - **B7:** Add an `ob_mt` state column (last bull/bear daily OB, flip on a close through the MT) and `how_rule`.
-- **B8:** Add a stateful `flip` column with triggers flip_ob_mt, flip_pd3, flip_wk_dc, flip_close_above, flip_thu_wopen and stop_flip.
+- **B8:** Add a stateful `flip` column with triggers flip_ob_mt, flip_pd3, flip_wk_dc, flip_close_above, flip_thu_wopen and stop_flip. **[shared column built 2026-10-18]** `htf.table` column `flip` (triggers ob_mt and wk_dc; the others raise NotImplementedError until bias_htf adds them); `htf_bias="flip"`.
 - **B8a:** Add the `ob_state` flip (same as B7).
 - **B8c:** Add `flip_wk_dc` (weekly close beyond the last down/up-close week).
 - **B9:** Add `objective_neutral`, persistence and `next_array_on_fail`.
@@ -867,7 +867,7 @@ Medium:
 - **X9:** Umbrella; apply to SB/Ma Deuce.
 - **X9a:** Add `time_stop_ref` (pts/leg_high/array_far) and `time_stop_frac`.
 - **X9c:** Add far_edge_min=2 with `far_edge_frac` (moved back = CE).
-- **X10:** Apply am_exit to SB and Ma Deuce. Add X10b-d.
+- **X10:** Apply am_exit to SB and Ma Deuce. Add X10b-d. **[built 2026-10-18, owner directives; see build_log.md]** Owner #8: close (not tighten); `am_exit_extras=True` covers SB-AM, London SB and Ma Deuce; `am_exit_mode="tighten"` test switch. X10b-d still open.
 - **X11:** Umbrella.
 - **X12:** Add `obj_stop` with obj_source draw/htf_ce (exit at the objective, then all done flags for the day).
 - **X13:** Umbrella.
@@ -879,7 +879,7 @@ Medium:
 - **Ep03.20:** Add `trail_after=2` and ladder_trail='measuring'.
 
 Low:
-- **A13.3:** Add breaker_zone leg (A=L1 to B=H), `breaker_mt_exit` and `breaker_mt_entry`.
+- **A13.3:** Add breaker_zone leg (A=L1 to B=H), `breaker_mt_exit` and `breaker_mt_entry`. **[built 2026-10-18, owner directives; see build_log.md]** Owner #6: breaker-MT respect is a DEFAULT (`breaker_mt_respect`, `breaker_mt_entry_floor`; MT = 50% of the full range, `breaker_mt_mode="body"` switch); leg mode still planned.
 - **B18.3:** Add `smt_exit`, smt_pick and `smt_bias`.
 - **T11:** Add `late_cutoff=945` (no adds, no fades) default on.
 - **X4:** Add `be_pad_pts` with a cost pad. Have SB respect be_on.
@@ -896,7 +896,7 @@ Low:
 - **X11c:** Add `pm_consol_exit=840` with a consolidation classifier at 13:30, and no entries after it.
 - **X13a:** Add `reverse_in_session`, a session-scoped lost_side and `loss_ends_morning`.
 - **X14:** Umbrella.
-- **X14a:** Add `day_target_pts=5`.
+- **X14a:** ~~Add `day_target_pts=5`.~~ **Owner #2: 5 handles is the minimum room, not the goal - `day_target_pts=0` (test switch, default OFF).** **[built 2026-10-18, owner directives; see build_log.md]**
 - **X14b:** Add `chop_one_win` (shared _slow helper).
 - **X14d:** Add `no_trade_after_win` (day-level, blocks SB/pre-open).
 - **Ep04.13:** Add `done_if_target` (final level before 15:00 -> day done).
@@ -910,7 +910,7 @@ Owns: `day_context`, the day branches of `blocked()`, the weekly state in BT.run
 Medium:
 - **B15:** Add org_tell tag/filter (no 50% attempt by 10:00) and `org_bias_gap`.
 - **B16:** Add sunday_scenario tag/filter (futures only).
-- **B17.4:** Add daily_range_regime tag/scalp/skip (range days, inside daily BISI, run into premium).
+- **B17.4:** Add daily_range_regime tag/scalp/skip (range days, inside daily BISI, run into premium). **[partial 2026-10-18]** Owner #10 `sloppy_mode` (stand_aside / scalp / off=tag) with big_prev, chop and NFP-week tests [our interpretation]; default "off" (tag only) until the owner answers; the daily-BISI / premium-run tests are still open.
 - **N7:** Umbrella for holidays.
 - **N8:** Add the adr5 helper and switches for each N8 sub-rule.
 - **N8.1:** Add `consol_skip` (range < 0.35 ADR5 and 4+ crosses of the midnight open; expansion resumes trading).
@@ -932,7 +932,7 @@ Low:
 - **N7.1:** Add `skip_holiday_eve` and EARLY_CLOSE flattening.
 - **N7.2:** Add `skip_post_holiday_am=True`, `post_holiday_pm_sync`, week_day_index and the wed_reversal tag.
 - **N7.3:** Add a holiday_week tag and `holiday_week_thu_fri`.
-- **N7.4:** Add year_end skip/inside and `year_first_am_from`.
+- **N7.4:** Add year_end skip/inside and `year_first_am_from`. **[partial 2026-10-18]** `year_end` (default "off" until the owner confirms the December mapping; tags year_end / year_end_inside); `year_first_am_from` still open.
 - **N7.5:** Add an independent roll tag, roll_risk and skip_roll_week.
 - **N7.6:** Add `august_risk`, `august_from_day` and `skip_august`.
 - **N8.3:** Add `consol_day_rules` (predictors, small-OR AM, out by 11:00, PM only if the AM stop pool is intact).
@@ -956,9 +956,9 @@ Low:
 - **D19:** Add a week_left budget across the engine/SB/Ma Deuce, a paper.py cap and `be_counts_as_win`.
 - **D20:** Add monday_mode and `monday_small_range`.
 - **Ep01.8:** Add `low_vol_inside` (last trading day; optional holiday-adjacent days).
-- **Ep01.9:** Add `year_end_long`.
+- **Ep01.9:** ~~Add `year_end_long`.~~ **Owner #3: the side comes from December's direction (`year_end="december"`, `year_end_map` squaring/with - OWNER MUST CONFIRM the mapping); the old always-long is `year_end="long"`. Built as switches, default OFF pending the owner's answer.**
 - **Ep02.7:** Add `first_day_wait` set later than 10:00, or first_day_skip_am.
-- **Ep03.24:** Add `t1_fixed_pts` (+5 first rung) and t1_fixed_all.
+- **Ep03.24:** Add `t1_fixed_pts` (+5 first rung) and t1_fixed_all. **Owner #2: test switches only, default OFF (5 handles = minimum room, not the goal).** **[built 2026-10-18, owner directives; see build_log.md]**
 
 ### news_calendar_times (31 items)
 
@@ -969,8 +969,8 @@ Medium:
 - **N3:** Add `fomc_flat_before`, `fomc_eve_risk`, `fomc_after_am_block`, `fomc_only_am` and `fomc_no_reentry`.
 - **N3.1:** Add `fomc_observe` (scan during 14:00-14:45, defer the order, Judas side), `fomc_pm_block_from`, and an SB check at max(a, fomc_pm_from).
 - **N5:** Add the 2019-2025 calendar (PCE/GDP/retail/JOLTS/CB), NEWS_0945 and `release_times()`.
-- **N5.1:** Add `news_wait_min=30` (default on) in all models, and `news_room_pts`.
-- **N5.2:** Add the NEWS_0945 set and `news_0945` start at 09:45.
+- **N5.1:** ~~Add `news_wait_min=30` (default on) in all models~~ **Owner #4: the 30-minute wait is NFP-only (`nfp_floor_min=30`); after every release wait for the news dealing range (`news_wait="range"`, default); the fixed wait is `news_wait="fixed"` with `news_wait_min=30` (065B), a switch.** `news_room_pts` still open. **[built 2026-10-18, owner directives; see build_log.md]**
+- **N5.2:** Add the NEWS_0945 set and `news_0945` start at 09:45. **[built 2026-10-18, owner directives; see build_log.md]** `calendar.NEWS_0945` (PMI on ISM days), `release_times()`; the 09:45 release drives the AM range wait.
 - **T4:** Add `or_no_entry` (fills from 10:00, expiry anchored at 10:00), `or_deep` (09:37-09:46), `or_bias` and `or_wide`.
 - **T5:** Add `pre_0820` (a PRE8 window with a 500 snapshot, skipped on 08:30 days).
 - **T8:** Add a `lunch` session (710-810, no look-ahead AM H/L), `pm_carry_draw` and `draw_done_skip`.
@@ -993,7 +993,7 @@ Low:
 - **T9:** Add `pm_skip_after=870`, `pm_bad_am_start`, `pm_continue_am` and `pm_ob_entry`.
 - **M9.2:** Add `fomc_judas` (a 14:00-14:25 range, fomc_pm_from 865) and `fomc_stage2_cont`.
 - **D9:** Add skip_pre_cpi skip/small with next_trading_day.
-- **Ep01.11:** Add `pm_setup_window` (detect 15:15-15:45, fills until 15:50).
+- **Ep01.11:** ~~Add `pm_setup_window` (detect 15:15-15:45, fills until 15:50).~~ **Owner #1: entries 15:00-15:50 (`last_hour=(900,950)`), 15:15-15:45 = sweet-spot tag `lh_sweet`; `last_hour_strict` switch; PM session 13:30-16:15 (futures flatten 16:15).** **[built 2026-10-18, owner directives; see build_log.md]**
 - **Ep02.1:** Add the 'pmi' event set and `wait_0945=True`.
 - **Ep06.1:** Add `london_kz` (a LON window, futures only), `london_kz_start` and `ny_kz_futures`.
 - **Ep07.8:** Add macro_only 0950/all (start-or-arm test).
@@ -1020,11 +1020,40 @@ Low:
 
 ### Shared pieces to build first (cross-package)
 
-| Helper | Owner | Used by |
+| Helper | Owner | Used by | Status |
+|---|---|---|---|
+| `breaker_zone()` (A13) | levels_detectors | setups (M4.x, A14), entries (A13.4, Ep05.5), targets (A22, L13), exits (A13.3) | **built** (`levels.breaker_zone`, `breaker_mt`) |
+| VI wiring (`vi_arrays`, VI rows in C/H) | levels_detectors | targets (Ep03.22, Ep04.12), bias (B5, Ep03.12), entries (Ep07.2/4, E12b) | **built** (`vi_arrays`: confluence src 3 rows, htf "vi" arrays/draws) |
+| `adr5()`, `next_trading_day()` | day_week_context | news (N3.4, D9), targets (L16), exits (X10d, X11c, X14b) | **built** (`strategy.adr5`, `calendar.next_trading_day`; `_split` now skips holidays) |
+| Turtle-soup core (M12) | setups_models | M4.4, M12.x, D10, Ep08.15 | **built** (`levels.turtle_soup`, `turtle_soup="2023"`) |
+| Level kinds carried into `pos` | targets_partials | exits (Ep03.15 be_on pool, X3a run-down) | **built** (`pos["level_kinds"]`) |
+| Stateful bias column (`flip`) | bias_htf | B8a-f, B9, B13, B17.3 | **built** (`htf.table` column `flip`, triggers ob_mt / wk_dc) |
+
+
+## 4. Owner-directive build (2026-10-18)
+
+The 14 owner corrections (`owner_directive_specs.md`), the verified bugs M1.2 / M7.1 and the shared
+helpers were built on branch `mentorship`; `build_log.md` lists every item with its switches and
+defaults. Status changes against section 2 (all behind Params switches; owner versions are the
+defaults except #3 year end and #10 sloppy days, which wait for the owner's answer):
+
+| Id | New status | Note |
 |---|---|---|
-| `breaker_zone()` (A13) | levels_detectors | setups (M4.x, A14), entries (A13.4, Ep05.5), targets (A22, L13), exits (A13.3) |
-| VI wiring (`vi_arrays`, VI rows in C/H) | levels_detectors | targets (Ep03.22, Ep04.12), bias (B5, Ep03.12), entries (Ep07.2/4, E12b) |
-| `adr5()`, `next_trading_day()` | day_week_context | news (N3.4, D9), targets (L16), exits (X10d, X11c, X14b) |
-| Turtle-soup core (M12) | setups_models | M4.4, M12.x, D10, Ep08.15 |
-| Level kinds carried into `pos` | targets_partials | exits (Ep03.15 be_on pool, X3a run-down) |
-| Stateful bias column (`flip`) | bias_htf | B8a-f, B9, B13, B17.3 |
+| T9, T10, T11, Ep01.10, Ep01.11, Ep08.6, M5.2 | FULL | owner #1: last hour 15:00-15:50, sweet-spot tag, 16:15 futures close |
+| L15, M3.6, X14a, Ep03.24 | FULL | owner #2: 5 = minimum room; `t1_fixed_pts`, `day_target_pts` switches (off) |
+| Ep01.9, N7.4 | SIMPLIFIED | owner #3 built as a switch, default off (mapping pending) |
+| N5, N5.1, N5.2, Ep04.5, Ep02.1 | FULL | owner #4: news dealing range wait (formation test [our interpretation]) |
+| A14, M4.2 (direction) | FULL | owner #5: unicorn both ways, `unicorn_side` tag, `unicorn_sides` switch |
+| A13.3, Ep02.3, Ep05.1 (MT) | FULL | owner #6: breaker-MT respect / entry floor / cancel / exit |
+| Ep02.10 (new), L9, X3f | FULL | owner #7: opposing HTF FVG caps the trade |
+| X10, X10a, Ep03.23, D16 | FULL | owner #8: close at 12:00, now SB-AM, London SB and Ma Deuce too |
+| B3, L14a, M0.1, M3.2, Ep01.14 | FULL | owner #9: lock one draw per session (nearest pick [our interpretation]) |
+| B17.4, N8.1, Ep08.2 | SIMPLIFIED | owner #10 built as a switch, default tag-only (pending) |
+| M1.4, D10, Ep07.2, Ep07.5 | FULL | owner #11: OB-bodies entry before the break is the default |
+| E8, E11 | FULL | owner #12: 1.2% / 1.3% |
+| DATA1 (new), Ep02.2 (round pools), N7.5 (hook) | FULL / SIMPLIFIED | owner #13: front-month frame, round pools on futures |
+| D6, A13, A13.2 | FULL | owner #14: full-range breaker default, shared helper |
+| M1.2 | FULL | intact() fix + `displacement_mult` |
+| M7.1 | FULL | `seen_from_created` fix + `pm_off_lunch`, `pm_judas_1330` |
+| M12, M12.1 | SIMPLIFIED | shared turtle-soup core + 2023 variant; CC / OR60 / external variants open |
+| B8, B8a, B8c | SIMPLIFIED | stateful `flip` column (ob_mt, wk_dc triggers) |

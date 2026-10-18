@@ -63,8 +63,11 @@ def weeks(d: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _arrays(o, h, l, c, tf: str, known_of) -> list[Arr]:
+def _arrays(o, h, l, c, tf: str, known_of, vi: bool = False) -> list[Arr]:
     out = []
+    if vi:                       # shared VI wiring (Ep02.8 / Ep03.3 / B1): daily/weekly volume
+        for z in L.volume_imbalances(o, h, l, c):      # imbalances as arrays and draws
+            out.append(Arr(z.kind, "vi", tf, z.top, z.bottom, z.mid, known_of(z.i)))
     for z in L.fvgs(h, l):
         out.append(Arr(z.kind, "fvg", tf, z.top, z.bottom, z.mid, known_of(z.i)))
         # order block: last opposite-close candle before the displacement candle
@@ -77,19 +80,32 @@ def _arrays(o, h, l, c, tf: str, known_of) -> list[Arr]:
     return out
 
 
+def bar_minutes(df: pd.DataFrame) -> int:
+    if len(df) < 2:
+        return 1
+    d = pd.Series(df.index[1:] - df.index[:-1])
+    return max(1, int(d[d > pd.Timedelta(0)].min().total_seconds() // 60))
+
+
 def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: int = 60,
-          min_gap_pts: float = 1.0) -> pd.DataFrame:
-    """One row per trading day: react / draw / pd / combo bias and the draw levels."""
+          min_gap_pts: float = 1.0, cut_min: int = 570, vi: bool = False,
+          flip_triggers: tuple = ("ob_mt", "wk_dc")) -> pd.DataFrame:
+    """One row per trading day: react / draw / pd / combo bias and the draw levels.
+    `cut_min`: the row describes the market as known at that minute of the day - the overnight
+    high/low/last use only bars that have CLOSED by cut_min (bar start + bar length <= cut_min).
+    The default 570 (09:30) gives the original table; the draw lock (owner #9) builds one table
+    per session lock time (13:30 for the PM, ...). `vi` adds daily/weekly volume imbalances as
+    arrays/draws (shared VI wiring). `flip` is the stateful bias column (B8; shared): see _flip."""
     d = sessions(df)
     D = len(d)
     o, h, l, c = (d[k].values.astype(float) for k in ("open", "high", "low", "close"))
-    arrs = _arrays(o, h, l, c, "D", lambda i: i + 1)
+    arrs = _arrays(o, h, l, c, "D", lambda i: i + 1, vi)
     # weekly arrays become usable the day after the week's last session
     w = weeks(d)
     pos = {t: k for k, t in enumerate(d.index)}
     wl = [pos[t] + 1 for t in w["last"]]
     arrs += _arrays(*(w[k].values.astype(float) for k in ("open", "high", "low", "close")), "W",
-                    lambda i: wl[i])
+                    lambda i: wl[i], vi)
     # opening gaps (ICT 039/051/052): NWOG Fri close -> Sun 18:00, NDOG 17:00 -> 18:00 Mon-Thu
     pos_of = {t: k for k, t in enumerate(d.index)}
     for r in opening_gaps(df, es_pt, min_gap_pts).itertuples():
@@ -104,8 +120,10 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     # overnight (reopen to 09:29) of each trading day
     lab = pd.to_datetime((df.index + pd.Timedelta(hours=7)).date)
     tmin = df.index.hour * 60 + df.index.minute
-    pre = df[(tmin < 570) | (tmin >= 17 * 60)]
-    plab = lab[(tmin < 570) | (tmin >= 17 * 60)]
+    bm = bar_minutes(df)
+    keep = ((tmin < 17 * 60) & (tmin + bm <= cut_min)) | (tmin >= 17 * 60)
+    pre = df[keep]
+    plab = lab[keep]
     g = pre.groupby(plab)
     on = pd.DataFrame({"high": g.high.max(), "low": g.low.min(), "last": g.close.last()})
 
@@ -146,7 +164,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
             if a.kind == "bear" and rh.max() >= a.bottom and px < a.ce:
                 react -= wt
             # draw: the unrebalanced part of the inefficiency (FVGs and gaps only)
-            if a.typ in ("fvg", "ndog", "nwog"):
+            if a.typ in ("fvg", "ndog", "nwog", "vi"):
                 if a.kind == "bull":
                     low_seen = lo_after.min()
                     if low_seen > a.bottom:                  # not fully rebalanced
@@ -201,7 +219,54 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
                          draw_dn=dn[2] if dn else np.nan, draw_dn_name=dn[1] if dn else ""))
     cols = ["date", "px", "react", "react_score", "draw", "pd", "combo", "draw_up", "draw_up_name",
             "draw_dn", "draw_dn_name"]
-    return pd.DataFrame(rows, columns=cols).set_index("date")
+    out = pd.DataFrame(rows, columns=cols).set_index("date")
+    if flip_triggers and len(out):
+        fl = _flip(d, w, arrs, flip_triggers)
+        out["flip"] = [fl.get(pd.Timestamp(x), 0) for x in out.index]
+    return out
+
+
+def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple) -> dict:
+    """Stateful bias column (B8; shared helper for B8a-f, B9, B13, B17.3). The state persists
+    from day to day and changes only on a trigger, evaluated at each completed session's close
+    and applied from the NEXT session (no look-ahead):
+      ob_mt  (B7/B8a) a daily close through the mean threshold of the most recent bullish daily
+             OB (from above -> -1) or bearish daily OB (from below -> +1)
+      wk_dc  (B8c) a week closing above the high of the last down-close week (+1) or below the
+             low of the last up-close week (-1)
+    Further triggers (flip_pd3, flip_close_above, flip_thu_wopen, stop_flip) belong to bias_htf
+    and plug in here. Returns {session date: state known before that session}."""
+    known = set(triggers) - {"ob_mt", "wk_dc"}
+    if known:
+        raise NotImplementedError(f"flip triggers {sorted(known)}: planned (bias_htf B8b/d/e/f)")
+    c = d.close.values.astype(float)
+    obs = [a for a in arrs if a.typ == "ob" and a.tf == "D"]
+    wk_last = {}                                   # session index -> its week's row (last session)
+    pos = {t: k for k, t in enumerate(d.index)}
+    for r in w.itertuples():
+        wk_last[pos[r.last]] = r
+    state, out = 0, {}
+    last_dn_week = last_up_week = None
+    for k in range(len(d)):
+        out[d.index[k]] = state                     # known before session k
+        if "ob_mt" in triggers and k >= 1:
+            bull = [a for a in obs if a.kind == "bull" and a.known <= k]
+            bear = [a for a in obs if a.kind == "bear" and a.known <= k]
+            if bull and c[k] < bull[-1].ce <= c[k - 1]:
+                state = -1
+            if bear and c[k] > bear[-1].ce >= c[k - 1]:
+                state = 1
+        if "wk_dc" in triggers and k in wk_last:
+            r = wk_last[k]
+            if last_dn_week is not None and r.close > last_dn_week:
+                state = 1
+            elif last_up_week is not None and r.close < last_up_week:
+                state = -1
+            if r.close < r.open:
+                last_dn_week = r.high
+            elif r.close > r.open:
+                last_up_week = r.low
+    return out
 
 
 def has_overnight(df: pd.DataFrame) -> bool:

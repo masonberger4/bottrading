@@ -10,7 +10,7 @@ import pandas as pd
 
 from claude_hf.daytypes import JOBS, is_trading_day
 from . import htf
-from .strategy import Params, run_day
+from .strategy import Params, resolve_session_close, run_day
 
 DATA = Path("data/mentorship")
 NY = "America/New_York"
@@ -76,12 +76,13 @@ def fetch(symbols=("SPY", "QQQ"), c=None) -> None:
             time.sleep(5)
 
 
-def days(df: pd.DataFrame, tf: int, partial_last: bool = False) -> list[pd.DataFrame]:
-    """Complete sessions only: 00:00-16:00 bars of days whose regular session is >= 90%
-    present and runs to the last bar before 16:00 (the final day may be partial with
-    `partial_last`, as in live trading)."""
+def days(df: pd.DataFrame, tf: int, partial_last: bool = False, close: int = 960) -> list[pd.DataFrame]:
+    """Complete sessions only: midnight (SPY: 04:00) to the session close (`close`: 16:00, or
+    16:15 for index futures - owner #1) bars of days whose regular session is >= 90% present
+    and runs to the last bar before 16:00 (the final day may be partial with `partial_last`,
+    as in live trading)."""
     t = df.index.hour * 60 + df.index.minute
-    df = df[t < 960]                                  # midnight (SPY: 04:00) to 16:00
+    df = df[t < max(960, close)]
     out = []
     groups = list(df.groupby(df.index.date))
     for k, (d, g) in enumerate(groups):
@@ -95,15 +96,91 @@ def days(df: pd.DataFrame, tf: int, partial_last: bool = False) -> list[pd.DataF
 
 
 def rth(g: pd.DataFrame) -> pd.DataFrame:
-    return g[(g.index.hour * 60 + g.index.minute) >= 570]
+    """09:30-16:00 only: the history frames stay the regular session even when the day frame
+    runs to 16:15 (prior-day levels, NWOG, ORG and SMT history unchanged; owner #1)."""
+    t = g.index.hour * 60 + g.index.minute
+    return g[(t >= 570) & (t < 960)]
+
+
+_META: dict = {}
+
+
+def load_meta(symbol: str, minutes: int, source: str = "databento") -> pd.DataFrame | None:
+    """#13 (DATA1): per-bar [adj, instrument_id, roll] for the databento series, on the same
+    index as load(). adj = back-adjusted - raw (real front-month price = engine - adj). Taken
+    from the `adj` column when the CSV was built with it (databento_data.back_adjust), else
+    derived from <S>_1min_db.csv - <S>_1min_dbraw.csv; 5-minute meta = the last 1-minute bar of
+    each bucket (roll = any). None for other sources or when the raw file is missing."""
+    if source != "databento":
+        return None
+    key = (symbol, minutes)
+    if key in _META:
+        return _META[key]
+    pq = DATA / f"{symbol}_{minutes}min_dbmeta.parquet"
+    adj_f, raw_f = DATA / f"{symbol}_1min_db.csv", DATA / f"{symbol}_1min_dbraw.csv"
+    if pq.exists() and adj_f.exists() and pq.stat().st_mtime >= adj_f.stat().st_mtime:
+        _META[key] = pd.read_parquet(pq)
+        return _META[key]
+    if not (adj_f.exists() and raw_f.exists()):
+        return None
+    a = pd.read_csv(adj_f, index_col=0)
+    a.index = pd.to_datetime(a.index, utc=True).tz_convert(NY)
+    a = a[~a.index.duplicated(keep="last")].sort_index()
+    if "adj" in a:
+        m = a[["adj"]].copy()
+    else:
+        r = pd.read_csv(raw_f, index_col=0)
+        r.index = pd.to_datetime(r.index, utc=True).tz_convert(NY)
+        r = r[~r.index.duplicated(keep="last")]
+        m = pd.DataFrame({"adj": (a.close - r.close.reindex(a.index)).round(6)})
+    m["instrument_id"] = a["instrument_id"] if "instrument_id" in a else np.nan
+    if "roll" in a:
+        m["roll"] = a["roll"].astype(bool)
+    else:
+        m["roll"] = m.instrument_id.ne(m.instrument_id.shift()) & m.instrument_id.shift().notna()
+    if minutes != 1:
+        g = m.groupby(m.index.floor(f"{minutes}min"))
+        m = pd.DataFrame({"adj": g.adj.last(), "instrument_id": g.instrument_id.last(), "roll": g.roll.any()})
+    try:
+        m.to_parquet(pq)
+    except OSError:
+        pass
+    _META[key] = m
+    return m
+
+
+def lock_tables(df: pd.DataFrame, p: Params, bias_table: pd.DataFrame | None = None) -> dict:
+    """#9: one htf table per draw-lock minute in use (bars closed by that minute), cut 570 being
+    the ordinary bias table. {cut: table}; empty without overnight bars or with draw_lock off."""
+    if p.draw_lock == "off" or not htf.has_overnight(df):
+        return {}
+    cuts = {p.am[0] or 570, p.pm[0] or 810, 585, 600}
+    if p.pre_0700:
+        cuts.add(420)
+    if p.pre_0900 or p.post_news:
+        cuts.add(540)
+    if p.ma_deuce:
+        cuts.add(480)
+    out = {}
+    for m in sorted(cuts):
+        if m == 570 and bias_table is not None:
+            out[m] = bias_table
+        else:
+            out[m] = htf.table(df, p.es_pt, cut_min=m, vi=p.vi_arrays)
+    return out
 
 
 def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
         partner: pd.DataFrame | None = None, warmup: int = 3, partial_last: bool = False,
         bias_table: pd.DataFrame | None = None, confluence: bool = True,
-        partner2: pd.DataFrame | None = None, intermarket: dict | None = None) -> pd.DataFrame:
-    p = p or Params()
-    bt = bias_table if bias_table is not None else (htf.table(df, p.es_pt) if htf.has_overnight(df) else None)
+        partner2: pd.DataFrame | None = None, intermarket: dict | None = None,
+        meta: pd.DataFrame | None = None, lock_cuts: dict | None = None) -> pd.DataFrame:
+    """Backtest one instrument. `meta` (#13): databento meta (load_meta) for the front-month
+    price frame; `lock_cuts` (#9): {minute: htf table cut there} (built here when None).
+    The result's attrs carry "days", "locks" (one row per session lock) and "skips"."""
+    p = resolve_session_close(p or Params(), df, symbol)        # owner #1: 16:15 futures, 16:00 SPY
+    bt = bias_table if bias_table is not None else (htf.table(df, p.es_pt, vi=p.vi_arrays) if htf.has_overnight(df) else None)
+    cuts = lock_cuts if lock_cuts is not None else lock_tables(df, p, bt)
     og = htf.opening_gaps(df, p.es_pt) if htf.has_overnight(df) else None
     tt = df.index.hour * 60 + df.index.minute
     pre = df[(tt >= 570) & (tt < p.org_close)]
@@ -111,10 +188,11 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     cf = None
     if confluence and htf.has_overnight(df):
         from .confluence import Confluence
-        cf = Confluence(df, tf, p.es_pt)
-    ds = days(df, tf, partial_last)
-    pmap = {g.index[0].date(): g for g in days(partner, tf, partial_last)} if partner is not None else {}
-    pmap2 = {g.index[0].date(): g for g in days(partner2, tf, partial_last)} if partner2 is not None else {}
+        cf = Confluence(df, tf, p.es_pt, vi=p.vi_arrays, breakers=p.conf_breakers)
+    ds = days(df, tf, partial_last, p.session_close)
+    pmap = {g.index[0].date(): g for g in days(partner, tf, partial_last, p.session_close)} if partner is not None else {}
+    pmap2 = {g.index[0].date(): g for g in days(partner2, tf, partial_last, p.session_close)} if partner2 is not None else {}
+    locks, skips = [], []
     hist_p: list[pd.DataFrame] = []
     hist_p2: list[pd.DataFrame] = []
     rows = []
@@ -130,10 +208,15 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             n_wk = sum(1 for r in rows if r["date"].isocalendar()[:2] == wk) if p.max_trades_week else 0
             if p.max_trades_week and n_wk >= p.max_trades_week:
                 continue
+            eq = None
+            if p.risk_basis == "equity":               # #12: start-of-day equity, closed trades only
+                eq = p.account_equity + sum(r["net"] for r in rows)
+            bbc = {m: t_.loc[d].to_dict() for m, t_ in cuts.items() if d in t_.index}
             day_trades = run_day(g, [rth(x) for x in ds[max(0, k - 45):k]], symbol, p, tf, pa, bias=b, conf=cf,
                                  gaps=htf.gaps_for_day(og, d, p.nwog_keep, p.nwog_days) if og is not None else None,
                                  closes=closes, evening=_evening(df, d) if p.globex_pool else None,
-                                 partner2=pa2, intermarket=(intermarket or INTERMARKET()).get(d))
+                                 partner2=pa2, intermarket=(intermarket or INTERMARKET()).get(d),
+                                 equity=eq, bias_by_cut=bbc, meta=meta, locks=locks, skips=skips)
             if p.max_trades_week:
                 day_trades = day_trades[:p.max_trades_week - n_wk]
             for tr in day_trades:
@@ -146,6 +229,8 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     if len(out):                           # several setups per day: report in time order
         out = out.sort_values(["entry_time", "setup"], kind="stable").reset_index(drop=True)
         out.attrs["days"] = len(ds) - warmup
+    out.attrs["locks"] = locks
+    out.attrs["skips"] = skips
     return out
 
 
@@ -200,7 +285,10 @@ def report(t: pd.DataFrame) -> dict:
     out = {"all": stats(t)}
     if not len(t):
         return out
-    for col in ("setup", "side", "day_type", "unicorn", "smt", "swept", "exit_reason"):
+    for col in ("setup", "side", "day_type", "unicorn", "unicorn_side", "lh_sweet", "capped", "sloppy",
+                "draw_side", "smt", "swept", "exit_reason"):
+        if col not in t:
+            continue
         out[f"by_{col}"] = {str(k): stats(g) for k, g in t.groupby(t[col].astype(str))}
     t = t.assign(month=pd.to_datetime(t.entry_time.astype(str).str[:10]).dt.strftime("%Y-%m"))
     out["by_month"] = {k: stats(g) for k, g in t.groupby("month")}

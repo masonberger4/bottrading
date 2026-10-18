@@ -1,5 +1,13 @@
 # ICT Mentorship bot: consolidated rulebook
 
+> **Owner corrections 2026-10-18** (`mentorship/digests/owner_directives.md`,
+> `owner_directive_specs.md`) override this file where they differ: last hour 15:00-15:50 and the
+> 16:15 PM close (#1); 5 handles = minimum room (#2); year end from December's direction (#3,
+> pending); news dealing-range wait (#4); bearish unicorn (#5); breaker MT respect (#6); opposing
+> HTF FVG = resistance (#7); close (not tighten) before noon (#8); lock one draw per session (#9);
+> stand aside on sloppy days (#10, pending); OB entry before the break (#11); 1.2% / 1.3% risk
+> (#12); front-month prices (#13); full-range breaker (#14). Built status: `digests/build_log.md`.
+
 ## 1. Header
 
 **Scope.** One rulebook for the ICT Mentorship bot (`mentorship/`), covering the 2023 Mentorship
@@ -331,8 +339,11 @@ and to the notes for context, charts and trade examples. This file states each r
   before CPI: no trade ahead of it, or small bread-and-butter only (028; 029 ~5:22) [2023]. Bot:
   allowed (entries start 09:30). D9.
 - **N5 Other releases** [2023]:
-  - Any high/medium-impact release: wait >= 30 min after it, then trade only with ~10 handles of
-    room (065B ~4:07).
+  - After any scheduled release, wait for the news dealing range (post-release manipulation
+    high/low) to form, then trade from it toward external liquidity; no fixed minute count (Ep02
+    ~0:12-1:01; Ep04 ~28:16-31:26). "~30 min" is NFP-only (Ep04 ~8:23); 065B's blanket 30-minute
+    rule is kept only as `news_wait="fixed"`. [owner correction #4] Bot: `news_wait="range"`
+    (two-swing formation test, NFP 30-min floor, 90-min cap = [our interpretation]).
   - 09:45/10:00 releases (PMI, ISM): wait for the release, not just the 09:30 open (Ep 02; 002
     ~0:25). Bot: AM starts 10:00 on 10:00-release days.
   - No 08:30 news ("soft bias"): wait for 09:30 (Ep 05; 007 ~11:14; 019 ~7:57).
@@ -446,16 +457,20 @@ and to the notes for context, charts and trade examples. This file states each r
   lunch, continuing or reversing the AM (cc10_012 ~0:34-7:07) [CC]; the 14:00-16:00 sweet spot
   generally continues the AM (047 ~09:21). A short-term high or low almost always forms right after
   lunch (cc10_014 ~6:33). Divided day: bad AM -> come back at 13:45; nothing by 14:30 -> skip the
-  PM (044 ~1:55:03). Bot: PM 13:30-15:50 (no entries after 15:50). D7.
-- **T10 Last hour** 15:00-16:00, setup sweet spot 15:15-15:45; no setup by 10 min before the close
-  -> no trade (Ep 01; 001 ~1:00:45). A last-hour run to an old high, old low or imbalance happens
+  PM (044 ~1:55:03). PM session 13:30-16:15 (Ep 08 wins over Ep 01's 14:00-16:00; owner #1).
+  Bot: PM entries 13:30-15:50. D7.
+- **T10 Last hour** 15:00-16:15. Entries 15:00-15:50 (15:50 = our reading of Ep 01's "10 min
+  before", confirmed by the owner); 15:15-15:45 = the typical sweet spot, tag `lh_sweet`;
+  `last_hour_strict` switch (Ep 01; 001 ~1:00:45; Ep 08 ~1:05:20) [owner correction #1]. A last-hour run to an old high, old low or imbalance happens
   nearly every day (Ep 01 ~49:28). With no clear setup, wait to 15:40-15:45 and expect a 5-8 (up to
   10) handle run (032 ~1:01:00). Pool taken before 15:50 -> flurry then pullback; an up day rarely
   closes on its high (027 ~50:40) [2023].
 - **T11 End of day**: flat before 16:00; don't hold past the close; be flat once the day's final
   level is hit; no overnight or weekend holds (026 ~1:24:30; 027 ~58:22; 101 ~4:27; 103 ~9:31)
   [2023]. (001 exited at 16:01 and 012's run printed just after 16:00.) Don't fade an afternoon
-  reversal or add in the last ~15 min (026 ~1:59:50). Bot: flatten at 16:00 (`flatten=960`).
+  reversal or add in the last ~15 min (026 ~1:59:50). Bot: flatten at the session close: 16:15
+  ES/MES, 16:00 SPY (`session_close`); `flatten=960` switch. Conflicts with the 2023 "flat before
+  16:00" videos; the owner directive (#1) wins.
 - **T12 When extremes form** (testable stats, not rules): index true-day high or low tends to form
   09:30-10:30, the opposite extreme 15:00-16:00; if the AM set the LOD, expect the HOD 15:00-16:00
   (cc10_011 ~0:52; cc10_012 ~1:08, ~11:27) [CC]. 2023 charts: lows at 09:31-09:40 after the 09:30
@@ -521,8 +536,10 @@ and to the notes for context, charts and trade examples. This file states each r
 **Levels inside arrays**
 - **L9 FVG targets**: near edge first (an FVG beats an overlapping OB), then CE; CE of a weekly gap
   is enough, the far edge is a "ringer" (049 ~5:37; 061 ~2:30:15; 065B ~3:02:40) [2023]. A partly
-  traded FVG's unvisited remainder plus the stops beyond it is the next draw (038 ~1:11:44). Bot:
-  FVGs are entries only, never targets (P2).
+  traded FVG's unvisited remainder plus the stops beyond it is the next draw (038 ~1:11:44). An
+  unbroken OPPOSING HTF FVG between the entry and the target is resistance: it caps the trade (exit
+  before its near edge, no target beyond it, no trade if the room is short) (Ep 02 ~2:15-5:22;
+  owner correction #7). Bot: HTF arrays as targets (`htf_targets`), `htf_resist_cap=True`.
 - **L10 Wick CE levels**: prior daily (and weekly) wick CEs are targets, partial levels and
   invalidation levels (Ep 08; 012 ~4:12; 035 ~24:54; 101 ~78:20) [2023]. Bot: `wick_levels`
   (prior day only, off).
@@ -559,10 +576,11 @@ and to the notes for context, charts and trade examples. This file states each r
     045 ~6:38; 105 ~29:59) [2023].
   - Silver Bullet draw list: PDH/PDL; previous session H/L (London for the AM); PWH/PWL; NWOG; OTE;
     FVGs. If already raided, use an HTF pool (054 ~4:02-6:50) [2023].
-- **L15 Room ("10-handle framework")**: the setup must offer ~10 ES pts best case to the draw while
-  aiming to take 5 (5.25 after costs); below that, observe only; experienced traders may take
-  4-5-handle moves (024 ~25:26; 046 ~32:40; 054 ~0:36; 058 ~37:16; 059 ~10:36; 060 ~50:00; 072
-  ~35:11) [2023]. Bot: only `min_rr=1` on T1 (P1 `min_draw_pts`).
+- **L15 Room ("10-handle framework")**: 5 handles is the MINIMUM room to the draw (10 for new
+  traders), not the goal; the target is the draw / PD array (024 ~25:26; 046 ~32:40; 054 ~0:36; 058
+  ~37:16; 059 ~10:36; 060 ~50:00; 072 ~35:11) [2023] [owner correction #2, 2026-10-18]. Bot:
+  `min_draw_pts=5` measured to the draw's exit price (10 = switch); a fixed +5 rung is the
+  `t1_fixed_pts` test switch.
 - **L16 ADR5** = 5-day average daily range [CC]: expected day range; aim to capture 65-70% of it;
   ADR reached before 10:00 -> take 80% and keep a runner (cc08_001 ~1:53; cc09_006 ~19:33). Also
   N8 filters. {1m}
@@ -774,7 +792,9 @@ and to the notes for context, charts and trade examples. This file states each r
 **Risk and size**
 - **E8 Size** = (equity x risk%) / stop distance (065A ~1:04:00; cc02_004 ~18:56) [both]. Risk 1%
   default (009: 1.2-1.3%; 102: 1-1.5%; cc02_004: 1% default, 2% hard max); 2% is too much for new
-  traders (022 ~1:38:24). Bot: `risk_dollars=1000` (1% of $100k), `max_notional`.
+  traders (022 ~1:38:24). Default open risk 1.2% of equity at entry (Ep 07 ~5:32 "the goal ...
+  percentage-wise") [owner correction #12]. Bot: `risk_pct=0.012`, `risk_basis` fixed|equity; 1% =
+  legacy preset.
 - **E9 Size down** when conditions are mixed: against the macro undertone, cracked ES/NQ
   correlation, low-probability setups (minimum size, no pyramid), day before CPI/NFP/FOMC, FOMC
   week, August, war shocks (022 ~1:38:24; 029 ~5:22; 042 ~3:50; 045 ~1:01:43; 079; 090 ~35:02;
@@ -785,7 +805,8 @@ and to the notes for context, charts and trade examples. This file states each r
   size (010 ~49:51). Bot: fixed risk (P2
   `loss_halving`).
 - **E11 Caps**: ~6 contracts initial, building to 10-16 by pyramiding (Ep 08; 010 ~49:51; 076
-  ~27:54) [2023]. Bot: `max_total_risk=2000` across first unit + adds.
+  ~27:54) [2023]. Max open risk 1.3% including adds (Ep 07 ~8:24, ~19:21); 2% is not stated in Ep
+  01-08 (cc02_004 only) [owner correction #12]. Bot: `max_total_risk_pct=0.013`; adds shrink to fit.
 
 **Pyramiding**
 - **E12 Adds** [2023]:
@@ -871,10 +892,12 @@ and to the notes for context, charts and trade examples. This file states each r
   cc03_003 ~13:18). Bot: none (P1).
 
 **Time exits**
-- **X10 AM exits**: take the last AM unit off before noon (lunch retraces) (Ep 03; 003 ~1:12:15);
+- **X10 AM exits**: CLOSE (not tighten) the last AM unit before noon - "should have peeled the last
+  contract off" (Ep 03; 003 ~1:17:26-1:18:44) [owner correction #8; exact 12:00 is our wording];
   CC: close the bulk 10:00-11:00 and hold AM SMT trades to 10:30-11:00 (cc12_004 ~8:25; cc10_014
-  ~3:01); AM delivered the day's range -> flat before lunch and skip the PM (cc10_007 ~9:05). Bot: AM
-  trades may run to 16:00 (no source supports this). D16.
+  ~3:01); AM delivered the day's range -> flat before lunch and skip the PM (cc10_007 ~9:05). Bot:
+  `am_exit=720` closes all AM, PRE/NEWS, SB-AM, London-SB and Ma Deuce units at the close of the bar
+  ending 12:00 (`am_exit_mode="tighten"` = test only). D16.
 - **X11 PM exits**: target hit by 15:00 -> be done, the last hour retraces (Ep 04; 006 ~41:45); CC:
   hold PM trend trades to the 15:00 bond close, ideally 16:00; consolidation-profile PM trades exit
   ~14:00 (cc10_014 ~3:01, ~13:17); flat before 16:00 (T11). D16.
@@ -887,7 +910,8 @@ and to the notes for context, charts and trade examples. This file states each r
   half the previous risk (070 ~38:41; 060 ~1:22:30; 085 ~27:21; cc02_005; cc06_003 ~23:24) [both].
   Not on FOMC (021 ~43:56). Bot: one trade per session and no opposite side after a loss
   (`lost_side`). D18.
-- **X14 After a win** [2023]: bread-and-butter 5 handles then stop (044 ~57:16; 046 ~4:41); in
+- **X14 After a win** [2023]: bread-and-butter 5 handles then stop (044 ~57:16; 046 ~4:41) - test
+  switch `day_target_pts`, default off (owner #2: 5 = minimum room, not the goal); in
   chop, one win and stop (031 ~9:20); if the AM wins, skip the PM (065B ~4:12); no re-entry after a
   winner on the day (095 ~47:08). Bot: one AM + one PM trade.
 - **X15 Frequency**: one good setup per week (Ep 03; 003 ~1:05:10; cc02_003 ~12:03); ~3 trades per
@@ -986,8 +1010,10 @@ on the bot.
 - B: in the OB before the MSS (003 first entry: 6 lots, 17.5-pt stop; 070 inside the A-B leg; 022
   turtle soup needs no MSS).
 - His trades: his biggest documented AM trade (003) used B.
-- Recommended: A. Test B only as `early_entry` when price sits in an HTF array with SMT (needs the
-  HTF tag on).
+- Recommended: B (owner correction #11, Ep 07 ~2:10, ~11:06, ~13:35, ~15:03): a limit at the bodies
+  of the bullish OB at the sweep low before the break of the reference high is the DEFAULT
+  (`ob_entry="pre_break"`); A (FVG after the MSS) = `ob_entry="post_mss"`; "both" takes either. No
+  HTF/SMT gating.
 
 **11. FVG entry price: near edge, CE, or IOFED?**
 - Edge / 1 tick in: 001, 018, 042, 054, 057, 066 (live fills, 6). CE: 007, 024, 048, 030 ladder
@@ -1235,7 +1261,7 @@ Definitions
 
 Day context
 - Low-volatility days (e.g. last trading day of year) -> expect an inside day vs previous day's high/low, framed before the 08:30/09:30 open (~16:42). Monday refers to Friday's range.
-- Year end: price is expected to reprice up to buy-side liquidity. [corrected] ICT says the algorithm reprices to the buy stops; short covering is a consequence, not the cause (~31:47-34:45).
+- Year end takes its side from December's direction: positions built in December get squared (Dec 2022 down, no Santa rally -> shorts covered -> reprice up to buy stops above 3864). Not always bullish. [owner correction #3; mapping = `year_end_map`, pending owner confirmation - owner_directives.md says Dec up -> bullish, the Ep 01 example runs against December] (~12:04-12:16, ~31:13-35:45). Bot: `year_end` switch, default off until confirmed.
 
 Sessions
 - AM session 08:30-11:00. PM session 14:00-16:00; focus on last hour 15:00-16:00.

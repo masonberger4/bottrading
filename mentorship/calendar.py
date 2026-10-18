@@ -75,3 +75,69 @@ DT.PPI |= _dates(PPI)
 DT.FOMC |= _dates(FOMC)
 DT.HOLIDAYS |= _dates(HOLIDAYS)
 DT.day_type.cache_clear()
+
+
+# --- trading-day helpers (shared: day_week_context; used by news, targets, exits) ---------
+# claude_hf.daytypes.HOLIDAYS carries 2019-2025 (above) plus the 2026 NYSE list incl.
+# 2026-12-25 and 2027-01-01, so these helpers are exact through 2026.
+
+def is_trading_day(d: date) -> bool:
+    return DT.is_trading_day(d)
+
+
+def next_trading_day(d: date, n: int = 1) -> date:
+    """The n-th NYSE trading day after d (holidays skipped; n < 0 walks back)."""
+    return DT._step(d, n)
+
+
+def prev_trading_day(d: date, n: int = 1) -> date:
+    return DT._step(d, -n)
+
+
+def last_n_trading_days(year: int, n: int) -> list[date]:
+    """The last n trading days of `year`, oldest first, walking back from Dec 31."""
+    d, out = date(year, 12, 31), []
+    while len(out) < n:
+        if is_trading_day(d):
+            out.append(d)
+        d = date.fromordinal(d.toordinal() - 1)
+    return out[::-1]
+
+
+def last_trading_day_of_year(d: date) -> bool:
+    """True if d is the last trading day of its year."""
+    return is_trading_day(d) and last_n_trading_days(d.year, 1)[0] == d
+
+
+# --- release times (owner directive #4; N5, N5.2, Ep02.1) ---------------------------------
+# PCE, GDP, retail sales and JOLTS dates exist for 2026 only (claude_hf.daytypes); ISM, PMI
+# and sentiment are rule-based (ISM manufacturing = 1st trading day, services = 3rd; S&P
+# Global final PMIs come out at 09:45 on the same days; flash PMI dates are not available).
+NEWS_0830 = {"cpi", "jobs", "ppi", "pce", "retail_sales", "gdp"}
+NEWS_0945 = {"pmi_mfg", "pmi_svc"}
+NEWS_1000 = {"ism_manufacturing", "ism_services", "jolts", "sentiment"}
+
+
+def pmi_events(d: date) -> set:
+    tags = set()
+    if d == DT.nth_trading_day(d.year, d.month, 1):
+        tags.add("pmi_mfg")
+    if d == DT.nth_trading_day(d.year, d.month, 3):
+        tags.add("pmi_svc")
+    return tags
+
+
+def release_times(d: date) -> list[int]:
+    """Scheduled release minutes (ET) on day d, sorted: 510 (08:30 data), 585 (09:45 PMI),
+    600 (10:00 data), 840 (FOMC decision)."""
+    tags = DT.events(d) | pmi_events(d)
+    out = []
+    if tags & NEWS_0830:
+        out.append(510)
+    if tags & NEWS_0945:
+        out.append(585)
+    if tags & NEWS_1000:
+        out.append(600)
+    if "fomc" in tags:
+        out.append(840)
+    return out

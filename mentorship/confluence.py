@@ -55,25 +55,38 @@ def _structure(h, l, c) -> np.ndarray:
     return st
 
 
-def _zones(o, h, l, c, end_times, gaps=None, max_bars=None):
+SRC = {"fvg": 0, "ob": 1, "gap": 2, "vi": 3, "breaker": 4}   # array source codes (column `src`)
+
+
+def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=False):
     """Arrays as columns: kind (+1 bull / -1 bear), top, bottom, inv (invalidation level),
-    known (time the array can first be used), plus the bar index the invalidation scan
-    starts from."""
+    known (time the array can first be used), src (SRC code: FVG 0, OB 1, opening gap 2,
+    volume imbalance 3, breaker 4), plus the bar index the invalidation scan starts from.
+    `vi` adds volume imbalances (shared VI wiring; dies on a close beyond the far edge like an
+    FVG); `breakers` adds breaker zones with inv = the breaker MT (owner #6, conf_breakers)."""
     rows = []
     for z in L.fvgs(h, l):
         s = 1 if z.kind == "bull" else -1
-        rows.append((s, z.top, z.bottom, z.bottom if s > 0 else z.top, z.i))
+        rows.append((s, z.top, z.bottom, z.bottom if s > 0 else z.top, z.i, 0))
         ob = L.order_block_blend(o, h, l, c, z.i - 4, z.i - 2, z.kind)
         if ob is not None:
             disp = c[z.i - 1]
             if (s > 0 and disp > ob.top) or (s < 0 and disp < ob.bottom):
-                rows.append((s, ob.top, ob.bottom, ob.mt, z.i))
+                rows.append((s, ob.top, ob.bottom, ob.mt, z.i, 1))
+    if vi:
+        for z in L.volume_imbalances(o, h, l, c):
+            s = 1 if z.kind == "bull" else -1
+            rows.append((s, z.top, z.bottom, z.bottom if s > 0 else z.top, z.i, 3))
+    if breakers:
+        for z in L.breakers(o, h, l, c, 1):
+            s = 1 if z.kind == "bull" else -1
+            rows.append((s, z.top, z.bottom, z.mt, z.i, 4))
     for s, top, bottom, k in gaps or ():
-        rows.append((s, top, bottom, bottom if s > 0 else top, k))
+        rows.append((s, top, bottom, bottom if s > 0 else top, k, 2))
     if not rows:
         return None
     a = np.array(rows, dtype=float)
-    kind, top, bottom, inv, i = a[:, 0], a[:, 1], a[:, 2], a[:, 3], a[:, 4].astype(int)
+    kind, top, bottom, inv, i, src = a[:, 0], a[:, 1], a[:, 2], a[:, 3], a[:, 4].astype(int), a[:, 5]
     # first later close beyond the invalidation level
     dead = np.full(len(a), np.inf)
     n = len(c)
@@ -85,11 +98,12 @@ def _zones(o, h, l, c, end_times, gaps=None, max_bars=None):
         if len(hit):
             dead[j] = end_times[i[j] + 1 + hit[0]]
     known = end_times[i]
-    return dict(kind=kind, top=top, bottom=bottom, known=known, dead=dead)
+    return dict(kind=kind, top=top, bottom=bottom, known=known, dead=dead, src=src)
 
 
 class Confluence:
-    def __init__(self, df: pd.DataFrame, base_minutes: int, es_pt: float = 1.0):
+    def __init__(self, df: pd.DataFrame, base_minutes: int, es_pt: float = 1.0, vi: bool = False,
+                 breakers: bool = False):
         self.tol = 0.25 * es_pt
         self.z = {}
         self.st = {}                   # tf -> (bar end times, structure state)
@@ -105,7 +119,7 @@ class Confluence:
             end = (b.index + pd.Timedelta(minutes=m)).as_unit("ns").asi8
             life_bars = int(pd.Timedelta(LIFE[tf]).total_seconds() // 60 // m)
             z = _zones(*(b[k].values.astype(float) for k in ("open", "high", "low", "close")),
-                       end.astype(float), max_bars=life_bars)
+                       end.astype(float), max_bars=life_bars, vi=vi, breakers=breakers)
             self.st[tf] = (end.astype(float), _structure(b.high.values, b.low.values, b.close.values))
             if z:
                 z["life"] = pd.Timedelta(LIFE[tf]).value
@@ -129,7 +143,7 @@ class Confluence:
                                   "close": g.close.last()})
                 ends = pd.Series(dend, index=d.index).groupby(grp).max().values
             z = _zones(*(b[k].values.astype(float) for k in ("open", "high", "low", "close")),
-                       np.asarray(ends, float))
+                       np.asarray(ends, float), vi=vi, breakers=breakers)
             self.st[tf] = (np.asarray(ends, float), _structure(b.high.values, b.low.values, b.close.values))
             if z:
                 z["life"] = np.full(len(z["kind"]), float(pd.Timedelta(LIFE[tf]).value))
@@ -150,7 +164,7 @@ class Confluence:
                     continue
                 add = dict(kind=np.where(og.up.values[m], 1.0, -1.0), top=og.high.values[m],
                            bottom=og.low.values[m], known=known[m], dead=np.asarray(dead)[m],
-                           life=np.full(m.sum(), np.inf))
+                           life=np.full(m.sum(), np.inf), src=np.full(m.sum(), 2.0))
                 z = self.z.get(tf)
                 self.z[tf] = add if z is None else {k: np.concatenate([z[k], add[k]]) for k in add}
 
@@ -210,6 +224,60 @@ def _trend_impl(self, t: pd.Timestamp, tf: str) -> int:
 
 
 Confluence.trend = _trend_impl
+
+
+def _resistance_impl(self, t: pd.Timestamp, price: float, side: int, tfs, src=(0,), straddle: bool = True):
+    """Owner directive #7 (Ep 02): the nearest unbroken OPPOSING array in the trade's way.
+    Long (side +1): bearish arrays with top > price, still valid at t (known <= t, not dead by
+    t, within life), source in `src`; level = max(bottom, price) (a straddling array gives
+    level = price); the lowest such level over all rows wins. Short mirrors (bullish arrays
+    below, level = min(top, price), highest wins). Real prices. Returns
+    (level, tf, top, bottom) or None. straddle=False ignores arrays the price is inside."""
+    now = float(t.value)
+    best = None
+    for tf in tfs:
+        z = self.z.get(tf)
+        if z is None:
+            continue
+        m = ((z["kind"] == -side) & (z["known"] <= now) & (z["dead"] > now)
+             & (now - z["known"] <= z["life"]) & np.isin(z["src"], list(src)))
+        if side > 0:
+            m &= (z["top"] > price) if straddle else (z["bottom"] > price)
+            lv = np.maximum(z["bottom"][m], price)
+        else:
+            m &= (z["bottom"] < price) if straddle else (z["top"] < price)
+            lv = np.minimum(z["top"][m], price)
+        if not m.any():
+            continue
+        k = int(np.argmin(lv) if side > 0 else np.argmax(lv))
+        cand = (float(lv[k]), tf, float(z["top"][m][k]), float(z["bottom"][m][k]))
+        if best is None or (cand[0] < best[0] if side > 0 else cand[0] > best[0]):
+            best = cand
+    return best
+
+
+Confluence.resistance = _resistance_impl
+
+
+def _support_impl(self, t: pd.Timestamp, price: float, side: int, tf: str, src=(0,)):
+    """Ep 02 30m "heavy" line (runner_htf_exit): the same-side array on `tf` containing
+    `price` or nearest behind it (below for a long), valid at t. Returns (top, bottom, dead)
+    with `dead` the time of the first close beyond its far edge (inf while alive), or None."""
+    now = float(t.value)
+    z = self.z.get(tf)
+    if z is None:
+        return None
+    m = ((z["kind"] == side) & (z["known"] <= now) & (z["dead"] > now)
+         & (now - z["known"] <= z["life"]) & np.isin(z["src"], list(src)))
+    m &= (z["bottom"] <= price) if side > 0 else (z["top"] >= price)
+    if not m.any():
+        return None
+    key = z["top"][m] if side > 0 else -z["bottom"][m]       # nearest behind the price
+    k = int(np.argmax(key))
+    return float(z["top"][m][k]), float(z["bottom"][m][k]), float(z["dead"][m][k])
+
+
+Confluence.support = _support_impl
 
 
 def score(tfs: list[str]) -> tuple[int, int]:

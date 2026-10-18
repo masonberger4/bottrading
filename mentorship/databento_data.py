@@ -66,7 +66,8 @@ def back_adjust(df: pd.DataFrame) -> pd.DataFrame:
     """Difference-adjust the rolled series so a contract roll leaves no artificial gap: at
     each change of instrument_id, everything before it is shifted by (first open of the new
     contract - last close of the old one). The newest contract keeps its real prices, so
-    levels on recent data match the chart. `roll` marks the first bar of each new contract."""
+    levels on recent data match the chart. `roll` marks the first bar of each new contract;
+    `adj` is the shift applied to each bar (real contract price = adjusted - adj; #13 DATA1)."""
     df = df.copy()
     roll = df.instrument_id.ne(df.instrument_id.shift()) & df.instrument_id.shift().notna()
     adj = pd.Series(0.0, index=df.index)
@@ -77,6 +78,7 @@ def back_adjust(df: pd.DataFrame) -> pd.DataFrame:
     for c in ("open", "high", "low", "close"):
         df[c] = df[c] + adj
     df["roll"] = roll
+    df["adj"] = adj
     return df
 
 
@@ -92,7 +94,8 @@ def build(s: str) -> pd.DataFrame:
     g = df.groupby(df.index.floor("5min"))
     five = pd.DataFrame({"open": g.open.first(), "high": g.high.max(), "low": g.low.min(),
                          "close": g.close.last(), "volume": g.volume.sum(),
-                         "instrument_id": g.instrument_id.last()})
+                         "instrument_id": g.instrument_id.last(), "adj": g.adj.last(),
+                         "roll": g.roll.any()})
     df.to_csv(DATA / f"{s}_1min_db.csv")
     five.to_csv(DATA / f"{s}_5min_db.csv")
     print(s, len(df), "1-min bars", df.index[0], "->", df.index[-1],

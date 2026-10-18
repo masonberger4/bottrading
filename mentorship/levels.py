@@ -104,38 +104,106 @@ def order_block_blend(o, h, l, c, start: int, end: int, kind: str) -> Zone | Non
     return None
 
 
-def breakers(o, h, l, c, n: int = 2) -> list[Zone]:
-    """Bullish breaker: swing low, swing high, lower low, then a candle *body* closes above
-    the swing high. The zone is the last up-close candle at/before that swing high (it
-    failed as resistance and now acts as support). Bearish mirrors it. Known at the
-    closing break."""
+BREAKER_MODES = ("range", "body")
+
+
+def breaker_candle(o, c, a0: int, ext_i: int, kind: str = "bull") -> int | None:
+    """The breaker candle of a bullish breaker: the up-close candle with the HIGHEST close in
+    [a0, ext_i] (the leg from the swing low L1 before the high to the sweep extreme L2;
+    029 ~24:13; 048). Bearish: the down-close candle with the lowest close. Closed bars only:
+    the caller passes ext_i <= the current bar. None when there is no such candle."""
+    a0 = max(int(a0), 0)
+    if kind == "bull":
+        cand = [k for k in range(a0, int(ext_i) + 1) if c[k] > o[k]]
+        return max(cand, key=lambda k: c[k]) if cand else None     # first on ties (as before)
+    cand = [k for k in range(a0, int(ext_i) + 1) if c[k] < o[k]]
+    return min(cand, key=lambda k: c[k]) if cand else None
+
+
+def breaker_mt(o, h, l, c, k: int, mode: str = "range") -> float:
+    """Breaker mean threshold (A13.3, owner directive #6): 50% of the breaker candle's FULL
+    high-low ("range", Ep 02 ~3:37-3:54 "half of that range from the candle's high and low";
+    007 ~1:22-1:58) or of its body ("body" switch)."""
+    if mode == "range":
+        return float((h[k] + l[k]) / 2)
+    if mode == "body":
+        return float((o[k] + c[k]) / 2)
+    raise ValueError(f"breaker mt mode {mode!r}: expected 'range' or 'body'")
+
+
+def breaker_zone(o, h, l, c, a0: int, ext_i: int, i: int, kind: str = "bull",
+                 mode: str = "range", mt_mode: str | None = None) -> Zone | None:
+    """Shared breaker-zone helper (A13; owner directive #14). The breaker candle is
+    `breaker_candle` (highest-close up-close candle between L1 and the sweep extreme for a
+    bullish breaker). Zone extent:
+      "range"  the candle's full high-low (default; Ep 02 ~3:37, Ep 05 ~11:34/~15:20/~22:49,
+               Ep 07's OB "entire range" [our interpretation])
+      "body"   open-close only (Ep 01 ~56:19 switch)
+    `mt` = breaker_mt(mt_mode) - by default it follows the zone mode, so the default MT is 50%
+    of the full range. "leg"/"last" are planned (D6). Known at bar i (the caller's bar)."""
+    if mode in ("leg", "last"):
+        raise NotImplementedError("planned D6")
+    if mode not in BREAKER_MODES:
+        raise ValueError(f"breaker_zone mode {mode!r}: expected one of {BREAKER_MODES}")
+    k = breaker_candle(o, c, a0, ext_i, kind)
+    if k is None:
+        return None
+    mt = breaker_mt(o, h, l, c, k, mt_mode or mode)
+    if mode == "range":
+        return Zone(kind, float(h[k]), float(l[k]), i, k, mt)
+    return Zone(kind, float(max(o[k], c[k])), float(min(o[k], c[k])), i, k, mt)
+
+
+def breakers(o, h, l, c, n: int = 2, mode: str = "range") -> list[Zone]:
+    """Bullish breaker: swing low L1, swing high H, lower low (the sweep), then a candle *body*
+    closes above H. The zone is the breaker candle from `breaker_zone` (highest-close up-close
+    candle between L1 and the sweep extreme, full range by default) - the same rule `_scan`
+    uses, so both agree. Bearish mirrors it. Known (emitted) at the closing break."""
+    import bisect
     ph, pl = pivots(h, l, n)
     out = []
     used = set()
+    known = {id(ph): [p.known for p in ph], id(pl): [p.known for p in pl]}
+    at = {id(ph): [p.i for p in ph], id(pl): [p.i for p in pl]}
     for i in range(len(c)):
         for kind, hs, ls, sign in (("bull", ph, pl, 1), ("bear", pl, ph, -1)):
             # in "bull" terms: hs = swing highs, ls = swing lows (mirrored for bear)
-            hk = [p for p in hs if p.known <= i]
-            if not hk:
+            k = bisect.bisect_right(known[id(hs)], i)         # pivots known by bar i (sorted)
+            if not k:
                 continue
-            H = hk[-1]
+            H = hs[k - 1]
             if (kind, H.i) in used:
                 continue
-            prior = [p for p in ls if p.i < H.i and p.known <= i]
-            if not prior:
+            j = bisect.bisect_left(at[id(ls)], H.i)          # swing lows before H (known by H.known)
+            if not j:
                 continue
-            L = prior[-1]
+            L1 = ls[j - 1]
             seg = l[H.i + 1:i] if sign > 0 else h[H.i + 1:i]
             if not len(seg):
                 continue
-            swept = seg.min() < L.price if sign > 0 else seg.max() > L.price
+            swept = seg.min() < L1.price if sign > 0 else seg.max() > L1.price
             broke = c[i] > H.price if sign > 0 else c[i] < H.price
             if swept and broke:
-                blk = order_block(o, h, l, c, H.i - n, H.i, "bear" if sign > 0 else "bull")
-                if blk is not None:
-                    out.append(Zone(kind, blk.top, blk.bottom, i, blk.src))
+                ext_i = H.i + 1 + int(np.argmin(seg) if sign > 0 else np.argmax(seg))
+                z = breaker_zone(o, h, l, c, L1.i, ext_i, i, kind, mode)
+                if z is not None:
+                    out.append(z)
                 used.add((kind, H.i))
     return out
+
+
+def turtle_soup(l, c, level: float, ext_i: int, i: int, max_depth: float,
+                back_bars: int) -> bool:
+    """Turtle-soup core (M12, shared by M12.x / M4.4 / D10 / Ep08.15), bullish terms: a false
+    break of an old low `level` "by a little" - the extreme l[ext_i] is below the level by no more
+    than `max_depth` - then a fast reversal: a candle CLOSES back above the level within
+    `back_bars` bars of the extreme, at the latest at bar i (closed bars only). No MSS needed
+    (022 ~2:47:29; cc05_004 ~6:45). Bearish = mirrored prices."""
+    if not (l[ext_i] < level and level - l[ext_i] <= max_depth):
+        return False
+    if i <= ext_i or i - ext_i > back_bars:
+        return False
+    return bool((c[ext_i:i + 1] > level).any()) and bool(l[ext_i + 1:i + 1].min(initial=np.inf) >= l[ext_i])
 
 
 def equal_levels(prices, tol: float) -> list[float]:
