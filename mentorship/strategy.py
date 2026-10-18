@@ -106,8 +106,14 @@ class Params:
     weekly_bias: bool = False
     sd_targets: bool = False
     sd_levels: tuple = (1.0, 1.5, 2.0, 2.5)
+    ep07_stop: bool = False        # Ep 07: stop under the body midpoint of the down-close candle
+                                   # nearest the sweep low (~4:07)
+    ep07_body_exit: bool = False   # Ep 07: out if price trades below the swing low's lowest body (~15:36)
+    ep07_trail: bool = False       # Ep 07: once price trades through the bodies of the prior swing
+                                   # high, trail the stop to the retracement candle's low
+    htf_far_edge: bool = False     # HTF gap targets: near edge, CE, and the far edge as a third level
     wick_levels: bool = True       # A23: the prior day's wick CEs as targets
-    ce_hold: bool = True           # A5/A6: the entry FVG is a breakaway gap - once filled, a candle BODY closing
+    ce_hold: bool = False           # A5/A6: the entry FVG is a breakaway gap - once filled, a candle BODY closing
                                    # beyond its CE (wicks may poke) exits the trade before T1
     skip_news: bool = False        # no trades at all on 08:30 / 10:00 release days
     # decisions in mentorship_rules.md section 3 (D#); defaults are the recommended ones
@@ -624,6 +630,15 @@ def _judas(ctx, sd, sw, session) -> bool:
     return bool(t0 <= ctx.t[sw["ext_i"]] < t0 + 60 and sw["ext"] < sd.x(ref))
 
 
+def _swing_ref(sd, ext_i: int, fill_i: int) -> dict:
+    """Ep 07 trail inputs at the fill: the body top of the swing high made between the sweep
+    low and the fill (the high the retracement came from), and the retracement's low."""
+    if fill_i <= ext_i + 1:
+        return dict(swing_body=np.inf, retr_low=-np.inf)
+    k = ext_i + int(np.argmax(sd.h[ext_i:fill_i]))
+    return dict(swing_body=float(max(sd.o[k], sd.c[k])), retr_low=float(sd.l[k:fill_i + 1].min()))
+
+
 def l_min_after(sd, q, i):
     return sd.l[q.i + 1:i].min(initial=np.inf)
 
@@ -710,6 +725,12 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                     pos["stop"] = max(pos["stop"], pos["basis"] / pos["n"])
                 if pos["left"] and pos["t2"] is not None and pos["t1_done"] and h >= pos["t2"]:
                     tr.exits.append((ts, sd.x(pos["t2"]), pos["left"], "t2")); pos["left"] = 0
+            if pos["left"] and p.ep07_body_exit and l < pos["body_low"]:
+                px = min(o, pos["body_low"])           # traded below the swing low's lowest body
+                tr.exits.append((ts, sd.x(px), pos["left"], "body_low")); pos["left"] = 0
+            if pos["left"] and p.ep07_trail and not pos.get("trailed") and h > pos["swing_body"]:
+                pos["stop"] = max(pos["stop"], pos["retr_low"] - p.stop_buffer)
+                pos["trailed"] = True
             if pos["left"] and p.ce_hold and i > pos["fill_i"] and c < pos["fvg_ce"] and not pos["t1_done"]:
                 tr.exits.append((ts, sd.x(c), pos["left"], "ce_close")); pos["left"] = 0
             if pos["left"] and p.fvg_abort:
@@ -783,7 +804,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 pos = dict(trade=tr, side=sd, stop=o["stop"], t1=o["t1"], t2=o["t2"],
                            left=o["shares"], n=o["shares"], basis=fill * o["shares"],
                            t1_done=False, fill_i=i, fill_t=t, add=None, fvg_bottom=o["fvg_bottom"],
-                           abort=None, best=fill, ext_i=o["ext_i"], broken=set(), fvg_ce=o["fvg_ce"])
+                           abort=None, best=fill, ext_i=o["ext_i"], broken=set(), fvg_ce=o["fvg_ce"],
+                           body_low=o["body_low"], **_swing_ref(sd, o["ext_i"], i))
                 done[o.get("done_key", o["session"])] = True
                 pending = None
                 if sd.l[i] <= pos["stop"]:           # same-bar stop (conservative)
@@ -976,6 +998,12 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
     mt = None if ob is None else (ob.mt if p.mt_mode == "body" else ob.mid)
     if p.stop_mode == "ob_mt" and mt is not None and mt < entry - p.min_risk_pts * p.es_pt:
         stop = min(stop, mt - p.stop_buffer)
+    if p.ep07_stop:                    # down-close candle nearest the sweep low, body midpoint
+        e = sw["ext_i"]
+        cand = [k for k in range(max(0, e - 3), min(i, e + 2) + 1) if c[k] < sd.o[k]]
+        if cand:
+            k = min(cand, key=lambda k: (abs(k - e), -k))
+            stop = (sd.o[k] + c[k]) / 2 - p.stop_buffer
     risk = entry - stop
     if not (p.min_risk_pts * p.es_pt <= risk <= p.max_risk_pts * p.es_pt):
         _f("x_risk_too_small" if risk < p.min_risk_pts * p.es_pt else "x_risk_too_big")
@@ -1018,7 +1046,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
     lv = _targets(ctx, sd, i, max(leg_hi, entry), eq_hi, p, (sw["ext"], leg_hi), sw["ext_i"])
     if p.htf_targets and getattr(ctx, "conf", None) is not None:
         now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
-        real = ctx.conf.targets(now, sd.x(max(leg_hi, entry)), sd.sign, p.htf_targets)
+        real = ctx.conf.targets(now, sd.x(max(leg_hi, entry)), sd.sign, p.htf_targets, p.htf_far_edge)
         lv = sorted(set(lv) | {(sd.x(v), "array") for v in real})
     if p.fvg_targets:                  # untouched opposing FVGs / voids: near edge, then CE (L9)
         extra = []
@@ -1053,6 +1081,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
                 smt=sw["smt"], smt2=sw.get("smt2"), smt_n=smt_n,
                 i=i, entry=entry, stop=stop, t1=lv[0], fvg_bottom=g.bottom, fvg_ce=g.mid,
                 ext=sw["ext"], ext_i=sw["ext_i"],
+                body_low=float(min(min(sd.o[k], c[k]) for k in range(max(0, sw["ext_i"] - 1), min(i, sw["ext_i"] + 1) + 1))),
                 t2=lv[1] if len(lv) > 1 else None, shares=shares, htf=htf,
                 conf_n=None if cf is None else len(cf), conf_top=(cf[-1] if cf else ""),
                 conf_tfs="|".join(cf or []), entry_kind="ifvg" if is_ifvg else "fvg",

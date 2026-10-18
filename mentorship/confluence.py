@@ -172,7 +172,7 @@ class Confluence:
         return out
 
 
-def _targets_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs) -> list[float]:
+def _targets_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs, far_edge: bool = False) -> list[float]:
     """Opposing PD arrays (FVGs, order blocks, opening gaps) still valid at time t on the
     given timeframes, beyond `beyond` in the trade's direction: their near edge and CE.
     For a long (side +1): bearish arrays above; for a short: bullish arrays below."""
@@ -192,6 +192,8 @@ def _targets_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs) -> list[
             near = z["top"][m]
         ce = (z["top"][m] + z["bottom"][m]) / 2
         out += list(near) + list(ce)
+        if far_edge:
+            out += list(z["top"][m] if side > 0 else z["bottom"][m])
     return out
 
 

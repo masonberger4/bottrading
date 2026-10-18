@@ -326,3 +326,22 @@ def test_new_pools_no_look_ahead():
         a = full[full.entry_time <= c][cols].reset_index(drop=True)
         b = part[part.entry_time <= c][cols].reset_index(drop=True)
         pd.testing.assert_frame_equal(a, b)
+
+
+def test_ep07_switches_no_look_ahead():
+    from pathlib import Path
+    if not Path("data/mentorship/ES_5min_db.csv").exists():
+        return
+    es = B.load("ES", 5, source="databento")
+    es = es[(es.index >= "2024-01-01") & (es.index < "2024-05-01")]
+    p = Params(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, leg_pd=0,
+               ep07_stop=True, ep07_body_exit=True, ep07_trail=True, htf_far_edge=True, ce_hold=True)
+    full = B.run(es, 5, "ES", p)
+    assert len(full) > 2
+    cols = ["entry_time", "entry", "stop", "t1"]
+    for cut_t in full.entry_time.iloc[::4]:
+        c = cut_t + pd.Timedelta(minutes=2)
+        part = B.run(es[es.index <= c], 5, "ES", p, partial_last=True)
+        a = full[full.entry_time <= c][cols].reset_index(drop=True)
+        b = part[part.entry_time <= c][cols].reset_index(drop=True)
+        pd.testing.assert_frame_equal(a, b)
