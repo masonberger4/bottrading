@@ -268,3 +268,22 @@ def test_no_look_ahead_smt_htf_targets_sb_topdown():
         a = full[full.entry_time <= c][cols].reset_index(drop=True)
         b = part[part.entry_time <= c][cols].reset_index(drop=True)
         pd.testing.assert_frame_equal(a, b)
+
+
+def test_no_look_ahead_day_templates_and_exits():
+    from pathlib import Path
+    if not Path("data/mentorship/ES_5min_db.csv").exists():
+        return
+    es = B.load("ES", 5, source="databento")
+    es = es[(es.index >= "2024-02-01") & (es.index < "2024-06-01")]
+    p = Params(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, leg_pd=0, min_draw_pts=0,
+               neutral_skip=True, three_day_rule=True, tgif=True, pd3_exit=True, sd_targets=True)
+    full = B.run(es, 5, "ES", p)
+    assert len(full) > 2
+    cols = ["entry_time", "entry", "stop", "t1", "day_tags", "judas", "dxy", "tnx"]
+    for cut_t in full.entry_time.iloc[::3]:
+        c = cut_t + pd.Timedelta(minutes=2)
+        part = B.run(es[es.index <= c], 5, "ES", p, partial_last=True)
+        a = full[full.entry_time <= c][cols].reset_index(drop=True)
+        b = part[part.entry_time <= c][cols].reset_index(drop=True)
+        pd.testing.assert_frame_equal(a, b)

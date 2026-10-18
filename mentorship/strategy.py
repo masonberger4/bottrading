@@ -140,8 +140,13 @@ class Params:
                                    # settlement (7 videos), 960 = 16:00 (3 videos; SPY's close)
     or_minutes: int = 30           # opening range 09:30-10:00 (2023 videos); 60 = CC's 09:30-10:30;
                                    # its high/low are AM sweep pools and targets once complete; 0 off
-    htf_targets: tuple = ()        # e.g. ("15m", "1h", "4h", "D"): opposing FVGs / OBs / gaps on
+    htf_targets: tuple = ("15m", "1h", "4h", "D")   # opposing FVGs / OBs / gaps on these
                                    # those timeframes as targets, near edge then CE (L9, P2)
+    neutral_skip: bool = False     # B17/N8: skip the day after a range > 2x the 5-day average
+    three_day_rule: bool = False   # B11: after 3 same-direction daily closes, not that direction on day 4
+    tgif: bool = False             # M14: on Fridays after a one-way week, only the retrace direction
+    pd3_exit: bool = False         # X: out once bodies close through 3 PD arrays (FVGs) against the trade
+    sd_first_beyond: bool = True   # L12: with sd_targets, only the first SD level beyond the nearest pool
     topdown: tuple = ()            # e.g. ("D", "4h", "1h", "15m"): structure on these timeframes
     topdown_min: int = 0           # must agree with the trade on at least this many (0 = all)
     sb_setup: bool = False         # Silver Bullet as its own setup: one more trade inside each SB
@@ -244,6 +249,10 @@ class Trade:
     propulsion: bool = False       # a propulsion block sits under the entry
     macro_win: str = ""            # ICT macro window at arming time
     td_agree: int | None = None    # of D/4h/1h/15m, how many have structure in the trade's direction
+    day_tags: str = ""             # inside_day / big_prev / three_up / three_down / tgif_long|short
+    judas: bool = False            # the sweep was the session's first move against the trade (PO3)
+    dxy: int = 0                   # DXY daily trend (close vs 20-day mean, prior day): +1 / -1
+    tnx: int = 0                   # 10-year yield daily trend, same way
     smt2: bool | None = None       # second sister index (YM)
     smt_n: int = 0                 # sister indices that did not confirm the sweep
 
@@ -485,7 +494,11 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
         lv.append((sd.x(ctx.wick["upper"] if sd.sign > 0 else ctx.wick["lower"]), "array"))
     if p.sd_targets and leg is not None:
         lo, hi = leg
-        lv += [(hi + k * (hi - lo), "array") for k in p.sd_levels]
+        sds = [hi + k * (hi - lo) for k in p.sd_levels]
+        if p.sd_first_beyond:              # only the first SD level beyond the nearest pool (014/030)
+            pool = min((v for v, kind in lv if kind == "pool" and v > above), default=None)
+            sds = [min((x for x in sds if x > pool), default=None)] if pool is not None else []
+        lv += [(x, "array") for x in sds if x is not None]
     out = []
     for v, kind in sorted(x for x in set(lv) if x[0] > above):   # merge levels within ~1 ES point
         if not out or v - out[-1][0] > p.es_pt:
@@ -526,6 +539,59 @@ def _after_close(pos, trades, p, done, state):
     return lost
 
 
+def day_context(hist: list[pd.DataFrame], day) -> tuple[set, dict]:
+    """Daily-candle context from the prior regular sessions (B11, B17, N8, M14):
+      big_prev     yesterday's range > 2x the average of the 5 days before it
+      inside_day   yesterday inside the day before
+      three_up/down  the last 3 closes each above / below the previous close -> day 4 not that way
+      tgif_long/short  Friday after a week whose Mon-Thu range is >= 1.5x the average of the
+                   prior weeks and whose Thursday close is in the top / bottom quarter of it:
+                   only the retrace (short / long) is allowed"""
+    tags, block = set(), {}
+    if len(hist) < 7:
+        return tags, block
+    rng = [float(x.high.max() - x.low.min()) for x in hist]
+    cl = [float(x.close.iloc[-1]) for x in hist]
+    if rng[-1] > 2 * np.mean(rng[-6:-1]):
+        tags.add("big_prev")
+    if hist[-1].high.max() < hist[-2].high.max() and hist[-1].low.min() > hist[-2].low.min():
+        tags.add("inside_day")
+    d = np.sign(np.diff(cl[-4:]))
+    if len(d) == 3 and abs(d.sum()) == 3:
+        tags.add("three_up" if d[0] > 0 else "three_down")
+        block["three"] = (int(d[0]),)
+    if day.weekday() == 4:
+        mon = day - timedelta(days=4)
+        wk = [x for x in hist if x.index[0].date() >= mon]
+        prior = {}
+        for x in hist:
+            k = x.index[0].date().isocalendar()[:2]
+            if x.index[0].date() < mon:
+                prior.setdefault(k, []).append(x)
+        if wk and len(prior) >= 2:
+            hi, lo = max(float(x.high.max()) for x in wk), min(float(x.low.min()) for x in wk)
+            avg = np.mean([max(float(x.high.max()) for x in v) - min(float(x.low.min()) for x in v)
+                           for v in prior.values()])
+            c = float(wk[-1].close.iloc[-1])
+            if hi - lo >= 1.5 * avg:
+                if c >= hi - 0.25 * (hi - lo):
+                    tags.add("tgif_short"); block["tgif"] = (1,)
+                elif c <= lo + 0.25 * (hi - lo):
+                    tags.add("tgif_long"); block["tgif"] = (-1,)
+    return tags, block
+
+
+def _judas(ctx, sd, sw, session) -> bool:
+    """Power of three: the sweep was the session's opening move against the trade - its
+    extreme came within the first hour of the session and beyond the session's reference open
+    (midnight for the AM, 13:30 for the PM)."""
+    t0 = 570 if session == "AM" else 810
+    ref = ctx.opens.get("midnight" if session == "AM" else "1330")
+    if ref is None:
+        return False
+    return bool(t0 <= ctx.t[sw["ext_i"]] < t0 + 60 and sw["ext"] < sd.x(ref))
+
+
 def _in_sb(t: int, p: Params) -> bool:
     return any(a <= t < b for a, b in p.sb_windows)
 
@@ -535,7 +601,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             log: list | None = None, live: bool = False, bias: dict | None = None,
             conf=None, gaps: list | None = None, closes: dict | None = None,
             evening: pd.DataFrame | None = None,
-            partner2: tuple[pd.DataFrame, list[pd.DataFrame]] | None = None) -> list[Trade]:
+            partner2: tuple[pd.DataFrame, list[pd.DataFrame]] | None = None,
+            intermarket: dict | None = None) -> list[Trade]:
     """Trades for one day. With `live`, a position still open at the last bar is returned
     with no exit (exit_reason "open") instead of being closed at the last price."""
     day = df.index[0].date()
@@ -558,6 +625,11 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                         pd.Series(np.arange(len(c2.idx)), index=c2.idx))
     tags = events(day)
     am_start = 600 if tags & NEWS_1000 else p.am[0]
+    dt, block_side = day_context(hist, day)
+    if p.neutral_skip and "big_prev" in dt:
+        return []
+    ctx.day_tags = "|".join(sorted(dt))
+    ctx.intermarket = intermarket or {}
     trades: list[Trade] = []
     done = {"AM": False, "PM": False}
     state = {"reentered": {}}
@@ -607,6 +679,12 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                     tr.exits.append((ts, sd.x(min(o, pos["abort"])), pos["left"], "abort")); pos["left"] = 0
                 elif max(o, c) < pos["fvg_bottom"] and i > pos["fill_i"]:
                     pos["abort"] = l                  # body closed below the gap: arm the abort
+            if pos["left"] and p.pd3_exit:
+                for g in sd.gaps:
+                    if g.i < i and g.i >= pos["ext_i"] and g.i not in pos["broken"] and c < g.bottom:
+                        pos["broken"].add(g.i)
+                if len(pos["broken"]) >= 3:
+                    tr.exits.append((ts, sd.x(c), pos["left"], "pd3")); pos["left"] = 0
             if pos["left"]:
                 pos["best"] = max(pos["best"], h)
                 if (p.time_stop_min and not pos["t1_done"] and (t + tf) - pos["fill_t"] >= p.time_stop_min
@@ -661,12 +739,13 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                            conf_n=o["conf_n"], conf_top=o["conf_top"], conf_tfs=o["conf_tfs"],
                            entry_kind=o["entry_kind"], mitigation=o["mitigation"],
                            smt2=o["smt2"], smt_n=o["smt_n"], macro_win=o["macro_win"],
-                           td_agree=o["td_agree"],
+                           td_agree=o["td_agree"], day_tags=ctx.day_tags, judas=o["judas"],
+                           dxy=int(ctx.intermarket.get("dxy", 0)), tnx=int(ctx.intermarket.get("tnx", 0)),
                            propulsion=o["propulsion"], **btag)
                 pos = dict(trade=tr, side=sd, stop=o["stop"], t1=o["t1"], t2=o["t2"],
                            left=o["shares"], n=o["shares"], basis=fill * o["shares"],
                            t1_done=False, fill_i=i, fill_t=t, add=None, fvg_bottom=o["fvg_bottom"],
-                           abort=None, best=fill)
+                           abort=None, best=fill, ext_i=o["ext_i"], broken=set())
                 done[o.get("done_key", o["session"])] = True
                 pending = None
                 if sd.l[i] <= pos["stop"]:           # same-bar stop (conservative)
@@ -695,6 +774,10 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             if p.weekly_bias and ctx.wbias == -sd.sign:
                 continue
             if want and want != sd.sign:
+                continue
+            if p.three_day_rule and sd.sign in block_side.get("three", ()):
+                continue
+            if p.tgif and sd.sign in block_side.get("tgif", ()):
                 continue
             o_ = _scan(ctx, sd, i, p, session, w0, pctx, psides, ppos,
                        0.5 if state["reentered"].get(session) else 1.0)
@@ -926,6 +1009,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
                 conf_tfs="|".join(cf or []), entry_kind="ifvg" if is_ifvg else "fvg",
                 mitigation=bool(mit), propulsion=bool(prop),
                 macro=bool(p.macro[0] <= t < p.macro[1]), td_agree=td,
+                judas=_judas(ctx, sd, sw, session),
                 macro_win=next((f"{a // 60:02d}{a % 60:02d}" for a, b in MACROS if a <= t < b), ""))
 
 

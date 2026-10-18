@@ -101,7 +101,7 @@ def rth(g: pd.DataFrame) -> pd.DataFrame:
 def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
         partner: pd.DataFrame | None = None, warmup: int = 3, partial_last: bool = False,
         bias_table: pd.DataFrame | None = None, confluence: bool = True,
-        partner2: pd.DataFrame | None = None) -> pd.DataFrame:
+        partner2: pd.DataFrame | None = None, intermarket: dict | None = None) -> pd.DataFrame:
     p = p or Params()
     bt = bias_table if bias_table is not None else (htf.table(df, p.es_pt) if htf.has_overnight(df) else None)
     og = htf.opening_gaps(df, p.es_pt) if htf.has_overnight(df) else None
@@ -133,7 +133,7 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             day_trades = run_day(g, [rth(x) for x in ds[max(0, k - 21):k]], symbol, p, tf, pa, bias=b, conf=cf,
                                  gaps=htf.gaps_for_day(og, d) if og is not None else None,
                                  closes=closes, evening=_evening(df, d) if p.globex_pool else None,
-                                 partner2=pa2)
+                                 partner2=pa2, intermarket=(intermarket or INTERMARKET()).get(d))
             if p.max_trades_week:
                 day_trades = day_trades[:p.max_trades_week - n_wk]
             for tr in day_trades:
@@ -146,6 +146,34 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     if len(out):
         out.attrs["days"] = len(ds) - warmup
     return out
+
+
+_IM = None
+
+
+def INTERMARKET() -> dict:
+    """date -> {"dxy": +1/-1, "tnx": +1/-1}: the prior day's close vs its 20-day mean for the
+    dollar index and the 10-year yield (free Yahoo daily data, data/mentorship/yahoo)."""
+    global _IM
+    if _IM is None:
+        _IM = {}
+        y = DATA / "yahoo"
+        cols = {}
+        for n in ("DXY", "TNX"):
+            f = y / f"{n}_1d.csv"
+            if f.exists():
+                s = pd.read_csv(f, index_col=0).iloc[:, :]
+                s.columns = [c.lower() for c in s.columns]
+                c = pd.to_numeric(s["close"], errors="coerce")
+                c.index = pd.to_datetime(c.index.str[:10])
+                cols[n.lower()] = np.sign(c - c.rolling(20).mean()).shift(1)   # prior day only
+        if cols:
+            t = pd.DataFrame(cols).dropna(how="all")
+            full = pd.date_range(t.index[0], t.index[-1] + pd.Timedelta(days=3))
+            t = t.reindex(full).ffill()
+            _IM = {k.date(): {c: (0 if pd.isna(v) else int(v)) for c, v in r.items()}
+                   for k, r in t.iterrows()}
+    return _IM
 
 
 def _evening(df: pd.DataFrame, d) -> pd.DataFrame:
