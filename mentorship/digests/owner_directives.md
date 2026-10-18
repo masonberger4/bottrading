@@ -29,8 +29,13 @@ captions (2026-10-18) plus earlier owner decisions in this project.
    dealing range to form, then trades from it (no fixed minute count).
 5. Bearish unicorn as well as bullish (check both directions are detected and tagged).
 6. Mean-threshold respect belongs on the BREAKER, not the order block (Ep 02).
-7. In Ep 02 the overhead 15m FVG is RESISTANCE, not a target: an unbroken opposing HTF FVG caps the
-   trade (exit before it / no target beyond it).
+7. [REVISED 2026-10-18 - narrower than first built] In Ep 02 the 15m FVG sat above price on a SHORT:
+   it was the entry zone and the resistance price respected on the retrace; the rulebook wrongly
+   listed it as a target. So: an FVG BEHIND the trade (one price has already traded through) is
+   resistance/support and an ADD zone, never a target. An opposing FVG BETWEEN price and the draw
+   is ICT's "speed bump": DEFAULT = take a partial at it and keep the rest for the draw (b). The
+   cap (exit before it, no target beyond - the first build of #7) and the timeframe split (cap on
+   1h+, speed bump on 15m and lower) stay as switches.
 8. "Tighten or close" before noon means CLOSE (Ep 03).
 9. Mark up levels and LOCK the session's draw before it opens; name ONE exact target and trade only
    toward it.
