@@ -226,3 +226,24 @@ def test_no_look_ahead_with_new_arrays_on():
         a = full[full.entry_time <= c][cols].reset_index(drop=True)
         b = part[part.entry_time <= c][cols].reset_index(drop=True)
         pd.testing.assert_frame_equal(a, b)
+
+
+def test_no_look_ahead_with_5m_entries_on_1m():
+    from pathlib import Path
+    if not Path("data/mentorship/ES_1min_db.csv").exists():
+        return
+    df = B.load("ES", 1, source="databento")
+    df = df[(df.index >= "2024-05-01") & (df.index < "2024-07-01")]
+    for et in ("5m", "nested"):
+        p = Params(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, leg_pd=0,
+                   min_draw_pts=0, entry_tf=et)
+        full = B.run(df, 1, "ES", p)
+        assert len(full) > 0
+        cols = ["entry_time", "entry", "stop", "t1"]
+        for cut in full.entry_time.iloc[::3]:
+            for lag in (2, 3, 4):          # cut inside a 5-minute bucket too
+                c = cut + pd.Timedelta(minutes=lag)
+                part = B.run(df[df.index <= c], 1, "ES", p, partial_last=True)
+                a = full[full.entry_time <= cut][cols].reset_index(drop=True)
+                b = part[part.entry_time <= cut][cols].reset_index(drop=True)
+                pd.testing.assert_frame_equal(a, b)

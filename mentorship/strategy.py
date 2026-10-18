@@ -76,6 +76,10 @@ class Params:
     stop_mode: str = "ob_mt"       # "ob_mt" or "fvg"
     stop_buffer: float = 0.01
     fvg_wait: int = 2              # bars after the structure break to wait for an FVG
+    entry_tf: str = "1m"           # run on 1m bars, enter in: "1m" a 1m FVG; "5m" a 5m FVG (or the
+                                   # 5m order block behind it) once the 1m shifts (Ep 03 / Ep 08);
+                                   # "nested" a 1m FVG inside a 5m FVG or 5m order block (Ep 01)
+    setup_minutes: int = 5         # the higher timeframe used by entry_tf "5m" / "nested"
     pending_minutes: int = 30
     am: tuple = (570, 660)         # 09:30-11:00
     pm: tuple = (810, 950)         # 13:30-15:50 (no new entries after 15:50)
@@ -224,7 +228,7 @@ class Trade:
     conf_n: int | None = None
     conf_top: str = ""
     conf_tfs: str = ""
-    entry_kind: str = "fvg"        # fvg / ifvg
+    entry_kind: str = "fvg"        # fvg / ifvg / 5m entry modes keep "fvg"
     mitigation: bool = False       # entry gap overlaps a mitigation block
     propulsion: bool = False       # a propulsion block sits under the entry
 
@@ -279,6 +283,36 @@ class Side:
         if self._mit is None:
             self._mit = [z for z in L.mitigation_blocks(self.o, self.h, self.l, self.c, self.n) if z.kind == "bull"]
         return self._mit
+
+    def zones_tf(self, idx, base: int, m: int):
+        """Bullish FVGs and order blocks on m-minute bars built from these (side-space) bars,
+        as Zones in base-bar index terms: `i` = the base bar at whose close the m-minute bar
+        that completes the zone has closed, `src` = the first base bar of its middle candle
+        (FVG) or anchor candle (OB). Cached per m."""
+        cache = self.__dict__.setdefault("_tfc", {})
+        if m in cache:
+            return cache[m]
+        b = pd.Series(np.arange(len(idx)), index=idx).groupby(idx.floor(f"{m}min"))
+        first, last = b.min().values, b.max().values
+        start = b.min().index
+        # a bucket counts only once its last base bar is in (else a partial bar at the end of
+        # live data would complete a zone early)
+        done = (idx[last] - start) >= pd.Timedelta(minutes=m - base)
+        o = np.array([self.o[a] for a in first]); c = np.array([self.c[z] for z in last])
+        hh = np.array([self.h[a:z + 1].max() for a, z in zip(first, last)])
+        ll = np.array([self.l[a:z + 1].min() for a, z in zip(first, last)])
+        out = []
+        for z in L.fvgs(hh, ll):
+            if z.kind != "bull" or z.top - z.bottom < self.min_gap:
+                continue
+            if not done[z.i]:
+                continue
+            out.append(L.Zone("bull", z.top, z.bottom, int(last[z.i]), int(first[z.src])))
+            ob = L.order_block_blend(o, hh, ll, c, z.i - 4, z.i - 2, "bull")
+            if ob is not None and c[z.i - 1] > ob.top:
+                out.append(L.Zone("bull", ob.top, ob.bottom, int(last[z.i]), int(first[ob.src]), ob.mt))
+        cache[m] = out
+        return out
 
     def propulsions(self):
         if self._prop is None:
@@ -727,10 +761,22 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         else:
             return None
     gaps = [g for g in sd.gaps if g.i <= i and g.i - 2 >= sw["ext_i"]]
+    if p.entry_tf != "1m" and ctx.tf < p.setup_minutes:
+        z5 = sd.zones_tf(ctx.idx, ctx.tf, p.setup_minutes)
+        if p.entry_tf == "5m":       # the 5m gap / block the 1m shift points at (formed after
+            gaps = [z for z in z5 if z.i <= i and z.mt != z.mt   # the sweep: FVGs ...
+                    and z.src + p.setup_minutes // ctx.tf > sw["ext_i"]]
+            if not gaps:             # ... else the 5m order block at the low
+                gaps = [z for z in z5 if z.i <= i and z.mt == z.mt and z.bottom <= sw["ext"] + 1e-9
+                        and z.top > sw["ext"] and z.i >= sw["ext_i"]]
+        else:                        # nested: 1m FVG inside a live 5m FVG or 5m order block
+            live5 = [z for z in z5 if z.i <= i and c[z.i + 1:i + 1].min(initial=np.inf) >= z.bottom]
+            gaps = [g for g in gaps if any(g.overlaps(z) for z in live5)]
     if p.ifvg_entries:                 # bearish gaps inverted by the move up from the sweep
         gaps = sorted(gaps + [z for z in sd.ifvgs() if sw["ext_i"] < z.i <= i], key=lambda z: z.i)
     if not gaps:
-        if i - sw["broke"] >= p.fvg_wait:
+        wait = p.fvg_wait * (p.setup_minutes // ctx.tf if p.entry_tf == "5m" and ctx.tf < p.setup_minutes else 1)
+        if i - sw["broke"] >= wait:
             sd.sweep = None
             _f("x_no_fvg_after_mss")
         return None
@@ -756,7 +802,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
     pick = uni or fresh
     g = pick[-1] if p.fvg_pick == "last" else pick[0]
     entry = g.top if p.entry == "edge" else g.mid
-    is_ifvg = g not in sd.gaps
+    is_ifvg = p.ifvg_entries and g not in sd.gaps
     mit = any(z.i <= i and g.overlaps(z) for z in sd.mitigations()) if p.tag_blocks else False
     prop = any(z.i <= i and z.bottom <= g.top and z.top >= sw["ext"] for z in sd.propulsions()) if p.tag_blocks else False
     # order block: the blended last down-close candle(s) before the structure break (A12)
