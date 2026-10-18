@@ -89,7 +89,7 @@ def days(df: pd.DataFrame, tf: int, partial_last: bool = False) -> list[pd.DataF
         rth = g[tt >= 570]
         if len(rth) >= 0.9 * 390 / tf and (rth.index[-1].hour * 60 + rth.index[-1].minute) >= 960 - tf:
             out.append(g)
-        elif partial_last and k == len(groups) - 1 and len(rth):
+        elif partial_last and k == len(groups) - 1 and len(g):     # live: today so far, pre-open too
             out.append(g)
     return out
 

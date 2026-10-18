@@ -165,6 +165,15 @@ class Params:
     sd_first_beyond: bool = True   # L12: with sd_targets, only the first SD level beyond the nearest pool
     topdown: tuple = ()            # e.g. ("D", "4h", "1h", "15m"): structure on these timeframes
     topdown_min: int = 0           # must agree with the trade on at least this many (0 = all)
+    # pre-09:30 setups (test-only switches; mentorship/digests/pre_open_entries.md)
+    pre_0700: bool = False         # 07:00-08:30 window (022, 032, 099), same model; flat before an
+                                   # 08:30 release (pre_flat_0830)
+    pre_flat_0830: bool = True
+    pre_0900: bool = False         # 09:00-09:29 entries, any day (018, 056, 100)
+    post_news: bool = False        # 08:30 release days: wait 30 min (065), then 09:00-09:29 entries
+                                   # off the 08:30-09:00 range's high/low
+    ma_deuce: bool = False         # 091: daily BISI premium + 1m FVG inverted before 08:00 ->
+                                   # sell the retest 08:00-08:30 toward the BISI CE (and mirror)
     sb_model: bool = True          # ICT's Silver Bullet as its own setup (sb_model.py)
     sb_room_pts: float = 5.0       # draw at least this far (10 new traders, 5 experienced; 046)
     sb_target_pts: float = 5.0     # take ~5 ES handles (or the draw if nearer)
@@ -417,6 +426,14 @@ class DayCtx:
             pre = pd.concat([evening, pre])           # globex: from the prior 18:00 reopen
         if len(pre):
             self.pd["pmh"], self.pd["pml"] = float(pre.high.max()), float(pre.low.min())
+        # the same overnight range as known at an earlier session start (no look-ahead)
+        self.pre_at = {}
+        for m in (420, 540):
+            q = pre[(pre.index.hour * 60 + pre.index.minute < m) | (pre.index.date < df.index[0].date())]
+            if len(q):
+                self.pre_at[m] = (float(q.high.max()), float(q.low.min()))
+        nr = df[(tt >= 510) & (tt < 540)]          # 08:30-09:00 news range
+        self.news_hl = (float(nr.high.max()), float(nr.low.min())) if len(nr) else None
         am = df[(tt >= 570) & (tt < 810)]
         self.am_hl = (float(am.high.max()), float(am.low.min())) if len(am) else None
         # session pools (067): London 02:00-05:00 and prior PM 13:30-16:00 for the AM; lunch
@@ -450,12 +467,14 @@ class DayCtx:
         self.nwog = self.nwog[-4:]
         # opening range gaps: each day's prior RTH close -> its 09:30 open (today's included)
         self.org = []
+        self.org_today = False                 # True when the last ORG is today's (09:30-based)
         seq = hist[-6:] + [df]
         for a, b in zip(seq[:-1], seq[1:]):
             rth = b[(b.index.hour * 60 + b.index.minute) >= 570]
             if len(rth) and len(a):
                 pc = (closes or {}).get(a.index[0].date(), float(a.close.iloc[-1]))
                 self.org.append((float(pc), float(rth.open.iloc[0])))
+                self.org_today = b is df
         # opening range 09:30 -> 09:30 + or_minutes: high/low usable once it is complete
         self.or_end, self.or_hl = 570 + or_minutes, None
         orb = df[(tt >= 570) & (tt < 570 + or_minutes)] if or_minutes else df.iloc[:0]
@@ -501,8 +520,18 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
     "pool" (old highs, equal highs, session highs) or "array" (gaps, wick CE, projections).
     A pool already traded through today before the sweep (bars start..ext_i) is spent (L14);
     gap levels are never retired (039)."""
-    pdk = ("pdh1", "pdh2", "pdh3", "pmh") if sd.sign > 0 else ("pdl1", "pdl2", "pdl3", "pml")
+    pre_open = ctx.t[i] < 570
+    pdk = ("pdh1", "pdh2", "pdh3") if sd.sign > 0 else ("pdl1", "pdl2", "pdl3")
     pools = [sd.x(ctx.pd[k]) for k in pdk if k in ctx.pd] + list(eq)
+    if not pre_open:                        # the overnight range is complete only at 09:30
+        k = "pmh" if sd.sign > 0 else "pml"
+        if k in ctx.pd:
+            pools.append(sd.x(ctx.pd[k]))
+    else:                                   # pre-open sessions: the overnight range so far
+        m = max((m for m in ctx.pre_at if m <= ctx.t[i]), default=None)
+        if m is not None:
+            hi, lo = ctx.pre_at[m]
+            pools.append(sd.x(hi if sd.sign > 0 else lo))
     if p.extra_pools:
         for name, (hi, lo, ready) in ctx.sess.items():
             if name != "lunch" or ctx.t[i] >= ready:
@@ -526,7 +555,8 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
         for a, b in ctx.nwog:
             lv += [(sd.x(a), "array"), (sd.x(b), "array")]
     if p.org_days:
-        for a, b in ctx.org[-p.org_days:]:
+        orgs = ctx.org[:-1] if (pre_open and ctx.org_today) else ctx.org
+        for a, b in orgs[-p.org_days:]:
             lv += [(sd.x(a + q * (b - a)), "array") for q in (0.0, 0.25, 0.5, 0.75, 1.0)]
     if p.wick_levels:
         lv.append((sd.x(ctx.wick["upper"] if sd.sign > 0 else ctx.wick["lower"]), "array"))
@@ -682,7 +712,14 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
     ctx.day_tags = "|".join(sorted(dt))
     ctx.intermarket = intermarket or {}
     trades: list[Trade] = []
-    done = {"AM": False, "PM": False}
+    done = {"AM": False, "PM": False, "PRE7": False, "PRE9": False, "NEWS": False}
+    pre_windows = []
+    if p.pre_0700:
+        pre_windows.append(("PRE7", 420, 510))
+    if p.post_news and news(day) == "0830":
+        pre_windows.append(("NEWS", 540, 570))
+    if p.pre_0900:
+        pre_windows.append(("PRE9", 540, 570))
     state = {"reentered": {}}
     pending = None    # dict with order details
     pos = None        # open Trade + live stop / remaining shares
@@ -749,7 +786,10 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 if (p.time_stop_min and not pos["t1_done"] and (t + tf) - pos["fill_t"] >= p.time_stop_min
                         and pos["best"] - pos["basis"] / pos["n"] < p.time_stop_pts * p.es_pt):
                     tr.exits.append((ts, sd.x(c), pos["left"], "time")); pos["left"] = 0
-            if pos["left"] and tr.session == "AM" and p.am_exit and t + tf >= p.am_exit:
+            if (pos["left"] and tr.session == "PRE7" and p.pre_flat_0830 and news(day) == "0830"
+                    and t + tf >= 510):
+                tr.exits.append((ts, sd.x(c), pos["left"], "pre_0830")); pos["left"] = 0
+            if pos["left"] and tr.session != "PM" and p.am_exit and t + tf >= p.am_exit:
                 tr.exits.append((ts, sd.x(c), pos["left"], "am_exit")); pos["left"] = 0
             if pos["left"] and tr.session == "PM" and p.pm_done_by and pos["t1_done"] and t + tf >= p.pm_done_by:
                 tr.exits.append((ts, sd.x(c), pos["left"], "pm_done")); pos["left"] = 0
@@ -773,7 +813,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         # --- 2. pending limit order
         if pending is not None:
             sd = pending["side"]
-            cut = p.am[1] if pending["session"] == "AM" else p.pm[1]
+            cut = {"AM": p.am[1], "PM": p.pm[1], "PRE7": 510, "PRE9": 570, "NEWS": 570}[pending["session"]]
             if pending.get("done_key", "").startswith("SB_"):
                 cut = p.sb_windows[0][1] if pending["session"] == "AM" else p.sb_windows[1][1]
             if p.sb_only:                               # fills only inside the session's SB window
@@ -813,12 +853,18 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                     lost_side = _after_close(pos, trades, p, done, state) or lost_side
                     pos = None
         # --- 3. setup detection on the closed bar
-        if p.am[0] <= t < p.am[1]:
-            session, w0 = "AM", am_start
-        elif p.pm[0] <= t < p.pm[1]:
-            session, w0 = "PM", p.pm[0]
-        else:
-            continue
+        session = None
+        for name, a_, b_ in pre_windows:
+            if a_ <= t < b_ and not done.get(name):
+                session, w0 = name, a_
+                break
+        if session is None:
+            if p.am[0] <= t < p.am[1]:
+                session, w0 = "AM", am_start
+            elif p.pm[0] <= t < p.pm[1]:
+                session, w0 = "PM", p.pm[0]
+            else:
+                continue
         done_key = session
         if done[session] and p.sb_setup and _in_sb(t, p):
             done_key = "SB_" + session                # the Silver Bullet window's own trade
@@ -848,6 +894,9 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 if log is not None:
                     log.append((ts, symbol, session, sname, o_["swept"], sd.x(o_["entry"]),
                                 sd.x(o_["stop"]), sd.x(o_["t1"])))
+    if p.ma_deuce:
+        from .pre_open import run_ma_deuce
+        trades += run_ma_deuce(ctx, hist, p, day, symbol, btag)
     if p.sb_model:
         from .sb_model import run_sb
         trades += run_sb(ctx, sides, p, day, symbol, blocked, btag)
@@ -863,6 +912,18 @@ def _sell_side(ctx: DayCtx, sd: Side, session: str, i: int | None = None,
                extra: bool = False, p: "Params | None" = None) -> dict[str, float]:
     keys = ("pdl1", "pdl2", "pdl3") if sd.sign > 0 else ("pdh1", "pdh2", "pdh3")
     out = {k: sd.x(ctx.pd[k]) for k in keys if k in ctx.pd}
+    if session in ("PRE7", "PRE9", "NEWS"):
+        m = 420 if session == "PRE7" else 540
+        if m in ctx.pre_at:
+            hi, lo = ctx.pre_at[m]
+            out["overnight"] = sd.x(lo if sd.sign > 0 else hi)
+        for name in ("london", "prev_pm"):
+            if name in ctx.sess:
+                hi, lo, _ = ctx.sess[name]
+                out[name] = sd.x(lo if sd.sign > 0 else hi)
+        if session == "NEWS" and ctx.news_hl is not None:
+            out["news_range"] = sd.x(ctx.news_hl[1] if sd.sign > 0 else ctx.news_hl[0])
+        return out
     if p is not None:
         for name, on, hl in (("pwl", p.pool_prev_week, ctx.pw), ("pml_month", p.pool_prev_month, ctx.pm_)):
             if on and hl is not None:
@@ -906,6 +967,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
     created = ctx.start if session == "AM" else ctx.start + int(np.searchsorted(ctx.t[ctx.start:], 810))
     or_made = ctx.start + int(np.searchsorted(ctx.t[ctx.start:], ctx.or_end))
     lon_made = ctx.start + int(np.searchsorted(ctx.t[ctx.start:], 300))
+    news_made = ctx.start + int(np.searchsorted(ctx.t[ctx.start:], 540))
     for k, eq in enumerate(_eq_levels(sd, i - 1, tol, lows=True)):
         lv[f"rel_eq_lows{k}"] = eq
     sw = sd.sweep
@@ -914,7 +976,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
 
     def intact(k, v):   # not traded through between the level's creation and bar i-1
         a = {"am_session": created, "lunch": created, "opening_range": or_made,
-             "london": lon_made}.get(k, ctx.start)
+             "london": lon_made, "news_range": news_made}.get(k, ctx.start)
         return k.startswith("rel_eq") or i <= a or l[a:i].min() >= v
     hit = [(k, v) for k, v in lv.items() if l[i] < v and intact(k, v)]
     if sw is None and hit:
@@ -1009,7 +1071,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         _f("x_risk_too_small" if risk < p.min_risk_pts * p.es_pt else "x_risk_too_big")
         return None
     if p.use_bias:
-        ref_open = ctx.opens.get("midnight" if session == "AM" else "1330")
+        ref_open = ctx.opens.get("1330" if session == "PM" else "midnight")
         if ref_open is not None and not entry < sd.x(ref_open):
             _f("x_wrong_side_of_open")
             return None
@@ -1075,7 +1137,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         return None
     _f("4_order")
     t = ctx.t[i]
-    setup = "am_mm" if session == "AM" else ("pm_last_hour" if p.last_hour[0] <= t < p.last_hour[1]
+    setup = "am_mm" if session == "AM" else session.lower() if session != "PM" else ("pm_last_hour" if p.last_hour[0] <= t < p.last_hour[1]
                                               else "pm_sb" if 840 <= t < 900 else "pm")
     return dict(side=sd, session=session, setup=setup, swept=sw["name"], unicorn=bool(uni),
                 smt=sw["smt"], smt2=sw.get("smt2"), smt_n=smt_n,

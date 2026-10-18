@@ -345,3 +345,24 @@ def test_ep07_switches_no_look_ahead():
         a = full[full.entry_time <= c][cols].reset_index(drop=True)
         b = part[part.entry_time <= c][cols].reset_index(drop=True)
         pd.testing.assert_frame_equal(a, b)
+
+
+def test_pre_open_switches_no_look_ahead():
+    from pathlib import Path
+    if not Path("data/mentorship/ES_1min_db.csv").exists():
+        return
+    es = B.load("ES", 1, source="databento")
+    es = es[(es.index >= "2022-01-01") & (es.index < "2022-04-15")]
+    p = Params(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, sb_model=False, am=(0, 0), pm=(0, 0),
+               pre_0700=True, pre_0900=True, post_news=True, ma_deuce=True, leg_pd=0)
+    full = B.run(es, 1, "ES", p, confluence=False)
+    assert len(full) > 2
+    cols = ["entry_time", "entry", "stop", "t1", "setup"]
+    for cut_t in full.entry_time.iloc[::2]:
+        c = cut_t + pd.Timedelta(minutes=1)
+        part = B.run(es[es.index <= c], 1, "ES", p, partial_last=True, confluence=False)
+        a = full[full.entry_time <= cut_t][cols].reset_index(drop=True)
+        assert len(part) >= len(a), (cut_t, len(part), len(a))
+        a = a.sort_values(["entry_time", "setup"]).reset_index(drop=True)
+        b = part[part.entry_time <= cut_t][cols].sort_values(["entry_time", "setup"]).reset_index(drop=True)
+        pd.testing.assert_frame_equal(a, b)
