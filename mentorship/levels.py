@@ -382,12 +382,13 @@ def rejection_blocks(o, h, l, c, n: int = 2) -> list[Zone]:
     return sorted(out, key=lambda z: z.i)
 
 
-def balanced_ranges(h, l, max_gap_bars: int = 0) -> list[Zone]:
+def balanced_ranges(h, l, max_gap_bars: int = 0, o=None, c=None, c2_dir: bool = False) -> list[Zone]:
     """Balanced price range: where a bullish and a bearish FVG overlap, price has been
     delivered both ways. Kind follows the later gap; known when the later gap forms.
     A11 `max_gap_bars` (Params.bpr_max_gap_bars): the two gaps must form within this many bars of
-    each other [our interpretation: one delivery up and back]; 0 = any pair (the old rule)."""
-    g = fvgs(h, l)
+    each other [our interpretation: one delivery up and back]; 0 = any pair (the old rule).
+    o / c / c2_dir (review fix): the gaps follow the same A5 c2 rule as every other FVG."""
+    g = fvgs(h, l, o, c, c2_dir)
     out = []
     for k, b in enumerate(g):
         for a in g[:k]:

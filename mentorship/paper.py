@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import time
+import warnings
 from datetime import datetime
 from pathlib import Path
 
@@ -13,10 +14,32 @@ from . import backtest as B
 from .strategy import Params, run_day
 
 
+SCHWAB_1M_DAYS = 48        # Schwab keeps roughly 48 calendar days of 1-minute bars
+
+
+def history_days(minutes: int) -> int:
+    """Calendar days to fetch (review fix): at least backtest.HIST_DAYS + 1 sessions, like the
+    backtest (IPDA 40/60, ipda_eq_day, org_days > 5); 1-minute bars are capped by Schwab."""
+    need = (B.HIST_DAYS + 1) * 7 // 5 + 10              # sessions -> calendar days, with holidays
+    return min(need, SCHWAB_1M_DAYS) if minutes == 1 else need
+
+
+def short_history(n_prior: int, p: Params) -> str | None:
+    """A warning when the prior sessions are too few for a long-history switch (paper vs backtest)."""
+    need = 0
+    if p.ipda_pools or p.ipda_next or p.ipda_eq_day != "off":
+        need = 60                                        # the 60-day range (and ipda_eq_day's three)
+    if p.org_days > 5:
+        need = max(need, p.org_days + 1)
+    if n_prior < min(need, B.HIST_DAYS):
+        return f"paper history has {n_prior} prior sessions; the ipda / org_days switches need {need}"
+    return None
+
+
 def snapshot(c, symbol: str, partner: str | None, minutes: int, p: Params):
     """Today's trades and armed setups from the bars closed so far (Schwab)."""
     from silver_bullet.data import schwab_history
-    days = 8 if minutes == 1 else 30
+    days = history_days(minutes)
     now = pd.Timestamp.now(tz=B.NY)
     df = schwab_history(c, symbol, days=days, minutes=minutes)
     q = schwab_history(c, partner, days=days, minutes=minutes) if partner else None
@@ -44,6 +67,9 @@ def evaluate(df: pd.DataFrame, symbol: str, minutes: int, p: Params, now: pd.Tim
     log: list = []
     locks: list = []
     kw = B.day_kwargs(pr, len(ds) - 1)
+    msg = short_history(len(kw["hist"]), pr.p)
+    if msg:
+        warnings.warn(msg)
     trades = run_day(partner=pa, log=log, live=True, locks=locks, **kw)
     return trades, log, locks
 

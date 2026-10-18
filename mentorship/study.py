@@ -205,7 +205,8 @@ CURRENT = dict(mt_mode="range", exit_mode="before", min_draw_pts=0.0, leg_pd=0.0
                breaker_mt_respect=False, breaker_mt_entry_floor=False,
                risk_dollars=1000.0, max_total_risk=2000.0, last_hour=(915, 945), flatten=960,
                sb_target_mode="fixed", price_frame="back_adjusted", round_pools=False,
-               seen_from_created=False, sweep_ticks=0.0, fvg_c2_dir=False, nwog_trading_days=False)
+               seen_from_created=False, sweep_ticks=0.0, fvg_c2_dir=False, nwog_trading_days=False,
+               breaker_ll=False, breaker_cand_to="ext")   # review fix: Ep01.6 defaults pinned back
 # the defaults just before the owner directives of 2026-10-18 (A/B baseline for the new defaults).
 # Bug fixes it can NOT undo (no switch, by design): the London-pool look-ahead (London 02:00-05:00
 # pools hidden before 05:00), the _split news-ahead holiday skip (N3.4), the M1.2 swing-low intact
@@ -218,7 +219,9 @@ PRE_OWNER = dict(ob_entry="post_mss", draw_lock="off", htf_resist_cap=False, new
                  seen_from_created=False, am_exit_extras=False,
                  # levels_detectors defaults that change the engine (A2 booking tick, A5 c2 check, L5 NWOG
                  # trading-day count): switched back so the golden window still reproduces 833350f
-                 sweep_ticks=0.0, fvg_c2_dir=False, nwog_trading_days=False)
+                 sweep_ticks=0.0, fvg_c2_dir=False, nwog_trading_days=False,
+                 # review fix (levels_detectors): Ep01.6 breaker lower low + L1 -> H candle are defaults now
+                 breaker_ll=False, breaker_cand_to="ext")
 LEGACY_1PCT_2PCT = dict(risk_dollars=1000.0, max_total_risk=2000.0)   # E8 / owner #12 preset
 DECISIONS = {
     "current": CURRENT,
@@ -426,7 +429,7 @@ DECISIONS = {
     "A1_mss_ref_itl": dict(ob_entry="post_mss", mss_ref="itl"),
     "A1_mss_ref_ltl": dict(ob_entry="post_mss", mss_ref="ltl"),
     "A1_mss_ref_itl_no_fallback": dict(ob_entry="post_mss", mss_ref="itl", mss_ref_fallback="none"),
-    "A1_mss_ref_fallback_highest": dict(mss_ref="itl", mss_ref_fallback="highest"),
+    "A1_mss_ref_fallback_highest": dict(ob_entry="post_mss", mss_ref="itl", mss_ref_fallback="highest"),
     "A2_sweep_ticks_off": dict(sweep_ticks=0.0),
     "A2_sweep_ticks_2": dict(sweep_ticks=2.0),
     "A2_pool_swings": dict(pool_swings=True),
@@ -516,6 +519,27 @@ DECISIONS = {
     "Ep08.1_wick_react_tag": dict(wick_react="tag"),
     "Ep08.1_wick_react_require": dict(wick_react="require"),
     "Ep08.1_daily_fvg_exact": dict(daily_fvg_exact=True),
+    # --- review fixes to levels_detectors: new switches, old defaults, interpretive thresholds ------
+    "B21_ipda_session_rth": dict(ipda_pools=True, ipda_session="rth"),
+    "L2_daily_needs_array_any_tf": dict(daily_level_needs_array=True,
+                                        daily_level_array_tfs=("1m", "5m", "15m", "30m", "1h", "4h", "D", "W", "M")),
+    "A13.1_breaker_ll_off": dict(ob_entry="both", breaker_ll=False),
+    "Ep01.6_breaker_cand_ext": dict(ob_entry="both", breaker_cand_to="ext"),
+    "A15_legacy_order": dict(mit_targets=True, mit_legacy_order=True),
+    "L7_org_half_draw_lock": dict(org_half_draw=True),
+    "A9_vi_htf_draw_lock": dict(vi_arrays=True, vi_htf_draw=True),
+    "B21_ipda_eq_frac_010": dict(ipda_eq_day="tag", ipda_eq_frac=0.10),
+    "B21_ipda_eq_frac_025": dict(ipda_eq_day="tag", ipda_eq_frac=0.25),
+    "B21_ipda_eq_days_20": dict(ipda_eq_day="tag", ipda_eq_days=20),
+    "A5_fvg_quad_min_8": dict(fvg_quadrants=True, fvg_quad_min_pts=8.0),
+    "A5_fvg_pool_gap_2": dict(ob_entry="both", fvg_skip_above_pool=True, fvg_pool_gap_pts=2.0),
+    "B1_no_draw_adr_05": dict(no_draw=True, no_draw_adr=0.5),
+    "B1_no_draw_adr_15": dict(no_draw=True, no_draw_adr=1.5),
+    "L7_org_break_15": dict(org_draw="draw", org_break_min=15),
+    "L7_org_break_60": dict(org_draw="draw", org_break_min=60),
+    "L5_gap_run_tol_4": dict(gap_run_stop=True, gap_run_tol_pts=4.0),
+    "A11_bpr_targets_any_pair": dict(bpr_targets=True, bpr_max_gap_bars=0),
+    "A11_bpr_abort_gap12": dict(bpr_abort=True, bpr_max_gap_bars=12),
 }
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
 

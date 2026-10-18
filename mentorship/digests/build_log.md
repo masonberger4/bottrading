@@ -137,3 +137,44 @@ Limits worth knowing (all items built): the no-lock draw overrides `vi_htf_draw`
 and the `eq_pref` draw act only with `draw_lock="off"` (with the lock, mark_levels picks the draw;
 htf_ce_draw / nwog_halfway / org_draw / vi_news_draw are lock preferences there); partner contexts
 (SMT) keep RTH levels and get none of the new pool keys (SMT is None for those sweeps).
+
+## Review pass (2026-10-18): fixes to levels_detectors
+
+Tests: `tests/test_levels_review.py` (helper / gate unit tests and no-look-ahead runs that cut at
+entry AND exit times, comparing exit_time / exit_reason of the trades closed by each cut, so the
+lvx exits - q_close, breakaway_ce, wick_inv, bpr_abort, release_open - are covered; use_bias with
+the 09:30 / 08:30 open in PRE9 / NEWS / PRE7 windows, a 09:00 AM window, the lock, SMT, ES with
+confluence). Study: one variant per new switch / old default / interpretive threshold.
+
+- T2 bias_open (blocker) | fixed | (none) | | `_open_known`: an open is read only once its bar is in (index <= i, as release_open's k830); a pre-09:30 window falls back to the midnight open. The review's reproduction (RW 5m 2026-04..06, pre_0900, bias_open 0930) is now a look-ahead test
+- L2 daily_level_needs_array (major) | fixed | `daily_level_array_tfs` | ("15m", "30m", "1h", "4h", "D", "W", "M") | only HTF confluence timeframes count; a 1m / 5m array alone is rejected (no confluence: the HTF tag as before). Variant L2_daily_needs_array_any_tf = the old gate
+- Ep08.1 daily_fvg_exact (major) | fixed | (none) | | `_drop_near_exact`: non-pool levels within a tick of an "exact" daily FVG edge are dropped before `_exit_px`, so the ladder holds only v
+- L7 org_draw under the lock (major) | fixed | (none) | | the ORG far edge is a lock preference from the 09:30 lock (the lock is taken while the 09:30 bar is in, so its open is known); breakaway (`_org_break`, no reach to the 25% level in 09:30 .. +org_break_min) is applied at the lock when known, else `_lock_step` re-marks the lock without the preference (same lock time, `org_pref=False`, tag `org_break_i`) once it is. org_half_draw is now a lock preference too (CE reached, far edge not, by the lock: acts on 09:45 / 10:00 lock days). Preferred draws keep their own name in `marked` when a plain candidate shares the level
+- Ep01.6 / A13.1 breaker defaults (major) | fixed | `breaker_ll`, `breaker_cand_to` | True, "h" | the spec is imperative; the old rule is pinned in study.PRE_OWNER / CURRENT (golden test unchanged: still reproduces 833350f); variants A13.1_breaker_ll_off, Ep01.6_breaker_cand_ext
+- B21 / L3 IPDA ranges (major) | fixed | `ipda_session` | "eth" | ranges and the ipda_eq_day "both sides run" test from daily full-session candles (`Prepared.eth`, now built when an IPDA switch is on); a date without an ETH candle (SPY) uses its RTH session; "rth" = the first build (variant B21_ipda_session_rth)
+- B1 no_draw (minor) | fixed | | | t_lock = min(session lock, the current bar's start minute): bars closed before it only, and the 09:30 open (ORG / NWOG) only once the 09:30 bar is in
+- L1 am_range_end (minor) | fixed | | | validated 570 < am_range_end <= 810; the AM range is a target from am_range_end (12:00 with 720), not from 13:30
+- A2 booking tick in the lock (minor) | fixed | | | `mark_levels.intact` uses `_thru` / `_spent_up` with `_tick(p)` (sweep_ticks 0 keeps the old touch rule); on tick-grid prices only sweep_ticks > 1 changes it
+- A2 / SMT new pools (minor) | fixed | | | `_smt` passes p to the partner `_sell_side` (creation bars via the shared `_level_created`); swing lows (keyed by bar index) have no twin
+- A5 BPR c2 rule (minor) | fixed | | | `levels.balanced_ranges(..., o, c, c2_dir)`; Side.bprs passes them
+- A11 bpr_targets (minor) | fixed | | | only BPRs not traded into since they formed (as vi_targets); variant A11_bpr_targets_any_pair
+- Ep08.10 matrix "ict" in the lock (minor) | fixed | | | mark_levels drops pdh3 / pdl3 and adds m3h / m3l (a 3-day extreme always equals today's / pdh1 / pdh2's level, so it only adds a name)
+- inert switches (minor) | fixed | | | vi_htf_draw is now also a lock preference (as htf_ce_draw); `Params.__post_init__` warns for vi_news_draw without the lock, vi_news_draw / vi_htf_draw without vi_arrays, and the eq_pref draw under the lock
+- A9 / Ep03.3 VI death intraday (minor) | fixed | | | with vi_body_death the Side VIs of vi_targets, vi_stop, vi_porous_n and fvg_vi_extend are alive until a later body spans them (`_vi_alive`)
+- A15 legacy order (minor) | fixed | `mit_legacy_order` | False | Side.mitigations / opp_mits; variant A15_legacy_order
+- T2 release_open hold (minor) | fixed | | | a body close below the 08:30 open (minus a tick) after arming cancels the pending order and exits the trade (lvx "release_open")
+- L8 vacuum_blocks (minor) | fixed | | | the far edge only for the 08:30 release (spec: 08:30 near / MT / far; 10:00+ near / MT); 09:45 = near / MT like 10:00
+- paper history (minor) | fixed | | | `paper.history_days`: (HIST_DAYS + 1) sessions in calendar days for 5m / 15m, 48 days for 1m (Schwab's limit); `paper.short_history` warns when an IPDA / org_days switch lacks history
+- study thresholds (minor) | done | | | B21_ipda_eq_frac_010 / _025, B21_ipda_eq_days_20, A5_fvg_quad_min_8, A5_fvg_pool_gap_2, B1_no_draw_adr_05 / _15, L7_org_break_15 / _60, L5_gap_run_tol_4, A11_bpr_abort_gap12; A1_mss_ref_fallback_highest now runs with ob_entry="post_mss"; L7_org_half_draw_lock, A9_vi_htf_draw_lock
+- Monday NWOG before 09:30 (found by the new look-ahead test) | fixed | (none) | | DayCtx built today's NWOG (Friday close -> today's 09:30 open) from the whole day, and the PRE7 / PRE9 / NEWS targets, sweep pools (pool_gaps), the gap-run stop, the halfway rule and a pre-09:30 lock read it before 09:30 printed. `_nwogs(ctx, i)`: before the 09:30 bar the 4 prior NWOGs (`DayCtx.nwog_prev`); the AM (from 09:30) is unchanged. RW 5m 2026-06-22 PRE7 short: t1 733.185 (full) vs 731.5775 (cut at the entry) before the fix
+- tests (minor) | done | | | the full test_mentorship.py and the other suites rerun on the final code (results below); look-ahead cases added for use_bias with pre_0900 / post_news / pre_0700 and a 09:00 AM window, and for exits
+
+Results (final code): test_levels_review 22 passed; test_mentorship 26 passed (full file);
+test_levels_detectors look-ahead 4 passed; the non-look-ahead parts of test_levels_detectors /
+test_owner_directives / test_review_fixes / test_strategy pass except 3 tests that fail only with
+another session's uncommitted owner-answer defaults in strategy.py (year_end="december",
+sloppy_mode="stand_aside"; not part of this commit) - with those two hunks reverted, all 3 pass
+(year_end, PRE_OWNER golden, sloppy alias).
+
+Limits after this pass: the eq_pref DRAW still acts only without the lock (the rel-eq sweep pick
+applies with it); vi_news_draw still acts only in the lock (it needs the htf table row).

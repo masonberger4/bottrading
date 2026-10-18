@@ -242,7 +242,9 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
         cf = Confluence(df, tf, p.es_pt, vi=p.vi_arrays, breakers=p.conf_breakers, **htf_kw(p))
     ds = days(df, tf, partial_last, p.session_close)
     eth = None
-    if p.pd_hl_session == "eth" or p.matrix_full or p.wick_session == "eth" or p.pw_pm_full_session:
+    ipda_on = p.ipda_pools or p.ipda_next or p.ipda_eq_day != "off"
+    if (p.pd_hl_session == "eth" or p.matrix_full or p.wick_session == "eth" or p.pw_pm_full_session
+            or (ipda_on and p.ipda_session == "eth")):
         se = htf.sessions(df)                  # full sessions (evening reopen -> close), by trading date
         eth = {t.date(): (float(r.open), float(r.high), float(r.low), float(r.close)) for t, r in se.iterrows()}
     return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth)

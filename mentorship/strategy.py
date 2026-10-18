@@ -42,6 +42,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, replace
 from datetime import date, timedelta
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -389,6 +390,9 @@ class Params:
     ipda_eq_frac: float = 0.15           # [our interpretation] "near EQ" = within 15% of each range of its EQ
     ipda_eq_days: int = 10               # [our interpretation] "both sides run" = an earlier 20-day high AND
                                          # low were both taken within the last N sessions
+    ipda_session: str = "eth"            # review fix (B21 / L3): IPDA ranges from daily FULL-session candles
+                                         # (backtest.prepare's eth dict; RTH where a date has none, e.g. SPY);
+                                         # "rth" = the 09:30-16:00 sessions (the first build)
     # A1 swing tiers (014 ~0:12; cc05_002 ~20:14; MSS on the parent swing, 010 ~41:31)
     mss_ref: str = "stl"                 # MSS reference = the last "stl" / "itl" / "ltl" swing high before
                                          # the sweep extreme (a tier is known once its right neighbour is)
@@ -427,6 +431,8 @@ class Params:
     org_pools: bool = False              # today's ORG edges (prior close, 09:30 open) as AM sweep pools
     # L2 / Ep08.10 liquidity matrix
     daily_level_needs_array: bool = False   # Ep 08 / 010 ~63:38: a PDH/PDL sweep needs an HTF PD array there
+    daily_level_array_tfs: tuple = ("15m", "30m", "1h", "4h", "D", "W", "M")   # review fix: the confluence
+                                         # timeframes that count as HTF for it (1m / 5m arrays do not)
     daily_level_needs_flow: bool = False    # cc09_005 ~03:12: ... and daily order flow (D structure) its way
     pd_hl_session: str = "rth"           # "eth": PDH/PDL 1-3 from the full session (18:00 -> close)
     pool_today_hl: bool = False          # today's high/low up to the session start as a pool / target
@@ -446,9 +452,11 @@ class Params:
     org_sweep: bool = False              # D21: the kept ORGs' high / CE / low as sweep pools
     # L7 ORG behaviour (033 ~14:57; 036 ~53:00; 058 ~53:24)
     org_draw: str = "off"                # "tag" / "draw": the ORG far edge (prior close) is the AM draw unless
-                                         # the gap acted as a breakaway (no attempt into it by 09:30 + org_break_min)
+                                         # the gap acted as a breakaway (no attempt into it by 09:30 + org_break_min);
+                                         # #9 lock: preferred from the 09:30 lock, dropped (re-marked) on breakaway
     org_break_min: int = 30              # B15 "no attempt in 30 minutes"
     org_half_draw: bool = False          # half filled (CE reached, far edge not) -> the unfilled half's far edge
+                                         # (no-lock draw; in the #9 lock when half filled by the lock time)
     org_q_hold: bool = False             # tag: the ORG 25% level reached and no body close beyond it (strength)
     # L10 / Ep08.1 wick CE levels
     wick_weekly: bool = False            # the prior week's wick CEs as targets
@@ -469,8 +477,11 @@ class Params:
     breakaway: str = "off"               # "tag"; "hold" = a body close beyond its CE exits; "next_fvg" = not an
                                          # entry, wait for the next FVG
     # A13.1 / A13.5 / Ep01.6 / A13.4 breaker structure
-    breaker_ll: bool = False             # real pivots, L2 < L1 and a body close above the real H
-    breaker_cand_to: str = "ext"         # breaker candle from the L1 -> "ext" leg (old) or L1 -> "h" (Ep01.6)
+    # review fix: Ep01.6 is imperative ("Require a lower low for bz. Take the candle from the L1-to-H
+    # leg.") - both are the defaults now; breaker_ll=False / breaker_cand_to="ext" = the old rule
+    # (pinned in study.PRE_OWNER / CURRENT; variants A13.1_breaker_ll_off, Ep01.6_breaker_cand_ext)
+    breaker_ll: bool = True              # real pivots, L2 < L1 and a body close above the real H
+    breaker_cand_to: str = "h"           # breaker candle from the L1 -> "h" leg (Ep01.6) or L1 -> "ext" (old)
     breaker_time: str = "off"            # 070 ~6:24: "hl2" H, L2 and the break in one session block; "all" + L1
     breaker_entry: str = "off"           # "fallback": no FVG after the MSS -> a limit at the breaker top, stop
                                          # beyond the sweep, cancel on a close below the MT; "prefer" = at once
@@ -480,7 +491,8 @@ class Params:
     vi_body_death: bool = False          # dead once a later body spans it (not a close beyond its far edge)
     vi_stop: bool = False                # 009 ~13:46: stop below the VI under the entry (touch ok, no pierce)
     vi_porous_n: int = 0                 # 027 ~22:09: >= N same-side VIs in the leg = porous, no trade (0 off)
-    vi_htf_draw: bool = False            # the nearest opposing HTF VI (vi_arrays) is the draw
+    vi_htf_draw: bool = False            # the nearest opposing HTF VI (vi_arrays) is the draw (no-lock draw
+                                         # and, review fix, a #9 lock preference)
     vi_news_draw: bool = False           # Ep 02 ~9:19: on release days the lock prefers the daily VI draw
     # Ep06.7 / A3 relative equal highs/lows
     eq_pref: str = "off"                 # "rank": rel-eq pools win the sweep pick and the draw (kind
@@ -497,6 +509,8 @@ class Params:
     # A15 mitigation block
     mit_targets: bool = False            # opposing mitigation blocks as targets (075 ~21:40)
     mit_body_respect: bool = False       # ... only while no close went through them
+    mit_legacy_order: bool = False       # review fix (contested alternative as a switch): the old swing order
+                                         # of levels.mitigation_blocks (legacy=True) for the A15 blocks
     # D6
     unicorn_pref: bool = True            # the unicorn FVG is preferred over plain FVGs (A14); False = no preference
     # L3 higher pools
@@ -529,6 +543,7 @@ class Params:
                          ("stop_flip", ("off", "breaker", "smt")),
                          # levels_detectors
                          ("ipda_eq_day", ("off", "tag", "skip")), ("mss_ref", ("stl", "itl", "ltl")),
+                         ("ipda_session", ("rth", "eth")),
                          ("mss_ref_fallback", ("lower", "highest", "none")),
                          ("pd_hl_session", ("rth", "eth")), ("matrix_days", ("bot", "ict")),
                          ("org_draw", ("off", "tag", "draw")), ("wick_session", ("rth", "eth")),
@@ -558,6 +573,23 @@ class Params:
         known = {"big_prev", "chop", "nfp_week", "premium_run", "fomc_week", "inside_bisi"}
         if set(self.sloppy_tests) - known:
             raise ValueError(f"sloppy_tests {sorted(set(self.sloppy_tests) - known)}: expected from {sorted(known)}")
+        # review fixes (levels_detectors)
+        if not 570 < self.am_range_end <= 810:     # L1: past 13:30 the PM would read later bars (look-ahead)
+            raise ValueError(f"am_range_end {self.am_range_end}: expected 570 < am_range_end <= 810")
+        bad = [x for x in self.daily_level_array_tfs if x not in CF_TFS]
+        if bad or not self.daily_level_array_tfs:
+            raise ValueError(f"daily_level_array_tfs {self.daily_level_array_tfs!r}: expected a non-empty "
+                             f"subset of {CF_TFS}")
+        inert = []                                  # switches the current draw_lock / vi_arrays make inert
+        if self.vi_news_draw and self.draw_lock != "session":
+            inert.append("vi_news_draw acts only in the #9 lock (draw_lock='session')")
+        if (self.vi_news_draw or self.vi_htf_draw) and not self.vi_arrays:
+            inert.append("vi_news_draw / vi_htf_draw need vi_arrays=True (the HTF VI rows)")
+        if self.eq_pref != "off" and self.draw_lock == "session":
+            inert.append("eq_pref: the rel-eq DRAW preference acts only with draw_lock='off' (the sweep "
+                         "pick still applies)")
+        if inert:
+            warnings.warn("inert switches: " + "; ".join(inert), stacklevel=3)
 
 
 def _eff_flat(p: "Params") -> int:
@@ -758,7 +790,7 @@ class Side:
     """One direction of one day, in bullish terms (mirrored prices for shorts)."""
 
     def __init__(self, sign, o, h, l, c, n, min_gap: float = 0.0, c2_dir: bool = False,
-                 vi_min_gap: float = 0.0):
+                 vi_min_gap: float = 0.0, mit_legacy: bool = False):
         self.sign = sign
         if sign > 0:
             self.o, self.h, self.l, self.c = o, h, l, c
@@ -767,6 +799,7 @@ class Side:
         self.ph, self.pl = L.pivots(self.h, self.l, n)
         self.c2_dir = c2_dir                  # A5 fvg_c2_dir (levels_detectors)
         self.vi_min_gap = vi_min_gap          # A9 vi_min_gap_pts (price units)
+        self.mit_legacy = mit_legacy          # A15 mit_legacy_order (review fix: a Params switch)
         self.gaps = [z for z in L.fvgs(self.h, self.l, self.o, self.c, c2_dir)
                      if z.kind == "bull" and z.top - z.bottom >= min_gap]
         self.min_gap = min_gap
@@ -791,7 +824,8 @@ class Side:
 
     def bprs(self, max_gap: int = 0):
         """A11 balanced price ranges (both kinds), side space."""
-        return self._lazy(("bpr", max_gap), lambda: L.balanced_ranges(self.h, self.l, max_gap))
+        return self._lazy(("bpr", max_gap), lambda: L.balanced_ranges(self.h, self.l, max_gap, self.o, self.c,
+                                                                       self.c2_dir))   # review fix: A5 c2 rule
 
     def irs(self, tick: float):
         """A7 immediate rebalances (bull kind, side space): candle indices."""
@@ -800,8 +834,8 @@ class Side:
 
     def opp_mits(self):
         """A15 opposing (bearish, side space) mitigation blocks - targets above a long."""
-        return self._lazy("opp_mit", lambda: [z for z in L.mitigation_blocks(self.o, self.h, self.l, self.c, self.n)
-                                              if z.kind == "bear"])
+        return self._lazy("opp_mit", lambda: [z for z in L.mitigation_blocks(self.o, self.h, self.l, self.c, self.n,
+                                                                             self.mit_legacy) if z.kind == "bear"])
 
     # lazily built arrays (only the switches that use them pay for them)
     def ifvgs(self):
@@ -818,7 +852,8 @@ class Side:
 
     def mitigations(self):
         if self._mit is None:
-            self._mit = [z for z in L.mitigation_blocks(self.o, self.h, self.l, self.c, self.n) if z.kind == "bull"]
+            self._mit = [z for z in L.mitigation_blocks(self.o, self.h, self.l, self.c, self.n, self.mit_legacy)
+                         if z.kind == "bull"]
         return self._mit
 
     def zones_tf(self, idx, base: int, m: int):
@@ -940,11 +975,16 @@ class DayCtx:
         if len(lun):
             self.sess["lunch"] = (float(lun.high.max()), float(lun.low.min()), 810)
         self.nwog = []
+        self.nwog_today = False                # review fix: True when the last NWOG is today's (known at 09:30)
         for a, b in zip(hist[-21:], hist[-20:] + [df]):
             if (b.index[0].date() - a.index[-1].date()).days >= 3 or b.index[0].weekday() < a.index[-1].weekday():
                 rth = b[(b.index.hour * 60 + b.index.minute) >= 570]
                 if len(rth):
                     self.nwog.append((float(a.close.iloc[-1]), float(rth.open.iloc[0])))
+                    self.nwog_today = b is df
+                else:
+                    self.nwog_today = False
+        self.nwog_prev = (self.nwog[:-1] if self.nwog_today else self.nwog)[-4:]   # before today's 09:30
         self.nwog = self.nwog[-4:]
         # opening range gaps: each day's prior RTH close -> its 09:30 open (today's included)
         self.org = []
@@ -998,6 +1038,30 @@ def _htf_tag(ctx: DayCtx, sd: Side, i: int, price: float, tol: float) -> bool | 
 def _idx_at(ctx, m: int) -> int:
     """First bar of today starting at or after minute m (len(ctx.t) if none yet)."""
     return ctx.start + int(np.searchsorted(ctx.t[ctx.start:], m))
+
+
+OPEN_MIN = {"midnight": 0, "0830": 510, "0930": 570, "1330": 810}
+
+
+def _htf_array(cf: list, p) -> bool:
+    """L2 daily_level_needs_array: a confluence timeframe from daily_level_array_tfs in `cf`."""
+    return any(x in p.daily_level_array_tfs for x in cf)
+
+
+def _nwogs(ctx, i: int | None) -> list:
+    """ctx.nwog known at bar i (review fix, found by the pre-09:30 look-ahead test): a Monday's own
+    NWOG (Friday close -> today's 09:30 open) only from the 09:30 bar; i=None = a pre-09:30 lock."""
+    if getattr(ctx, "nwog_today", False) and ctx.nwog and (i is None or i < _idx_at(ctx, 570)):
+        return ctx.nwog_prev                   # the 4 prior NWOGs (not the 3 left after slicing)
+    return ctx.nwog
+
+
+def _open_known(ctx, name: str, i: int) -> float | None:
+    """Review fix (T2 bias_open look-ahead): today's `name` open only once its bar is in (index
+    <= i, as release_open's k830 <= i); ctx.opens is built from the whole day's frame."""
+    if name not in ctx.opens or _idx_at(ctx, OPEN_MIN[name]) > i:
+        return None
+    return ctx.opens[name]
 
 
 ROUND_STEP = {"ES": 50.0, "MES": 50.0, "SPX": 50.0, "NQ": 100.0, "MNQ": 100.0, "NDX": 100.0,
@@ -1077,8 +1141,9 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
                 pools.append((sd.x(hi if sd.sign > 0 else lo), created))
     if ctx.or_hl is not None and ctx.t[i] >= ctx.or_end:
         pools.append((sd.x(ctx.or_hl[0] if sd.sign > 0 else ctx.or_hl[1]), at(ctx.or_end)))
-    if ctx.t[i] >= 810 and ctx.am_hl:       # L1: complete at am_range_end (13:30 old / 12:00)
-        pools.append((sd.x(ctx.am_hl[0] if sd.sign > 0 else ctx.am_hl[1]), at(min(810, getattr(ctx, "am_end", 810)))))
+    ae = min(810, getattr(ctx, "am_end", 810))   # L1 (review fix): a pool from am_range_end itself
+    if ctx.t[i] >= ae and ctx.am_hl:        # (13:30 old / 12:00); Params checks 570 < end <= 810
+        pools.append((sd.x(ctx.am_hl[0] if sd.sign > 0 else ctx.am_hl[1]), at(ae)))
     for on, hl in ((p.pool_prev_week, ctx.pw), (p.pool_prev_month, ctx.pm_)):
         if on and hl is not None:
             pools.append((sd.x(hl[0] if sd.sign > 0 else hl[1]), ctx.start))
@@ -1110,7 +1175,7 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
             if p.gap_quarters or (p.nwog_quarters and kind == "nwog"):   # L5 / D21 quarters
                 lv += [(sd.x(lo + 0.25 * (hi - lo)), "array"), (sd.x(lo + 0.75 * (hi - lo)), "array")]
     else:
-        for a, b in ctx.nwog:
+        for a, b in _nwogs(ctx, i):
             lv += [(sd.x(a), "array"), (sd.x(b), "array")]
             if p.monday_ce:                 # D21: the Monday-gap CE
                 lv.append((sd.x((a + b) / 2), "array"))
@@ -1212,6 +1277,17 @@ def _spent_up(seen: float, v: float, tk: float) -> bool:
     return bool(seen >= v + tk - 1e-9) if tk > 0 else bool(seen >= v)
 
 
+def _drop_near_exact(lv: list, tk: float) -> list:
+    """Ep08.1 daily_fvg_exact (review fix): drop the non-pool levels within a tick `tk` of an
+    "exact" level, so the htf_targets copy of the same daily FVG edge (kind "array", exit
+    exit_before_pts early) cannot be the rung hit first - the edge is hit to the tick."""
+    ex = [v for v, k in lv if k == "exact"]
+    if not ex:
+        return lv
+    return [(v, k) for v, k in lv if k == "exact" or k in POOL_KINDS
+            or not any(abs(v - e) <= tk + 1e-9 for e in ex)]
+
+
 def _exit_px(v: float, kind: str, p) -> float:
     """The exit price of a target level (side space): just beyond a pool (exit_mode "split"),
     exactly at an "exact" level (Ep08.1 daily_fvg_exact), else exit_before_pts in front of it."""
@@ -1246,12 +1322,16 @@ def _extra_levels(ctx, df: pd.DataFrame, hist: list, p: "Params", eth: dict | No
     tt = df.index.hour * 60 + df.index.minute
     dates = [x.index[0].date() for x in hist]
     ec = (lambda d: eth.get(d)) if eth else (lambda d: None)
-    # B21 / L3: IPDA ranges, rolling from yesterday (day 1)
+    # B21 / L3: IPDA ranges, rolling from yesterday (day 1). Review fix: daily FULL-session candles
+    # (ipda_session="eth": the eth dict, a date without one falls back to its RTH session)
+    hl_ = lambda d, x: ((ec(d)[1], ec(d)[2]) if (p.ipda_session == "eth" and ec(d) is not None)
+                        else (float(x.high.max()), float(x.low.min())))
+    ctx.ipda_days = [hl_(d, x) for d, x in zip(dates, hist)]
     ctx.ipda = {}
     for n in (20, 40, 60):
         if len(hist) >= n:
-            seg = hist[-n:]
-            ctx.ipda[n] = (max(float(x.high.max()) for x in seg), min(float(x.low.min()) for x in seg))
+            seg = ctx.ipda_days[-n:]
+            ctx.ipda[n] = (max(x[0] for x in seg), min(x[1] for x in seg))
     # L2 / Ep08.10: the matrix on full ETH sessions
     if (p.pd_hl_session == "eth" or p.matrix_full) and eth and len(dates) >= 3:
         last3 = [ec(d) for d in dates[-3:]]
@@ -1351,14 +1431,14 @@ def _lv_target_pools(ctx, sd, i: int, p) -> list:
 
 
 def _lv_target_arrays(ctx, sd, i: int, p) -> list:
-    """levels_detectors array targets (side space) for _targets: L8 vacuum blocks (08:30 / early NY:
-    near, MT and far edge; 10:00+: near and MT)."""
+    """levels_detectors array targets (side space) for _targets: L8 vacuum blocks (08:30: near, MT and
+    far edge; later releases - 09:45 / 10:00+: near and MT)."""
     out = []
     for k, near, mt, far, R in getattr(ctx, "vac", []):
         if k > i:
             continue
         out += [(sd.x(near), "array"), (sd.x(mt), "array")]
-        if R < 600:
+        if R == 510:                   # review fix: the spec gives the far edge at 08:30 only
             out.append((sd.x(far), "array"))
     return out
 
@@ -1429,7 +1509,7 @@ def _lv_sell_side(ctx, sd, session: str, i: int, p, out: dict, extra: bool) -> N
                     out[f"{tag}_{q}"] = sd.x(v)
     if p.pool_gaps:                                    # M2.1: NWOG / NDOG as sweep pools
         gl = ctx.gaps if getattr(ctx, "gaps", None) is not None else \
-            [("monday", max(a, b), min(a, b), (a + b) / 2) for a, b in ctx.nwog]
+            [("monday", max(a, b), min(a, b), (a + b) / 2) for a, b in _nwogs(ctx, i)]
         for j, (kind, hi, lo, ce) in enumerate(gl):
             v = min(sd.x(hi), sd.x(lo)) if p.gap_pool_edge == "far" else sd.x(ce)
             if v < last:
@@ -1450,11 +1530,12 @@ def _ipda_eq(ctx, p, i: int) -> bool:
         if abs(px - (hi + lo) / 2) > p.ipda_eq_frac * (hi - lo):
             return False
     up = dn = False
-    for j in range(max(20, len(hist) - p.ipda_eq_days), len(hist)):
-        prior = hist[j - 20:j]
-        if float(hist[j].high.max()) > max(float(x.high.max()) for x in prior):
+    dh = getattr(ctx, "ipda_days", None) or [(float(x.high.max()), float(x.low.min())) for x in hist]
+    for j in range(max(20, len(dh) - p.ipda_eq_days), len(dh)):   # review fix: the same (ETH) candles
+        prior = dh[j - 20:j]
+        if dh[j][0] > max(x[0] for x in prior):
             up = True
-        if float(hist[j].low.min()) < min(float(x.low.min()) for x in prior):
+        if dh[j][1] < min(x[1] for x in prior):
             dn = True
     return up and dn
 
@@ -1488,6 +1569,19 @@ def _org_state(ctx, sd, i: int, p) -> dict | None:
     return dict(pcx=pcx, opx=opx, up=up, breakaway=brk, half=reach(mid) and not reach(pcx), q_hold=q_hold)
 
 
+def _org_break(ctx, p, i: int) -> bool | None:
+    """L7 breakaway in real prices (as _org_state): today's ORG and no reach to its 25% level in
+    09:30 .. 09:30 + org_break_min; None until bar i is past that window (or no ORG today)."""
+    if not (getattr(ctx, "org_today", False) and ctx.org):
+        return None
+    pc, op = ctx.org[-1]
+    k0, kb = _idx_at(ctx, 570), _idx_at(ctx, 570 + p.org_break_min)
+    if pc == op or i < kb or kb <= k0:
+        return None
+    q25 = op + 0.25 * (pc - op)
+    return bool(ctx.h[k0:kb].max() < q25) if pc > op else bool(ctx.l[k0:kb].min() > q25)
+
+
 def _nwog_half(ctx, sd, i: int) -> float | None:
     """L5 halfway rule (037 ~22:46; 051 ~16:51): with NWOG A below price and NWOG B above (side
     space), once today's high reached 50% of the space between A's and B's near edges, B's near
@@ -1495,7 +1589,7 @@ def _nwog_half(ctx, sd, i: int) -> float | None:
     if getattr(ctx, "gaps", None) is not None:
         zs = [(sd.x(hi), sd.x(lo)) for kind, hi, lo, _ in ctx.gaps if kind == "nwog"]
     else:
-        zs = [(sd.x(a), sd.x(b)) for a, b in ctx.nwog]
+        zs = [(sd.x(a), sd.x(b)) for a, b in _nwogs(ctx, i)]
     zs = [(max(a, b), min(a, b)) for a, b in zs]
     px = sd.c[i]
     below = [z for z in zs if z[0] <= px]
@@ -1916,7 +2010,7 @@ def _lock_times(p, day, pre_windows) -> dict:
     return out
 
 
-def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=()) -> dict:
+def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), org_pref: bool = True) -> dict:
     """Mark up the levels before the session opens and lock ONE draw (owner #9). Uses only bars
     that closed by t_lock (bar start + tf <= t_lock). Candidates, each with its kind (pool /
     array), its direction (+1 buy-side high, -1 sell-side low, 0 array / round handle) and the
@@ -1946,6 +2040,8 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=()) -
                               dr if nm in POOL_NAMES else 0, S))
     for k, v in ctx.pd.items():
         if k.startswith(("pdh", "pdl")):
+            if p.matrix_days == "ict" and k in ("pdh3", "pdl3"):
+                continue                               # review fix: the Ep08.10 matrix as in the scan
             cands.append((v, "pool", k, 1 if k.startswith("pdh") else -1, S))
     if t_lock >= 570:
         for k, dr in (("pmh", 1), ("pml", -1)):
@@ -1964,7 +2060,7 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=()) -
             cands += [(hi, "array", kind + "_high", 0, S), (ce, "array", kind + "_ce", 0, S),
                       (lo, "array", kind + "_low", 0, S)]
     else:
-        for a, b in ctx.nwog:
+        for a, b in _nwogs(ctx, None if t_lock < 570 else at(570)):
             cands += [(a, "array", "nwog", 0, S), (b, "array", "nwog", 0, S)]
     if p.org_days:
         orgs = ctx.org[:-1] if (ctx.org_today and t_lock <= 570) else ctx.org
@@ -1997,6 +2093,10 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=()) -
         if k0 is not None and S < k0 <= kl:
             cands += [(float(ctx.h[S:k0].max()), "pool", "today_high", 1, k0),
                       (float(ctx.l[S:k0].min()), "pool", "today_low", -1, k0)]
+            if p.matrix_days == "ict":                 # review fix: the 3-day extremes (m3h / m3l)
+                hs3 = getattr(ctx, "hist", [])[-2:]
+                cands += [(max([float(ctx.h[S:k0].max())] + [float(x.high.max()) for x in hs3]), "pool", "m3h", 1, k0),
+                          (min([float(ctx.l[S:k0].min())] + [float(x.low.min()) for x in hs3]), "pool", "m3l", -1, k0)]
     if p.prev_am_pool and getattr(ctx, "prev_am", None) is not None:
         cands += [(ctx.prev_am[0], "pool", "prev_am_high", 1, S), (ctx.prev_am[1], "pool", "prev_am_low", -1, S)]
     prefs = []
@@ -2005,13 +2105,28 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=()) -
             v = row.get(key_)
             if v is not None and v == v:
                 prefs.append((float(v), "array", "vi_news", 0, S))
-    if p.org_draw == "draw" and session == "AM" and t_lock > 570 and ctx.org_today and ctx.org:
-        prefs.append((ctx.org[-1][0], "array", "org_far", 0, at(570)))    # L7: the prior close
+    # L7 (review fix): today's ORG is known from the 09:30 open, i.e. at the 09:30 lock itself (the
+    # lock is taken while the 09:30 bar is in); the breakaway test (_org_break) drops org_far once
+    # 09:30 + org_break_min shows no attempt - here when known by the lock, else _lock_step re-marks
+    # the lock without it (org_pref=False). org_half_draw: CE reached, far edge not, by the lock.
+    k570 = at(570)
+    if (org_pref and session == "AM" and t_lock >= 570 and ctx.org_today and ctx.org and k570 < len(t)
+            and (p.org_draw == "draw" or p.org_half_draw)):
+        pc_, op_ = ctx.org[-1]
+        brk = _org_break(ctx, p, kl - 1)
+        if p.org_draw == "draw" and brk is not True:
+            prefs.append((pc_, "array", "org_far", 0, k570))                # the prior close
+        if p.org_half_draw and kl > k570 and pc_ != op_:
+            up_ = pc_ > op_
+            hh = ctx.h[k570:kl].max() if up_ else -ctx.l[k570:kl].min()
+            sg = 1 if up_ else -1
+            if hh >= sg * (pc_ + op_) / 2 and hh < sg * pc_:
+                prefs.append((pc_, "array", "org_half", 0, k570))
     if p.nwog_halfway and kl - 1 >= S:                                     # L5 halfway rule
         if getattr(ctx, "gaps", None) is not None:
             zs = [(hi_, lo_) for kind, hi_, lo_, _ in ctx.gaps if kind == "nwog"]
         else:
-            zs = [(max(a, b), min(a, b)) for a, b in ctx.nwog]
+            zs = [(max(a, b), min(a, b)) for a, b in _nwogs(ctx, None if t_lock < 570 else at(570))]
         bel = [z for z in zs if z[0] <= px]
         abv = [z for z in zs if z[1] > px]
         if bel and abv:
@@ -2028,16 +2143,27 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=()) -
             r = ctx.conf.opposing(now, px, sgn, tfs, (0,))
             if r:
                 prefs.append((r[0][1], "array", "htf_ce", 0, S))
-    cands += prefs
+    if p.vi_htf_draw and getattr(ctx, "conf", None) is not None:          # A9 (review fix: in the lock too)
+        now = pd.Timestamp(ctx.day, tz=ctx.idx.tz) + pd.Timedelta(minutes=t_lock)
+        for sgn in (1, -1):
+            r = ctx.conf.opposing(now, px, sgn, ("1h", "4h", "D", "W"), (3,))
+            if r:
+                prefs.append((r[0][0], "array", "htf_vi", 0, S))
+    cands = prefs + cands                          # review fix: a preferred draw keeps its own name
     pref_keys = {(round(v, 9), k) for v, k, *_ in prefs}
     near = lambda v: any(abs(v - s) <= p.es_pt for s in spent)
 
+    tk = _tick(p)
+
     def intact(v, dr, cr):
-        """L14d: not traded through by the bars after it formed, up to the lock."""
+        """L14d: not traded through by the bars after it formed, up to the lock (review fix: A2
+        booking tick - through = at least sweep_ticks beyond it, as in the scan)."""
         a = max(cr, S)
         if a >= kl:
             return True
-        return (ctx.h[a:kl].max() <= v) if v > px else (ctx.l[a:kl].min() >= v)
+        if tk <= 0:                                    # the old rule: a touch keeps it intact
+            return (ctx.h[a:kl].max() <= v) if v > px else (ctx.l[a:kl].min() >= v)
+        return (not _spent_up(ctx.h[a:kl].max(), v, tk)) if v > px else (not _thru(ctx.l[a:kl].min(), v, tk))
 
     if p.draw_lock_near_cap and p.htf_resist_cap and getattr(ctx, "conf", None) is not None:
         # switch: candidates beyond the nearest opposing HTF FVG wholly beyond the lock price
@@ -2172,7 +2298,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         _setup_news(pctx, day, p)
         _extra_levels(pctx, partner[0], partner[1], p)
     mg = p.min_fvg_pts * p.es_pt
-    sk = dict(c2_dir=p.fvg_c2_dir, vi_min_gap=p.vi_min_gap_pts * p.es_pt)   # levels_detectors A5 / A9
+    sk = dict(c2_dir=p.fvg_c2_dir, vi_min_gap=p.vi_min_gap_pts * p.es_pt,   # levels_detectors A5 / A9
+              mit_legacy=p.mit_legacy_order)                                  # A15 (review fix)
     sides = [Side(1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, mg, **sk), Side(-1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, mg, **sk)]
     psides = ppos = None
     if pctx is not None:
@@ -2389,6 +2516,9 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 pending = None
             elif ob_pre and i - 1 > pending["i"] and sd.c[i - 1] < pending["ob_body_low"]:
                 pending = None                       # #11: a close below the OB bodies (bar i-1)
+            elif ("release_open" in (pending.get("lvx") or {}) and i - 1 > pending["i"]
+                  and sd.c[i - 1] < pending["lvx"]["release_open"][0]):
+                pending = None                       # T2 (review fix): bar i-1 closed below the 08:30 open
             elif sd.h[i] >= pending["t1"] and sd.l[i] >= pending["entry"]:
                 pending = None                       # ran to target without us
             elif p.sb_only and t < sb_a:
@@ -2547,6 +2677,8 @@ def _no_draw(ctx, p, session: str, i: int, bias_by_cut: dict | None) -> bool:
     #9 mark-up: pools, gaps, ORGs, HTF draws) within no_draw_adr x ADR5 of price on either side ->
     the market has nothing to run or rebalance near by and is expected to consolidate."""
     t_lock = {"AM": 570, "PM": 810}.get(session, int(ctx.t[i]))
+    t_lock = min(t_lock, int(ctx.t[i]))      # review fix: never past the current bar (the 09:30 open is
+                                             # read at a 09:30 lock only once the 09:30 bar is in)
     rows = bias_by_cut or {}
     cut = max((m for m in rows if m <= t_lock), default=None)
     lk = mark_levels(ctx, rows.get(cut) if cut is not None else None, t_lock, session, p)
@@ -2627,6 +2759,17 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
     for s_, lk in list(ctx.lock.items()):
         if not lk["side"] or lk["delivered"]:
             continue
+        if lk["name"] == "org_far" and _org_break(ctx, p, i):
+            # L7 (review fix): the ORG acted as a breakaway (no attempt by 09:30 + org_break_min) -
+            # its far edge is no longer the draw: the lock as marked at its time without it
+            nl = mark_levels(ctx, (bias_by_cut or {}).get(lk["t_lock"]), lk["t_lock"], s_, p, spent, org_pref=False)
+            nl.update(org_break_i=i, traded=lk["traded"])   # (the lock report shows the replacement)
+            lk = nl
+            ctx.lock[s_] = lk
+            if lk["side"] == 0:
+                if p.draw_lock_neutral == "skip":
+                    done[s_] = True
+                continue
         hit = ctx.h[i] >= lk["target"] if lk["side"] > 0 else ctx.l[i] <= lk["target"]
         if hit:
             lk.update(delivered=True, delivered_t=ctx.idx[i], delivered_i=i)
@@ -2750,6 +2893,12 @@ def _f(key):
 def _level_intact(ctx, l, i, k, v, session, tk: float = 0.0) -> bool:
     """A sell-side level (side space) not traded through between its creation and bar i-1
     (A2: through = at least tk below it; tk = 0 any print below)."""
+    a = _level_created(ctx, k, session)
+    return k.startswith(("rel_eq", "round")) or i <= a or not _thru(l[a:i].min(), v, tk)
+
+
+def _level_created(ctx, k: str, session: str) -> int:
+    """The bar from which sell-side pool `k` exists (shared by _level_intact and _smt)."""
     at = lambda m: ctx.start + int(np.searchsorted(ctx.t[ctx.start:], m))
     if k.startswith("swing_low"):          # M1.2 fix: from the bar after the swing low itself
         a = int(k[len("swing_low"):]) + 1
@@ -2770,7 +2919,7 @@ def _level_intact(ctx, l, i, k, v, session, tk: float = 0.0) -> bool:
         a = {"am_session": created, "lunch": created, "opening_range": at(ctx.or_end),
              "london": at(300), "or60": at(630),
              "news_range": getattr(ctx, "news_made", at(540))}.get(k, ctx.start)
-    return k.startswith(("rel_eq", "round")) or i <= a or not _thru(l[a:i].min(), v, tk)
+    return a
 
 
 def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mult=1.0):
@@ -2887,8 +3036,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
             k, v = min(hit, key=lambda kv: kv[1])
         sw = sd.sweep = dict(session=session, name=("rel_eq_lows" if sd.sign > 0 else "rel_eq_highs") if k.startswith("rel_eq") else k,
                              level=v, key=k, ext=l[i], ext_i=i, broke=None, sweep_i=i)
-        sw["smt"] = _smt(ctx, sd, i, k, v, session, pctx, psides, ppos)
-        sw["smt2"] = _smt(ctx, sd, i, k, v, session, *ctx.partner2) if getattr(ctx, "partner2", None) else None
+        sw["smt"] = _smt(ctx, sd, i, k, v, session, pctx, psides, ppos, p)
+        sw["smt2"] = _smt(ctx, sd, i, k, v, session, *ctx.partner2, p) if getattr(ctx, "partner2", None) else None
         _f("1_sweep")
     if sw is None:
         return None
@@ -3006,7 +3155,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     vi_exact = None
     if p.fvg_vi_extend:                # A5 (022 ~55:00; 098 ~60:00): an adjacent VI extends the box;
         for z in sd.vis("bull"):       # a VI inside the gap is the exact limit
-            if not (g.i - 1 <= z.i <= min(g.i + 1, i)):
+            if not (g.i - 1 <= z.i <= min(g.i + 1, i)) or (p.vi_body_death and not _vi_alive(sd, z, i)):
                 continue
             if z.bottom >= g.bottom - 1e-9 and z.top <= g.top + 1e-9:
                 vi_exact = z.top if vi_exact is None else max(vi_exact, z.top)
@@ -3024,7 +3173,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         if p.breaker_mt_respect:
             bz_mt = bz.mt
     if p.vi_porous_n:                  # A9 (027 ~22:09): a porous cluster of VIs in the leg = low trust
-        nvi = sum(1 for z in sd.vis("bull") if sw["ext_i"] <= z.i <= i)
+        nvi = sum(1 for z in sd.vis("bull") if sw["ext_i"] <= z.i <= i
+                  and (not p.vi_body_death or _vi_alive(sd, z, i)))
         if nvi >= p.vi_porous_n:
             _f("x_vi_porous")
             return None
@@ -3047,7 +3197,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         stop = min(stop, bz.bottom - p.stop_buffer)    # Ep05.1: below the breaker without an OB MT
     if p.vi_stop:                      # A9 (009 ~13:46): below the VI under the entry (touch ok)
         vs = [z for z in sd.vis("bull") if sw["ext_i"] < z.i <= i and z.top <= entry
-              and l[z.i + 1:i + 1].min(initial=np.inf) >= z.bottom]
+              and (_vi_alive(sd, z, i) if p.vi_body_death else l[z.i + 1:i + 1].min(initial=np.inf) >= z.bottom)]
         if vs:
             z = max(vs, key=lambda z: z.top)
             if entry - (z.bottom - p.stop_buffer) >= p.min_risk_pts * p.es_pt:
@@ -3073,6 +3223,12 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
                          h[sw["ext_i"]:i + 1].max(), tags, pctx_free=True)
 
 
+def _vi_alive(sd, z, i: int) -> bool:
+    """A9 / Ep03.3 body death rule for the intraday Side VIs (review fix, vi_body_death): alive until
+    a later body spans it (L.vi_body_dead over bars z.i+1 .. i)."""
+    return L.vi_body_dead(sd.o, sd.c, z, end=i) is None
+
+
 def _lv_finish_targets(ctx, sd, i: int, above: float, p, htf_t: tuple) -> list:
     """levels_detectors targets beyond `above` (side space, raw levels with kinds): B1 vi_targets
     (untouched opposing intraday VIs: near edge, CE), A11 bpr_targets (near edge, midpoint), A15
@@ -3083,13 +3239,13 @@ def _lv_finish_targets(ctx, sd, i: int, above: float, p, htf_t: tuple) -> list:
     h = sd.h
     out = []
     after = lambda z: h[z.i + 1:i + 1].max(initial=-np.inf)
-    if p.vi_targets:
+    if p.vi_targets:                   # review fix: vi_body_death -> alive = no later body across it
         for z in sd.vis("bear"):
-            if z.i <= i and z.bottom > above and after(z) < z.bottom:
+            if z.i <= i and z.bottom > above and (_vi_alive(sd, z, i) if p.vi_body_death else after(z) < z.bottom):
                 out += [(z.bottom, "array"), (z.mid, "array")]
-    if p.bpr_targets:
+    if p.bpr_targets:                  # review fix: only BPRs not traded into since they formed
         for z in sd.bprs(p.bpr_max_gap_bars):
-            if z.i <= i and z.bottom > above:
+            if z.i <= i and z.bottom > above and after(z) < z.bottom:
                 out += [(z.bottom, "array"), (z.mid, "array")]
     if p.mit_targets:
         for z in sd.opp_mits():
@@ -3184,7 +3340,7 @@ def _gap_below(ctx, sd, i, x) -> float | None:
         for _, hi, lo, ce in ctx.gaps:
             lv += [hi, lo, ce]
     else:
-        for a, b in ctx.nwog:
+        for a, b in _nwogs(ctx, i):
             lv += [a, b]
     orgs = ctx.org[:-1] if (ctx.t[i] < 570 and ctx.org_today) else ctx.org
     for a, b in orgs[-5:]:
@@ -3395,6 +3551,9 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
                     _f("x_release_open")
                     return None
                 lvt.append("release_open")
+                # review fix: the hold is enforced after arming too - a body close below the 08:30
+                # open (minus a tick) cancels the pending order (run_day) and exits the trade (lvx)
+                lvx["release_open"] = (o830 - 0.25 * p.es_pt - 1e-9, False)
             if p.release_open_stop:          # T2: the stop beyond the 08:30 open / its candle's wick CE
                 b830 = min(sd.o[k830], c[k830])
                 lvl = o830 if p.release_open_stop == "open" else b830 - (b830 - l[k830]) / 2
@@ -3405,7 +3564,9 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         _f("x_risk_too_small" if risk < p.min_risk_pts * p.es_pt else "x_risk_too_big")
         return None
     if p.use_bias:                       # T2 / D22 bias_open: the AM reference open
-        ref_open = ctx.opens.get("1330" if session == "PM" else p.bias_open)
+        ref_open = _open_known(ctx, "1330" if session == "PM" else p.bias_open, i)
+        if ref_open is None and session != "PM":     # review fix: a pre-09:30 window (PRE7 / PRE9 /
+            ref_open = _open_known(ctx, "midnight", i)   # NEWS) reads the midnight open until it prints
         if ref_open is not None and not entry < sd.x(ref_open):
             _f("x_wrong_side_of_open")
             return None
@@ -3432,7 +3593,9 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     key = sw.get("key", "")
     if (p.daily_level_needs_array or p.daily_level_needs_flow) and key.startswith(("pdl", "pdh", "m3", "ipda")):
         # L2 (Ep 08; 010 ~63:38): an old daily high/low alone is not an entry - a PD array there
-        if p.daily_level_needs_array and not (cf if cf is not None else htf):
+        # review fix: only HTF arrays count (daily_level_array_tfs, >= 15m by default) - any 1m / 5m
+        # FVG or OB at the sweep extreme made the gate a near no-op; no confluence -> the HTF tag
+        if p.daily_level_needs_array and not (_htf_array(cf, p) if cf is not None else htf):
             _f("x_daily_no_array")
             return None
         if p.daily_level_needs_flow:     # cc09_005 ~03:12: plus HTF (daily) order flow its way
@@ -3526,6 +3689,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         extra = _lv_finish_targets(ctx, sd, i, above, p, htf_t)    # levels_detectors arrays
         if extra:
             lv = sorted(set(lv) | set(extra))
+        if p.daily_fvg_exact:          # review fix: the exact daily edge replaces its "array" twin
+            lv = _drop_near_exact(lv, 0.25 * p.es_pt)
         kinds = [kind for v, kind in lv]
         lv = [_exit_px(v, kind, p) for v, kind in lv]
     if p.round_step_pts:               # L17: targets rounded toward price (down for a long)
@@ -3686,21 +3851,26 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     return order
 
 
-def _smt(ctx, sd, i, key, level, session, pctx, psides, ppos):
+def _smt(ctx, sd, i, key, level, session, pctx, psides, ppos, p=None):
     """SMT divergence: the partner index did NOT take its own version of the swept level
-    (by the same bar). None when there is no partner or the level has no partner twin."""
-    if pctx is None or key.startswith(("rel_eq", "round")):
+    (by the same bar). None when there is no partner or the level has no partner twin
+    (swing lows are keyed by bar index - no twin)."""
+    if pctx is None or key.startswith(("rel_eq", "round", "swing_low")):
         return None
     ps = psides[sd.sign]
     j = ppos.index.searchsorted(ctx.idx[i], side="right") - 1
     if j < pctx.start:
         return None
-    plv = _sell_side(pctx, ps, session, j, True).get(key)
+    # review fix: p passed, so the partner gets the levels_detectors keys too (ipda*, today_low, m3l,
+    # prev_am, org*, gap_*, or_alt ...) - _extra_levels ran on pctx; a key the partner lacks -> None
+    plv = _sell_side(pctx, ps, session, j, True, p).get(key)
     if plv is None:
         return None
     at = lambda m: pctx.start + int(np.searchsorted(pctx.t[pctx.start:], m))
     created = {"am_session": at(810), "lunch": at(810), "opening_range": at(pctx.or_end),
-               "london": at(300)}.get(key, pctx.start)
+               "london": at(300)}.get(key)
+    if created is None:
+        created = _level_created(pctx, key, session)
     if key.startswith("news_range"):
         R = 510 if key == "news_range" else int(key[len("news_range_"):])
         d = getattr(pctx, "news_dr", {}).get(R)
