@@ -52,6 +52,20 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                 elif l <= pos["stop"]:
                     tr.exits.append((ts, sd.x(pos["stop"]), pos["left"], "be" if pos["t1_done"] else "stop"))
                     pos["left"] = 0
+                elif p.sb_mgmt == "ladder":            # bread and butter at +5, then scale out
+                    lv_, fr = pos["levels"], p.ladder_fracs
+                    while pos["k"] < len(lv_) and pos["left"] and h >= lv_[pos["k"]]:
+                        k = pos["k"]
+                        q = pos["left"] if k == len(lv_) - 1 else min(pos["left"], max(p.lot, _lots(pos["n"] * fr[k], p.lot)))
+                        tr.exits.append((ts, sd.x(lv_[k]), q, f"t{k + 1}")); pos["left"] -= q
+                        pos["k"] += 1
+                        if not pos["t1_done"]:
+                            pos["t1_done"] = True
+                            pos["stop"] = max(pos["stop"], pos["entry"])
+                        pos["away"] = lv_[k]
+                    if pos["left"] and pos["away"] is not None and c >= pos["away"] + p.away_pts * p.es_pt:
+                        pos["stop"] = max(pos["stop"], pos["away"] - p.stop_buffer)
+                        pos["away"] = None
                 else:
                     if not pos["t1_done"] and h >= pos["t1"]:
                         q = pos["left"] if pos["t2"] is None else max(p.lot, _lots(pos["left"] * 0.8, p.lot))
@@ -85,7 +99,8 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                                day_type=day_type(day), news=news(day), sb=True, weekday=day.weekday(),
                                **btag)
                     pos = dict(trade=tr, side=sd, stop=o_["stop"], t1=o_["t1"], t2=o_["t2"],
-                               left=o_["shares"], entry=fill, t1_done=False)
+                               left=o_["shares"], entry=fill, t1_done=False, n=o_["shares"],
+                               levels=o_["levels"], k=0, away=None)
                     pending = None
                     if sd.l[i] <= pos["stop"]:
                         tr.exits.append((ts, sd.x(pos["stop"]), pos["left"], "stop")); pos["left"] = 0
@@ -163,5 +178,6 @@ def _arm(ctx, sd, i, k0, p, tol):
             swept = name
         if name.startswith(("pdh", "pmh")) and sd.sign < 0 and lo_seg < lv_:
             swept = name
+    levels = [t1] + [v for v in draws if v > t1 + p.es_pt][:2]
     return dict(side=sd, i=i, fvg_i=g.i, entry=entry, stop=stop, t1=t1, t2=t2, shares=shares,
-                swept=swept)
+                swept=swept, levels=levels)

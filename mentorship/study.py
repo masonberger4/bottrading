@@ -198,7 +198,7 @@ def main_bias(out="runs/mentorship", workers=6, tfs=(5, 1), modes=("off", "react
 
 # --- the 23 decisions: recommended defaults vs each contradiction -------------------------
 # SPX signals, SPY pricing (AM_SPY costs), AM and PM sessions, 2019-2026.
-CURRENT = dict(mt_mode="range", exit_mode="before", min_draw_pts=0.0, leg_pd=0.0, am_exit=0,
+CURRENT = dict(mt_mode="range", exit_mode="before", min_draw_pts=0.0, leg_pd=0.0, am_exit=0, mgmt="t1t2", adds=(),
                breaker_zone="range")                # the engine before the decisions
 DECISIONS = {
     "current": CURRENT,
@@ -258,6 +258,15 @@ DECISIONS = {
     "TF_nested_5m": dict(entry_tf="nested"),
     "HTF_targets_off": dict(htf_targets=()),
     "CE_hold_on": dict(ce_hold=True),
+    "MGMT_t1t2": dict(mgmt="t1t2", adds=()),
+    "SB_ladder": dict(sb_model=True, sb_mgmt="ladder"),
+    "SB_only_ladder": dict(sb_model=True, sb_mgmt="ladder", am=(0, 0), pm=(0, 0)),
+    "MGMT_ladder_80_20": dict(ladder_fracs=(0.8, 0.2)),
+    "MGMT_trail_prior": dict(ladder_trail="prior"),
+    "MGMT_trail_hit": dict(ladder_trail="hit"),
+    "MGMT_be_at_t1": dict(be_on="t1"),
+    "MGMT_fixed_split": dict(ladder_by_day=False),
+    "MGMT_no_adds": dict(adds=()),
     "PRE_0700": dict(pre_0700=True),
     "PRE_0900": dict(pre_0900=True),
     "PRE_post_news": dict(post_news=True),
@@ -271,10 +280,10 @@ DECISIONS = {
     "POOL_prev_month": dict(pool_prev_month=True),
     "POOL_swings": dict(pool_swings=True),
     "POOL_all": dict(pool_prev_week=True, pool_prev_month=True, pool_swings=True),
-    "SB_off": dict(sb_model=False),
+    "SB_on": dict(sb_model=True),
     "SB_only": dict(sb_model=True, am=(0, 0), pm=(0, 0)),
-    "SB_room10": dict(sb_room_pts=10.0),
-    "SB_runner": dict(sb_runner=True),
+    "SB_room10": dict(sb_model=True, sb_room_pts=10.0),
+    "SB_runner": dict(sb_model=True, sb_runner=True),
     "BEGINNER_news": dict(nfp_day=False, nfp_week_block=True, nfp_thu=False, fomc_pm_from=0),
     "BEGINNER_no_reverse": dict(reverse_after_loss=False),
     "BEGINNER_room10": dict(min_draw_pts=10.0),

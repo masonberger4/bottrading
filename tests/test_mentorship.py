@@ -296,7 +296,7 @@ def test_silver_bullet_no_look_ahead():
     es = B.load("ES", 1, source="databento")
     es = es[(es.index >= "2024-01-01") & (es.index < "2024-02-15")]
     p = Params(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, am=(0, 0), pm=(0, 0),
-               sb_runner=True)
+               sb_runner=True, sb_model=True)
     full = B.run(es, 1, "ES", p)
     assert len(full) > 5 and set(full.setup) <= {"sb_am", "sb_pm"}
     cols = ["entry_time", "entry", "stop", "t1", "side"]

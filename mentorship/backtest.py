@@ -143,7 +143,8 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
         if d in pmap2:
             hist_p2 = (hist_p2 + [rth(pmap2[d])])[-21:]
     out = pd.DataFrame(rows)
-    if len(out):
+    if len(out):                           # several setups per day: report in time order
+        out = out.sort_values(["entry_time", "setup"], kind="stable").reset_index(drop=True)
         out.attrs["days"] = len(ds) - warmup
     return out
 

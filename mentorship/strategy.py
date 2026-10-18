@@ -101,7 +101,8 @@ class Params:
     htf: tuple = (15, 60)          # higher timeframes (minutes) for nested FVGs
     require_htf: bool = False
     trail: bool = False
-    adds: tuple = ()               # pyramid units as fractions of the first, e.g. (0.5, 0.33)
+    adds: tuple = (0.5, 0.33, 0.17)  # Ep 04 pyramid 6/3/2/1: smaller adds on each new FVG after
+                                   # the fill, none after the first partial, total risk capped
     max_total_risk: float = 2000.0 # 2% of $100k across the first unit and the adds
     weekly_bias: bool = False
     sd_targets: bool = False
@@ -113,6 +114,20 @@ class Params:
                                    # high, trail the stop to the retracement candle's low
     htf_far_edge: bool = False     # HTF gap targets: near edge, CE, and the far edge as a third level
     wick_levels: bool = True       # A23: the prior day's wick CEs as targets
+    mgmt: str = "ladder"           # "ladder": scale out at each target level in turn (X3); "t1t2": old
+    ladder_fracs: tuple = (0.5, 0.25, 0.25)   # 036 normal days: 50/25/25
+    ladder_fracs_slow: tuple = (0.8, 0.2)     # 036 slow days or news ahead: 80/20
+    ladder_by_day: bool = True     # pick the split per trade (slow / news-ahead vs normal)
+    slow_frac: float = 0.5         # [our interpretation] "slow day": the day's range at the fill
+                                   # (from midnight) is under slow_frac x the 5-day average RTH range
+    ladder_trail: str = "fvg"      # X5 (ICT): after each partial, trail under the newest FVG formed
+                                   # since that partial (never the FVG right after the shift);
+                                   # "hit" = stop to the array just paid at once price closes away_pts
+                                   # beyond it (Mase's version); "prior" = one level behind
+    away_pts: float = 1.0
+    be_on: str = "expansion"       # X4: breakeven only after the first partial AND expansion -
+                                   # [our interpretation] a later bar closes beyond the first target;
+                                   # "t1" = at the first partial
     ce_hold: bool = False           # A5/A6: the entry FVG is a breakaway gap - once filled, a candle BODY closing
                                    # beyond its CE (wicks may poke) exits the trade before T1
     skip_news: bool = False        # no trades at all on 08:30 / 10:00 release days
@@ -174,9 +189,11 @@ class Params:
                                    # off the 08:30-09:00 range's high/low
     ma_deuce: bool = False         # 091: daily BISI premium + 1m FVG inverted before 08:00 ->
                                    # sell the retest 08:00-08:30 toward the BISI CE (and mirror)
-    sb_model: bool = True          # ICT's Silver Bullet as its own setup (sb_model.py)
+    sb_model: bool = False         # ICT's Silver Bullet as its own setup (sb_model.py); off until a version holds up
     sb_room_pts: float = 5.0       # draw at least this far (10 new traders, 5 experienced; 046)
     sb_target_pts: float = 5.0     # take ~5 ES handles (or the draw if nearer)
+    sb_mgmt: str = "fixed"         # "fixed": all off at +5 (or 80% with sb_runner); "ladder": scale out
+                                   # from +5 through the next draws with the ladder rules
     sb_runner: bool = False        # keep 20% for the draw, stop to breakeven
     sb_min_rr: float = 0.0         # optional reward:risk floor on the 5-handle target (x min_rr)
     sb_london: bool = False        # 03:00-04:00 window (futures only; SPY can't trade it)
@@ -660,6 +677,26 @@ def _judas(ctx, sd, sw, session) -> bool:
     return bool(t0 <= ctx.t[sw["ext_i"]] < t0 + 60 and sw["ext"] < sd.x(ref))
 
 
+def _split(p, ctx, hist, day, i, t) -> tuple:
+    """Scale-out split for a new trade (036): 80/20 on slow days or with news ahead, else
+    50/25/25. News ahead = a scheduled release later today after the fill (10:00 data, 14:00
+    FOMC) or a CPI / NFP / FOMC day tomorrow. Slow day [our interpretation]: the range from
+    midnight to the fill is under slow_frac x the 5-day average regular-session range."""
+    if not p.ladder_by_day:
+        return p.ladder_fracs
+    tags = events(day)
+    ahead = (bool(tags & NEWS_1000) and t < 600) or ("fomc" in tags and t < 840)
+    nxt = day + timedelta(days=3 if day.weekday() == 4 else 1)
+    if events(nxt) & {"cpi", "jobs", "fomc"}:
+        ahead = True
+    slow = False
+    if len(hist) >= 5:
+        adr = np.mean([float(x.high.max() - x.low.min()) for x in hist[-5:]])
+        rng = ctx.h[ctx.start:i + 1].max() - ctx.l[ctx.start:i + 1].min()
+        slow = rng < p.slow_frac * adr
+    return p.ladder_fracs_slow if (ahead or slow) else p.ladder_fracs
+
+
 def _swing_ref(sd, ext_i: int, fill_i: int) -> dict:
     """Ep 07 trail inputs at the fill: the body top of the swing high made between the sweep
     low and the fill (the high the retracement came from), and the retracement's low."""
@@ -753,6 +790,27 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 tr.exits.append((ts, sd.x(o), pos["left"], "stop_gap")); pos["left"] = 0
             elif l <= stop:
                 tr.exits.append((ts, sd.x(stop), pos["left"], "be" if pos["t1_done"] else "stop")); pos["left"] = 0
+            elif p.mgmt == "ladder":
+                fr = pos["fracs"]
+                lv_ = pos["levels"][:len(fr)]
+                while pos["k"] < len(lv_) and pos["left"] and h >= lv_[pos["k"]]:
+                    k = pos["k"]
+                    last = k == len(lv_) - 1
+                    q = pos["left"] if last else min(pos["left"], max(p.lot, _lots(pos["n"] * fr[k], p.lot)))
+                    tr.exits.append((ts, sd.x(lv_[k]), q, f"t{k + 1}")); pos["left"] -= q
+                    pos["k"] += 1
+                    pos["last_partial_i"] = i
+                    if not pos["t1_done"]:
+                        pos["t1_done"] = True
+                        if p.be_on == "t1":
+                            pos["stop"] = max(pos["stop"], pos["basis"] / pos["n"])
+                    if p.ladder_trail == "prior" and k >= 1:
+                        pos["stop"] = max(pos["stop"], lv_[k - 1] - p.stop_buffer)
+                    pos["away"] = lv_[k]
+                if (pos["t1_done"] and not pos.get("be_done") and p.be_on == "expansion"
+                        and pos["last_partial_i"] < i and c > lv_[0]):
+                    pos["stop"] = max(pos["stop"], pos["basis"] / pos["n"])   # breakeven after expansion
+                    pos["be_done"] = True
             else:
                 if not pos["t1_done"] and h >= pos["t1"]:
                     q = pos["left"] if pos["t2"] is None else max(p.lot, _lots(pos["left"] * p.partial, p.lot))
@@ -762,6 +820,10 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                     pos["stop"] = max(pos["stop"], pos["basis"] / pos["n"])
                 if pos["left"] and pos["t2"] is not None and pos["t1_done"] and h >= pos["t2"]:
                     tr.exits.append((ts, sd.x(pos["t2"]), pos["left"], "t2")); pos["left"] = 0
+            if (pos["left"] and p.mgmt == "ladder" and p.ladder_trail == "hit" and pos.get("away") is not None
+                    and c >= pos["away"] + p.away_pts * p.es_pt):
+                pos["stop"] = max(pos["stop"], pos["away"] - p.stop_buffer)   # price left the array
+                pos["away"] = None
             if pos["left"] and p.ep07_body_exit and l < pos["body_low"]:
                 px = min(o, pos["body_low"])           # traded below the swing low's lowest body
                 tr.exits.append((ts, sd.x(px), pos["left"], "body_low")); pos["left"] = 0
@@ -802,7 +864,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 new = [g for g in sd.gaps if g.i == i and g.i - 2 > pos["fill_i"]]
                 if new:
                     g = new[-1]
-                    if p.trail:
+                    if p.trail or (p.mgmt == "ladder" and p.ladder_trail == "fvg" and pos["t1_done"]
+                                   and g.i - 2 > pos["last_partial_i"]):   # formed since the partial
                         pos["stop"] = max(pos["stop"], g.bottom - p.stop_buffer)
                     k = len(tr.adds)
                     if (p.adds and k < len(p.adds) and not pos["t1_done"] and pos["add"] is None):
@@ -845,7 +908,9 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                            left=o["shares"], n=o["shares"], basis=fill * o["shares"],
                            t1_done=False, fill_i=i, fill_t=t, add=None, fvg_bottom=o["fvg_bottom"],
                            abort=None, best=fill, ext_i=o["ext_i"], broken=set(), fvg_ce=o["fvg_ce"],
-                           body_low=o["body_low"], **_swing_ref(sd, o["ext_i"], i))
+                           body_low=o["body_low"], levels=o["levels"], k=0, away=None, last_partial_i=i,
+                           fracs=_split(p, ctx, hist, day, i, t),
+                           **_swing_ref(sd, o["ext_i"], i))
                 done[o.get("done_key", o["session"])] = True
                 pending = None
                 if sd.l[i] <= pos["stop"]:           # same-bar stop (conservative)
@@ -1145,6 +1210,7 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
                 ext=sw["ext"], ext_i=sw["ext_i"],
                 body_low=float(min(min(sd.o[k], c[k]) for k in range(max(0, sw["ext_i"] - 1), min(i, sw["ext_i"] + 1) + 1))),
                 t2=lv[1] if len(lv) > 1 else None, shares=shares, htf=htf,
+                levels=lv[:max(1, len(p.ladder_fracs))],
                 conf_n=None if cf is None else len(cf), conf_top=(cf[-1] if cf else ""),
                 conf_tfs="|".join(cf or []), entry_kind="ifvg" if is_ifvg else "fvg",
                 mitigation=bool(mit), propulsion=bool(prop),
