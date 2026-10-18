@@ -11,7 +11,12 @@ from dataclasses import dataclass
 import numpy as np
 
 
-@dataclass(frozen=True)
+def _same(a, b) -> bool:
+    """Field equality where NaN equals NaN (an unset mean threshold)."""
+    return a == b or (a != a and b != b)
+
+
+@dataclass(frozen=True, eq=False)
 class Zone:
     kind: str       # "bull" or "bear"
     top: float
@@ -19,6 +24,22 @@ class Zone:
     i: int          # bar index at which the zone is known (the bar that completes it)
     src: int = -1   # index of the candle the zone is built from (blocks), or the gap's middle candle
     mt: float = float("nan")   # blocks: body mean threshold (see order_block_blend)
+
+    # Equality and hashing treat a NaN mean threshold as equal to NaN. Python 3.13's dataclass
+    # __eq__ compares fields with == (NaN != NaN), while 3.11/3.12 compared tuples, whose
+    # identity shortcut made the shared NaN default compare equal; this keeps both the same.
+    def _key(self):
+        return (self.kind, self.top, self.bottom, self.i, self.src, None if self.mt != self.mt else self.mt)
+
+    def __eq__(self, other):
+        if not isinstance(other, Zone):
+            return NotImplemented
+        return all(_same(x, y) for x, y in zip(
+            (self.kind, self.top, self.bottom, self.i, self.src, self.mt),
+            (other.kind, other.top, other.bottom, other.i, other.src, other.mt)))
+
+    def __hash__(self):
+        return hash(self._key())
 
     @property
     def mid(self) -> float:
