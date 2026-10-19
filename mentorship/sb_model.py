@@ -386,8 +386,9 @@ def _premise(ctx, sd, li, i, p, session) -> str:
     if mode in ("smt", "either"):
         ps = getattr(ctx, "pside", None)
         if ps and ps[0] is not None:
+            from .strategy import _sell_side
             pctx, psides, ppos = ps
-            for key, v in _sweep_levels(ctx, sd, i, p, session).items():
+            for key, v in _sell_side(ctx, sd, session, i, True, p).items():
                 if _thru(float(sd.l[li]), v, _tick(p)) and _smt(ctx, sd, i, key, v, session, pctx, psides, ppos, p) is True:
                     return "smt"
     return ""
@@ -520,6 +521,12 @@ def _conf_levels(ctx, sd, k0, i, g, ob, p) -> tuple | None:
         mt = float(ob.mt if p.mt_mode == "body" else ob.mid)
         lv.append((mt, "mt"))
     lv = sorted(x for x in lv if x[0] <= g.top)
+    if mt is not None:                                 # the idea is "support where they agree with the MT" (090)
+        grp = [x for x in lv if abs(x[0] - mt) <= tol]
+        kinds = {k for _, k in grp}
+        if len(kinds) >= p.sb_conf_min:
+            return float(np.mean([x[0] for x in grp])), kinds, mt
+        return None
     best = None
     for j, (v, _) in enumerate(lv):
         grp = [x for x in lv if v - 1e-12 <= x[0] <= v + tol]
@@ -588,13 +595,18 @@ def _arm_all(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=
         brk = (h if p.mss_mode == "wick" else c)[li + 1:i + 1] > ref
         if brk.any():
             kb = li + 1 + int(np.flatnonzero(brk)[0])
+    mss_fail = False                                   # no (valid) MSS: only the 5m order block entry (049) can still arm
     if kb is None and need_mss:
-        return []
+        if "ob" not in p.sb_entry_arrays:
+            return []
+        mss_fail = True
     if kb is not None and (p.disp_mult or p.disp_body_mult or p.disp_through_pts or p.disp_follow or p.mss_disp):
         ok, kb2 = disp_ok_sb(sd, li, i, ref, p)        # setups_models A20 / M0.4 "also in SB"
         if not ok:
             if need_mss:
-                return []
+                if "ob" not in p.sb_entry_arrays:
+                    return []
+                mss_fail = True
             kb = None
         else:
             kb = kb2
@@ -655,7 +667,7 @@ def _arm_all(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=
     pick = p.sb_fvg_pick if p.sb_evolve else "first"
     cands = []
     gaps = []
-    if "fvg" in p.sb_entry_arrays:
+    if "fvg" in p.sb_entry_arrays and not mss_fail:
         brk_lv = -np.inf if ref is None else ref
         sib_top = -np.inf
         bears = []
@@ -701,7 +713,7 @@ def _arm_all(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=
                     continue
                 tg.append("sb_lrc")
             cands.append(dict(kind="fvg", top=g.top, bottom=g.bottom, i=g.i, g=g, first_low=float(l[g.i - 2]), tags=tg))
-    if p.sb_ifvg:
+    if p.sb_ifvg and not mss_fail:
         ifs = _ifvg_cands(ctx, sd, k0, li, i, p, kb)
         ifs = [x for x in ifs if x["i"] >= k_fvg]
         if p.sb_ifvg == "prefer" and ifs:
@@ -714,7 +726,7 @@ def _arm_all(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=
             cands.append(ob_c)
     if not cands:
         return []
-    cands.sort(key=lambda x: (x["i"], x["kind"] != "fvg"))
+    cands.sort(key=lambda x: (x["i"], x["kind"] != "fvg", x["top"]))
     if pick == "any_in_leg":
         sel = cands
     elif pick == "first":
@@ -755,7 +767,7 @@ def _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, pr
         if conf is not None:
             lvt.append("sb_conf")
             if p.sb_conf_mode == "entry":
-                entry = min(entry, conf[0])
+                entry = min(entry, conf[0] if conf[2] is None else max(conf[0], conf[2]))   # support at or above the MT
                 kind = "conf"
     pad = p.pad
     stop_at_fill = False
@@ -816,6 +828,10 @@ def _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, pr
                 mg.append((v, k_))
         lv = mg
     dr = [(v, k_) for v, k_ in lv if v > entry]
+    if lock is not None and lock["side"] == sd.sign and lock["target"] is not None:   # #9 / M3.2: the locked draw is a draw
+        tv_ = sd.x(lock["target"])                      # even when the target list (pw_pools, OTE, fallback, London) lacks it
+        if tv_ > entry and not any(abs(v - tv_) <= 1e-9 for v, _ in dr):
+            dr = sorted(dr + [(tv_, "pool" if lock["kind"] == "pool" else "array")])
     if p.sb_draw_pools_only:                           # A2 (033 ~24:34): an imbalance is not liquidity
         dr = [(v, k_) for v, k_ in dr if k_ in POOL_KINDS]
     scalp_fail = None
@@ -956,13 +972,14 @@ def _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, pr
             early = wk is not None and wk.get("early_up" if sd.sign > 0 else "early_dn", 0)
             if early and aligned and not (ds.ranging if ds is not None else True):
                 sup = True
-                lvt.append("sb_supercharge")
                 if t2 is None:                         # the HTF draw: the locked target, else the farthest draw
                     far = lock["target"] if (lock is not None and lock["side"] == sd.sign) else None
                     t2 = (sd.x(far) if far is not None else (levels[-1] if levels else t1))
                     if t2 <= t1 + p.es_pt:
                         t2 = None
                         sup = False
+                if sup:
+                    lvt.append("sb_supercharge")
             else:
                 t2 = None                              # not supercharged: the full exit at the SB target (gap 8)
     chop = getattr(ctx, "chop", None)                # #10: sloppy reasons known at this close
@@ -1199,6 +1216,7 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
     if isinstance(lock, dict) and p.sb_day_dir == "lock" and ds.day_side == 0 and lock["side"]:
         ds.day_side = lock["side"]
     pend: dict = {}
+    dead_draws: set = set()                           # M3.5 / 057 ~3:35: a cancelled draw stays cancelled (sb_cancel_sticky)
     pos = None
     n_done = 0
     rev_state = None
@@ -1271,7 +1289,7 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
                 if t < a and sd.l[i] < o_["entry"] and not o_["market"]:
                     del pend[key]                     # traded into before the window: not valid
                     continue
-                if o_["cancel_below"] is not None and sd.c[i] < o_["cancel_below"]:
+                if o_["cancel_below"] is not None and i - 1 >= o_["i"] and sd.c[i - 1] < o_["cancel_below"]:
                     del pend[key]                     # gap 10: a close below the MT cancels the confluence idea
                     continue
                 if p.sb_cancel_ticks:                 # gap 17 (057 ~4:18): a 1-2 tick run beyond the draw is wanted
@@ -1280,12 +1298,18 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
                     gone = sd.h[i] >= o_["t1"] and sd.l[i] >= o_["entry"]
                 if gone and not o_["market"]:
                     del pend[key]                     # target traded before the fill
+                    dead_draws.add((sd.sign, round(float(o_["draw_raw"]), 6)))
                     continue
                 ft_ = p.fill_through * p.tick         # E3: ticks the limit must print through to fill
-                if o_["market"]:
-                    if i > o_["i"] and a <= t < b:
-                        filled = (key, sd.o[i], o_)
-                        break
+                if o_["market"]:                      # 076: a down-close candle trades into the IFVG -> buy the next open
+                    if i - 1 >= o_["i"]:
+                        pb = i - 1
+                        if sd.c[pb] < o_["zone"][1]:
+                            del pend[key]         # a close through the IFVG: it failed
+                            continue
+                        if sd.c[pb] < sd.o[pb] and sd.l[pb] <= o_["zone"][0] and a <= t < b:
+                            filled = (key, sd.o[i], o_)
+                            break
                     continue
                 if a <= t < b and (sd.l[i] <= o_["entry"] - ft_ + 1e-12 if ft_ else sd.l[i] < o_["entry"]):
                     cand = (key, min(o_["entry"], sd.o[i]), o_)
@@ -1296,8 +1320,8 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
                 sd = o_["side"]
                 stop, shares = o_["stop"], o_["shares"]
                 if o_["stop_at_fill"] or o_["market"]:   # 086 ~11:35 / 076: below the entry candle; size at the real fill
-                    if o_["stop_at_fill"]:
-                        stop = float(sd.l[i]) - p.pad
+                    if o_["stop_at_fill"]:               # the entry candle: the fill bar, or the signal bar of a market buy
+                        stop = float(sd.l[i - 1 if o_["market"] else i]) - p.pad
                     risk = fill - stop
                     if not (p.min_risk_pts * p.es_pt <= risk <= p.max_risk_pts * p.es_pt) or fill >= o_["t1"]:
                         del pend[key]
@@ -1404,6 +1428,8 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
             kk0 = rev_state["k0"] if rev_state is not None else k0
             lk_sd = lk if (lk is not None and lk["side"] == sd.sign) else None
             os_ = _arm_all(ctx, sd, i, kk0, p, tol, lk_sd, session, a, out, win, ds, None)
+            if p.sb_cancel_sticky and dead_draws:
+                os_ = [x for x in os_ if (sd.sign, round(float(x["draw_raw"]), 6)) not in dead_draws]
             for o_ in os_:
                 if wk_tag:
                     o_["lv_tags"] = "|".join(x for x in (o_["lv_tags"], wk_tag) if x)

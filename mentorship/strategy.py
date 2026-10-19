@@ -1107,6 +1107,7 @@ class Params:
     sb_conf_mode: str = "tag"            # "tag" / "entry"
     sb_reverse_after_target: bool = False  # gap 15 (058 ~44-47): ONE opposite SB after an HTF-array target
     sb_cancel_ticks: int = 0             # gap 17 (057 ~4:18): cancel after a run N ticks beyond the draw (0 = at the exit)
+    sb_cancel_sticky: bool = True        # M3.5 / 057 ~3:35: once the draw traded and the order was cancelled the same draw is not re-armed
     sb_simple: bool = False              # gap 20 (069 ~15:05): EQ of the leg, target the first array beyond it, one exit
     # stop (M3.8, gap 19)
     sb_stop: str = "fvg_ob"              # "fvg_ob" (090) / "fvg2" (057) / "entry_candle" (086) / "swing" / "fvg_ce" (069)
