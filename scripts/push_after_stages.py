@@ -18,7 +18,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 LOG = REPO / "runs" / "push_after_stages.log"
-BAD_PATH = re.compile(r"(^|/)(data|runs)/|\.env($|\.)|token.*\.json$|credentials.*\.json$|\.(pem|key|csv|parquet|dbn|zst|zip)$",
+BAD_PATH = re.compile(r"(^|/)(data|runs|.worktrees)/|\.env($|\.)|token.*\.json$|credentials.*\.json$|\.(pem|key|csv|parquet|dbn|zst|zip)$",
                       re.I)
 BAD_TEXT = r"(db-[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|\"refresh_token\"\s*:|\"access_token\"\s*:|" \
            r"(app_secret|api_key|app_key)\s*=\s*['\"][A-Za-z0-9_\-]{12,})"
