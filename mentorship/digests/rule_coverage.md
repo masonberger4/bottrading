@@ -1148,8 +1148,13 @@ The `silver_bullet` package (`sb_model.py` plus the `# --- silver_bullet package
 
 | Id | New status | Note |
 |---|---|---|
-| M3, M3.1, M3.2, M3.3, M3.4, M3.5, M3.6, M3.7, M3.8, M3.9, M3.10, M3.11, D2, T6, L14g | FULL | the 12 rule_coverage items; `sb_*` switches |
-| gaps 1-3, 5-10, 13-22 (rulebook_gaps/silver_bullet.md) | FULL | IFVG, room overshoot / untaken / ORG chop, discount-array stand-in, BPR, immediate rebalance, supercharge, OB entry, confluence, premise, several entries, reverse, FVG pick, cancel ticks, large-range candle, stop width, simple EQ rule, consolidation wait, NWOG expansion |
+| M3, M3.1, M3.2, M3.4, M3.5, M3.6, M3.7, M3.8, M3.9, M3.10, M3.11, T6, L14g | FULL | `sb_*` switches |
+| M3.3 | FULL (opt-in) | `sb_use_bias` (the spec's "apply `want` to run_sb") is OPT-IN and default OFF; `sb_need_mss` is a duplicate of `sb_mss_required` (kept as an alias, both must be True) |
+| D2 | PARTIAL | the A1 `mss_ref` tiers ("honour consistently") are not wired into the SB trigger; the SB uses its own swing reference |
+| gaps 1-3, 5-10, 13-22 (rulebook_gaps/silver_bullet.md) | FULL, except below | IFVG, room overshoot / untaken / ORG chop, discount-array stand-in, BPR, immediate rebalance, supercharge, OB entry, confluence, premise, several entries, reverse, FVG pick, cancel ticks, large-range candle, stop width, simple EQ rule, consolidation wait, NWOG expansion |
+| gap 7 `sb_runaway` | PARTIAL | the funnel counter exists (both sides, inside the window) but there is no log row; counts are per re-arm bar, so they overstate |
+| gap 8 supercharge | PARTIAL | fixed-exit mode only (`sb_mgmt="fixed"`, enforced by check_params); Monday reads as "nothing in yet" (Mon-Wed); seasonal not built |
+| `sb_mgmt="layered057"` | alias | exactly `gap424` (no separate variant is documented) |
 | gaps 4, 11, 12 | no build | FX room (fx_only), entry timeframe (needs sub-minute data), FVG from the 09:30 leg (already how the SB arms); rulebook text only |
 | direction filters | FULL [our interpretation] | `sb_draw_first` + `sb_day_dir`, `sb_disp_*`, `sb_sync`, `sb_spotty`, `sb_weekly` |
 | B23 seasonal agreement (gap 8) | NOT built | `sb_supercharge_seasonal` is reserved; the seasonal column belongs to bias_htf |

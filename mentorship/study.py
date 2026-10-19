@@ -123,7 +123,9 @@ def main_index(out="runs/mentorship", variants=None, tfs=(5, 1), workers=6):
     books = []
     for (tf, v), g in t.groupby(["tf", "variant"]):
         books.append(B.combine(g[g.symbol == "SPX"], g[g.symbol == "NDX"],
-                               pick=IVARIANTS.get(v, {}).get("smt_pick", "first")).assign(book="combined"))
+                               pick=IVARIANTS.get(v, {}).get("smt_pick", "first"),
+                               sb_one_market=IVARIANTS.get(v, {}).get("sb_one_market", False),     # SB package
+                               sb_am_done=IVARIANTS.get(v, {}).get("sb_am_done", False)).assign(book="combined"))
     t = pd.concat([t.assign(book=t.symbol)] + books, ignore_index=True)
     t.to_csv(f"{out}/index_trades.csv", index=False)
     rep = {"all": {f"{tf}m/{b}/{v}": B.stats(g) for (tf, b, v), g in t.groupby(["tf", "book", "variant"])}}
@@ -984,6 +986,14 @@ DECISIONS.update({
     "gap3_sb_org_chop": dict(SB_ONLY, sb_org_chop=True),
     "gap3_sb_org_chop_scalp": dict(SB_ONLY, sb_org_chop=True, sb_fail_mode="scalp"),
     "M3.11_sb_gap424": dict(SB_ONLY, sb_mgmt="gap424"),
+    "M3.11_sb_ladder": dict(SB_ONLY, sb_mgmt="ladder"),                          # SB package review: the ladder exits
+    "M3.11_sb_layered057": dict(SB_ONLY, sb_mgmt="layered057"),                  # (= gap424: an alias, kept for the record)
+    "M3.3_sb_use_bias_po3": dict(SB_ONLY, htf_bias="combo", bias_neutral="both", sb_use_bias=True, use_bias=True),   # the PO3 test
+    "review_sb_no_overlap_off": dict(SB_ONLY, sb_last_hour=True, sb_no_overlap=False),   # two SB positions at once (double risk)
+    "review_sb_stop_entry_candle": dict(SB_ONLY, sb_stop="entry_candle"),        # 086 stop from the last closed bar (no look-ahead)
+    "review_sb_conf_tol": dict(SB_ONLY, sb_entry_arrays=("fvg", "ob", "confluence"), sb_conf_mode="entry", sb_conf_min=3, sb_conf_tol_pts=2.0),
+    "review_sb_cons_bars": dict(SB_ONLY, sb_cons_wait=True, sb_cons_bars=4),
+    "review_sb_windows_shifted": dict(SB_ONLY, sb_windows=((600, 650), (840, 890))),
     "M3.11_sb_runner_if_weekly": dict(SB_ONLY, sb_runner=True, sb_runner_if_weekly=True),
     "gap8_sb_supercharge": dict(SB_ONLY, sb_runner=True, sb_supercharge=True),
 })

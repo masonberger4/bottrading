@@ -1109,6 +1109,7 @@ class Params:
     sb_conf_mode: str = "tag"            # "tag" / "entry"
     sb_reverse_after_target: bool = False  # gap 15 (058 ~44-47): ONE opposite SB after an HTF-array target
     sb_cancel_ticks: int = 0             # gap 17 (057 ~4:18): cancel after a run N ticks beyond the draw (0 = at the exit)
+    sb_no_overlap: bool = True           # SB package (review): no SB fill while an earlier SB trade (any window) is still open - one SB position at a time (double risk otherwise)
     sb_cancel_sticky: bool = True        # M3.5 / 057 ~3:35: once the draw traded and the order was cancelled the same draw is not re-armed
     sb_simple: bool = False              # gap 20 (069 ~15:05): EQ of the leg, target the first array beyond it, one exit
     # stop (M3.8, gap 19)
@@ -3738,6 +3739,8 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
     """#9 per bar: lock each session's draw at its lock time (bars closed by then only), then
     mark a lock delivered when this closed bar reached its target (before or after an entry):
     that session (and its SB window) is done for the day."""
+    if not hasattr(ctx, "lock_hist"):
+        ctx.lock_hist = {}                            # SB package: {key: [(effective bar, replaced lock)]}
     for s_, tl in lock_t.items():
         if s_ not in ctx.lock and t >= tl:
             row = (bias_by_cut or {}).get(tl)
@@ -3756,6 +3759,7 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
                              spent, org_pref=False)
             nl["session"] = s_
             nl.update(org_break_i=i, traded=lk["traded"])   # (the lock report shows the replacement)
+            ctx.lock_hist.setdefault(s_, []).append((i, lk))   # SB package: the replaced lock, for SB bars before i
             lk = nl
             ctx.lock[s_] = lk
             if lk["side"] == 0:
@@ -3773,6 +3777,7 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
                 all_locks.append(lk)
                 nl = mark_levels(ctx, None, int(t + ctx.tf), "PM" if s_ == "LH" else s_, p, spent)
                 nl["session"] = s_
+                ctx.lock_hist.setdefault(s_, []).append((i + 1, lk))   # SB package: the delivered lock, for SB bars before i
                 ctx.lock[s_] = nl
                 if nl["side"] == 0 and p.draw_lock_neutral == "skip":
                     done[s_] = True

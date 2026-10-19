@@ -677,7 +677,7 @@ Conventions: a long rule is written once in side space and mirrored; bars are us
 - displacement size | done | `sb_disp_pts` (the MSS candle's body), `sb_disp_leg_pts` (low -> MSS close), `sb_disp_range_mult` (range vs the 20 bars before the low) | 0 | the A20 `disp_*` switches also act in the SB (setups_models)
 - ES/NQ/YM sync | done [our interpretation] | `sb_sync` ("tag"/"require"), `sb_sync_mode` ("dir"/"mss"), `sb_sync_min` | "off", "mss", 1 | each sister closed higher at the arming bar than at our low's bar and (mss) broke its own last swing high; no sister present = no data (tag `sb_sync_na`, passes)
 - spotty-day skip | done [our interpretation] | `sb_spotty` ("tag"/"skip"), `sb_spotty_tests`, `sb_spotty_min`, `sb_spotty_bars` | "off", (no_disp, no_fvg, whipsaw), 2, 30 | read once from the bars before the window (filters.md: ICT gives no measurable definition)
-- weekly-profile alignment | done [our interpretation] | `sb_weekly` ("tag"/"require"), `sb_weekly_neutral` | "off", "allow" | side +1 when the week's low is in on Mon/Tue and the last close is above the week open (mirror -1); Mondays are neutral
+- weekly-profile alignment | done [our interpretation] | `sb_weekly` ("tag"/"require"), `sb_weekly_neutral` | "off", "allow" | side +1 when the week's low is in on Mon/Tue and the last close is above the week open (mirror -1); Mondays are neutral for the side, but the supercharge's "week extreme not yet in" read is open on a Monday (`fresh`)
 
 ### Default changes (the only two) - OWNER QUESTIONS
 
@@ -695,3 +695,18 @@ Conventions: a long rule is written once in side space and mirrored; bars are us
 ### Tests
 
 `tests/test_silver_bullet.py` (104 tests, 22 min with the ES look-ahead runs): unit and run_day scenarios for every rule item, gap and filter; mirror invariance (19 behaviours, long = short); the synthetic-data look-ahead loop (full vs truncated) for five switch groups; ES 5m x2 and ES 1m look-ahead (skip without data); the old-build signature test (`sb_pw_pools=False`, `sb_cancel_sticky=False` -> the recorded trades); the study-variant build test; and a meta test that every new switch is named by a test. Also checked by hand: ES 5m 2023-04..06 and ES 1m 2024-01..02 plus synthetic runs of the old build reproduce trade for trade with the two defaults switched back.
+
+
+### Review fixes (sb-build, after ecf38c6)
+
+1. management_exits hooks ported into `_run_window` / `_manage` (guarded by `_mg(p)`, which returns mentorship's `manage` module only when the Params carry `time_stop_extras`, so this branch runs without it and the merge needs no textual hunk in the loop): `pm_consol_exit` PM skip, `extras_blocked` (`blk`), `be_on` ("t1" or after expansion; `t1_i`, `be_done`; default now follows `be_on="expansion"` like the engine and mentorship), `time_stop_extras` (`fill_t`, `best`), `am_bulk_t` / `am_bulk_frac`, `final_hit` and `mark_day_stop`. The `be_on`, blk and am_bulk paths are tested (the last two with a stub of `manage`); re-run the golden / signature tests after the merge.
+2. `sb_stop="entry_candle"` and limit IFVG entries no longer read the fill bar's own low: the stop is the last closed bar's low minus the pad, else (limit retraced below it) the stop armed with the order. The fill bar can now stop the trade out.
+3. look-ahead tests also compare exits: for cuts after exits, `exit_time`, `exit_reason`, `gross` of the trades closed by the cut must agree; the `filters` group needs >= 3 trades.
+4. `sb_no_overlap` (default True, Params): no SB fill while an earlier SB trade of any window is open.
+5. `sb_spotty="tag"` only tags (arming before the window is unchanged); only "skip" waits for the read.
+6. Supercharge: Monday has `early_up = early_dn = fresh = 1`, so it can fire Mon-Wed; `sb_supercharge` with `sb_mgmt` other than "fixed" is rejected by check_params (it was silently inert).
+7. `sb_runaway` counts both sides and only inside the window.
+8. rule_coverage section 6 marks D2, gap 7 and gap 8 PARTIAL, `layered057` an alias, `sb_use_bias` opt-in.
+9. study: `M3.11_sb_ladder`, `layered057`, `M3.3_sb_use_bias_po3`, no_overlap off, entry_candle, conf / cons / window variants; the SPX/NDX combine passes `sb_one_market` / `sb_am_done`.
+10. Session locks replaced mid-day (ORG breakaway, `draw_relock`) are recorded in `ctx.lock_hist` (strategy._lock_step, "SB package"); the SB reads the lock in force at each bar (`_lock_at`), not the day's final one.
+11. `sb_moc_extra`'s "no PM SB hit its target" condition also binds the 15:00 last-hour window. Not changed: `sb_x_*` funnel counts are per re-arm bar (inflated), `_first_lock` adds the previous-session H/L for the AM window only, `sb_need_mss` stays an alias, `sb_pw_pools` / `sb_cancel_sticky` default changes are still open owner questions.

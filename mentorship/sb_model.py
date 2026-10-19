@@ -86,6 +86,8 @@ def check_params(p) -> None:
         raise ValueError("sb_cancel_ticks >= 0, sb_conf_min >= 2, sb_org_chop_bars >= 1, sb_cons_bars >= 2 expected")
     if len(p.sb_gap424_fracs) < 2 or abs(sum(p.sb_gap424_fracs) - 1.0) > 1e-6:
         raise ValueError(f"sb_gap424_fracs {p.sb_gap424_fracs!r}: expected >= 2 fractions summing to 1")
+    if p.sb_supercharge and p.sb_mgmt != "fixed":      # SB package: the supercharge (gap 8) is the fixed-exit runner lot
+        raise ValueError(f"sb_supercharge needs sb_mgmt='fixed' (got {p.sb_mgmt!r}): it would be silently inert")
     for name in ("sb_lh_window", "sb_0700_window", "sb_london_window", "sb_moc_window"):
         w = getattr(p, name)
         if len(w) != 2 or not 0 <= w[0] < w[1] <= 1440:
@@ -133,16 +135,18 @@ def windows(p) -> list:
 def weekly_profile(ctx, p, day) -> dict:
     """The weekly profile read (048 ~2:02:12: "a classic bullish weekly profile would be a Tuesday low of the week in
     London") [our interpretation]. From the completed sessions of this week: `side` +1 when the week's low is in on
-    Monday / Tuesday and the last close is above the week's open (mirror -1); 0 otherwise or on Mondays. `early_up` /
+    Monday / Tuesday and the last close is above the week's open (mirror -1); 0 otherwise or on Mondays (neutral). `early_up` /
     `early_dn` are 1 while it is Monday-Wednesday and the week's low (high) is not yet clearly in: within 0.5 x ADR5 of
     the last close (the supercharge test, gap 8). Uses completed days only."""
     from .strategy import adr5
     hist = getattr(ctx, "hist", [])
     iso = day.isocalendar()[:2]
     wk = [g for g in hist if g.index[0].date().isocalendar()[:2] == iso and g.index[0].date() < day]
-    out = dict(side=0, early_up=0, early_dn=0, low_day=None, high_day=None)
+    out = dict(side=0, early_up=0, early_dn=0, fresh=0, low_day=None, high_day=None)
     if not wk:
-        return out
+        if day.weekday() <= 2 and len(hist) >= 5 and adr5(hist[-5:]):
+            out["early_up"] = out["early_dn"] = out["fresh"] = 1   # SB package: no completed day yet (Monday) - no
+        return out                                  # week extreme is in, the profile is neutral (side 0): the supercharge may fire
     lows = [float(g.low.min()) for g in wk]
     highs = [float(g.high.max()) for g in wk]
     ld, hd = int(np.argmin(lows)), int(np.argmax(highs))
@@ -1000,7 +1004,7 @@ def _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, pr
             lvt.append("sb_no_runner")
         if p.sb_supercharge:
             early = wk is not None and wk.get("early_up" if sd.sign > 0 else "early_dn", 0)
-            if early and aligned and not (ds.ranging if ds is not None else True):
+            if early and (aligned or wk.get("fresh")) and not (ds.ranging if ds is not None else True):
                 sup = True
                 if t2 is None:                         # the HTF draw: the locked target, else the farthest draw
                     far = lock["target"] if (lock is not None and lock["side"] == sd.sign) else None
@@ -1164,6 +1168,33 @@ def _day_state(ctx, p, day) -> SimpleNamespace:
     return ds
 
 
+def _mg(p):
+    """SB package: mentorship's manage module (management_exits package) when this build has it, else None - the hooks
+    below (pm_consol_exit, extras_blocked, time stop, am_bulk, day stops, be_stop) switch on with the Params fields."""
+    if not hasattr(p, "time_stop_extras"):
+        return None
+    from . import manage as MG
+    return MG
+
+
+def _be_px(p, mg, entry: float) -> float:
+    return mg.be_stop(entry, p) if mg is not None else float(entry)
+
+
+def _lock_key(ctx, win) -> str:
+    return "LH" if win.name in ("lh", "moc") and "LH" in ctx.lock else win.session
+
+
+def _lock_at(ctx, key: str, i: int):
+    """The session lock as it stood at bar i. strategy._lock_step replaces a lock mid-day (ORG breakaway, draw_relock) and
+    records (effective bar, replaced lock) in ctx.lock_hist; an SB bar before that reads the lock then in force
+    (no look-ahead on the day's final lock)."""
+    for eff, old in getattr(ctx, "lock_hist", {}).get(key, ()):
+        if eff > i:
+            return old
+    return getattr(ctx, "lock", {}).get(key)
+
+
 def _hit_target(tr, before=None) -> bool:
     """The trade reached a target rung (t1, t2, ...), not just a stop / exit; `before` (a timestamp) = by then."""
     import re
@@ -1173,7 +1204,7 @@ def _hit_target(tr, before=None) -> bool:
 def _moc_ok(ctx, out, a_idx: int) -> bool:
     """Gap 14 (056 ~15:00 "the final market on close macro"): the extra 15:15-15:45 entry only while the PM draw is
     not delivered (before the window opens) and no PM Silver Bullet has hit its target (by then)."""
-    pm = getattr(ctx, "lock", {}).get("PM")
+    pm = _lock_at(ctx, "PM", a_idx)
     if pm is not None and pm.get("delivered_i") is not None and pm["delivered_i"] < a_idx:
         return False
     t0 = ctx.idx[a_idx] if a_idx < len(ctx.idx) else None
@@ -1193,6 +1224,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
     out = []
     ds = _day_state(ctx, p, day)
     stand = p.sloppy_mode == "stand_aside"
+    mg = _mg(p)
     for win in windows(p):
         if p.day_filter and blocked(day, win.session, p, win.a):
             continue
@@ -1202,8 +1234,12 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
             continue                                  # M3 / 047 ~08:00: one Silver Bullet a day
         if p.sb_cascade and win.classic and _entered_before(ctx, out, _idx_at(ctx, win.a), ("sb_london", "sb_am", "sb_pm")):
             continue                                  # M3.9 / 054 ~18:01: London, else AM, else PM
-        if win.name == "moc" and not _moc_ok(ctx, out, _idx_at(ctx, win.a)):
-            continue
+        if (win.name == "moc" or (win.name == "lh" and p.sb_moc_extra)) and not _moc_ok(ctx, out, _idx_at(ctx, win.a)):
+            continue                                  # gap 14: the 15:15 condition also binds the 15:00 last-hour window
+        if mg is not None and win.session == "PM" and getattr(p, "pm_consol_exit", 0) and win.a >= p.pm_consol_exit:
+            k810 = ctx.start + int(np.searchsorted(ctx.t[ctx.start:], 810))
+            if k810 < len(ctx.t) and mg.consol_day(ctx, k810, p):
+                continue                              # X11c (management_exits): a consolidation PM starts nothing after the exit time
         drv = _news_gate(ctx, p, win.a, win.b)        # #4: wait for the news dealing range
         made = 0
         if drv is not None:
@@ -1217,6 +1253,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
 def _window_lock(ctx, p, win, ds):
     """(lock, lazy_key): lock is None (no draw lock), a dict, or "lazy" (marked at the leg start inside the loop);
     lock False = skip the window."""
+    from .strategy import _idx_at
     if p.sb_draw_first:
         return "lazy", "SB_" + win.name                # M3.2: its own pre-window lock
     if p.draw_lock != "session":
@@ -1225,8 +1262,7 @@ def _window_lock(ctx, p, win, ds):
         return "lazy", "LON"                           # precedes every session lock: its own lock at
     if win.name == "0700":                             # 02:00 (the leg start), with the htf table cut there
         return "lazy", "SB7"
-    key = "LH" if win.name in ("lh", "moc") and "LH" in ctx.lock else win.session
-    lock = getattr(ctx, "lock", {}).get(key)
+    lock = _lock_at(ctx, _lock_key(ctx, win), _idx_at(ctx, win.leg_from))   # (re-read per bar in _run_window)
     if lock is None:
         return False, None
     if lock["side"] == 0 and p.draw_lock_neutral == "skip":
@@ -1244,6 +1280,11 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
     lock, lazy_key = _window_lock(ctx, p, win, ds)
     if lock is False:
         return
+    mg = _mg(p)
+    lkey = _lock_key(ctx, win) if (isinstance(lock, dict) and lazy_key is None) else None   # re-read per bar (_lock_at)
+    busy = None                                       # SB package: sb_no_overlap - no fill while an earlier SB trade is open
+    if p.sb_no_overlap and out:
+        busy = max((x.exits[-1][0] if x.exits else ctx.idx[-1]) for x in out)
     flat_w = win.flat if win.flat else flat
     idx = [k for k in range(ctx.start, len(ctx.t)) if leg_from <= ctx.t[k] < flat_w]
     if not idx:
@@ -1254,8 +1295,6 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
     ds.want = want_side(ctx, p, row_w)
     if p.sb_supercharge:
         ds.ranging = daily_ranging(ctx, p, row_w)
-    if isinstance(lock, dict) and p.sb_day_dir == "lock" and ds.day_side == 0 and lock["side"]:
-        ds.day_side = lock["side"]
     pend: dict = {}
     dead_draws: set = set()                           # M3.5 / 057 ~3:35: a cancelled draw stays cancelled (sb_cancel_sticky)
     pos = None
@@ -1267,6 +1306,14 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
     for i in idx:
         t = ctx.t[i]
         ts = ctx.idx[i]
+        if lkey is not None:
+            lock = _lock_at(ctx, lkey, i)             # the lock in force at this bar (not the day's final one)
+            if lock is None:
+                break
+            if lock["side"] == 0 and p.draw_lock_neutral == "skip":
+                break
+            if p.sb_day_dir == "lock" and ds.day_side == 0 and lock["side"]:
+                ds.day_side = lock["side"]
         if lock == "lazy" and t >= leg_from:          # locked before the leg it trades from
             if p.sb_draw_first:
                 lock = _first_lock(ctx, p, win, ds)
@@ -1290,13 +1337,18 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
             sd = pos["side"]
             o, h, l, c = sd.o[i], sd.h[i], sd.l[i], sd.c[i]
             tr = pos["trade"]
-            _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session)
+            _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session, mg)
             if pos["left"] and p.sb_adds and not pos["t1_done"]:
                 _sb_adds(ctx, p, pos, tr, sd, i, ts, o, l, c)
             if pos["left"] and ctx.equity:
                 r_now = max(0.0, (pos["entry"] - pos["stop"]) * pos["left"]) / ctx.equity
                 tr.peak_risk_pct = round(max(tr.peak_risk_pct or 0.0, r_now), 5)
             if not pos["left"]:
+                if mg is not None:                    # X12 / Ep04.13 (management_exits): the draw / last rung ended the day
+                    last_ = tr.exits[-1][3]
+                    tr.final_hit = last_ == (f"t{len(pos['levels'])}" if p.sb_mgmt != "fixed" else
+                                             ("t1" if pos["t2"] is None else "t2"))
+                    mg.mark_day_stop(tr, p)
                 out.append(tr)
                 n_done += 1
                 hit = _hit_target(tr)
@@ -1316,7 +1368,8 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
                 continue
             continue
         chopped = stand and chop is not None and chop.active_before(i)
-        if pend and (chopped or i < made):
+        blk = mg.extras_blocked(ctx, p, session, ts, out) if mg is not None else False   # X7c / X12 / X13a / X14b / X14d
+        if pend and (chopped or i < made or blk):
             pend = {}
         if pend and session == "AM" and p.am_exit and p.am_exit_extras and t + ctx.tf >= p.am_exit:
             pend = {}                                 # #8 guard
@@ -1343,6 +1396,8 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
                     del pend[key]                     # target traded before the fill
                     dead_draws.add((sd.sign, round(float(o_["draw_raw"]), 6)))
                     continue
+                if busy is not None and ts <= busy:
+                    continue                          # SB package sb_no_overlap: an earlier SB trade is still open
                 ft_ = p.fill_through * p.tick         # E3: ticks the limit must print through to fill
                 if o_["market"]:                      # 076: a down-close candle trades into the IFVG -> buy the next open
                     if i - 1 >= o_["i"]:
@@ -1363,8 +1418,10 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
                 sd = o_["side"]
                 stop, shares = o_["stop"], o_["shares"]
                 if o_["stop_at_fill"] or o_["market"]:   # 086 ~11:35 / 076: below the entry candle; size at the real fill
-                    if o_["stop_at_fill"]:               # the entry candle: the fill bar, or the signal bar of a market buy
-                        stop = float(sd.l[i - 1 if o_["market"] else i]) - p.pad
+                    if o_["stop_at_fill"]:               # the entry candle: the last CLOSED bar (the fill bar's own low is not
+                        stop = float(sd.l[i - 1]) - p.pad    # known at the fill: SB package review fix, no look-ahead)
+                        if stop >= fill:                     # [our interpretation] the limit retraced below the last closed
+                            stop = o_["stop"]                # bar's low: fall back to the stop armed with the order
                     risk = fill - stop
                     if not (p.min_risk_pts * p.es_pt <= risk <= p.max_risk_pts * p.es_pt) or fill >= o_["t1"]:
                         del pend[key]
@@ -1402,7 +1459,7 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
                            t1_done=False, n=shares, levels=o_["levels"], k=0, away=None, fill_i=i,
                            lvx=o_.get("lvx") or {}, fracs=fracs, zone=o_["zone"], li=o_["li"], rev=o_["rev"],
                            super=o_["super"], draw_raw_kind=o_["draw_raw_kind"], n0=shares, moved=False,
-                           add_pend=None, adds_done=0)
+                           add_pend=None, adds_done=0, fill_t=t, best=fill, t1_i=None)
                 pend = {}
                 if o_["rev"]:
                     rev_used, rev_state = True, None       # gap 15: ONE opposite Silver Bullet per window
@@ -1423,16 +1480,17 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
             if not pend:
                 break
             continue
-        if i < made or chopped:
+        if i < made or chopped or blk:
             continue
         lk = lock if isinstance(lock, dict) else None
         if lk is not None and lk.get("delivered_i") is not None and i >= lk["delivered_i"] and rev_state is None:
             continue                                  # #9: the session's draw is delivered
         if rev_state is not None:
             lk = None                                 # gap 15: the counter-draw trade ignores the lock's side
-        if p.sb_spotty != "off":
+        if p.sb_spotty != "off" and (i >= a_idx - 1 or p.sb_spotty == "skip"):
             if i < a_idx - 1:
-                continue                              # the spotty read needs the bars before the window
+                continue                              # "skip": no arming before the read (needs the bars before the window)
+                                                      # "tag" only tags: arming before the window is unchanged
             if "r" not in ds.spot.get(win.name, ""):
                 bad, why = spotty_day(ctx, p, win, a_idx, k0, ctx.tf)
                 ds.spot[win.name] = "r" + ("S:" + "+".join(why) if bad else "")
@@ -1500,7 +1558,9 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
     if pos is not None:                               # data ended
         out.append(pos["trade"])
     elif not out or out[-1].setup != setup:
-        if p.sb_imm_tag and any(immediate_rebalance(sd, a_idx, len(ctx.t) - 1, tk_sb) for sd in sides if sd.sign > 0):
+        b_end = _idx_at(ctx, b) - 1                   # bounded to the window, both sides (side space mirrors the short)
+        if p.sb_imm_tag and b_end > a_idx and any(immediate_rebalance(sd, a_idx, min(b_end, len(ctx.t) - 1), tk_sb)
+                                                  for sd in sides):
             _f("sb_runaway")                          # gap 7 (048 ~1:31): an immediate rebalance, no SB fill
 
 
@@ -1509,7 +1569,7 @@ def _first_units_sb(p, eq, risk, entry, o_):
     return _first_units(p, eq, risk, entry, o_["rm"], o_["xcap"])
 
 
-def _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session):
+def _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session, mg=None):
     """One bar of the open trade (side space): stops, targets (fixed / ladder / 4-2-4), the mohawk exits, the 045 abort,
     owner #8's 12:00 close and the flat."""
     from .strategy import _lots
@@ -1530,7 +1590,10 @@ def _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session):
             pos["k"] += 1
             if not pos["t1_done"]:
                 pos["t1_done"] = True
-                pos["stop"] = max(pos["stop"], pos["entry"])
+                pos["t1_i"] = i
+                if p.be_on == "t1":                    # X4 (management_exits): the SB follows be_on (default: after expansion)
+                    pos["stop"] = max(pos["stop"], _be_px(p, mg, pos["entry"]))
+                    pos["be_done"] = True
             pos["away"] = lv_[k]
         if pos["left"] and pos["away"] is not None and c >= pos["away"] + p.away_pts * p.es_pt:
             pos["stop"] = max(pos["stop"], pos["away"] - p.trail_pad)
@@ -1544,15 +1607,34 @@ def _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session):
             q = min(q, pos["left"])
             tr.exits.append((ts, sd.x(pos["t1"]), q, "t1")); pos["left"] -= q
             pos["t1_done"] = True
-            if not pos.get("super"):
-                pos["stop"] = max(pos["stop"], pos["entry"])
+            pos["t1_i"] = i
+            if not pos.get("super") and p.be_on == "t1":          # X4: the SB follows be_on
+                pos["stop"] = max(pos["stop"], _be_px(p, mg, pos["entry"]))
+                pos["be_done"] = True
         if pos["left"] and pos["t2"] is not None and pos["t1_done"] and h >= pos["t2"] + p.exit_fill_through * p.tick:
             tr.exits.append((ts, sd.x(pos["t2"]), pos["left"], "t2")); pos["left"] = 0
+    if (pos["left"] and pos["t1_done"] and not pos.get("be_done") and not pos.get("super")
+            and p.be_on in ("expansion", "after_mss", "stall", "pool") and pos["t1_i"] is not None and pos["t1_i"] < i
+            and c > (pos["levels"][0] if pos["levels"] else pos["t1"])):
+        pos["stop"] = max(pos["stop"], _be_px(p, mg, pos["entry"]))   # X4: BE after expansion (after_mss / stall / pool
+        pos["be_done"] = True                                         # read as expansion in the SB)
+    pos["best"] = max(pos["best"], h)
+    if mg is not None and pos["left"] and getattr(p, "time_stop_extras", False) and (p.time_stop_min or p.time_stop_bars)             and not pos["t1_done"]:
+        frac = mg.time_stop_frac(p, pos.setdefault("ts", {}), nbars=i - pos["fill_i"] + 1,
+                                 elapsed=(t + ctx.tf) - pos["fill_t"], best=pos["best"], basis=pos["entry"])
+        if frac > 0:                                   # X9 / X9d: the same time stop as the engine
+            q_ = mg.cut_qty(pos["left"], frac, p)
+            tr.exits.append((ts, sd.x(c), q_, "time" if q_ >= pos["left"] else "time_cut")); pos["left"] -= q_
     if pos["left"] and pos["lvx"] and i > pos["fill_i"]:
         for nm_, (lvl_, pre_t1) in pos["lvx"].items():       # A4 mohawk: a body close beyond the raw
             if (not pre_t1 or not pos["t1_done"]) and c < lvl_:   # level exits (as in run_day)
                 tr.exits.append((ts, sd.x(c), pos["left"], nm_)); pos["left"] = 0
                 break
+    if (mg is not None and pos["left"] and session == "AM" and getattr(p, "am_bulk_t", 0) and not pos.get("bulk_done")
+            and pos["fill_t"] < p.am_bulk_t and t + ctx.tf >= p.am_bulk_t):
+        pos["bulk_done"] = True                        # X10b: the bulk off at am_bulk_t
+        q_ = mg.cut_qty(pos["left"], p.am_bulk_frac, p)
+        tr.exits.append((ts, sd.x(c), q_, "am_bulk")); pos["left"] -= q_
     if (pos["left"] and session == "AM" and p.am_exit and p.am_exit_extras
             and t + ctx.tf >= p.am_exit):              # owner #8: close (not tighten) at 12:00
         if p.am_exit_mode == "close":

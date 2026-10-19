@@ -628,12 +628,18 @@ def test_gap19_stop_modes_swing_fvg2_fvg_ce_entry_candle_and_width():
     cut = one(p=P(sb_max_stop_pts=2.0, sb_wide="size"))[0]
     assert cut.shares == pytest.approx(base.shares * 2.0 / 2.75, abs=1.5) and "sb_wide_sized" in cut.lv_tags
     assert len(one(p=P(sb_max_stop_pts=4.0, sb_wide="skip"))) == 1
-    # 086 ~11:35: below the entry candle, taken at the fill and sized there
+    # 086 ~11:35: below the entry candle. SB package review fix: the stop comes from bars CLOSED before the fill (the fill
+    # bar's own low is not known at the fill), so a deeper or shallower fill bar must not change the stop or the size.
     rows = ROWS[:9] + [(102.5, 102.6, 100.2, 101.6), (101.6, 104.0, 101.5, 103.9), (103.9, 108.6, 103.8, 108.5)]
-    e = one([("09:30", rows)], P(sb_stop="entry_candle"))[0]
-    assert e.stop == pytest.approx(99.95) and e.entry == 101.7
-    assert e.shares == int(1200 / (101.7 - 99.95))                                   # sized at the real fill stop
-    assert one([("09:30", ROWS)], P(sb_stop="entry_candle")) == []                   # the fill candle's stop is under 1 pt
+    rows2 = ROWS[:9] + [(102.5, 102.6, 101.6, 101.6), (101.6, 104.0, 101.5, 103.9), (103.9, 108.6, 103.8, 108.5)]
+    pe = P(sb_stop="entry_candle", min_risk_pts=0.1)
+    e = one([("09:30", rows)], pe)[0]
+    e2 = one([("09:30", rows2)], pe)[0]
+    assert (e.stop, e.entry, e.shares) == (e2.stop, e2.entry, e2.shares)             # same decision, whatever the fill bar did next
+    assert e.stop == pytest.approx(101.7 - 0.25) and e.entry == 101.7                # last closed bar's low - pad
+    assert e.exits[0][3] in ("stop", "stop_gap")                                     # the deep fill bar can now stop the trade out
+    assert e2.exits[-1][3] != "stop"
+    assert one([("09:30", ROWS)], P(sb_stop="entry_candle")) == []                   # the stop is under the min risk
 
 
 def test_045_abort_after_a_body_closes_outside_the_fvg():
@@ -791,7 +797,9 @@ def test_gap1_ifvg_entry_at_the_near_edge_of_an_inverted_gap():
     q = dict(or_minutes=0)                                                              # (no opening-range pool: 101.2 would be the draw)
     t = one([("09:30", IFVG)], P(sb_ifvg="prefer", **q))
     assert len(t) == 1 and t[0].entry == 100.8 and t[0].entry_kind == "ifvg"          # the old SIBI's top (076 / 092)
-    assert t[0].stop == pytest.approx(99.5 - 0.25)                                     # below the entry candle (076)
+    # SB package review fix: the fill bar's own low (99.5) is not known at a limit fill -> the stop armed with the order
+    # (the last closed bar's low 101.9 is above the fill, so the fall-back applies; the market entry below uses the signal bar)
+    assert t[0].stop == pytest.approx(98.5 - 0.25)
     t = one([("09:30", IFVG)], P(sb_ifvg="add", **q))
     assert t[0].entry == 101.9 and t[0].entry_kind == "fvg"                           # the later formation wins
     o = arm([("09:30", IFVG_B)], P(sb_ifvg="prefer", **q), at="10:10")                # overlapping a breaker: "SB on steroids"
@@ -1023,7 +1031,7 @@ def test_every_new_switch_is_a_params_field_and_has_a_test_that_names_it():
 
 # --- no look-ahead: a run on the full data and on data cut just after each fill must agree on every trade up to that fill ---
 
-def _no_look_ahead(df, tf, sym, p, cols, every=1, meta=None, lag=2, min_trades=1, **kw):
+def _no_look_ahead(df, tf, sym, p, cols, every=1, meta=None, lag=2, min_trades=1, exits=True, **kw):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         full = B.run(df, tf, sym, p, meta=meta, **kw)
@@ -1035,13 +1043,23 @@ def _no_look_ahead(df, tf, sym, p, cols, every=1, meta=None, lag=2, min_trades=1
             a = full[full.entry_time <= cut_t][cols].reset_index(drop=True)
             b = part[part.entry_time <= cut_t][cols].reset_index(drop=True)
             pd.testing.assert_frame_equal(a, b)
+        if exits:                                     # SB package review fix: the EXITS up to a cut must agree as well
+            ex = full[full.exit_time.notna() & (full.exit_reason != "open")]
+            for cut_t in ex.exit_time.iloc[::max(1, len(ex) // 6)]:
+                c = cut_t + pd.Timedelta(minutes=lag)
+                pk = {k: (v[v.index <= c] if isinstance(v, pd.DataFrame) else v) for k, v in kw.items()}
+                part = B.run(df[df.index <= c], tf, sym, p, partial_last=True, meta=meta, **pk)
+                xc = cols + ["exit_time", "exit_reason", "gross"]
+                a = full[full.exit_time <= cut_t].set_index("entry_time")[xc[1:]]
+                b = part.set_index("entry_time").reindex(a.index)[xc[1:]]
+                pd.testing.assert_frame_equal(a, b)
     return full
 
 
 SBCOLS = ["entry_time", "entry", "stop", "t1", "t2", "shares", "setup", "entry_kind", "swept", "draw_px", "lv_tags", "sb_win", "sb_n"]
 SYN = dict(es_pt=0.09, use_bias=False, min_draw_pts=0, leg_pd=0, sb_model=True, am=(0, 0), pm=(0, 0), draw_lock="off",
            htf_resist_cap=False, sloppy_mode="off", sb_room_pts=1.0)
-MIN_TRADES = {"windows_draw": 3, "count_pick": 5, "filters": 1, "entries_exits": 5, "runner_simple": 5}
+MIN_TRADES = {"windows_draw": 3, "count_pick": 5, "filters": 3, "entries_exits": 5, "runner_simple": 5}
 SYN_GROUPS = {
     "windows_draw": dict(sb_london=True, sb_0700=True, sb_last_hour=True, sb_moc_extra=True, sb_draw_first=True,
                          sb_ote_draw=True, sb_htf_fallback=True, sb_day_dir="first_trade", sb_day_dir_delivered="free"),
@@ -1169,7 +1187,7 @@ MIRROR_CASES = {
     "stop_fvg2": (ROWS, dict(sb_stop="fvg2")),
     "entry_ce": (ROWS, dict(sb_entry="ce")),
     "entry_candle": (ROWS[:9] + [(102.5, 102.6, 100.2, 101.6), (101.6, 104.0, 101.5, 103.9), (103.9, 108.6, 103.8, 108.5)],
-                     dict(sb_stop="entry_candle")),
+                     dict(sb_stop="entry_candle", min_risk_pts=0.1)),
     "wide_size": (ROWS, dict(sb_max_stop_pts=2.0, sb_wide="size")),
     "pick_any": (THREE, dict(sb_fvg_pick="any_in_leg")),
     "bpr_exclude": (THREE, dict(sb_bpr_exclude=True)),
@@ -1203,3 +1221,119 @@ def test_mirror_invariance_of_the_new_behaviours(name):
         assert a.shares == b.shares and a.entry_kind == b.entry_kind and a.lv_tags == b.lv_tags, name
         assert [e[3] for e in a.exits] == [e[3] for e in b.exits], name
         assert len(a.adds) == len(b.adds)
+
+
+# --- SB package review fixes ---------------------------------------------------------------------------------------------------
+
+PM_OFF = [(o + 8.5, h + 8.5, l + 8.5, c + 8.5) for o, h, l, c in ROWS]
+
+
+def test_sb_no_overlap_skips_a_fill_while_an_earlier_window_trade_is_open():
+    df = mk([("09:30", ROWS), ("13:30", PM_OFF)])
+    kw = dict(am_exit=0)
+    off = run(df, history(hi=150.0), P(sb_no_overlap=False, **kw))[0]
+    on = run(df, history(hi=150.0), P(**kw))[0]                                  # default on
+    assert [t.setup for t in off] == ["sb_am", "sb_pm"] and off[0].exits[-1][0] > off[1].entry_time   # two open at once
+    assert [t.setup for t in on] == ["sb_am"]
+    done = run(mk([("09:30", ROWS), ("13:30", shifted(PM_OFF, 0))]), history(), P(**kw))[0]
+    assert [t.setup for t in done][:1] == ["sb_am"]                              # (an AM trade that is flat by then does not block)
+
+
+def test_sb_spotty_tag_does_not_change_the_trades():
+    rows = ROWS[:9] + [(102.5, 102.6, 102.4, 102.5)] * 3 + ROWS[9:]
+    blocks = [("09:00", rows)]
+    a = one(blocks, P())
+    b = one(blocks, P(sb_spotty="tag"))
+    assert len(a) == len(b) >= 1
+    for x, y in zip(a, b):
+        assert (x.entry_time, x.entry, x.stop, x.t1, x.shares, x.exits) == (y.entry_time, y.entry, y.stop, y.t1, y.shares, y.exits)
+
+
+def test_weekly_profile_monday_is_neutral_but_the_supercharge_read_is_open():
+    mon = date(2026, 6, 22)
+    p = P()
+    ctx, _ = actx([("09:30", ROWS)], p, hist=history(mon), d=mon)
+    wk = sb_model.weekly_profile(ctx, p, mon)
+    assert wk["side"] == 0 and wk["early_up"] == 1 and wk["early_dn"] == 1 and wk["fresh"] == 1
+    thu = date(2026, 6, 25)
+    ctx, _ = actx([("09:30", ROWS)], p, hist=history(thu), d=thu)
+    assert sb_model.weekly_profile(ctx, p, thu)["early_up"] == 0                     # Mon-Wed only
+
+
+def test_supercharge_needs_the_fixed_exit_mode():
+    with pytest.raises(ValueError):
+        P(sb_supercharge=True, sb_mgmt="ladder")
+    P(sb_supercharge=True)
+
+
+def test_sb_runaway_counts_both_sides_inside_the_window_only():
+    from collections import Counter
+    rb = [(100.0, 100.5, 99.8, 100.2), (100.2, 103.0, 100.1, 102.9), (102.9, 103.0, 100.5, 101.0)]
+    def count(rows, at="10:00"):
+        S.FUNNEL = Counter()
+        try:
+            one([(at, rows)], P(sb_imm_tag=True))
+            return S.FUNNEL["sb_runaway"]
+        finally:
+            S.FUNNEL = None
+    assert count(rb) == 1
+    assert count(mirror(rb)) == 1                                                   # the short mirror is counted too
+    assert count(rb, "11:30") == 0                                                  # after the window: not a runaway
+
+
+def test_lock_at_reads_the_lock_in_force_at_the_bar():
+    old, new = {"side": 1, "name": "old"}, {"side": 1, "name": "new"}
+    ctx = SimpleNS(lock={"AM": new}, lock_hist={"AM": [(40, old)]})
+    assert sb_model._lock_at(ctx, "AM", 39)["name"] == "old"
+    assert sb_model._lock_at(ctx, "AM", 40)["name"] == "new"
+    assert sb_model._lock_at(SimpleNS(lock={"AM": new}), "AM", 3)["name"] == "new"
+
+
+def test_lock_step_records_the_replaced_lock(monkeypatch):
+    """strategy._lock_step on a draw_relock: the delivered lock is kept in ctx.lock_hist for the bars before the replacement."""
+    p = P(draw_lock="session", draw_relock=True)
+    ctx, _ = actx([("09:30", ROWS)], p)
+    S._setup_news(ctx, D0, p)
+    ctx.lock = {}
+    lk = {"side": 1, "delivered": False, "target": 101.0, "name": "x", "t_lock": 570}
+    ctx.lock["AM"] = lk
+    nl = {"side": 1, "delivered": False, "target": 120.0, "name": "y"}
+    monkeypatch.setattr(S, "mark_levels", lambda *a, **k: dict(nl))
+    i = S._idx_at(ctx, 600)
+    ctx.h = np.asarray(ctx.h, float).copy(); ctx.h[i] = 200.0
+    S._lock_step(ctx, p, {}, i, ctx.t[i], {}, {}, [], [], None)
+    assert ctx.lock["AM"]["name"] == "y" and ctx.lock_hist["AM"][0][1] is lk and ctx.lock_hist["AM"][0][0] == i + 1
+
+
+def test_management_exits_hooks_are_inert_without_the_manage_module_and_fire_with_it(monkeypatch):
+    """mentorship's management_exits hooks (blk, am_bulk, time stop) are ported guarded: a stub of manage proves they act."""
+    import types
+    assert sb_model._mg(P()) is None or hasattr(P(), "time_stop_extras")
+    calls = {}
+    stub = types.SimpleNamespace(
+        extras_blocked=lambda ctx, p, session, ts, extra=(): calls.get("block", False),
+        cut_qty=lambda left, frac, p: max(1, int(left * frac)) if left > 1 else left,
+        be_stop=lambda e, p: e, mark_day_stop=lambda tr, p: None, consol_day=lambda *a: False,
+        time_stop_frac=lambda *a, **k: 0.0)
+    monkeypatch.setattr(sb_model, "_mg", lambda p: stub)
+    base = one(p=P(sb_mgmt="ladder"))
+    assert len(base) == 1
+    calls["block"] = True
+    assert one(p=P(sb_mgmt="ladder")) == []                                          # extras_blocked stops the window
+    calls["block"] = False
+    monkeypatch.setattr(Params, "am_bulk_t", 620, raising=False)
+    monkeypatch.setattr(Params, "am_bulk_frac", 0.5, raising=False)
+    t = one(p=P(sb_mgmt="ladder"))[0]
+    assert "am_bulk" in [e[3] for e in t.exits] or t.shares == 1
+
+
+def test_be_on_t1_moves_the_stop_to_entry_at_the_first_partial_default_waits_for_expansion():
+    """X4 (management_exits hook): the SB follows be_on - "t1" = breakeven at the first partial, the default "expansion" waits
+    for a close beyond the first rung on a later bar."""
+    h = history(n=24, over={date(2026, 6, 18): (100.0, 108.0, 91.0, 108.0), date(2026, 6, 22): (111.0, 111.0, 100.0, 100.5)})
+    rows = ROWS[:11] + [(103.9, 107.6, 103.8, 107.55), (107.55, 107.6, 100.0, 100.5), (100.5, 100.6, 100.0, 100.3)]
+    t1 = one([("09:30", rows)], P(sb_mgmt="gap424", sb_draw_first=True, be_on="t1"), hist=h)
+    t1 = [x for x in t1 if x.side == "long"][0]
+    assert [e[3] for e in t1.exits][:2] == ["t1", "be"] and t1.exits[1][1] == pytest.approx(t1.entry)
+    ex = [x for x in one([("09:30", rows)], P(sb_mgmt="gap424", sb_draw_first=True), hist=h) if x.side == "long"][0]
+    assert [e[3] for e in ex.exits][:2] == ["t1", "am_exit"]                         # no breakeven yet: the dip to 100.0 is not stopped
