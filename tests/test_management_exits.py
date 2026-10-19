@@ -1002,6 +1002,7 @@ def _md_run(flat=3746.65, hi_pad=0.2, upto="11:00", **kw):
     day_ = pd.Timestamp("2020-03-02", tz=NY)
     m = (d.index >= day_ + pd.Timedelta(hours=8, minutes=25)) & (d.index < day_ + pd.Timedelta(hours=int(upto[:2]), minutes=int(upto[3:])))
     d.loc[m, ["open", "high", "low", "close"]] = np.array([flat, flat + hi_pad, flat - 0.2, flat])
+    kw.setdefault("london_adr_skip", 0.0)   # N9.6 (default 0.8) would skip the whole volatile 2020-03-02 session
     p = Params(**ES_BASE, ma_deuce=True, md_eth=True, md_ladder=True, md_second=True, md_blocked=True, am=(0, 0), pm=(0, 0), **kw)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")

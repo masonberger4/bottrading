@@ -225,17 +225,18 @@ def test_m71_lunch_high_is_a_pm_target_and_the_old_rule_drops_it():
 
 
 def test_m71_london_pool_hidden_before_0500():
+    # (the bar is at 04:30, after the 04:00 overnight-so-far snapshot: a 02:30 bar would show up in pre_at[180])
     hist = history(hi=120.0, lo=80.0)
     df = day([])
-    df.iloc[30] = [100.0, 101.7, 99.9, 100.0, 1.0]              # 02:30: London high 101.7
+    df.iloc[54] = [100.0, 101.7, 99.9, 100.0, 1.0]              # 04:30: London high 101.7
     ctx = S.DayCtx(df, D0, hist, 5)
     sd = S.Side(1, ctx.o, ctx.h, ctx.l, ctx.c, 1)
     p = Params(**BASE, wick_levels=False, org_days=0)
-    i3, i5 = S._idx_at(ctx, 180), S._idx_at(ctx, 330)
+    i3, i5 = S._idx_at(ctx, 295), S._idx_at(ctx, 330)
     assert (101.7, "pool") not in S._targets(ctx, sd, i3, 100.5, [], p, None, i3 - 1)
     assert (101.7, "pool") in S._targets(ctx, sd, i5, 100.5, [], p, None, i5 - 1)
     sh = S.Side(-1, ctx.o, ctx.h, ctx.l, ctx.c, 1)
-    df.iloc[31] = [100.0, 100.1, 98.3, 100.0, 1.0]
+    df.iloc[55] = [100.0, 100.1, 98.3, 100.0, 1.0]
     ctx = S.DayCtx(df, D0, hist, 5)
     sh = S.Side(-1, ctx.o, ctx.h, ctx.l, ctx.c, 1)
     assert (-98.3, "pool") not in S._targets(ctx, sh, i3, -99.5, [], p, None, i3 - 1)
