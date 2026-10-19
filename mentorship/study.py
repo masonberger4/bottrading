@@ -798,6 +798,11 @@ DECISIONS = {
     "Ep04.10_add_fvg_low": dict(add_fvg_low=True),
     "E12_add_fvg_low_end": dict(add_fvg_low_end=True),
     "Ep02.2_add_htf_fvg_off": dict(add_arrays=()),                       # owner #7 revised: the add zone is the default
+    "Ep02.2_add_htf_fvg_extra_risk": dict(htf_add_extra_risk_pct=0.005),  # the add may use 0.5% above the 1.3% cap
+    "E12e_add_cutoff25_progress": dict(add_cutoff=0.25, add_cutoff_read="progress"),   # the other reading of the 25% line
+    "E9_size_up_cap": dict(size_up_rules=("bpr", "htf_target"), size_up_cap_pct=0.005),   # a real 1.5x (cap 1.8%)
+    "E12f_nfp_day_adds_blocked": dict(nfp_day=True, nfp_no_adds=True),   # NFP days traded: no pyramiding (default rule)
+    "E12f_nfp_day_adds_allowed": dict(nfp_day=True, nfp_no_adds=False),  # NFP days traded and pyramided
 }
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
 

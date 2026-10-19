@@ -64,9 +64,10 @@ def _h1_gap_edge(ctx, sign, k8, beyond):
     return min(out) if out else None
 
 
-def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
+def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
     from .strategy import (Trade, _first_units, news, day_type, _eff_flat, _stamp_frame,
-                           mark_levels, CF_SRC, blocked, _arm_add, _lots, _f)
+                           mark_levels, CF_SRC, blocked, _arm_add, _lots, _f, _htf_tag)
+    from . import entries as _EN
     # the funnel keys md_* (strategy.FUNNEL) show which gate stops Ma Deuce (setups_models review)
     if len(hist) < 3:
         return []
@@ -124,6 +125,10 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
         return []
     entry = inv.top                                    # near edge from above (side space)
     stop = inv.bottom - p.pad
+    sd_ = next((s_ for s_ in (sides or ()) if s_.sign == sign), None)
+    lvx, lvt = {}, []
+    if sd_ is not None:    # the main engine's stop modifiers (E6d / E6f nfp_stop_wide / A4 mohawk) [our interpretation:
+        stop = _EN.refine_stop(ctx, sd_, dict(ext_i=inv.i), k8 - 1, p, entry, stop, {}, lvx, lvt)   # the sweep = the inverted FVG]
     # at 08:00 price must already be past the inverted gap (the retest comes later)
     if sc[k8 - 1] <= entry:
         _f("md_x_not_past_at_0800")
@@ -184,7 +189,13 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
         return sorted({min(v, s_) for v in lv_}), min(t_, s_)
     if p.sloppy_mode == "scalp" and sloppy:
         levels, target = scalp_cap(levels, target)     # #10 scalp mode
-    shares = _first_units(p, ctx.equity, risk, entry)
+    rm = _EN.extras_risk_mult(ctx, p, ctx.idx[k8 - 1])        # E10 loss_halving / Ep08.12 after_loss_mult
+    if sd_ is not None:
+        sw_ = dict(ext=float(inv.bottom), ext_i=inv.i)
+        rm *= _EN.size_mult(ctx, sd_, sw_, k8 - 1, p, "AM", entry,
+                            _htf_tag(ctx, sd_, k8 - 1, sw_["ext"], p.eq_tol_pts * p.es_pt), "|".join(sorted(sloppy)), lvt)   # E9
+    xcap = p.size_up_cap_pct * ctx.equity if (p.size_up_cap_pct and any(x.startswith("size_up_") for x in lvt)) else 0.0
+    shares = _EN.cap_initial(_first_units(p, ctx.equity, risk, entry, rm, xcap), p)    # E11
     if shares < 1:
         return []
     flat = _eff_flat(p)
@@ -213,7 +224,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
                            False, None, ctx.idx[k8], ctx.idx[i], x(fill), x(stop), x(levels[0] if len(levels) > 1 else target),
                            None if len(levels) < 2 else x(levels[-1]),
                            shares, day_type=day_type(day), news=news(day), weekday=day.weekday(),
-                           capped=capped, sloppy=tag,
+                           capped=capped, sloppy=tag, lv_tags="|".join(dict.fromkeys(lvt)),
                            draw_side=0 if lock is None else lock["side"],
                            draw_px=None if lock is None else lock["target"],
                            draw_name="" if lock is None else lock["name"],
@@ -243,6 +254,9 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
             tr.exits.append((ctx.idx[i], x(so[i]), left, "stop_gap")); return [tr]
         if sl[i] <= stop:
             tr.exits.append((ctx.idx[i], x(stop), left, "be" if kl else "stop")); return [tr]
+        for nm_, (lvl_, pre_t1) in lvx.items():       # A4 mohawk: a body close beyond the raw level exits
+            if i > fill_i and (not pre_t1 or not kl) and sc[i] < lvl_:
+                tr.exits.append((ctx.idx[i], x(sc[i]), left, nm_)); return [tr]
         if len(levels) > 1:                           # M15 md_ladder: scale out, BE after the first
             fr = p.ladder_fracs
             while kl < len(levels) and left and sh[i] >= levels[kl] + p.exit_fill_through * p.tick:
@@ -267,6 +281,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
                     - max(0.0, basis - stop * n_units)
                 if (px2 - stop) * q2 > room:
                     q2 = _lots(max(room, 0.0) / (px2 - stop), p.lot)
+                q2 = _EN.cap_add(q2, n_units, p)           # E11 max_contracts_total
                 if q2 >= max(p.lot, 1):
                     add = (px2, q2)
         if p.am_exit and p.am_exit_extras and t[i] + ctx.tf >= p.am_exit:   # owner #8
@@ -274,7 +289,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict) -> list:
                 tr.exits.append((ctx.idx[i], x(sc[i]), left, "am_exit")); return [tr]
             if not tightened:
                 tightened = True
-                new = max(stop, fill, sl[i] - p.pad)
+                new = max(stop, fill, sl[i] - p.trail_pad)
                 if new >= sc[i]:
                     tr.exits.append((ctx.idx[i], x(sc[i]), left, "am_exit")); return [tr]
                 stop = new

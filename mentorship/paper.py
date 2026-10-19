@@ -3,6 +3,7 @@ It never sends an order; there is no order code in this package."""
 from __future__ import annotations
 
 import csv
+import json
 import time
 import warnings
 from datetime import datetime
@@ -36,19 +37,46 @@ def short_history(n_prior: int, p: Params) -> str | None:
     return None
 
 
-def snapshot(c, symbol: str, partner: str | None, minutes: int, p: Params):
-    """Today's trades and armed setups from the bars closed so far (Schwab)."""
+def load_risk_state(path: Path, today, p: Params) -> dict | None:
+    """E10 loss_halving carry-over for paper mode (review fix: it started fresh every day). The file holds
+    {date, start, end}: `start` = the state before that day, `end` = after it. A restart on the same day
+    reuses `start` (the day is re-simulated from the bars); a later day starts from `end`."""
+    if not p.loss_halving:
+        return None
+    from .entries import new_risk_state
+    try:
+        d = json.loads(Path(path).read_text())
+        if d.get("date") == str(today):
+            return dict(d["start"])
+        if d.get("date") and d["date"] < str(today):
+            return dict(d["end"])
+    except (OSError, ValueError, KeyError):
+        pass
+    return new_risk_state()
+
+
+def save_risk_state(path: Path, today, start: dict | None, end: dict | None) -> None:
+    """Persist the E10 state after today's simulated trades (see load_risk_state)."""
+    if start is None or end is None:
+        return
+    Path(path).write_text(json.dumps(dict(date=str(today), start=start, end=end)))
+
+
+def snapshot(c, symbol: str, partner: str | None, minutes: int, p: Params, risk_state: dict | None = None):
+    """Today's trades and armed setups from the bars closed so far (Schwab). `risk_state` (E10) is
+    advanced in place by the simulated day - pass a copy of the day's starting state."""
     from silver_bullet.data import schwab_history
     days = history_days(minutes)
     now = pd.Timestamp.now(tz=B.NY)
     df = schwab_history(c, symbol, days=days, minutes=minutes)
     q = schwab_history(c, partner, days=days, minutes=minutes) if partner else None
-    trades, log, _ = evaluate(df, symbol, minutes, p, now, q)
+    trades, log, _ = evaluate(df, symbol, minutes, p, now, q, risk_state=risk_state)
     return trades, log
 
 
 def evaluate(df: pd.DataFrame, symbol: str, minutes: int, p: Params, now: pd.Timestamp,
-             partner_df: pd.DataFrame | None = None, meta: pd.DataFrame | None = None):
+             partner_df: pd.DataFrame | None = None, meta: pd.DataFrame | None = None,
+             risk_state: dict | None = None):
     """The paper decision for `now` from a recorded / live frame: closed bars only, today's
     session as a partial day, built by backtest.prepare / day_kwargs exactly like a backtest
     (same session close, lock tables, confluence, gaps, history length). Returns (trades, log,
@@ -70,7 +98,7 @@ def evaluate(df: pd.DataFrame, symbol: str, minutes: int, p: Params, now: pd.Tim
     msg = short_history(len(kw["hist"]), pr.p)
     if msg:
         warnings.warn(msg)
-    trades = run_day(partner=pa, log=log, live=True, locks=locks, **kw)
+    trades = run_day(partner=pa, log=log, live=True, locks=locks, risk_state=risk_state, **kw)
     return trades, log, locks
 
 
@@ -80,14 +108,20 @@ def run(symbol="SPY", partner="QQQ", minutes=1, p: Params | None = None, out="ru
     c = client()
     Path(out).mkdir(parents=True, exist_ok=True)
     seen_arm, seen_tr = set(), {}
+    rs_path = Path(out) / f"risk_state_{symbol}.json"
+    rs_start = load_risk_state(rs_path, datetime.now().date(), p)     # E10 carried across days
+    rs_day = None
     path = Path(out) / f"paper_{symbol}_{datetime.now():%Y%m%d}.csv"
     print(f"paper mode {symbol} {minutes}m (partner {partner}); simulated only, logging to {path}")
     while True:
         now = pd.Timestamp.now(tz=B.NY)
         if now.hour * 60 + now.minute > 16 * 60 + 5:
+            save_risk_state(rs_path, now.date(), rs_start, rs_day)
             print("session over"); break
         try:
-            trades, log = snapshot(c, symbol, partner, minutes, p)
+            rs_try = None if rs_start is None else dict(rs_start)
+            trades, log = snapshot(c, symbol, partner, minutes, p, risk_state=rs_try)
+            rs_day = rs_try
         except Exception as e:                        # keep going through API hiccups
             print(f"{now:%H:%M:%S} fetch failed: {e}"); trades, log = [], []
         for ev in log:

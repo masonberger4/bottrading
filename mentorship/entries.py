@@ -143,6 +143,18 @@ def refine_stop(ctx, sd, sw, i, p, entry: float, stop: float, tags: dict, lvx: d
     return stop
 
 
+def ote_cancel_level(entry: float, ext: float, leg_hi: float, existing, p):
+    """A21.3 ote_cancel: a closed bar through the 79% line of the leg cancels the order - set only for an
+    entry in or under the OTE band (not for a shallower entry, review fix), and never loosening a
+    cancel level that is already there (ob_cisd="cancel": the more protective = higher one wins)."""
+    if not (p.ote_cancel and p.ote != "off"):
+        return existing
+    band = L.ote_band(ext, leg_hi)
+    if entry > band[1] + p.tick:
+        return existing
+    return max(float(band[0]), float(existing)) if existing is not None else float(band[0])
+
+
 def engage_ok(ctx, i: int, p) -> bool:
     """Ep08.17 (010 ~1:15:16): the session range since midnight is at least engage_range_pts."""
     if not p.engage_range_pts:
@@ -247,13 +259,23 @@ def _next_day_events(day) -> set:
         return set()
 
 
-def low_probability(ctx, sd, p, htf_tag, sloppy: str) -> bool:
+def bias_row_known(ctx, i) -> object:
+    """The day's htf table row (ctx.bias_row) only for bars at or after 09:30: that table is cut at the
+    09:30 open, so a pre-open order (PRE7 / PRE9 / Ma Deuce / London) reading it would use bars that
+    have not printed yet (the B3 pre-open look-ahead; found by the SB / Ma Deuce look-ahead test)."""
+    row = getattr(ctx, "bias_row", None)
+    if row is None or i is None:
+        return row
+    return row if ctx.t[i] >= 570 else None
+
+
+def low_probability(ctx, sd, p, htf_tag, sloppy: str, i=None) -> bool:
     """E9 / E12f "low-probability setup" [our interpretation], any of low_prob_tests:
     against_bias (the htf table's draw column opposes the side), no_htf (no HTF array at the sweep),
     sloppy (a sloppy-day reason is active)."""
     for t in p.low_prob_tests:
         if t == "against_bias":
-            row = getattr(ctx, "bias_row", None)
+            row = bias_row_known(ctx, i)
             if row is not None:
                 try:
                     if int(row["draw"]) == -sd.sign:
@@ -307,7 +329,7 @@ def size_mult(ctx, sd, sw, i, p, session, entry, htf_tag, sloppy: str, lvt: list
         elif r == "august":
             on = day.month == 8
         elif r == "against_macro":
-            row = getattr(ctx, "bias_row", None)
+            row = bias_row_known(ctx, i)
             if row is not None:
                 try:
                     on = int(row["react"]) == -sd.sign or int(row["draw"]) == -sd.sign
@@ -316,7 +338,7 @@ def size_mult(ctx, sd, sw, i, p, session, entry, htf_tag, sloppy: str, lvt: list
         elif r == "decoupled":
             on = decoupled(ctx, i, p)
         elif r == "low_prob":
-            on = low_probability(ctx, sd, p, htf_tag, sloppy)
+            on = low_probability(ctx, sd, p, htf_tag, sloppy, i)
         if on:
             m *= p.size_down
             lvt.append("size_" + r)
@@ -430,8 +452,8 @@ def add_cut_passed(sd, pos, i, p) -> bool:
         fr.append(0.5)
     if p.add_cut == "leg75":
         fr.append(0.75)
-    if p.add_cutoff:
-        fr.append(1.0 - p.add_cutoff)
+    if p.add_cutoff:                    # add_cutoff_read: "covered" (1 - cutoff) or "progress" (cutoff itself)
+        fr.append(p.add_cutoff if p.add_cutoff_read == "progress" else 1.0 - p.add_cutoff)
     return bool(prog >= min(fr) - 1e-12)
 
 
@@ -480,8 +502,10 @@ def more_add_arrays(ctx, sd, pos, tr, i, p, arm) -> bool:
         zs = [z for z in zs if avg <= z[0] + p.tick]         # filled in / under it: price traded up through it
         if zs:
             top, bot, tf = zs[0]
-            pos["htf_add_used"] = True
-            if arm(top, floor=bot):
+            # review fix: the one shot is spent only when an add is really ARMED. A failed arm (no risk room
+            # under the 1.3% cap, add_ok false) leaves it for a later bar, e.g. after a trail has freed risk.
+            if arm(top, floor=bot, extra=p.htf_add_extra_risk_pct):
+                pos["htf_add_used"] = True
                 return True
     return False
 
@@ -533,7 +557,9 @@ def retest_add(sd, pos, tr, i, p, arm) -> None:
     One shot per trade; the pyramid count and add_ok still apply."""
     if pos.get("retest_used") or pos["t1_done"] or S._nadds(pos, tr) >= len(p.adds):
         return
-    top = 2 * pos["fvg_ce"] - pos["fvg_bottom"]
+    top = pos.get("zone_top")          # the entry zone's top stored with the order (review fix: the old
+    if top is None:                    # 2 * CE - bottom is wrong for OB / breaker / unicorn entries)
+        top = 2 * pos["fvg_ce"] - pos["fvg_bottom"]
     if sd.c[i] >= top + p.add_retest_away_pts * p.es_pt and top > pos["stop"] and S._SM.add_ok(sd, pos, top, i, p):
         pos["retest_used"] = True
         arm(top)
@@ -576,3 +602,50 @@ def prop_block(sd, sw, g_top: float, i: int, p):
     z = max(pz, key=lambda z: z.top)
     top = z.top if p.prop_zone == "range" else float(max(sd.o[z.src], sd.c[z.src]))
     return float(top), float(z.mt)
+
+
+# --- Silver Bullet / Ma Deuce: the same risk, stop and sizing hooks as the main engine --------------------------
+# (review fix, entries_stops_sizing). sb_model.run_sb and pre_open.run_ma_deuce run after the bar loop of
+# strategy.run_day, so they read the day's CLOSED trades as of their order time (never a later loss) from
+# ctx.risk_view = {rs0: the E10 state at the start of the day, trades: the day's closed trades so far}.
+# The main loop cannot see the extras' trades (they are produced later); the carried E10 state is replayed in
+# exit-time order over all of the day's trades at the end of run_day (replay_risk_state).
+
+def _net(tr, p) -> float:
+    gross, costs = tr.pnl(p.cost_per_share)
+    return gross - costs
+
+
+def _closed_before(trades, ts):
+    """Trades whose last exit bar is at or before the bar `ts`, in exit-time order."""
+    done = [t for t in trades if t.exits and t.exits[-1][0] <= ts]
+    return sorted(done, key=lambda t: t.exits[-1][0])
+
+
+def extras_risk_mult(ctx, p, ts, extra=()) -> float:
+    """E10 loss_halving state and Ep08.12 after_loss_mult for an order armed on the bar `ts` (Silver Bullet,
+    Ma Deuce): replays the closed trades (the day's main-loop trades + `extra`, the extras' own) that exited
+    at or before that bar onto the day's starting E10 state."""
+    view = getattr(ctx, "risk_view", None)
+    if view is None:
+        return 1.0
+    rs = None if view["rs0"] is None else dict(view["rs0"])
+    loss = False
+    for tr in _closed_before(list(view["trades"]) + list(extra), ts):
+        net = _net(tr, p)
+        loss = loss or net < 0
+        if p.loss_halving and rs is not None:
+            risk_state_update(rs, net, p)
+    m = rs["m"] if (p.loss_halving and rs is not None) else 1.0
+    return m * (p.after_loss_mult if loss else 1.0)
+
+
+def replay_risk_state(rs: dict, rs0: dict | None, trades, p) -> None:
+    """End of run_day: recompute the carried E10 state from the day's starting state over ALL of its trades
+    (main loop + Silver Bullet + Ma Deuce) in exit-time order, and write it into `rs` in place."""
+    if rs0 is None:
+        return
+    new = dict(rs0)
+    for tr in sorted((t for t in trades if t.exits), key=lambda t: t.exits[-1][0]):
+        risk_state_update(new, _net(tr, p), p)
+    rs.update(new)

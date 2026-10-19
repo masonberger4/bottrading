@@ -61,7 +61,7 @@ price inside one) and the #9 session lock (one side, session over once the draw 
 Update (entries_stops_sizing): the revised #7 add zone is built as the default - `add_arrays=("htf_fvg",)`:
 an HTF FVG behind the trade that price already traded through (the position was filled at or under its
 top) takes one add at its top (before the first partial, within the 1.3% cap); it is never a target.
-`add_arrays=()` switches it off. Also new DEFAULTS from the build specs: the one-tick stop pad
+`add_arrays=()` switches it off. The 1.3% total cap binds the add: with 1.2% open risk at entry only ~0.1% is free before the first partial, so it arms a small add (or waits until a stop move frees risk - the one shot is spent only when an add is armed); `htf_add_extra_risk_pct` lets it use extra risk above the cap (study variant `Ep02.2_add_htf_fvg_extra_risk`). Also new DEFAULTS from the build specs: the one-tick stop pad
 (`stop_tick_pts=0.25`, Ep 08) and no adds on NFP days (`nfp_no_adds=True`, E12f).
 
 ## Open questions for the owner (review pass, 2026-10-18)

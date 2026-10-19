@@ -758,7 +758,10 @@ class Params:
     # Stops. Every distance is in ES points / ticks scaled by es_pt; side-space (bullish) wording.
     tick_pts: float = 0.25               # E3: one tick in ES points
     stop_tick_pts: float = 0.25          # Ep08.17 (010 ~16:01; "1 tick beyond the level"; DEFAULT ON): the
-                                         # stop pad is one tick instead of the old 0.01; 0 = use stop_buffer
+                                         # stop pad is one tick instead of the old 0.01; 0 = use stop_buffer.
+                                         # While > 0, stop_buffer is dead (a warning says so). The tick scales
+                                         # with es_pt: SPY (es_pt 0.10) pads 0.025, not 0.01 - paper / backtest
+                                         # runs that relied on stop_buffer change behaviour
     stop_pad_ticks: float = 0.0          # E6f: > 0 replaces the pad by N ticks (overrides stop_tick_pts)
     ce_stop_pad_pts: float = 0.0         # E6f (102 ~1:40:20): extra ES pts beyond a stop on a CE entry
                                          # (entry="ce"); ICT: 3-4 pts in fast markets, < 2 is too tight
@@ -768,7 +771,9 @@ class Params:
     mohawk_ticks: float = 0.0            # A4 (075 ~1:25:00): structural stops / trails sit N ticks beyond
                                          # the level (a wick may poke - respect is by the body) and a body
                                          # CLOSE beyond the raw level exits; the "fresh gap" test ignores
-                                         # an N-tick poke
+                                         # an N-tick poke. Covers the _finish_order stops, every trail
+                                         # (trail_pad: FVG, ladder, Ep07, ep01_manage, add_body_stop, AM-tighten,
+                                         # SB and Ma Deuce trails) and the stops of the Silver Bullet and Ma Deuce
     sweep_body: bool = False             # A4 (off, unranked): a level is swept only when a candle BODY
                                          # trades through it (min(open, close) beyond), not a wick
     stop_all_ineff: bool = False         # E6d (025 ~55:15; 027 ~30:20; 069 ~13:46): beyond every open
@@ -779,7 +784,10 @@ class Params:
                                          # a body CLOSE below the MT exits (wicks may poke)
     ob_zone: str = ""                    # A12 sensitive range (012 ~5:13; 055 ~1:44): "range" = full OB range
                                          # (entry at its high); "sensitive" = high down to the open - entry at
-                                         # the open when the wick is stubby, else at the wick CE
+                                         # the open when the wick is stubby, else at the wick CE.
+                                         # SCOPE: the pre-break OB path (_ob_pre, ob_entry "pre_break" / "both")
+                                         # only; the Ep08.5 anchor path (ob_entries) and setups.array_order keep
+                                         # their own entry price, as does ob_entry_px
     ob_stub_frac: float = 0.25           # [our interpretation] a wick <= this fraction of the candle range
                                          # is "stubby"
     ob_disp_mult: float = 0.0            # A12 quality (022 ~13:12; cc04_003 ~26:51): on the FVG path the move
@@ -799,7 +807,7 @@ class Params:
     iofed_ref: str = "c2_high"           # E2 (003 ~30:30): entry="iofed" = the FVG-forming candle's high
                                          # clipped into the gap; "tick" = one tick past the edge; "q75" = 75%
     entry_ladder_fracs: tuple = (0.5, 0.3, 0.2)   # E2 (030 ~15:46): entry="ladder" = FVG high, 75%, CE
-    sb_entry: str = "edge"               # E2: the Silver Bullet's entry price mode (no ladder)
+    sb_entry: str = "edge"               # E2: the Silver Bullet's entry price mode (no ladder: NOT BUILT for the SB)
     run_cancel: str = "t1"               # D11: a pending order is dropped when price runs to "t1" without it;
                                          # "last" = only at the last rung, "off" = never (loosened)
     entry_order: str = "limit"           # E1: "stop_cc" = a buy stop at the array top [CC] (never chases)
@@ -838,6 +846,11 @@ class Params:
     size_down: float = 0.5               # E9: the multiplier of each active size-down rule (compounded)
     size_up_rules: tuple = ()            # E9 (test only): "bpr" (BPR under the entry) "htf_target" (HTF array
                                          # within htf_target_pts of the entry); capped by the 1.3% total
+                                         # (size_up_cap_pct). "htf_target" is [our interpretation] of the
+                                         # "HTF 5000" size-up (092 ~9:44; 102 ~1:23:50)
+    size_up_cap_pct: float = 0.0         # E9: extra total-risk cap (fraction of equity) for an order a size-up
+                                         # rule fired on. 0 = the 1.3% cap binds and size_up is nearly inert
+                                         # (1.5 x 1.2% is clamped to 1.3%, ~1.08x); e.g. 0.005 lets it reach 1.8%
     size_up: float = 1.5
     htf_target_pts: float = 10.0
     low_prob_tests: tuple = ("against_bias",)   # [our interpretation] "low probability": against_bias,
@@ -858,6 +871,12 @@ class Params:
                                          # HTF FVG BEHIND the trade that price already traded through - owner
                                          # #7 REVISED, DEFAULT: support/resistance and an ADD zone, never a
                                          # target; the add still needs adds, a free pyramid slot, before T1)
+    htf_add_extra_risk_pct: float = 0.0  # owner #7 add zone: extra open risk (fraction of equity) the HTF-FVG
+                                         # add may use ABOVE the 1.3% cap. 0 = the cap binds (owner #12): the
+                                         # zone arms only when a stop move (a trail, a BE) has freed risk, else
+                                         # it waits (the one-shot flag is spent only when an add is armed).
+                                         # Under the default 1.2% entry risk the room before T1 is ~0.1%, so the
+                                         # default zone is a near no-op until the stop has moved [documented]
     add_hold: bool = False               # E12b: an add is cancelled by a body close below its array
     add_htf_tfs: tuple = ("15m", "30m", "1h")
     add_low_end: bool = False            # E12c (006 ~51:52): a body closing INTO the last add's FVG -> one
@@ -866,6 +885,11 @@ class Params:
     add_fvg_low: bool = False            # Ep04.10 (same rule, restated)
     add_cutoff: float = 0.0              # E12 / D12 (022 ~49:26; 025 ~47:56): no adds once price has covered
                                          # (1 - add_cutoff) of the range; 0.25 = the 25% line (0 off)
+    add_cutoff_read: str = "covered"     # E12e/D12 reading of the 25% line (sources disagree: "past 25% of the
+                                         # leg" 022 ~49:26 vs "halfway of the discount half" 025 ~47:56):
+                                         # "covered" = no adds once (1 - add_cutoff) of the range is covered
+                                         # (0.25 -> 75%); "progress" = no adds once add_cutoff of the range
+                                         # is covered, measured up from the sweep low (0.25 -> 25%)
     add_cut: str = ""                    # E12e: "eq" = no adds past EQ of the range; "leg75" = past 75% of the leg
     add_cut_ref: str = "range"           # range = sweep extreme .. the locked draw; "leg" = .. the leg high
     nfp_no_adds: bool = True             # E12f (105 ~9:13): no pyramiding on a jobs (NFP) day
@@ -943,7 +967,7 @@ class Params:
                          ("add_order", ("limit", "market")), ("retrace_candle", ("off", "closed", "intrabar")),
                          ("ob_zone", ("", "range", "sensitive")), ("ob_cisd", ("off", "tag", "cancel")),
                          ("prop_zone", ("range", "body")), ("ob_entries", ("off", "fallback", "prefer")),
-                         ("add_points", ("top", "ce", "q75")), ("add_cut", ("", "eq", "leg75")),
+                         ("add_points", ("top", "ce", "q75")), ("add_cut", ("", "eq", "leg75")), ("add_cutoff_read", ("covered", "progress")),
                          ("add_cut_ref", ("range", "leg")), ("add_on", ("", "retest", "breaker")),
                          ("ob_entry_px", ("body_top", "mt", "range_top", "open", "high")),
                          ("trail_ref", ("gap", "body"))):
@@ -989,6 +1013,9 @@ class Params:
                          "pick still applies)")
         if self.daily_vi_targets and not self.vi_arrays:
             inert.append("daily_vi_targets needs vi_arrays=True (the confluence VI rows)")
+        if self.stop_tick_pts > 0 and self.stop_pad_ticks <= 0 and self.stop_buffer != 0.01:
+            inert.append("stop_buffer is ignored while stop_tick_pts > 0 (the one-tick pad is the default): "
+                         "set stop_tick_pts=0 to use stop_buffer, or stop_pad_ticks=N")
         if inert:
             warnings.warn("inert switches: " + "; ".join(inert), stacklevel=3)
 
@@ -1044,9 +1071,11 @@ def _total_cap(p: "Params", eq: float) -> float:
     return p.max_total_risk if p.max_total_risk is not None else p.max_total_risk_pct * eq
 
 
-def _first_units(p: "Params", eq: float, risk: float, entry: float, risk_mult: float = 1.0) -> int:
-    """Owner #12: the first unit risks risk_pct (1.2%) of equity, never more than the total cap."""
-    return _lots(min(risk_mult * _risk_budget(p, eq) / risk, _total_cap(p, eq) / risk,
+def _first_units(p: "Params", eq: float, risk: float, entry: float, risk_mult: float = 1.0,
+                 extra_cap: float = 0.0) -> int:
+    """Owner #12: the first unit risks risk_pct (1.2%) of equity, never more than the total cap.
+    extra_cap (E9 size_up_cap_pct x equity) raises the cap for an order a size-up rule fired on."""
+    return _lots(min(risk_mult * _risk_budget(p, eq) / risk, (_total_cap(p, eq) + extra_cap) / risk,
                      p.max_notional / abs(entry)), p.lot)
 
 
@@ -2850,6 +2879,9 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         pre_windows.append(("PRE9", 540, 570))
     state = {"reentered": {}, "day_pts": 0.0, "day_loss": False,
              "rs": (risk_state if risk_state is not None else _EN.new_risk_state()) if p.loss_halving else None}
+    # E9 / E10 / E11 / Ep08.12 for the setups that run AFTER the loop (Silver Bullet, Ma Deuce): they read
+    # the day's closed trades as of their order time (entries.extras_risk_mult) - never a later loss
+    ctx.risk_view = dict(rs0=None if state["rs"] is None else dict(state["rs"]), trades=trades)
     pending = None    # dict with order details
     pos = None        # open Trade + live stop / remaining shares
     lost_side = None
@@ -2876,6 +2908,9 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                     keep_r = []
                     for px_r, q_r in pos["rungs"]:
                         if i > pos["fill_i"] and _prints_through(l, px_r, p):
+                            q_r = _EN.cap_add(q_r, pos["n"], p)         # E11: the total-contracts cap binds rungs too
+                            if q_r < max(p.lot, 1):
+                                continue                                # nothing left under the cap: the rung is dropped
                             px = min(px_r, o)
                             tr.adds.append((ts, sd.x(px), q_r))
                             pos["rung_fills"] = pos.get("rung_fills", 0) + 1
@@ -3005,7 +3040,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 if p.am_exit_mode == "close":
                     tr.exits.append((ts, sd.x(c), pos["left"], "am_exit")); pos["left"] = 0
                 elif not pos.get("am_tightened"):
-                    new = max(pos["stop"], pos["basis"] / pos["n"], l - p.pad)
+                    new = max(pos["stop"], pos["basis"] / pos["n"], l - p.trail_pad)
                     pos["am_tightened"] = True
                     if new >= c:
                         tr.exits.append((ts, sd.x(c), pos["left"], "am_exit")); pos["left"] = 0
@@ -3054,9 +3089,10 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                     _SM.more_adds(ctx, sd, pos, tr, i, p)          # setups_models Ep05.4 / M4 / M12.2 / M4.4
                     can_add = pos["add"] is None
                 if can_add and _nadds(pos, tr) < len(p.adds) and p.add_arrays:       # E12b + owner #7 htf_fvg
-                    arm_ = lambda px, floor=None: (_SM.add_ok(sd, pos, px, i, p)
-                                                   and _arm_add(pos, tr, px, i, p, ctx.equity, floor=floor) is None
-                                                   and pos["add"] is not None)
+                    arm_ = lambda px, floor=None, extra=0.0: (_SM.add_ok(sd, pos, px, i, p)
+                                                              and _arm_add(pos, tr, px, i, p, ctx.equity, floor=floor,
+                                                                           extra_room=extra) is None
+                                                              and pos["add"] is not None)
                     _EN.more_add_arrays(ctx, sd, pos, tr, i, p, arm_)
                     can_add = pos["add"] is None
                 if can_add and p.add_on == "retest":                            # Ep01.18
@@ -3127,6 +3163,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                            exit_at=o.get("exit_at"), runner=o.get("runner", False), po3_open=o.get("po3_open"),
                            ce_hold=o.get("ce_hold", False), rungs=list(o.get("rungs") or []),
                            draw=o.get("draw"), ext=o["ext"], low_prob=o.get("low_prob", False),
+                           zone_top=o.get("zone_top"), plan_shares=o.get("plan_shares", o["shares"]),
                            **_swing_ref(sd, o["ext_i"], i))
                 if pos["runner"]:                    # Ep04.3: the last fraction has no target
                     lv0 = pos["levels"][:-1] if (pos["final_T"] and len(pos["levels"]) > 1) else pos["levels"]
@@ -3279,7 +3316,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                                 sd.x(o_["stop"]), sd.x(o_["t1"])))
     if p.ma_deuce:
         from .pre_open import run_ma_deuce
-        trades += run_ma_deuce(ctx, hist, p, day, symbol, btag)
+        trades += run_ma_deuce(ctx, hist, p, day, symbol, btag, sides)
     if p.sb_model:
         from .sb_model import run_sb
         trades += run_sb(ctx, sides, p, day, symbol, blocked, btag)
@@ -3287,7 +3324,11 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         tr = pos["trade"]
         if not live:
             tr.exits.append((ctx.idx[-1], pos["side"].x(pos["side"].c[-1]), pos["left"], "eod"))
-        trades.append(tr)
+            _after_close(pos, trades, p, done, state)     # review fix: the risk state / day-loss see this close too
+        else:
+            trades.append(tr)
+    if state["rs"] is not None and (p.ma_deuce or p.sb_model):
+        _EN.replay_risk_state(state["rs"], ctx.risk_view["rs0"], trades, p)   # E10: carried state in time order
     if locks is not None:
         locks += [dict(lk, symbol=symbol, marked=len(lk["marked"])) for lk in all_locks + list(ctx.lock.values())]
     return trades
@@ -3310,21 +3351,23 @@ def _no_draw(ctx, p, session: str, i: int, bias_by_cut: dict | None) -> bool:
     return not any(abs(v - lk["px"]) <= reach for v, *_ in lk["marked"])
 
 
-def _arm_add(pos, tr, px, i, p, eq, floor=None, g=None, pos_g=False, size=None):
+def _arm_add(pos, tr, px, i, p, eq, floor=None, g=None, pos_g=False, size=None, extra_room=0.0):
     """#12: an add at `px` (side space) sized by the adds fraction, shrunk so the open risk
     (against the current stop; never negative) stays within the total cap (1.3%).
     floor      the array's bottom: add_hold cancels the add on a body close below it (E12b)
     g          the add's FVG: add_body_stop (Ep01.19) moves the stop under its bodies after the fill;
                pos_g remembers it for add_low_end (E12c)
     size       an explicit quantity (E12c: the smallest earlier add)
+    extra_room extra open risk (fraction of equity) above the total cap (owner #7 htf_add_extra_risk_pct)
     E11 max_contracts_total caps the units; E1 add_order "market" fills at the open after a retest."""
     k = _nadds(pos, tr)
-    q = _lots(tr.shares * p.adds[min(k, len(p.adds) - 1)], p.lot) if size is None else size
+    base = pos.get("plan_shares") or tr.shares        # a ladder trade: the full planned size, not rung 0
+    q = _lots(base * p.adds[min(k, len(p.adds) - 1)], p.lot) if size is None else size
     at_risk = max(0.0, pos["basis"] - pos["stop"] * pos["n"])
     d = px - pos["stop"]
     if d <= 0:
         return
-    room = _total_cap(p, eq) - at_risk
+    room = _total_cap(p, eq) + extra_room * eq - at_risk
     if d * q > room:
         q = _lots(max(room, 0.0) / d, p.lot)
     q = _EN.cap_add(q, pos["n"], p)
@@ -3333,7 +3376,7 @@ def _arm_add(pos, tr, px, i, p, eq, floor=None, g=None, pos_g=False, size=None):
                           hold=floor if (p.add_hold and floor is not None) else None)
         if g is not None and p.add_body_stop:         # Ep01.19: under the bodies of the add's FVG candles
             pos["add"]["stop_to"] = float(min(min(pos_sd(pos).o[k_], pos_sd(pos).c[k_])
-                                              for k_ in range(g.i - 2, g.i + 1))) - p.pad
+                                              for k_ in range(g.i - 2, g.i + 1))) - p.trail_pad
         if pos_g and g is not None:
             pos["last_add_g"] = (float(g.top), float(g.bottom), int(g.i))
 
@@ -3903,6 +3946,9 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
             if p.breaker_entry in ("fallback", "classic") and bz is not None and not sw.get("bz_sent"):
                 return _breaker_order(ctx, sd, sw, bz, i, p, session, risk_mult)
         return None
+    if not _EN.engage_ok(ctx, i, p):    # Ep08.17: the sweep waits (is not consumed) until the range has formed
+        _f("x_engage_range")
+        return None
     keep_sw = p.evolve_fvg or p.wait_structural
     rearm = sw.get("ev_g") is not None
     if keep_sw:                       # E5: the sweep stays alive; only a gap newer than these re-arms
@@ -4085,7 +4131,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         lvx["q_close"] = (top - 0.25 * (top - bottom), True)   # the upper quarter must hold
     ir = _ir_in_leg(sd, sw, i, p)
     tags = dict(unicorn=bool(uni) and g in uni if not p.unicorn_pref else bool(uni), fvg_bottom=bottom,
-                fvg_ce=(top + bottom) / 2,
+                fvg_ce=(top + bottom) / 2, zone_top=float(top),
                 entry_kind="ifvg" if is_ifvg else "implied_fvg" if is_imp else
                 ("vi" if any(g is z for z in sd.vis("bull")) else "void") if is_xz else "fvg", mitigation=bool(mit),
                 propulsion=bool(prop), ce_hold=ce_hold_,
@@ -4480,6 +4526,13 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     lvx = dict(tags.pop("lvx", {}) or {})            # levels_detectors exit levels (side space)
     if p.round_step_pts:                 # L17: limit entries rounded toward price; stops are not
         entry = _round_px(ctx, sd, i, entry, p, up=True)
+    zone_top = float(tags.get("zone_top", entry))        # Ep01.18: the entry zone top (retest add)
+    stop_cc = p.entry_order == "stop_cc"
+    if stop_cc:                          # E1 [CC]: a buy stop one tick over the array top, never a chase.
+        if not sd.c[i] < entry:          # The shift comes BEFORE risk / size / min-max risk, so they are
+            _f("x_stop_cc_chase")        # computed at the real fill price (review fix)
+            return None
+        entry = entry + p.tick
     if (p.release_open or p.release_open_stop) and session != "PM" and news(ctx.day) == "0830":
         k830 = _idx_at(ctx, 510)         # T2 (064 ~55:13): retrace bodies hold the 08:30 open
         if k830 < len(ctx.t) and ctx.t[k830] < 540 and k830 <= i and "0830" in ctx.opens:
@@ -4527,8 +4580,9 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         return None
     if p.leg_depth_tag:
         lvt += _EN.leg_depth_tags(entry, sw["ext"], pd_hi)
-    if p.ote_cancel and p.ote != "off":
-        tags["cancel_low"] = float(L.ote_band(sw["ext"], leg_hi)[0])      # A21.3: through the 79% line cancels
+    cl = _EN.ote_cancel_level(entry, sw["ext"], leg_hi, tags.get("cancel_low"), p)     # A21.3
+    if cl is not None:
+        tags["cancel_low"] = cl
     if session == "PM" and p.pm_judas_1330 and not _judas(ctx, sd, sw, "PM"):
         _f("x_pm_judas")
         return None                                   # M7.1 option
@@ -4789,17 +4843,21 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     risk_mult *= _EN.size_mult(ctx, sd, sw, i, p, session, entry, htf, getattr(ctx, "cur_sloppy", ""), lvt)   # E9
     rungs = []
     lad = tags.pop("ladder", None)                  # E2 / D11 ladder: FVG high, 75%, CE (one order, later rungs)
-    if lad and all(px > stop for px in lad):
+    xcap = p.size_up_cap_pct * ctx.equity if (p.size_up_cap_pct and any(x.startswith("size_up_") for x in lvt)) else 0.0
+    plan = None                                     # the planned full size (all ladder rungs together)
+    if lad and not stop_cc and all(px > stop for px in lad):    # a stop-cc order is one stop: no ladder
         fr = p.entry_ladder_fracs
-        n_ = _first_units(p, ctx.equity, sum(f * (px - stop) for f, px in zip(fr, lad)), entry, risk_mult)
+        n_ = _first_units(p, ctx.equity, sum(f * (px - stop) for f, px in zip(fr, lad)), entry, risk_mult, xcap)
+        n_ = _EN.cap_initial(n_, p)                 # E11 caps the WHOLE ladder; the rungs scale together
         qs = [_lots(n_ * f, p.lot) for f in fr]
         shares = qs[0]
         rungs = [(px, q) for px, q in zip(lad[1:], qs[1:]) if q >= max(p.lot, 1)]
+        plan = shares + sum(q for _, q in rungs)
     else:
-        shares = _first_units(p, ctx.equity, risk, entry, risk_mult)
-    shares = _EN.cap_initial(shares, p)             # E11
+        shares = _EN.cap_initial(_first_units(p, ctx.equity, risk, entry, risk_mult, xcap), p)    # E11
     if shares < 1:
         return None
+    plan = plan or shares
     _f("4_order")
     t = ctx.t[i]
     lh = p.last_hour[0] <= t < p.last_hour[1]
@@ -4835,14 +4893,12 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
                  lock_capped=lock_capped, sloppy=sl, scalp=scalp, no_adds=scalp, news_pd=news_pd, news_wait_min_actual=news_wait,
                  heavy_dead=heavy, rungs=rungs, leg_hi0=float(leg_hi),
                  no_new_extreme=p.no_new_extreme,
-                 low_prob=bool(p.low_prob_no_adds and _EN.low_probability(ctx, sd, p, htf, sl)))
+                 low_prob=bool(p.low_prob_no_adds and _EN.low_probability(ctx, sd, p, htf, sl, i)))
     if p.fill_through:
         order["through"] = p.fill_through * p.tick       # E3: the limit needs N ticks of print through it
-    if p.entry_order == "stop_cc":                       # E1 [CC]: a buy stop at the array top, never a chase
-        if not sd.c[i] < entry:
-            _f("x_stop_cc_chase")
-            return None
-        order.update(stop_entry=True, entry=entry + p.tick)
+    order.update(zone_top=zone_top, plan_shares=plan)    # plan: adds are sized from the FULL ladder
+    if stop_cc:
+        order.update(stop_entry=True)                    # entry is already the stop price (top + 1 tick)
     order.update(tags)
     order["lv_tags"] = "|".join(dict.fromkeys(lvt))
     order["lvx"] = lvx

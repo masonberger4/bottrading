@@ -840,7 +840,7 @@ def ep01_manage(ctx, sd, pos, tr, i, p, can_add: bool) -> None:
     st = pos.setdefault("ep01_stage", 0)
     new = [g for g in sd.gaps if g.i == i and g.i - 2 > pos["fill_i"]]
     for g in new:                                      # the trail under each new gap's bodies
-        b = min(min(sd.o[k], sd.c[k]) for k in range(g.i - 2, g.i + 1)) - p.pad
+        b = min(min(sd.o[k], sd.c[k]) for k in range(g.i - 2, g.i + 1)) - p.trail_pad
         if b < sd.c[i] and pos.get("ep01_trail_ok"):
             pos["stop"] = max(pos["stop"], b)
     if not (can_add and pos["add"] is None and S._nadds(pos, tr) < len(p.adds)):
@@ -856,7 +856,7 @@ def ep01_manage(ctx, sd, pos, tr, i, p, can_add: bool) -> None:
         if g.top > pos["stop"] and add_ok(sd, pos, g.top, i, p):
             S._arm_add(pos, tr, g.top, i, p, ctx.equity)
             if pos["add"] is not None:
-                pos["add"]["stop_to"] = min(min(sd.o[k], sd.c[k]) for k in range(g.i - 2, g.i + 1)) - p.pad
+                pos["add"]["stop_to"] = min(min(sd.o[k], sd.c[k]) for k in range(g.i - 2, g.i + 1)) - p.trail_pad
         return
     if st == 2:
         zs = [z for z in _breakers(sd, p) if z.i == i and z.i > pos["fill_i"] and z.top > pos["stop"]

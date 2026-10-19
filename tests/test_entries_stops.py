@@ -14,7 +14,7 @@ import pytest
 from mentorship import backtest as B, entries as EN, levels as L, strategy as S, study
 from mentorship.strategy import Params
 
-from test_review_fixes import A_LOCK, A_ROWS, BASE, D0, day, history, run  # noqa: E402  (shared scenario builders)
+from test_review_fixes import A_LOCK, A_ROWS, BASE, D0, day, history, mirror, run  # noqa: E402  (shared scenario builders)
 
 ES = Path("data/mentorship/ES_5min_db.csv").exists()
 FUT = dict(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1)
@@ -44,7 +44,7 @@ NEW_FIELDS = (
     "max_contracts_total", "units_per_contract", "add_points", "add_arrays", "add_hold", "add_htf_tfs",
     "add_low_end", "add_fvg_low_end", "add_fvg_low", "add_cutoff", "add_cut", "add_cut_ref", "nfp_no_adds",
     "no_adds_nfp", "decoupled_no_adds", "low_prob_no_adds", "add_on", "add_retest_away_pts", "add_body_stop",
-    "ob_mt_pure_pad_pts", "trail_ref")
+    "ob_mt_pure_pad_pts", "trail_ref", "htf_add_extra_risk_pct", "add_cutoff_read", "size_up_cap_pct")
 # fields that are tuning knobs of another switch (the study variant of the main switch uses them)
 KNOBS = {"tick_pts", "stop_ineff_wick", "ob_stub_frac", "entry_ladder_fracs", "htf_target_pts", "size_down",
          "size_up", "low_prob_tests", "halving_floor", "winback_frac", "add_htf_tfs", "add_retest_away_pts",
@@ -686,12 +686,12 @@ def test_htf_fvg_behind_the_trade_is_an_add_zone_and_never_a_target():
     armed = []
     tr = SimpleNamespace(adds=[])
     pos.update(add=None, t1_done=False)
-    ok = EN.more_add_arrays(ctx, long_sd, pos, tr, 5, p, lambda px, floor=None: armed.append((px, floor)) or True)
+    ok = EN.more_add_arrays(ctx, long_sd, pos, tr, 5, p, lambda px, floor=None, extra=0.0: armed.append((px, floor)) or True)
     assert ok and armed == [(101.0, 100.0)] and pos["htf_add_used"]
-    assert not EN.more_add_arrays(ctx, long_sd, pos, tr, 5, p, lambda px, floor=None: True)       # one shot
+    assert not EN.more_add_arrays(ctx, long_sd, pos, tr, 5, p, lambda px, floor=None, extra=0.0: True)       # one shot
     # an entry ABOVE the zone top never traded up through it: no add zone
     pos2 = dict(stop=98.0, basis=102.0 * 10, n=10, fill_i=0, add=None, t1_done=False)
-    assert not EN.more_add_arrays(ctx, long_sd, pos2, tr, 5, p, lambda px, floor=None: True)
+    assert not EN.more_add_arrays(ctx, long_sd, pos2, tr, 5, p, lambda px, floor=None, extra=0.0: True)
     # a short mirrors it: a bearish 15m FVG 99-100 ABOVE a short entered at 101 ... in side space below the price
     short_sd = S.Side(-1, np.full(10, 103.0), np.full(10, 103.5), np.full(10, 102.5), np.full(10, 103.0), 1, 0.0)
     assert EN.htf_add_zones(_ctx(None), short_sd, pos, 5, p) == []             # no confluence table: no zones
@@ -750,3 +750,290 @@ def test_prints_through_helper():
     assert S._prints_through(99.99, 100.0, p) and not S._prints_through(100.0, 100.0, p)    # strict print below
     q = replace(p, fill_through=1.0)
     assert not S._prints_through(99.9, 100.0, q) and S._prints_through(99.75, 100.0, q)     # a full tick through
+
+
+# =====================================================================================================
+# Review fixes, second pass (entries_stops_sizing): the owner #7 add zone, ladder sizing, the SB / Ma Deuce
+# hooks, stop_cc, mohawk coverage, the E12e reading switch, paper-mode risk state
+# =====================================================================================================
+
+def _zone_patch(monkeypatch, top=102.0, bot=101.6):
+    """Replace htf_add_zones by one fixed 15m zone in SIDE space (scenario days have no confluence table)."""
+    def zones(ctx, sd, pos, i, p):
+        off = 0.0 if sd.sign > 0 else -300.0
+        return [(top + off, bot + off, "15m")] if pos["stop"] < top + off < sd.c[i] else []
+    monkeypatch.setattr(EN, "htf_add_zones", zones)
+
+
+ADD_TAIL = B_ROWS[:11] + [(102.9, 103.0, 101.8, 102.5), (102.5, 108.0, 102.4, 107.9)]
+
+
+def _sbt(rows=ADD_TAIL, mirror_=False, **kw):
+    df, hist = day(rows), history()
+    if mirror_:
+        df, hist = mirror(df), [mirror(x) for x in hist]
+    p = Params(**{**B_POST, "adds": (0.5,), "max_risk_pts": 40, **kw})
+    return run(df, hist, p, {})[0]
+
+
+def _adds(t):
+    return [(round(float(a[1]), 2), int(a[2])) for a in t.adds]
+
+
+def test_htf_add_zone_one_shot_is_spent_only_when_an_add_is_armed():
+    p = Params(es_pt=1.0)
+    sd = S.Side(1, np.full(10, 103.0), np.full(10, 103.5), np.full(10, 102.5), np.full(10, 103.0), 1, 0.0)
+    ctx = _ctx(_Conf([(101.0, 100.0, "15m", 0, 0.0)]))
+    pos = dict(stop=98.0, basis=100.0 * 10, n=10, fill_i=0, add=None, t1_done=False)
+    tr = SimpleNamespace(adds=[])
+    seen = []
+    fail = lambda px, floor=None, extra=0.0: seen.append(extra) or False
+    assert not EN.more_add_arrays(ctx, sd, pos, tr, 5, p, fail)               # no risk room under the cap: not armed
+    assert not pos.get("htf_add_used")                                         # ... so the shot is NOT burned
+    assert EN.more_add_arrays(ctx, sd, pos, tr, 5, replace(p, htf_add_extra_risk_pct=0.004),
+                              lambda px, floor=None, extra=0.0: seen.append(extra) or True)
+    assert pos["htf_add_used"] and seen == [0.0, 0.004]                        # the extra-risk switch reaches the arm call
+
+
+def test_htf_add_zones_short_side_mirrors_the_long():
+    p = Params(es_pt=1.0)
+    short = S.Side(-1, np.full(10, 97.0), np.full(10, 97.5), np.full(10, 96.5), np.full(10, 97.0), 1, 0.0)
+    # real prices: a bearish 15m FVG 100.4-101.0 ABOVE a short (entered at 100.6, inside it); noise zones that
+    # must not count: a 4h one (not in add_htf_tfs), one under the price and one beyond the stop (102)
+    conf = _Conf([(101.0, 100.4, "15m", 0, 0.0), (101.2, 100.9, "4h", 0, 0.0), (95.0, 94.0, "15m", 0, 0.0),
+                  (104.0, 103.0, "30m", 0, 0.0)])
+    pos = dict(stop=-102.0, basis=-100.6 * 10, n=10, fill_i=0, add=None, t1_done=False)
+    assert EN.htf_add_zones(_ctx(conf), short, pos, 5, p) == [(-100.4, -101.0, "15m")]
+    armed = []
+    tr = SimpleNamespace(adds=[])
+    assert EN.more_add_arrays(_ctx(conf), short, pos, tr, 5, p,
+                              lambda px, floor=None, extra=0.0: armed.append((px, floor)) or True)
+    assert armed == [(-100.4, -101.0)]                                         # side space: the add rests at real 100.4
+    # a short filled BELOW the zone (real 100.0) never traded down through it: no add zone
+    pos2 = dict(stop=-102.0, basis=-100.0 * 10, n=10, fill_i=0, add=None, t1_done=False)
+    assert not EN.more_add_arrays(_ctx(conf), short, pos2, tr, 5, p, lambda px, floor=None, extra=0.0: True)
+
+
+def test_htf_add_zone_arms_and_fills_in_the_engine_long_and_short(monkeypatch):
+    _zone_patch(monkeypatch)
+    for mir, px in ((False, 102.0), (True, 198.0)):                           # the short is the long on K - p
+        assert _sbt(mirror_=mir, add_arrays=())[0].adds == []                  # switched off: no add
+        # default: the 1.2% entry risk leaves ~0.1% under the 1.3% cap - the add arms, but tiny (documented)
+        assert _adds(_sbt(mirror_=mir)[0]) == [(px, 34)]
+        # the explicit extra-risk switch gives the add its full adds[0] size
+        assert _adds(_sbt(mirror_=mir, htf_add_extra_risk_pct=0.01)[0]) == [(px, 266)]
+
+
+def test_ladder_adds_use_the_full_plan_and_the_caps_scale_the_whole_ladder(monkeypatch):
+    _zone_patch(monkeypatch)
+    a = _sbt(entry="ladder", htf_add_extra_risk_pct=0.01)[0]
+    plan = a.shares + a.adds[0][2] + a.adds[1][2]                              # rung 0 + the two later rungs
+    assert a.adds[2][2] == int(plan * 0.5) and a.adds[2][2] > int(a.shares * 0.5)   # half the PLAN, not half of rung 0
+    c = _sbt(entry="ladder", max_contracts_initial=300, units_per_contract=1, htf_add_extra_risk_pct=0.01)[0]
+    assert (c.shares, c.adds[0][2], c.adds[1][2]) == (150, 90, 60)             # 300 contracts = 50 / 30 / 20 %
+    assert c.adds[2][2] == 150
+    d = _sbt(entry="ladder", max_contracts_total=400, units_per_contract=1)[0]
+    held = d.shares + sum(x[2] for x in d.adds)
+    assert held == 400 and len(d.adds) == 1                                    # rung 1 shrank to the room, rung 2 dropped
+
+
+def test_stop_cc_fills_and_is_sized_at_the_shifted_price():
+    lim = scen_a(ob_arm="touch")[0]
+    cc = scen_a(ob_arm="touch", entry_order="stop_cc")[0]
+    assert cc.entry == 100.25 and cc.shares < lim.shares                       # OB top 100.0 + one tick
+    assert cc.shares == 600 and cc.shares * (cc.entry - cc.stop) <= 1200 + 1e-6    # 1.2% of 100k at the REAL fill price
+    assert scen_a(entry_order="stop_cc") == []                                 # armed above the market: still refused
+
+
+def test_engage_range_keeps_the_sweep_alive_until_the_range_has_formed():
+    rows = B_ROWS[:9] + [(102.3, 102.9, 102.2, 102.8), (102.8, 103.0, 102.5, 102.9), (102.9, 103.0, 101.0, 101.5),
+                         (101.5, 108.0, 101.4, 107.9)]
+    run_ = lambda **kw: run(day(rows), history(), Params(**{**B_POST, "adds": (0.5,), "max_risk_pts": 40, **kw}), {})[0]
+    assert len(run_()) == 1
+    t = run_(engage_range_pts=4.7)           # 4.5 pts at the FVG bar, 5.0 two bars later: waits, then fills
+    assert len(t) == 1 and t[0].entry == 101.3
+    assert run_(engage_range_pts=9.0) == []
+
+
+def test_ote_cancel_level_is_set_only_in_the_band_and_never_loosens():
+    p = Params(es_pt=1.0, ote="limit", ote_cancel=True)
+    lo = lambda **kw: EN.ote_cancel_level(kw.pop("entry"), 100.0, 110.0, kw.pop("existing", None), p)
+    assert lo(entry=103.0) == pytest.approx(102.1)                              # 79% retrace of 100..110 = 102.1
+    assert lo(entry=108.0) is None                                              # a shallow entry: no OTE cancel
+    assert lo(entry=108.0, existing=101.0) == 101.0                             # ... and the other cancel is kept
+    assert lo(entry=103.0, existing=102.5) == 102.5                             # the higher (more protective) wins
+    assert lo(entry=103.0, existing=101.0) == pytest.approx(102.1)
+    assert EN.ote_cancel_level(103.0, 100.0, 110.0, 101.0, replace(p, ote_cancel=False)) == 101.0
+
+
+def test_add_cutoff_read_progress_vs_covered():
+    sd = _sd([0] * 8, [100, 101, 102, 103, 104, 105, 106, 107], [0] * 8, [0] * 8)
+    pos = dict(fill_i=0, leg=(100.0, 108.0), draw=110.0)
+    p = Params(es_pt=1.0, add_cutoff=0.25)
+    cut = lambda i, **kw: EN.add_cut_passed(sd, pos, i, replace(p, **kw))
+    assert not cut(4) and cut(7) is False                                       # "covered": 75% of 100..110 needed
+    assert cut(3, add_cutoff_read="progress") and not cut(2, add_cutoff_read="progress")   # 25% up from the low
+    with pytest.raises(ValueError):
+        Params(add_cutoff_read="x")
+    assert study.DECISIONS["E12e_add_cutoff25_progress"]["add_cutoff_read"] == "progress"
+
+
+def test_retest_add_uses_the_entry_zone_top():
+    p = Params(es_pt=1.0, add_on="retest")
+    sd = S.Side(1, np.full(10, 110.0), np.full(10, 110.5), np.full(10, 109.5), np.full(10, 110.0), 1, 0.0)
+    got = []
+    mk = lambda **kw: dict(stop=98.0, t1_done=False, fvg_ce=100.0, fvg_bottom=99.0, fill_i=0, basis=1000.0, n=10,
+                           add=None, **kw)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(S._SM, "add_ok", lambda *a, **k: True)
+        tr = SimpleNamespace(adds=[])
+        EN.retest_add(sd, mk(zone_top=105.0), tr, 5, p, lambda px: got.append(px))
+        EN.retest_add(sd, mk(), tr, 5, p, lambda px: got.append(px))            # no stored top: the old 2 * CE - bottom
+    assert got == [105.0, 101.0]
+
+
+def test_stop_pad_default_warns_about_a_dead_stop_buffer():
+    with pytest.warns(UserWarning, match="stop_buffer is ignored"):
+        Params(stop_buffer=0.05)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        Params(stop_buffer=0.05, stop_tick_pts=0.0)          # the old pad asked for: fine
+        Params(stop_buffer=0.05, stop_pad_ticks=2.0)
+        Params()
+    assert Params(es_pt=0.10).pad == pytest.approx(0.025)    # SPY: a tick is 0.025, not 0.01
+
+
+def test_size_up_cap_lets_the_size_up_exceed_the_total_cap():
+    kw = dict(size_up_rules=("bpr", "htf_target"), htf_target_pts=100.0)
+    base = scen_b()[0]
+    up = scen_b(**kw)[0]
+    wide = scen_b(size_up_cap_pct=0.01, **kw)[0]
+    assert "size_up" in up.lv_tags and "size_up" in wide.lv_tags               # the size-up fired
+    assert up.shares <= base.shares * 1.3 / 1.2 + 1                             # clamped by the 1.3% total cap
+    assert wide.shares > up.shares                                              # the explicit cap switch lets it go further
+    assert study.DECISIONS["E9_size_up_cap"]["size_up_cap_pct"] == 0.005
+
+
+# --- Silver Bullet / Ma Deuce reach the same risk, stop and sizing hooks ------------------------------------------
+
+def _fake_trade(t_exit, net):
+    """A closed trade with one exit at `t_exit` and a net P&L of `net` (long, 1 share, no costs)."""
+    return SimpleNamespace(exits=[(t_exit, 100.0 + net, 1, "stop")], adds=[], pnl=lambda cost: (net, 0.0))
+
+
+def test_extras_risk_mult_replays_only_trades_closed_before_the_order():
+    p = Params(es_pt=1.0, loss_halving=True, after_loss_mult=0.5, halving_floor=0.125)
+    t0 = pd.Timestamp("2026-06-23 09:30", tz="America/New_York")
+    at = lambda m: t0 + pd.Timedelta(minutes=m)
+    loss, loss2 = _fake_trade(at(10), -5.0), _fake_trade(at(60), -5.0)
+    ctx = SimpleNamespace(risk_view=dict(rs0=EN.new_risk_state(), trades=[loss, loss2]))
+    assert EN.extras_risk_mult(ctx, p, at(5)) == 1.0                              # nothing closed yet
+    assert EN.extras_risk_mult(ctx, p, at(10)) == 0.25                            # one loss: E10 half x after-loss half
+    assert EN.extras_risk_mult(ctx, p, at(30)) == 0.25
+    assert EN.extras_risk_mult(ctx, p, at(61)) == pytest.approx(0.125)            # the 60-min loss counts only afterwards
+    win = _fake_trade(at(20), +50.0)
+    assert EN.extras_risk_mult(ctx, p, at(61), extra=[win]) == 0.5 * 0.5          # the extras' own win ends the E10 halving
+    assert EN.extras_risk_mult(SimpleNamespace(), p, at(5)) == 1.0               # no view (paper / unit): neutral
+    rs = EN.new_risk_state()
+    EN.replay_risk_state(rs, EN.new_risk_state(), [loss2, loss, win], p)          # exit-time order, not list order
+    ref = EN.new_risk_state()
+    for tr in (loss, win, loss2):
+        EN.risk_state_update(ref, tr.pnl(0)[0], p)
+    assert rs == ref
+
+
+ES1 = Path("data/mentorship/ES_1min_db.csv").exists()
+
+
+@pytest.mark.skipif(not ES1, reason="no ES 1m data")
+def test_silver_bullet_gets_the_stop_modifiers_sizing_and_loss_hooks():
+    es = B.load("ES", 1, source="databento")
+    df = es[(es.index >= "2024-01-02") & (es.index < "2024-01-26")]
+    kw = dict(FUT, sb_model=True, sb_runner=True, draw_lock="off", htf_resist_cap=False, leg_pd=0, min_draw_pts=0,
+              use_bias=False)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        run_ = lambda **k: B.run(df, 1, "ES", Params(**kw, **k))
+        base = run_()
+        sb = base.setup.isin(["sb_am", "sb_pm"])
+        assert sb.sum() >= 4
+        cap = run_(max_contracts_initial=6, units_per_contract=1)                 # E11
+        assert (cap[cap.setup.isin(["sb_am", "sb_pm"])].shares <= 6).all()
+        mk = run_(mohawk_ticks=2.0)                                               # A4: 2 ticks further out
+        m = base[sb].merge(mk, on=["entry_time", "setup"], suffixes=("", "_n"))
+        assert len(m) >= 4 and ((m.stop - m.stop_n).abs().round(6) == 0.5).all()      # shorts report real prices
+        hal = run_(loss_halving=True, after_loss_mult=0.5)                        # E10 / Ep08.12
+        h = base[sb].merge(hal, on=["entry_time", "setup"], suffixes=("", "_n"))
+        assert (h.shares_n <= h.shares).all() and (h.shares_n < h.shares).any()
+        sz = run_(size_rules=("august", "fomc_week", "news_eve", "low_prob"))     # E9
+        z = base[sb].merge(sz, on=["entry_time", "setup"], suffixes=("", "_n"))
+        assert (z.shares_n <= z.shares).all() and (z.shares_n < z.shares).any()
+
+
+@pytest.mark.skipif(not ES1, reason="no ES 1m data")
+def test_ma_deuce_gets_the_stop_modifiers_and_caps():
+    es = B.load("ES", 1, source="databento")
+    df = es[(es.index >= "2022-01-10") & (es.index < "2022-02-25")]
+    kw = dict(FUT, sb_model=False, am=(0, 0), pm=(0, 0), pre_0700=True, pre_0900=True, post_news=True, ma_deuce=True,
+              leg_pd=0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        run_ = lambda **k: B.run(df, 1, "ES", Params(**kw, **k), confluence=False)
+        base = run_()
+        md = base.setup == "ma_deuce"
+        assert md.sum() >= 2
+        cap = run_(max_contracts_initial=6, units_per_contract=1)
+        assert (cap[cap.setup == "ma_deuce"].shares <= 6).all()
+        mk = run_(mohawk_ticks=2.0)
+        m = base[md].merge(mk, on=["entry_time", "setup"], suffixes=("", "_n"))
+        assert len(m) >= 1 and ((m.stop - m.stop_n).abs().round(6) == 0.5).all()
+        sz = run_(size_rules=("august", "fomc_week", "news_eve", "low_prob"), loss_halving=True, after_loss_mult=0.5)
+        z = base[md].merge(sz, on=["entry_time", "setup"], suffixes=("", "_n"))
+        assert (z.shares_n <= z.shares).all()
+
+
+# --- paper mode carries the E10 state ------------------------------------------------------------------------
+
+def test_paper_risk_state_load_and_save(tmp_path):
+    from datetime import date as _d
+    from mentorship import paper
+    p = Params(loss_halving=True)
+    f = tmp_path / "rs.json"
+    day1, day2 = _d(2026, 6, 23), _d(2026, 6, 24)
+    assert paper.load_risk_state(f, day1, p) == EN.new_risk_state()               # no file: a fresh state
+    assert paper.load_risk_state(f, day1, Params()) is None                       # switch off: nothing carried
+    start, end = EN.new_risk_state(), dict(m=0.5, deficit=10.0, peak=10.0)
+    paper.save_risk_state(f, day1, start, end)
+    assert paper.load_risk_state(f, day2, p) == end                               # next day starts from the end state
+    assert paper.load_risk_state(f, day1, p) == start                             # a restart the same day re-simulates it
+    paper.save_risk_state(f, day1, None, end)                                     # nothing to save when off
+    assert paper.load_risk_state(f, day2, p) == end
+
+
+# --- look-ahead for the new switches -------------------------------------------------------------------------
+
+EXTRA_SETS = {
+    "extras_main": dict(POST, entry="ladder", add_cutoff=0.5, add_cutoff_read="progress", add_arrays=("htf_fvg", "vi"),
+                        htf_add_extra_risk_pct=0.004, size_up_rules=("bpr", "htf_target"), size_up_cap_pct=0.005,
+                        ote="limit", ote_cancel=True, ob_cisd="cancel", engage_range_pts=1.0, add_on="retest",
+                        max_contracts_initial=400, max_contracts_total=900, units_per_contract=1, max_risk_pts=60),
+    "extras_stop_cc": dict(ob_entry="pre_break", draw_lock="off", entry_order="stop_cc", ob_arm="touch", max_risk_pts=60, mohawk_ticks=2.0,
+                           trail=True, add_body_stop=True),
+}
+
+
+@pytest.mark.parametrize("name", list(EXTRA_SETS))
+def test_look_ahead_review_fix_switches(name):
+    x, y = _syn()
+    _no_look_ahead(x, 5, "RW", Params(**SYN, **EXTRA_SETS[name]), COLS, every=3, partner=y, exits=True, min_trades=1)
+
+
+@pytest.mark.skipif(not ES1, reason="no ES 1m data")
+def test_look_ahead_silver_bullet_and_ma_deuce_hooks():
+    es = B.load("ES", 1, source="databento")
+    df = es[(es.index >= "2022-01-10") & (es.index < "2022-02-25")]
+    p = Params(**FUT, am=(0, 0), pm=(0, 0), pre_0700=True, pre_0900=True, post_news=True, ma_deuce=True, sb_model=True,
+               leg_pd=0, loss_halving=True, after_loss_mult=0.5, size_rules=("august", "low_prob"), mohawk_ticks=2.0,
+               stop_all_ineff=True, nfp_stop_wide=True, max_contracts_initial=900, units_per_contract=1)
+    full = _no_look_ahead(df, 1, "ES", p, COLS, every=2, exits=True, confluence=False)
+    assert full.setup.isin(["ma_deuce", "sb_am", "sb_pm"]).any()

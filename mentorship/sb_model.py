@@ -100,7 +100,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                             pos["stop"] = max(pos["stop"], pos["entry"])
                         pos["away"] = lv_[k]
                     if pos["left"] and pos["away"] is not None and c >= pos["away"] + p.away_pts * p.es_pt:
-                        pos["stop"] = max(pos["stop"], pos["away"] - p.pad)
+                        pos["stop"] = max(pos["stop"], pos["away"] - p.trail_pad)
                         pos["away"] = None
                 else:
                     if not pos["t1_done"] and h >= pos["t1"] + p.exit_fill_through * p.tick:
@@ -111,12 +111,17 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                         pos["stop"] = max(pos["stop"], pos["entry"])
                     if pos["left"] and pos["t2"] is not None and pos["t1_done"] and h >= pos["t2"] + p.exit_fill_through * p.tick:
                         tr.exits.append((ts, sd.x(pos["t2"]), pos["left"], "t2")); pos["left"] = 0
+                if pos["left"] and pos["lvx"] and i > pos["fill_i"]:
+                    for nm_, (lvl_, pre_t1) in pos["lvx"].items():       # A4 mohawk: a body close beyond the raw
+                        if (not pre_t1 or not pos["t1_done"]) and c < lvl_:   # level exits (as in run_day)
+                            tr.exits.append((ts, sd.x(c), pos["left"], nm_)); pos["left"] = 0
+                            break
                 if (pos["left"] and session == "AM" and p.am_exit and p.am_exit_extras
                         and t + ctx.tf >= p.am_exit):  # owner #8: close (not tighten) at 12:00
                     if p.am_exit_mode == "close":
                         tr.exits.append((ts, sd.x(c), pos["left"], "am_exit")); pos["left"] = 0
                     elif not pos.get("am_tightened"):
-                        new = max(pos["stop"], pos["entry"], l - p.pad)
+                        new = max(pos["stop"], pos["entry"], l - p.trail_pad)
                         pos["am_tightened"] = True
                         if new >= c:
                             tr.exits.append((ts, sd.x(c), pos["left"], "am_exit")); pos["left"] = 0
@@ -154,6 +159,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                                o_["swept"], False, None, ctx.idx[o_["i"]], ts, sd.x(fill), sd.x(o_["stop"]),
                                sd.x(o_["t1"]), None if o_["t2"] is None else sd.x(o_["t2"]), o_["shares"],
                                day_type=day_type(day), news=news(day), sb=True, weekday=day.weekday(),
+                               lv_tags=o_.get("lv_tags", ""),
                                capped=o_["capped"], draw_side=o_["draw_side"], draw_px=o_["draw_px"],
                                draw_name=o_["draw_name"], draw_kind=o_["draw_kind"], sloppy=o_["sloppy"],
                                **btag)
@@ -162,7 +168,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                     _stamp_frame(ctx, tr, i)
                     pos = dict(trade=tr, side=sd, stop=o_["stop"], t1=o_["t1"], t2=o_["t2"],
                                left=o_["shares"], entry=fill, t1_done=False, n=o_["shares"],
-                               levels=o_["levels"], k=0, away=None,
+                               levels=o_["levels"], k=0, away=None, fill_i=i, lvx=o_.get("lvx") or {},
                                fracs=(1.0,) if o_["scalp"] else p.ladder_fracs)
                     pending = None
                     if sd.l[i] <= pos["stop"]:
@@ -190,7 +196,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                 if lk is not None and lk["side"] and sd.sign != lk["side"]:
                     continue
                 o_ = _arm(ctx, sd, i, k0, p, tol, lk if (lk is not None and lk["side"] == sd.sign) else None,
-                          session, a)
+                          session, a, out)
                 if o_ is not None and (best is None or o_["fvg_i"] > best["fvg_i"]):
                     best = o_
             if best is not None and (pending is None or best["fvg_i"] != pending["fvg_i"]
@@ -212,8 +218,9 @@ def immediate_rebalance(sd, a: int, i: int, tick: float) -> bool:
     return False
 
 
-def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None):
-    from .strategy import _targets, _eq_levels, _first_units, CF_SRC, _idx_at, _thru, _tick, POOL_KINDS
+def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=()):
+    from .strategy import _targets, _eq_levels, _first_units, CF_SRC, _idx_at, _thru, _tick, POOL_KINDS, _htf_tag
+    from . import entries as _EN
     l, h, c = sd.l, sd.h, sd.c
     if i <= k0 + 2:
         return None
@@ -250,6 +257,8 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None):
     if ob is not None and ob.mt == ob.mt:
         stop = min(stop, ob.mt)
     stop -= p.pad
+    lvx, lvt = {}, []          # the main engine's stop modifiers (E6d stop_all_ineff, E6f nfp_stop_wide, A4 mohawk)
+    stop = _EN.refine_stop(ctx, sd, dict(ext_i=li), i, p, entry, stop, {}, lvx, lvt)
     risk = entry - stop
     if not (p.min_risk_pts * p.es_pt <= risk <= p.max_risk_pts * p.es_pt):
         return None
@@ -309,7 +318,11 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None):
     if p.sloppy_mode == "scalp" and sl_set:
         t1 = min(entry + p.sloppy_scalp_pts * p.es_pt, t1)   # scalp: one exit, no runner
         t2, levels, scalp = None, [t1], True
-    shares = _first_units(p, ctx.equity, risk, entry)
+    rm = _EN.extras_risk_mult(ctx, p, ctx.idx[i], prior)      # E10 loss_halving / Ep08.12 after_loss_mult
+    sw_ = dict(ext=float(l[li]), ext_i=li)
+    rm *= _EN.size_mult(ctx, sd, sw_, i, p, session, entry, _htf_tag(ctx, sd, i, sw_["ext"], tol), sl, lvt)   # E9
+    xcap = p.size_up_cap_pct * ctx.equity if (p.size_up_cap_pct and any(x.startswith("size_up_") for x in lvt)) else 0.0
+    shares = _EN.cap_initial(_first_units(p, ctx.equity, risk, entry, rm, xcap), p)    # E11
     if shares < 1:
         return None
     lo_seg = l[k0:li + 1].min()
@@ -322,6 +335,7 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None):
             swept = name
     return dict(side=sd, i=i, fvg_i=g.i, entry=entry, stop=stop, t1=t1, t2=t2, shares=shares,
                 swept=swept, levels=levels, capped=capped, scalp=scalp, sloppy=sl,
+                lv_tags="|".join(dict.fromkeys(lvt)), lvx=lvx,
                 draw_side=0 if lock is None else lock["side"],
                 draw_px=None if lock is None else lock["target"],
                 draw_name="" if lock is None else lock["name"],
