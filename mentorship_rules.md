@@ -547,7 +547,9 @@ and to the notes for context, charts and trade examples. This file states each r
   traded FVG's unvisited remainder plus the stops beyond it is the next draw (038 ~1:11:44). An
   unbroken OPPOSING HTF FVG between the entry and the target is resistance: it caps the trade (exit
   before its near edge, no target beyond it, no trade if the room is short) (Ep 02 ~2:15-5:22;
-  owner correction #7). Bot: HTF arrays as targets (`htf_targets`), `htf_resist_cap=True`.
+  owner correction #7). Bot: HTF arrays as targets (`htf_targets`); [owner #7 REVISED] the opposing FVG between price
+  and the draw is a SPEED BUMP by default (`htf_resist_mode="bump"`: a partial at its near edge, the rest for the draw); `"cap"` = the
+  first build (exit before it), `"split"` = cap on 1h+ and bump on 15m and lower. An FVG BEHIND the trade is never a target.
 - **L10 Wick CE levels**: prior daily (and weekly) wick CEs are targets, partial levels and
   invalidation levels (Ep 08; 012 ~4:12; 035 ~24:54; 101 ~78:20) [2023]. Bot: `wick_levels`
   (prior day, ON by default - the old "off" note was stale); `wick_days`, `wick_weekly`,

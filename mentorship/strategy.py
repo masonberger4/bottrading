@@ -904,6 +904,123 @@ class Params:
     add_body_stop: bool = False          # Ep01.19: after an add the stop moves under the add gap's bodies
     # A13.4 / M1.4 / Ep05.5 / Ep02.2 are built by setups_models (breaker_entry, ob_entry, entry_arrays,
     # round_pools); this package only verifies them (tests/test_entries_stops.py)
+    # ---- package targets_partials (build_log.md: targets_partials) -------------------------------------
+    # owner #7 REVISED (owner_directives.md #7): an opposing HTF FVG BETWEEN price and the draw is a SPEED
+    # BUMP - DEFAULT: a partial at its near edge (a protected "bump" rung), the rest stays for the draw;
+    # "cap" = the first build (exit before it, no target beyond, no trade if the room is short); "split" =
+    # the timeframe split (cap on the htf_resist_cap_tfs, bump on 15m and lower). An FVG BEHIND the trade
+    # is never a target (it is the add zone, add_arrays "htf_fvg"). htf_resist_cap=False switches both off.
+    htf_resist_mode: str = "bump"
+    htf_resist_cap_tfs: tuple = ("1h", "4h", "D", "W")   # "split": these timeframes cap, the rest bump
+    htf_bump_max: int = 2                # speed bumps taken per trade (the nearest N opposing FVGs)
+    # X3 / X3a ladder shape ----------------------------------------------------------------------------
+    ladder_all_pools: bool = False       # X3 (Ep 03; 003 ~1:04:25; 027 ~43:36): a partial at EVERY pool on the way
+    run_down: bool = False               # X3a "running down equity": one piece per rung (the first keeps ladder_fracs[0],
+                                         # the rest is split evenly) instead of the fixed 3-level cap
+    ladder_max_levels: int = 0           # X3a: most main rungs (0 = len(ladder_fracs); run_down / ladder_all_pools: 6)
+    partial_extra_frac: float = 0.25     # [our interpretation] each extra partial rung (wick CE, -0.5 SD, halfway,
+                                         # inner level) takes this share of the position ...
+    partial_extra_cap: float = 0.6       # ... all extras together at most this share; the main rungs share the rest
+    wick_partials: bool = False          # X3c (065A ~2:37:30; 065B ~3:52:40; 105 ~9:00): always a partial a little before
+    wick_ce_partial: bool = False        # the CE of a wick inside the path (alias of wick_partials); with two wicks the longer
+    wick_partial_tfs: tuple = ("D",)     # candle timeframes read for wicks: "D" (prior days), "1h", "4h", "15m", ...
+    wick_partial_longest: bool = True    # two wicks in the path -> only the longer one
+    wick_partial_protect: bool = True    # the wick rung survives min_rr and the rung cap
+    wick_partial_min_pts: float = 2.0    # [our interpretation] a wick counts from this length (ES pts)
+    sd_half_partial: bool = False        # X3d (064 ~1:33:48): -0.5 SD is always a first partial (exempt from min_rr)
+    sd_neg05_first: bool = False         # alias of sd_half_partial (X3 umbrella)
+    halfway_partial: bool = False        # X3d (026 ~14:57): the next partial halfway between the first rung and the next one
+    halfway_min_pts: float = 2.0         # [our interpretation] no halfway rung between rungs closer than this
+    smt_bank: bool = False               # X3 / X3g (046 ~1:02:40; 037 ~32:56): the sister refuses to confirm a new high
+    smt_bank_frac: float = 0.5           # -> bank this share of what is left (once)
+    smt_bank_min_r: float = 0.5          # [our interpretation] only when the trade is at least this many R in profit
+    resistance_mode: str = "off"         # X3f (089 ~8:46; 092 ~1:28:54; 102 ~2:15:30): "low_full" = a low-resistance run
+                                         # (<= res_low_max obstacles) is one full pull at the draw; "high_run" = a
+                                         # high-resistance run (>= res_high_min obstacles) runs down equity; "both"
+    res_low_max: int = 1                 # [our interpretation] obstacles (opposing FVGs, untaken swing highs) allowed
+    res_high_min: int = 3                # in a low- / required for a high-resistance run
+    capture_frac: float = 0.0            # X3h (013 ~29:22): aim to capture 80-85% of the best-case run: the last rung
+                                         # sits at entry + capture_frac x (rung - entry); 0 off (0.85 = ICT's top end)
+    # A6 / Ep03.5 / L13 gaps and projections ---------------------------------------------------------------
+    measuring_gap: bool = False          # A6 (003 ~31:35; 011 ~6:37; 061 ~1:22:05): tag the measuring gap (an FVG in the
+    measuring_band: tuple = (0.3, 0.7)   # middle of the displacement leg; its near edge sits in this band of the leg)
+    measuring_mid_frac: float = 0.15     # the gap's CE within this share of the leg's 50% (gap notes: A6)
+    measuring_target: bool = False       # Ep03.5: swing extreme -> the gap's anchor, projected once more (-1 SD)
+    measuring_anchor: str = "far"        # "far" edge from the swing (gap notes: 061 / 062), "near" (A6's first
+                                         # reading), "ce", "dup" (061's alternative: duplicated from the other edge)
+    measuring_pool_pts: float = 1.0      # keep the projection only if a pool lies within this many ES pts (062; 0 = always)
+    proj_measuring: bool = False         # L13 (alias of measuring_target with the near anchor)
+    trail_breakaway: bool = False        # A6 / X5: stop under the breakaway (protected) FVG once price closed above it
+    proj_breaker: bool = False           # L13 (070 ~37:31): breaker A-B leg, B + 1 x (B - A): ext -> MSS reference
+    proj_org_k: tuple = ()               # L13 (055 ~19:30; 056 ~17:10): ORG size multiples beyond its far edge, e.g. (1, 2)
+    proj_ext: tuple = ()                 # L13 [CC]: extensions (1.27, 1.62) of the leg, only where they overlap an opposing array
+    mm_targets: bool = False             # Ep08.9: measured move = a range projected once more
+    mm_anchor: str = "leg"               # "leg" (ext .. leg high) or "ref" (ext .. the broken MSS swing)
+    # A22 / L9 / L11 / A17 / L14d array targets --------------------------------------------------------------
+    matrix_targets: tuple = ()           # A22 (cc05_014 ~18:20): "breaker", "mitigation", "rejection" blocks as targets
+    breaker_first: bool = False          # A22 (cc05_014 ~21:04): an opposing breaker in the path ends the run in front of it
+    skip_exhausted: bool = False         # A22 / L14 (cc07_004 ~4:00): HTF arrays price already traded into are not targets
+    fvg_over_ob: bool = False            # L9 (049 ~5:37): where an OB overlaps an FVG the FVG's edge is the target
+    fvg_remainder: bool = False          # L9 (038 ~1:11:44): a partly traded opposing FVG keeps its unvisited remainder
+    weekly_gap_ce_only: bool = False     # L9 (061 ~2:30:15): the weekly gap's CE is enough, the far edge is a ringer
+    rb_targets: str = "off"              # L11 (cc04_006 ~14:14; 059 ~9:38): cover at the rejection block's BODY edge:
+                                         # "ladder" = an extra rung before the pool, "replace" = instead of the pool wick
+    rej_targets: bool = False            # A17 (alias of rb_targets="ladder")
+    pool_body_edge: bool = False         # A17 (015 ~2:15; 059 ~10:03): 2023 reads the body edge of a swing high, not its wick
+    rb_min_wick_frac: float = 0.5        # A17 [our interpretation] a rejection candle: wick >= this share of its range
+    target_hygiene: tuple = ()           # L14d: "arrays" (levels price traded through before the sweep), "htf" (HTF arrays
+                                         # already touched since they formed), "wick" (traded wick CEs)
+    void_targets: bool = False           # A10: true price gaps (liquidity voids) as targets, near edge then CE
+    leg_start_target: bool = False       # A10 [CC]: the start of the one-sided displacement leg is a fill target
+    inter_swing_target: bool = False     # Ep01.21 (~42:19): the nearest untaken short-term high before the draw is a rung
+    target_ltf_obs: bool = False         # X1: untraded opposing LTF order blocks as targets
+    keep_inner_levels: bool = False      # X1: levels under min_rr stay as small early partials
+    inner_min_pts: float = 1.0           # [our interpretation] ... when at least this far from the entry (ES pts)
+    final_htf: bool = False              # Ep03.22: the last rung = the nearest 4h / D / W array or daily VI
+    org_reprice: bool = False            # M8 (069 ~10:06-14:50): Judas away from the ORG -> T1 = the ORG near edge
+    adr_target: bool = False             # L16 [CC]: aim for adr_frac of the 5-day average range from the day's low
+    adr_frac: float = 0.65               # (65-70% of the expected range)
+    adr_early: bool = False              # L16 (cc08_001 ~1:53): ADR reached before 10:00 -> take adr_early_frac, keep a runner
+    adr_early_frac: float = 0.8
+    # L12 / D23 / Ep06.4 standard deviations --------------------------------------------------------------
+    sd_anchor: str = "leg"               # D23: "leg" (sweep extreme .. leg high; "sweep_leg"), "broken" (.. the broken MSS
+                                         # swing), "downleg" (014: the one-sided down-leg into the low), "fulcrum", "london"
+                                         # (= "manip": the London manipulation swing, once its high was taken), "multi" (all)
+    sd_swings: int = 3                   # [our interpretation] "multi": also the last N confirmed swing legs
+    sd_cluster_ticks: int = 0            # L12 (014 ~2:54-4:43; 030 ~26:01): levels from several anchors within N ticks are
+                                         # a cluster (high-probability turn); only clusters are kept when any exist
+    sd_roles: bool = False               # L12 (064 ~1:33:48): -0.5 first partial, -1 the measured move (most off), -2+ extended
+    sd_align: bool = False               # L12 (014; 062 ~42:19): keep an SD level only where it lines up with a pool / array
+    sd_align_tol_pts: float = 1.0
+    sd_no_pool_fallback: bool = False    # L12: with no pool to pass, use the first SD level that pays min_rr
+    sd_close_hit: bool = False           # Ep06.4 (Ep 05 ~6:01-6:49): an SD level is hit by a CLOSE, not a wick ...
+    sd_close_window: tuple = ()          # ... optionally only inside this clock window, e.g. (600, 720)
+    # M14.2 / M14.4 TGIF ---------------------------------------------------------------------------------
+    tgif_zone: bool = False              # M14.2 (066; 074; 084; 089): Friday retrace of 20/22.5/25/30% of the weekly range
+    tgif_zone_levels: tuple = (0.20, 0.225, 0.25, 0.30)    # from the extreme (week low incl. Sunday 18:00 to the high)
+    tgif_cap: float = 0.30               # no target beyond 30%
+    tgif_stand_down: float = 0.40        # 40%+ is reversal talk: no trade
+    tgif_exits: bool = False             # M14.4: 25/25/50 at the first three zone levels
+    tgif_exit_fracs: tuple = (0.25, 0.25, 0.5)
+    # Ep04.x / Ep07.1 / Ep03.19 / X3b -------------------------------------------------------------------------
+    target_order: tuple = ()             # Ep04.12 (Ep 04): kinds in the order they are taken, e.g. ("eq", "daily", "vi"); the
+                                         # bulk (ladder_fracs_bulk) sits on the first target
+    ladder_fracs_bulk: tuple = (0.8, 0.1, 0.1)
+    ladder_news_day: bool = False        # Ep04.12: on a CPI / jobs / FOMC day take the slow 80/20 split
+    clean_eq_pref: bool = False          # Ep04.11 (Ep 04: smooth equal highs are magnets): the smoothest equal-high pool is the draw
+    close_draw: bool = False             # Ep07.1: unrealized prior daily closes (and last week's close) are pool draws
+    pool_rank: bool = False              # L4: the larger pool is the draw (timeframe, then touch count)
+    pool_rank_reach: float = 3.0         # [our interpretation] ... only within this multiple of the nearest pool's distance
+    rel_tfs: tuple = ()                  # L4: relative equal highs / lows read on these minutes too, e.g. (60, 240)
+    draw_below_eq: bool = False          # L4 (042 ~1:09:17): the draw is beyond the dealing range's equilibrium
+    lrlr_max: int = -1                   # L4 (cc01_007; 025 ~15:00): prefer a draw whose run has <= N obstacles (-1 off)
+    pool_runner_pts: float = 0.0         # L4 (027 ~44:20): a runner rung this many ES pts beyond the last pool (fund stops)
+    wick_daily_src: str = ""             # A23: "rth" / "eth" candles for the daily wicks (sets wick_session)
+    wick_week: bool = False              # A23 (alias of wick_weekly)
+    wick_tfs: tuple = ()                 # A23: wick CE targets from these candle timeframes ("1h", "4h")
+    wick_read: str = "off"               # A23 (025 ~25:37; 100 ~38:13): "exit" = a close back through a wick CE the bar after it
+                                         # was reached ends the rest; a close beyond it = continuation
+    sb_split: bool = False               # X3b: the Silver Bullet scales out with the day's _split (slow / news-ahead)
 
     def __post_init__(self):
         if self.unicorn_sides not in ("both", "long", "short"):
@@ -1003,6 +1120,48 @@ class Params:
         if bad or not self.daily_level_array_tfs:
             raise ValueError(f"daily_level_array_tfs {self.daily_level_array_tfs!r}: expected a non-empty "
                              f"subset of {CF_TFS}")
+        # package targets_partials: aliases (umbrella names) and validation
+        if self.wick_ce_partial:
+            self.wick_partials = True
+        if self.sd_neg05_first:
+            self.sd_half_partial = True
+        if self.rej_targets and self.rb_targets == "off":
+            self.rb_targets = "ladder"
+        if self.proj_measuring:
+            self.measuring_target = True
+        if self.wick_week:
+            self.wick_weekly = True
+        if self.wick_daily_src:
+            self.wick_session = self.wick_daily_src
+        for name, ok in (("htf_resist_mode", ("bump", "cap", "split")), ("rb_targets", ("off", "ladder", "replace")),
+                         ("resistance_mode", ("off", "low_full", "high_run", "both")),
+                         ("measuring_anchor", ("far", "near", "ce", "dup")), ("mm_anchor", ("leg", "ref")),
+                         ("wick_read", ("off", "exit")), ("wick_session", ("rth", "eth")),
+                         ("sd_anchor", ("leg", "sweep_leg", "broken", "downleg", "fulcrum", "london", "manip", "multi")),
+                         ("mgmt", ("ladder", "t1t2", "unit"))):
+            if getattr(self, name) not in ok:
+                raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
+        for name, ok in (("matrix_targets", ("breaker", "mitigation", "rejection")),
+                         ("target_hygiene", ("arrays", "htf", "wick")),
+                         ("target_order", ("eq", "daily", "vi", "pool", "array")),
+                         ("wick_partial_tfs", ("D", "4h", "1h", "30m", "15m")), ("wick_tfs", ("D", "4h", "1h", "30m", "15m"))):
+            bad = set(getattr(self, name)) - set(ok)
+            if bad:
+                raise ValueError(f"{name} {sorted(bad)}: expected from {ok}")
+        bad = [k for k in self.sd_levels if not (0.5 - 1e-9 <= k <= 4.5 + 1e-9) or abs(k * 2 - round(k * 2)) > 1e-9]
+        if bad:                                     # L12 / D23: standard deviations 0.5 .. 4.5 in half steps
+            raise ValueError(f"sd_levels {bad}: expected multiples of 0.5 from 0.5 to 4.5")
+        bad = [x for x in self.htf_resist_cap_tfs if x not in CF_TFS]
+        if bad:
+            raise ValueError(f"htf_resist_cap_tfs {bad}: expected names from {CF_TFS}")
+        if self.capture_frac and not 0.3 <= self.capture_frac <= 1.0:
+            raise ValueError(f"capture_frac {self.capture_frac}: expected 0 (off) or 0.3 .. 1.0")
+        if self.tgif_zone and not (0 < self.tgif_cap <= self.tgif_stand_down < 1):
+            raise ValueError("tgif_cap must be > 0 and <= tgif_stand_down < 1")
+        if self.sd_close_window and (len(self.sd_close_window) != 2 or self.sd_close_window[0] >= self.sd_close_window[1]):
+            raise ValueError(f"sd_close_window {self.sd_close_window!r}: expected (start_minute, end_minute)")
+        if self.wick_partial_min_pts < 0 or not 0 < self.partial_extra_frac <= 0.5 or not 0 < self.partial_extra_cap <= 0.9:
+            raise ValueError("partial_extra_frac must be in (0, 0.5], partial_extra_cap in (0, 0.9]")
         inert = []                                  # switches the current draw_lock / vi_arrays make inert
         if self.vi_news_draw and self.draw_lock != "session":
             inert.append("vi_news_draw acts only in the #9 lock (draw_lock='session')")
@@ -1218,6 +1377,8 @@ class Trade:
     # package setups_models (Ep03.11 smt_pick / reporting): the sweep extreme and the leg high
     ext_px: float | None = None
     leg_hi_px: float | None = None
+    capture: float | None = None   # targets_partials X3h: (avg exit - avg entry) / (best high - avg entry)
+    rungs: str = ""                # targets_partials: the ladder at the fill, "level:kind:share|..." (engine frame)
 
     REAL_FIELDS = ("entry", "stop", "t1", "t2", "draw_px", "bz_top", "bz_bottom", "bz_mt",
                    "resist_lo", "resist_hi", "ext_px", "leg_hi_px")
@@ -1619,6 +1780,8 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
                 pools.append((sd.x(d["hi"] if sd.sign > 0 else d["lo"]), d["made"] + 1))
     pools += [(v, None) for v in _round_levels(ctx, sd, i, True, 2)]   # #13 round handles
     pools += _lv_target_pools(ctx, sd, i, p)                           # levels_detectors pools
+    if p.close_draw:                        # Ep07.1: unrealized prior closes + last week's close as pools
+        pools += _TP.close_pools(ctx, sd, i, p, above)
     eqs = {round(v, 9) for v in eq} if p.eq_pref != "off" else set()   # Ep06.7: kind "pool_eq"
     pk = lambda v: "pool_eq" if round(v, 9) in eqs else "pool"
     tk = _tick(p)                           # A2: spent only once traded 1 tick through
@@ -1634,14 +1797,20 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
         lv = [(v, pk(v)) for v, _ in pools if not _spent_up(seen, v, tk)]
     if getattr(ctx, "gaps", None) is not None:
         for kind, hi, lo, ce in ctx.gaps:
-            lv += [(sd.x(hi), "array"), (sd.x(ce), "array"), (sd.x(lo), "array")]
+            if p.weekly_gap_ce_only and kind == "nwog":      # L9 (061 ~2:30:15): the CE is enough, the far edge a ringer
+                lv.append((sd.x(ce), "array"))
+            else:
+                lv += [(sd.x(hi), "array"), (sd.x(ce), "array"), (sd.x(lo), "array")]
             if p.gap_quarters or (p.nwog_quarters and kind == "nwog"):   # L5 / D21 quarters
                 lv += [(sd.x(lo + 0.25 * (hi - lo)), "array"), (sd.x(lo + 0.75 * (hi - lo)), "array")]
     else:
         for a, b in _nwogs(ctx, i):
-            lv += [(sd.x(a), "array"), (sd.x(b), "array")]
-            if p.monday_ce:                 # D21: the Monday-gap CE
+            if p.weekly_gap_ce_only:        # L9: the CE only
                 lv.append((sd.x((a + b) / 2), "array"))
+            else:
+                lv += [(sd.x(a), "array"), (sd.x(b), "array")]
+                if p.monday_ce:             # D21: the Monday-gap CE
+                    lv.append((sd.x((a + b) / 2), "array"))
             if p.nwog_quarters or p.gap_quarters:
                 lv += [(sd.x(a + 0.25 * (b - a)), "array"), (sd.x(a + 0.75 * (b - a)), "array")]
     lv += _lv_target_arrays(ctx, sd, i, p)                             # levels_detectors arrays
@@ -1650,13 +1819,14 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
         for a, b in orgs[-p.org_days:]:
             lv += [(sd.x(a + q * (b - a)), "array") for q in (0.0, 0.25, 0.5, 0.75, 1.0)]
     if p.wick_levels:
-        lv.append((sd.x(ctx.wick["upper"] if sd.sign > 0 else ctx.wick["lower"]), "array"))
+        wk_ = "wick" if p.wick_read != "off" else "array"       # A23 wick_read: the rung is told apart
+        lv.append((sd.x(ctx.wick["upper"] if sd.sign > 0 else ctx.wick["lower"]), wk_))
         for w in getattr(ctx, "wicks", [])[1:] + getattr(ctx, "wick_wk", []):   # L10 wick_days / weekly
-            lv.append((sd.x(w["upper"] if sd.sign > 0 else w["lower"]), "array"))
+            lv.append((sd.x(w["upper"] if sd.sign > 0 else w["lower"]), wk_))
         if p.wick_both:                     # L10: the other wick's CE too (any beyond price)
             for w in getattr(ctx, "wicks", [ctx.wick]) + getattr(ctx, "wick_wk", []):
-                lv.append((sd.x(w["lower"] if sd.sign > 0 else w["upper"]), "array"))
-    if p.sd_targets and leg is not None:
+                lv.append((sd.x(w["lower"] if sd.sign > 0 else w["upper"]), wk_))
+    if p.sd_targets and leg is not None and not _TP.sd_active(p):
         lo, hi = leg
         sds = [hi + k * (hi - lo) for k in p.sd_levels]
         if p.sd_first_beyond:              # only the first SD level beyond the nearest pool (014/030)
@@ -2109,6 +2279,7 @@ def _draw_prefs(ctx, sd, i: int, entry: float, p, session: str, keep: list) -> l
 
 def _close(pos, trades, p):
     tr = pos["trade"]
+    tr.capture = _TP.capture_ratio(pos, tr)           # X3h: how much of the best-case run the exits took
     trades.append(tr)
     gross, costs = tr.pnl(p.cost_per_share)
     return tr.side if gross - costs < 0 else None
@@ -2382,6 +2553,8 @@ def _split(p, ctx, hist, day, i, t) -> tuple:
         return p.ladder_fracs
     tags = events(day)
     ahead = (bool(tags & NEWS_1000) and t < 600) or ("fomc" in tags and t < 840)
+    if p.ladder_news_day and tags & {"cpi", "jobs", "fomc"}:      # Ep04.12: a news day takes the bulk first
+        return p.ladder_fracs_slow
     nxt = next_trading_day(day)
     if events(nxt) & {"cpi", "jobs", "fomc"}:
         ahead = True
@@ -2654,13 +2827,13 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
             return (ctx.h[a:kl].max() <= v) if v > px else (ctx.l[a:kl].min() >= v)
         return (not _spent_up(ctx.h[a:kl].max(), v, tk)) if v > px else (not _thru(ctx.l[a:kl].min(), v, tk))
 
-    if p.draw_lock_near_cap and p.htf_resist_cap and getattr(ctx, "conf", None) is not None:
+    if p.draw_lock_near_cap and _TP.resist_cfg(p)[0] and getattr(ctx, "conf", None) is not None:
         # switch: candidates beyond the nearest opposing HTF FVG wholly beyond the lock price
         # (as known at the lock) are not draws
         now = pd.Timestamp(ctx.day, tz=ctx.idx.tz) + pd.Timedelta(minutes=t_lock)
         src = tuple(CF_SRC[x] for x in p.htf_resist_src)
         for sgn in (1, -1):
-            r = ctx.conf.resistance(now, px, sgn, p.htf_resist_tfs, src, straddle=False)
+            r = ctx.conf.resistance(now, px, sgn, _TP.resist_cfg(p)[0], src, straddle=False)
             if r is not None:          # [our interpretation] arrays wholly beyond the lock price
                 cands = [x for x in cands if (x[0] <= r[0] if sgn > 0 else x[0] >= r[0])
                          or (x[0] < px if sgn > 0 else x[0] > px)]
@@ -2681,6 +2854,8 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
     if pf:                                         # levels_detectors: a preferred draw wins
         up = [x for x in pf if x[1] > px]
         dn = [x for x in pf if x[1] < px]
+    elif p.pool_rank or p.draw_below_eq:           # L4: the larger pool / beyond the range's equilibrium
+        up, dn = _TP.lock_rank(ctx, p, up, px, True), _TP.lock_rank(ctx, p, dn, px, False)
     side = 0
     if up and (not dn or up[0][0] < dn[0][0]):
         side = 1
@@ -2901,6 +3076,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         if pos is not None:
             tr, sd = pos["trade"], pos["side"]
             o, h, l, c = sd.o[i], sd.h[i], sd.l[i], sd.c[i]
+            pos["best"] = max(pos["best"], h)         # X3h capture metric: the best-case run includes this bar
             if pos.get("rungs"):                      # E2 / D11 entry ladder: the deeper rungs rest as limits
                 if pos["t1_done"]:
                     pos["rungs"] = []
@@ -2949,17 +3125,23 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 tr.exits.append((ts, sd.x(o), pos["left"], "stop_gap")); pos["left"] = 0
             elif l <= stop:
                 tr.exits.append((ts, sd.x(stop), pos["left"], "be" if pos["t1_done"] else "stop")); pos["left"] = 0
-            elif p.mgmt == "ladder":
+            elif p.mgmt in ("ladder", "unit"):
                 fr = pos["fracs"]
                 lv_ = pos["levels"][:len(fr)]
                 if pos.get("final_T") and len(pos["levels"]) > len(fr):   # #9: the last rung is the draw
                     lv_ = pos["levels"][:len(fr) - 1] + [pos["levels"][-1]]
                 xt_ = p.exit_fill_through * p.tick          # E3: a target needs N ticks of print through it
-                while pos["k"] < len(lv_) and pos["left"] and h >= lv_[pos["k"]] + xt_:
+                while pos["k"] < len(lv_) and pos["left"]:
                     k = pos["k"]
+                    hit_, px_ = _TP.rung_hit(pos, k, lv_[k], h, c, t, tf, p, xt_)     # Ep06.4 sd_close_hit
+                    if not hit_:
+                        break
                     last = k == len(lv_) - 1 and not pos.get("runner")   # Ep04.3 po3_runner
                     q = pos["left"] if last else min(pos["left"], max(p.lot, _lots(pos["n"] * fr[k], p.lot)))
-                    tr.exits.append((ts, sd.x(lv_[k]), q, f"t{k + 1}")); pos["left"] -= q
+                    tr.exits.append((ts, sd.x(px_), q, f"t{k + 1}")); pos["left"] -= q
+                    if (p.wick_read == "exit" and pos["left"] and pos.get("level_kinds")
+                            and k < len(pos["level_kinds"]) and pos["level_kinds"][k] == "wick"):
+                        pos["wick_chk"] = (i, lv_[k] + p.exit_before_pts * p.es_pt)      # A23: read the next close
                     pos["k"] += 1
                     pos["last_partial_i"] = i
                     if not pos["t1_done"]:
@@ -2982,7 +3164,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                     pos["stop"] = max(pos["stop"], pos["basis"] / pos["n"])
                 if pos["left"] and pos["t2"] is not None and pos["t1_done"] and h >= pos["t2"] + p.exit_fill_through * p.tick:
                     tr.exits.append((ts, sd.x(pos["t2"]), pos["left"], "t2")); pos["left"] = 0
-            if (pos["left"] and p.mgmt == "ladder" and p.ladder_trail == "hit" and pos.get("away") is not None
+            if (pos["left"] and p.mgmt in ("ladder", "unit") and p.ladder_trail == "hit" and pos.get("away") is not None
                     and c >= pos["away"] + p.away_pts * p.es_pt):
                 pos["stop"] = max(pos["stop"], pos["away"] - p.trail_pad)   # price left the array
                 pos["away"] = None
@@ -3026,6 +3208,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             if (pos["left"] and pos["t1_done"] and pos.get("heavy_dead") is not None
                     and (ts + pd.Timedelta(minutes=tf)).value >= pos["heavy_dead"]):
                 tr.exits.append((ts, sd.x(c), pos["left"], "htf_heavy")); pos["left"] = 0   # #7 Ep02 30m
+            if pos["left"] and (p.smt_bank or p.adr_early or p.wick_read != "off" or p.trail_breakaway):
+                _TP.manage(ctx, sd, pos, tr, i, ts, p, pctx, psides, ppos)      # X3g / L16 / A23 / A6 partials
             if pos["left"]:
                 pos["best"] = max(pos["best"], h)
                 if (p.time_stop_min and not pos["t1_done"] and (t + tf) - pos["fill_t"] >= p.time_stop_min
@@ -3059,7 +3243,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 lost_side = _after_close(pos, trades, p, done, state) or lost_side
                 pos = None
             else:                                      # new FVG after the fill: trail / add
-                if p.htf_resist_live and ctx.conf is not None and p.htf_resist_cap:
+                if p.htf_resist_live and ctx.conf is not None and p.htf_resist_cap and _TP.resist_cfg(p)[0]:
                     _resist_live(ctx, sd, pos, i, p)
                 new = [g for g in sd.gaps if g.i == i and g.i - 2 > pos["fill_i"]]
                 can_add = (p.adds and not pos["t1_done"] and pos["add"] is None and not pos.get("no_adds")
@@ -3072,7 +3256,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                     new, can_add = [], False
                 if new:
                     g = new[-1]
-                    if p.trail or (p.mgmt == "ladder" and p.ladder_trail == "fvg" and pos["t1_done"]
+                    if p.trail or (p.mgmt in ("ladder", "unit") and p.ladder_trail == "fvg" and pos["t1_done"]
                                    and g.i - 2 > pos["last_partial_i"]):   # formed since the partial
                         ref_ = g.bottom if p.trail_ref == "gap" else                             float(min(min(sd.o[k_], sd.c[k_]) for k_ in range(g.i - 2, g.i + 1)))   # Ep01.20 body
                         pos["stop"] = max(pos["stop"], ref_ - p.trail_pad)
@@ -3149,16 +3333,21 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 o = pending
                 fill = _fill_at(sd, o, i)            # a gap through the limit fills at the open
                 tr = _make_trade(ctx, day, symbol, o, sd, ts, fill, i, t, p, btag)
-                pos = dict(trade=tr, side=sd, stop=o["stop"], t1=o["t1"], t2=o["t2"],
+                base_ = (1.0,) if o.get("scalp") else (o.get("fracs") or _split(p, ctx, hist, day, i, t))
+                if o.get("rung_plan"):               # targets_partials: the day's split is known now
+                    lv_f, kd_f, fr_f = _TP.fill_plan(o, base_, p)
+                else:
+                    lv_f, kd_f, fr_f = o["levels"], o.get("level_kinds"), base_
+                pos = dict(trade=tr, side=sd, stop=o["stop"], t1=lv_f[0] if o.get("rung_plan") else o["t1"], t2=o["t2"],
                            left=o["shares"], n=o["shares"], basis=fill * o["shares"],
                            t1_done=False, fill_i=i, fill_t=t, add=None, fvg_bottom=o["fvg_bottom"],
                            abort=None, best=fill, ext_i=o["ext_i"], broken=set(), fvg_ce=o["fvg_ce"],
-                           body_low=o["body_low"], levels=o["levels"], k=0, away=None, last_partial_i=i,
-                           level_kinds=o.get("level_kinds"), final_T=o.get("final_T", False),
+                           body_low=o["body_low"], levels=lv_f, k=0, away=None, last_partial_i=i,
+                           level_kinds=kd_f, final_T=o.get("final_T", False),
                            bz_mt=o.get("bz_mt"), ob_pre=ob_pre, no_adds=o.get("no_adds", False),
                            heavy_dead=o.get("heavy_dead"), ob_add_used=set(),
                            be_at=o.get("be_at"), lvx=o.get("lvx") or {},
-                           fracs=(1.0,) if o.get("scalp") else (o.get("fracs") or _split(p, ctx, hist, day, i, t)),
+                           fracs=tuple(fr_f),
                            leg=o.get("leg"), bz_side=o.get("bz_side"), kind=o.get("entry_kind"),
                            exit_at=o.get("exit_at"), runner=o.get("runner", False), po3_open=o.get("po3_open"),
                            ce_hold=o.get("ce_hold", False), rungs=list(o.get("rungs") or []),
@@ -3168,6 +3357,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 if pos["runner"]:                    # Ep04.3: the last fraction has no target
                     lv0 = pos["levels"][:-1] if (pos["final_T"] and len(pos["levels"]) > 1) else pos["levels"]
                     pos.update(levels=lv0[:max(1, len(pos["fracs"]) - 1)], final_T=False)
+                if o.get("rung_plan"):
+                    tr.rungs = "|".join(f"{sd.x(v_):.2f}:{k_}:{f_:.2f}" for v_, k_, f_ in zip(lv_f, kd_f, fr_f))
                 if p.mss_on_side == "tag" and _SM.on_side_since(sd, o, i):   # A19.4
                     tr.lv_tags = "|".join(x for x in (tr.lv_tags, "on_side") if x)
                 done[o.get("done_key", o["session"])] = True
@@ -3408,7 +3599,7 @@ def _resist_live(ctx, sd, pos, i, p):
     (applies from bar i+1)."""
     now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
     src = tuple(CF_SRC[x] for x in p.htf_resist_src)
-    r = ctx.conf.resistance(now, sd.x(sd.c[i]), sd.sign, p.htf_resist_tfs, src)
+    r = ctx.conf.resistance(now, sd.x(sd.c[i]), sd.sign, _TP.resist_cfg(p)[0], src)
     if r is None:
         return
     capx = sd.x(r[0]) - p.htf_resist_buffer_pts * p.es_pt
@@ -4680,22 +4871,32 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             _f("x_news_range_premium")
             return None
     above = max(leg_hi, entry)
+    tg = _TP.tgif_info(ctx, sd, i, p, entry) if p.tgif_zone else None     # M14.2 TGIF zone
+    if tg is not None and tg["stand_down"]:
+        _f("x_tgif_stand_down")                  # 40%+ of the weekly range retraced = reversal talk
+        return None
     if p.sick_sister and fixed is None:          # setups_models M16.2: the sick sister's own targets
         fixed = _SM.sick_sister(ctx, sd, i, p, session, entry)
         if fixed is None:
             return None
+    eq_hi, rr_ = [], None
     if fixed is not None:
         lv = sorted(fixed)
         kinds = [k for _, k in lv]
         lv = [v for v, _ in lv]
     else:
         eq_hi = _eq_levels(sd, i, tol, lows=False, p=p)
+        if p.rel_tfs:                      # L4: relative equal highs on higher timeframes too
+            eq_hi = list(eq_hi) + _TP.rel_pools(ctx, sd, i, p)
         lv = _targets(ctx, sd, i, above, eq_hi, p, (sw["ext"], leg_hi), sw["ext_i"])
         htf_t = tuple(p.htf_targets) + (("30m",) if p.htf_targets_30m and "30m" not in p.htf_targets else ())
         if htf_t and getattr(ctx, "conf", None) is not None:
             now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
-            real = ctx.conf.targets(now, sd.x(above), sd.sign, htf_t, p.htf_far_edge)
-            lv = sorted(set(lv) | {(sd.x(v), "array") for v in real})
+            if _TP.needs_htf_rows(p):      # L9 / A22 / L14d: the same levels with the array filters applied
+                lv = sorted(set(lv) | set(_TP.htf_levels(ctx, sd, i, above, p, htf_t)))
+            else:
+                real = ctx.conf.targets(now, sd.x(above), sd.sign, htf_t, p.htf_far_edge)
+                lv = sorted(set(lv) | {(sd.x(v), "array") for v in real})
         if p.fvg_targets:                  # untouched opposing FVGs / voids: near edge, then CE (L9)
             extra = []
             for z in sd.opposing():
@@ -4704,41 +4905,54 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             lv = sorted(set(lv) | set(extra))
         extra = _lv_finish_targets(ctx, sd, i, above, p, htf_t)    # levels_detectors arrays
         if p.daily_vi_targets or p.news_ce_target:                 # setups_models M1.1 / N6
-            extra = list(extra) + _SM.more_targets(ctx, sd, i, above, p)
+            more = _SM.more_targets(ctx, sd, i, above, p)
+            if p.target_order:             # Ep04.12: the daily VI rungs are told apart ("vi")
+                more = [(v, "vi") for v, _ in more]
+            extra = list(extra) + more
         if extra:
             lv = sorted(set(lv) | set(extra))
+        if p.mm_targets or p.proj_breaker or p.sd_anchor in ("broken", "multi"):
+            rr_ = _mss_ref(ctx, sd, sw, i, p)
+        lv = sorted(set(lv) | set(_TP.extra_sources(ctx, sd, i, p, sw, entry, risk, leg_hi, above, lv, lvt, rr_)))
+        if p.wick_tfs:                     # A23 wick_tfs: the nearest two long 1h / 4h wick CEs are targets
+            wk = sorted(w[0] for w in _TP.tf_wicks(ctx, sd, i, p, p.wick_tfs, above))[:2]
+            lv = sorted(set(lv) | {(v, "wick") for v in wk})
+        lv = _TP.refine(ctx, sd, i, p, lv, sw, entry, above, lvt)
         if p.daily_fvg_exact:          # review fix: the exact daily edge replaces its "array" twin
             lv = _drop_near_exact(lv, 0.25 * p.es_pt)
-        if p.ob_targets_1m:            # A12: untraded opposing order blocks of the session's bars
+        if p.ob_targets_1m or p.target_ltf_obs:   # A12 / X1: untraded opposing order blocks of the session's bars
             lv = sorted(set(lv) | set(_EN.ob_target_levels(sd, i, above, p)))
         if p.erl_exits_only:           # L14b: exit at external range liquidity only
             lv = [(v, k) for v, k in lv if k in POOL_KINDS]
         kinds = [kind for v, kind in lv]
         lv = [_exit_px(v, kind, p) for v, kind in lv]
+    inner_ex = _TP.inner_extras(p, entry, risk, lv, kinds) if fixed is None else []   # X1 keep_inner_levels
     if p.round_step_pts:               # L17: targets rounded toward price (down for a long)
         pairs = sorted({(_round_px(ctx, sd, i, v, p, up=False), k) for v, k in zip(lv, kinds)})
         pairs = [(v, k) for v, k in pairs if v > entry]
         lv, kinds = [v for v, _ in pairs], [k for _, k in pairs]
-    # owner #7 (Ep 02): an unbroken opposing HTF FVG between the entry and the target caps it
-    capped, resist, capx = False, None, None
+    # owner #7 REVISED (Ep 02): an opposing HTF FVG between the entry and the target is a SPEED BUMP (a
+    # partial at its near edge, the rest stays for the draw); "cap" / "split" keep the first build's cap
+    capped, resist, capx, bumps = False, None, None, []
     if p.htf_resist_cap:
-        if getattr(ctx, "conf", None) is None:
-            _f("x_htf_resist_nodata")
-        else:
-            now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
-            src = tuple(CF_SRC[x] for x in p.htf_resist_src)
-            r = ctx.conf.resistance(now, sd.x(entry), sd.sign, p.htf_resist_tfs, src)
-            if r is not None:
-                capx = sd.x(r[0]) - p.htf_resist_buffer_pts * p.es_pt
-                if capx - entry < max(p.min_rr * risk, p.htf_resist_min_room * p.es_pt):
-                    _f("x_htf_resist")
-                    return None
-                pairs = [(v, k) for v, k in zip(lv, kinds) if v <= capx]
-                if not any(abs(v - capx) <= p.es_pt for v, _ in pairs):
-                    pairs.append((capx, "array"))
-                pairs.sort()
-                lv, kinds = [v for v, _ in pairs], [k for _, k in pairs]
-                capped, resist = True, r
+        rs_ = _TP.apply_resist(ctx, sd, i, p, entry, risk, lv, kinds, _f)
+        if rs_ is None:
+            return None
+        lv, kinds, capx, bumps = rs_["lv"], rs_["kinds"], rs_["capx"], rs_["bumps"]
+        resist, capped = rs_["resist"], rs_["resist"] is not None
+        if bumps:
+            lvt.append("speed_bump")
+    if p.breaker_first and fixed is None:      # A22: an opposing breaker in the path ends the run in front of it
+        bc = _TP.breaker_cap(ctx, sd, i, p, entry, risk, _f)
+        if bc is False:
+            return None
+        if bc is not None:
+            pairs = [(v, k) for v, k in zip(lv, kinds) if v <= bc]
+            if not any(abs(v - bc) <= p.es_pt for v, _ in pairs):
+                pairs.append((bc, "array"))
+            pairs.sort()
+            lv, kinds = [v for v, _ in pairs], [k for _, k in pairs]
+            lvt.append("breaker_first")
     if p.bpr_rule and fixed is None:   # Ep01.4: the first target is capped at the next BPR above
         caps = [z for z in sd.bprs(p.bpr_max_gap_bars) if z.i <= i and z.bottom > entry]
         if caps:
@@ -4787,6 +5001,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
                 x = _exit_px(sd.x(v), k, p)
                 if entry + p.min_rr * risk <= x < T - p.es_pt:
                     rungs.append((x, k))
+            rungs += [(b, "bump") for b in bumps if entry + p.min_rr * risk <= b < T - p.es_pt
+                      and not any(abs(b - r_[0]) <= p.es_pt for r_ in rungs)]       # owner #7: the speed bump
             rungs = sorted(set(rungs))
         else:
             rungs = [(v, k) for v, k in keep if v < T - p.es_pt]
@@ -4814,6 +5030,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
                     return None
             if p.m2_target or p.mmxm_ctx or p.pm_lunch_target:      # setups_models M2 / Ep05.8 / M7
                 prefs += _SM.draw_prefs(ctx, sd, sw, i, p, session, entry, risk, keep)
+            if p.pool_rank or p.draw_below_eq or p.lrlr_max >= 0 or p.clean_eq_pref:   # L4 / Ep04.11
+                prefs += _TP.draw_pref(ctx, sd, i, p, entry, risk, keep, leg_hi, sw)
             prefs = sorted(x for x in prefs if x[0] - entry >= p.min_rr * risk)
             if prefs:
                 draw, kd, nm = prefs[0]
@@ -4867,6 +5085,16 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         levels = lv
     else:
         levels = lv[:max(1, len(p.ladder_fracs))]
+    rp = None                                       # targets_partials: the rung plan (None = the old ladder)
+    if (fixed is None and not scalp and not p.t1_fixed_all and not tags.get("fracs") and not tags.get("single_exit")
+            and not (p.moc_pool_exit and session == "PM" and p.last_hour[0] <= t < p.last_hour[1])):
+        extras_ = list(inner_ex)
+        if p.sd_half_partial or p.wick_partials:
+            extras_ += _TP.partial_extras(ctx, sd, i, p, sw, entry, leg_hi, lv[-1], rr_, lvt)
+        rp = _TP.plan(ctx, sd, i, p, entry, risk, above, list(zip(lv, kinds)), final_T, extras_, tg, eq_hi, lvt)
+        if rp == "skip":
+            _f("x_tgif_room")
+            return None
     heavy = None
     if p.runner_htf_exit and getattr(ctx, "conf", None) is not None:
         s_ = ctx.conf.support(ctx.idx[i] + pd.Timedelta(minutes=ctx.tf), sd.x(entry), sd.sign, p.runner_htf_exit)
@@ -4902,6 +5130,12 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     order.update(tags)
     order["lv_tags"] = "|".join(dict.fromkeys(lvt))
     order["lvx"] = lvx
+    if rp is not None:                           # targets_partials: rungs resolved again at the fill (the day's split)
+        order.update(rung_plan=rp["rungs"], fracs_fixed=rp["fracs_fixed"], run_local=rp["run_local"],
+                     final_T=rp["final_T"], bulk=bool(p.target_order))
+        lv_o, kd_o, _ = _TP.fill_plan(order, p.ladder_fracs, p)
+        order.update(levels=lv_o, level_kinds=kd_o, t1=lv_o[0],
+                     t2=(lv_o[-1] if rp["final_T"] and len(lv_o) > 1 else lv_o[1] if len(lv_o) > 1 else None))
     # setups_models order plumbing (run_day): the draw, the displacement leg, the MSS bar
     order.update(draw=draw, leg=(float(sw["ext"]), float(pd_hi)), broke=sw.get("broke"))
     if order.pop("single_exit", False):          # M5.1: one exit at the draw
@@ -4993,3 +5227,4 @@ def _smt_rel_eq(ctx, sd, i, level, pctx, ps, j, p):
 
 from . import setups as _SM   # noqa: E402  (setups_models package; imports this module back)
 from . import entries as _EN  # noqa: E402  (entries_stops_sizing package; imports this module back)
+from . import targets as _TP  # noqa: E402  (targets_partials package: speed bump, rung plan, partials)

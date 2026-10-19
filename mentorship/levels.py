@@ -384,21 +384,30 @@ def opens(index, o) -> dict[str, float]:
     return out
 
 
-def rejection_blocks(o, h, l, c, n: int = 2) -> list[Zone]:
-    """Wicks at a swing high (low): from the highest candle body to the high (lowest body to
-    the low) of the swing candle and its neighbours. A bearish rejection block sits at a
-    swing high. Known when the swing is confirmed."""
+def rejection_blocks(o, h, l, c, n: int = 2, min_wick_frac: float = 0.0) -> list[Zone]:
+    """Rejection block (A17; cc04_006 ~5:04-10:43): a swing high of long-upper-wick candles; the zone runs
+    from the highest open / close of the swing (any candle colour) up to the highest wick. A bearish
+    block sits at a swing high; the bullish mirror at a swing low. Known when the swing is confirmed.
+    Review fix (targets_partials A17): the swing is the pivot candle plus its `n` neighbours each side
+    (it was a fixed +-1), and the pivot candle itself must show the wick - its wick at least
+    `min_wick_frac` of its range (0 = any wick, the old test). Default arguments keep the old zones for
+    pivot_n = 1."""
     ph, pl = pivots(h, l, n)
     out = []
+    w = max(n, 1)
     for p in ph:
-        a, b = max(0, p.i - 1), p.i + 2
+        a, b = max(0, p.i - w), min(len(h), p.i + w + 1)
         body = max(max(o[k], c[k]) for k in range(a, b))
-        if body < p.price:
+        rng = h[p.i] - l[p.i]
+        wick = h[p.i] - max(o[p.i], c[p.i])
+        if body < p.price and (min_wick_frac <= 0 or (rng > 0 and wick >= min_wick_frac * rng)):
             out.append(Zone("bear", p.price, float(body), p.known, p.i))
     for p in pl:
-        a, b = max(0, p.i - 1), p.i + 2
+        a, b = max(0, p.i - w), min(len(h), p.i + w + 1)
         body = min(min(o[k], c[k]) for k in range(a, b))
-        if body > p.price:
+        rng = h[p.i] - l[p.i]
+        wick = min(o[p.i], c[p.i]) - l[p.i]
+        if body > p.price and (min_wick_frac <= 0 or (rng > 0 and wick >= min_wick_frac * rng)):
             out.append(Zone("bull", float(body), p.price, p.known, p.i))
     return sorted(out, key=lambda z: z.i)
 

@@ -351,7 +351,7 @@ Times are New York. "ES pts" means ES handles; 5 ES = 20 NQ (049 ~2:44; 071 ~20:
    - Manipulation leg (092; Ep 06).
    - Breaker A-B leg (070).
    - London low to high [fx] (008).
-   - Default for `sd_targets`: the leg from the sweep extreme to the swing high that was broken (= 030/047, which also matches the existing code). Test the 070 A-B leg.
+   - Default for `sd_targets` (corrected, targets_partials): `sd_anchor="leg"` = the sweep extreme to the HIGHEST HIGH OF THE LEG so far (`leg_hi`), not the broken swing - the first build's note said "= 030/047" wrongly. The recommended anchor (sweep extreme to the broken MSS swing) is `sd_anchor="broken"`; 014's down-leg is `"downleg"`; Ep 06 / Ep 05 manipulation (London) is `"london"` (= `"manip"`), measured only after its high is taken; the fulcrum is `"fulcrum"`; `"multi"` runs them all and clusters. `sd_levels` runs 0.5-4.5.
 10. **News days.**
     - A: no NFP Friday, no Thu/Fri or Wed PM of NFP week, no FOMC PM (003; 006; 038; 101 for new traders).
     - B: he trades them (021 after 14:45; 065b FOMC 14:25; 071, 088/089 and 105 NFP Friday; 041 and 050 NFP Thursday; 082 FOMC minutes; 097 FOMC day).

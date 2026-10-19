@@ -68,6 +68,8 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
     from .strategy import (Trade, _first_units, news, day_type, _eff_flat, _stamp_frame,
                            mark_levels, CF_SRC, blocked, _arm_add, _lots, _f, _htf_tag)
     from . import entries as _EN
+    from . import targets as _TP
+    from types import SimpleNamespace
     # the funnel keys md_* (strategy.FUNNEL) show which gate stops Ma Deuce (setups_models review)
     if len(hist) < 3:
         return []
@@ -153,8 +155,9 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
     cap = np.inf                                       # the hard ceiling of every ladder rung
     if lock is not None and lock["side"]:
         cap = T
-    if p.htf_resist_cap and getattr(ctx, "conf", None) is not None:      # owner #7 at 08:00
-        r = ctx.conf.resistance(ctx.idx[k8], sign * entry, sign, p.htf_resist_tfs,
+    cap_tfs, bump_tfs = _TP.resist_cfg(p)                # owner #7 REVISED: cap tfs / speed-bump tfs
+    if cap_tfs and getattr(ctx, "conf", None) is not None:      # the cap at 08:00
+        r = ctx.conf.resistance(ctx.idx[k8], sign * entry, sign, cap_tfs,
                                 tuple(CF_SRC[x] for x in p.htf_resist_src))
         if r is not None:
             capx = sign * r[0] - p.htf_resist_buffer_pts * p.es_pt
@@ -181,6 +184,14 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
         if np.isfinite(cap) and (not levels or max(raw) >= cap - p.es_pt):
             levels.append(float(cap))
         levels = levels or [target]
+    if bump_tfs and getattr(ctx, "conf", None) is not None:     # owner #7 REVISED: a partial at the opposing HTF FVG
+        shim = SimpleNamespace(sign=sign, x=lambda v: sign * v)  # between the entry and the draw (the speed bump)
+        bumps = _TP.bump_levels(ctx, shim, k8, p, entry, risk, bump_tfs, tuple(CF_SRC[x] for x in p.htf_resist_src),
+                                None, now=ctx.idx[k8])
+        bumps = [b for b in bumps if entry + p.sb_room_pts * p.es_pt <= b < max(levels) - p.es_pt]
+        if bumps:
+            levels = sorted(set(levels) | set(bumps))
+            lvt.append("speed_bump")
     chop = getattr(ctx, "chop", None)
     sloppy = set(r for r in getattr(ctx, "sl_day", ()) if not r.endswith(":PM"))
 

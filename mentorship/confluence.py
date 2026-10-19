@@ -342,6 +342,34 @@ def _opposing_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs, src=(0,
 Confluence.opposing = _opposing_impl
 
 
+def _opposing_ext_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs, src=(0,), straddle: bool = False):
+    """targets_partials (L9 / A22 / L14d): like `opposing`, but every row keeps its identity - a dict
+    (top, bottom, tf, src, known_ns, dead_ns) in real prices - so the caller can test overlaps
+    (fvg_over_ob), how far price has traded into the array since it formed (skip_exhausted, hygiene)
+    and the unvisited remainder (fvg_remainder). Valid at t (known <= t, not dead, within life).
+    Long: bearish arrays with bottom > beyond (straddle=True: top > beyond). Nearest first."""
+    now = float(t.value)
+    out = []
+    for tf in tfs:
+        z = self.z.get(tf)
+        if z is None:
+            continue
+        m = ((z["kind"] == -side) & (z["known"] <= now) & (z["dead"] > now) & (now - z["known"] <= z["life"])
+             & np.isin(z["src"], list(src)))
+        if side > 0:
+            m &= (z["top"] > beyond) if straddle else (z["bottom"] > beyond)
+        else:
+            m &= (z["bottom"] < beyond) if straddle else (z["top"] < beyond)
+        for k in np.flatnonzero(m):
+            out.append(dict(top=float(z["top"][k]), bottom=float(z["bottom"][k]), tf=tf, src=int(z["src"][k]),
+                            known=float(z["known"][k]), dead=float(z["dead"][k])))
+    out.sort(key=lambda r: (r["bottom"] if side > 0 else -r["top"]))
+    return out
+
+
+Confluence.opposing_ext = _opposing_ext_impl
+
+
 def score(tfs: list[str]) -> tuple[int, int]:
     """(number of aligned timeframes, index of the highest one in TFS; -1 if none)."""
     return len(tfs), max((TFS.index(t) for t in tfs), default=-1)

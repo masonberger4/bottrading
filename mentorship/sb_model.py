@@ -30,7 +30,7 @@ from . import levels as L
 
 def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
     from .strategy import (Trade, _lots, news, day_type, _eff_flat, _news_gate, _stamp_frame,
-                           mark_levels)   # noqa: avoid cycle
+                           mark_levels, _split)   # noqa: avoid cycle
     wins = [("AM", "sb_am", p.sb_windows[0], 570), ("PM", "sb_pm", p.sb_windows[1], 810)]
     if p.sb_london:
         wins.insert(0, ("AM", "sb_london", (180, 240), 120))
@@ -169,7 +169,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                     pos = dict(trade=tr, side=sd, stop=o_["stop"], t1=o_["t1"], t2=o_["t2"],
                                left=o_["shares"], entry=fill, t1_done=False, n=o_["shares"],
                                levels=o_["levels"], k=0, away=None, fill_i=i, lvx=o_.get("lvx") or {},
-                               fracs=(1.0,) if o_["scalp"] else p.ladder_fracs)
+                               fracs=(1.0,) if o_["scalp"] else (_split(p, ctx, getattr(ctx, "hist", []), day, i, t) if p.sb_split else p.ladder_fracs))
                     pending = None
                     if sd.l[i] <= pos["stop"]:
                         tr.exits.append((ts, sd.x(pos["stop"]), pos["left"], "stop")); pos["left"] = 0
@@ -221,6 +221,7 @@ def immediate_rebalance(sd, a: int, i: int, tick: float) -> bool:
 def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=()):
     from .strategy import _targets, _eq_levels, _first_units, CF_SRC, _idx_at, _thru, _tick, POOL_KINDS, _htf_tag
     from . import entries as _EN
+    from . import targets as _TP
     l, h, c = sd.l, sd.h, sd.c
     if i <= k0 + 2:
         return None
@@ -289,9 +290,10 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=()):
             T = tv + p.pool_beyond_pts * p.es_pt if (p.exit_mode == "split" and lock["kind"] == "pool") \
                 else tv - p.exit_before_pts * p.es_pt
             draws = [d for d in draws if d < T - p.es_pt] + [T]
-        if p.htf_resist_cap and getattr(ctx, "conf", None) is not None:   # #7 cap
+        cap_tfs, bump_tfs = _TP.resist_cfg(p)             # owner #7 REVISED: cap tfs / speed-bump tfs
+        if cap_tfs and getattr(ctx, "conf", None) is not None:   # #7 cap
             now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
-            r = ctx.conf.resistance(now, sd.x(entry), sd.sign, p.htf_resist_tfs,
+            r = ctx.conf.resistance(now, sd.x(entry), sd.sign, cap_tfs,
                                     tuple(CF_SRC[x] for x in p.htf_resist_src))
             if r is not None:
                 capx = sd.x(r[0]) - p.htf_resist_buffer_pts * p.es_pt
@@ -299,6 +301,13 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=()):
                 capped = True
                 if capx - entry < max(p.min_rr * risk, p.sb_room_pts * p.es_pt):
                     return None
+        if bump_tfs and getattr(ctx, "conf", None) is not None:      # #7 REVISED: a partial at the opposing HTF FVG
+            bm = _TP.bump_levels(ctx, sd, i, p, entry, risk, bump_tfs, tuple(CF_SRC[x] for x in p.htf_resist_src), None)
+            last_ = max(draws) if draws else None
+            bm = [b for b in bm if last_ is not None and entry + p.sb_room_pts * p.es_pt <= b < last_ - p.es_pt]
+            if bm:
+                draws = sorted(set(draws) | set(bm))
+                lvt.append("speed_bump")
         draws = [d for d in draws if d > entry + ext_pts * p.es_pt - 1e-9]   # M3.10: the extended draw
         if not draws:
             return None

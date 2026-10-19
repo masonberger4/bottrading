@@ -107,3 +107,9 @@ Built as switches; the defaults stay as they are until the owner answers.
    lock once the PM draw was delivered). On the Ep 01 day (ES 2022-12-30) the 15:00 lock picks the
    AM low below (nearest), while ICT's draw was the buy side above - so the Ep 01 last-hour long is
    blocked by the default lock. Confirm the 15:00 lock, or tie the LH slot to the PM lock.
+
+Update (targets_partials): the revised #7 is built as the DEFAULT - `htf_resist_mode="bump"`. An opposing FVG (15m, 30m, 1h, 4h, D;
+`htf_resist_tfs`) between price and the draw gets a protected "bump" rung at its near edge (minus `htf_resist_buffer_pts`); the rest
+of the position stays for the draw. `htf_resist_mode="cap"` is the first build (exit before it, nothing beyond, no trade if the room
+is short), `"split"` caps on `htf_resist_cap_tfs` (1h, 4h, D, W) and bumps on 15m / 30m. `htf_resist_cap=False` switches both off.
+The Silver Bullet and Ma Deuce follow the same mode. Effect: far more trades than the cap (ES 5m 2024-01..02: 10 vs 2).

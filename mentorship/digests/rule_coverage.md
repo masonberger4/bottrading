@@ -671,45 +671,45 @@ Low:
 Owns: `_targets` and the `_scan` target merge. Ladder-loop edits are done in coordination with management_exits.
 
 High:
-- **X3:** Umbrella for X3a-h: `ladder_all_pools`, `wick_ce_partial`, `sd_neg05_first`, `halfway_partial`, `smt_bank`, `resistance_mode`, and a capture metric.
+- **X3:** Umbrella for X3a-h: `ladder_all_pools`, `wick_ce_partial`, `sd_neg05_first`, `halfway_partial`, `smt_bank`, `resistance_mode`, and a capture metric. **[built 2026-10-18, targets_partials; see build_log.md]**
 
 Medium:
-- **A6:** Add a breakaway tag, `measuring_gap` (near-edge projection) and `trail_breakaway`.
-- **A22:** Add `matrix_targets` (breakers, mitigation and rejection blocks), `breaker_first` and `skip_exhausted`.
-- **L4:** Add `pool_rank` (touch count + TF), `rel_tfs`, `draw_below_eq`, `lrlr_max` and `pool_runner_pts`.
-- **L9:** Add `fvg_over_ob`, `fvg_remainder` (far-edge test) and `weekly_gap_ce_only`.
-- **L11:** Add `rb_targets` ladder/replace at the body edge.
-- **L12:** Add sd_levels 0.5-4.5, `sd_anchor` (sweep_leg/fulcrum/london/multi), `sd_cluster_ticks`, `sd_roles`, `sd_align` and `sd_no_pool_fallback`.
-- **L14d:** Add `target_hygiene` (retire traded-through arrays, touched HTF arrays).
-- **M8:** Add `org_reprice` (Judas away from the ORG, T1 = near edge).
-- **M14.2:** Add `tgif_zone` (20/22.5/25/30% of the weekly range from Sunday 18:00, cap at 30%, stand down at 40%).
-- **X1:** Add `target_ltf_obs` and `keep_inner_levels`.
-- **X3a:** Add `run_down` and `ladder_max_levels`. Keep level kinds.
-- **X3c:** Add `wick_partials` (multi-TF, longest wick, protected rung).
-- **X3d:** Add `sd_half_partial` (exempt from min_rr) and `halfway_partial`.
+- **A6:** Add a breakaway tag, `measuring_gap` (near-edge projection) and `trail_breakaway`. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **A22:** Add `matrix_targets` (breakers, mitigation and rejection blocks), `breaker_first` and `skip_exhausted`. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **L4:** Add `pool_rank` (touch count + TF), `rel_tfs`, `draw_below_eq`, `lrlr_max` and `pool_runner_pts`. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **L9:** Add `fvg_over_ob`, `fvg_remainder` (far-edge test) and `weekly_gap_ce_only`. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **L11:** Add `rb_targets` ladder/replace at the body edge. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **L12:** Add sd_levels 0.5-4.5, `sd_anchor` (sweep_leg/fulcrum/london/multi), `sd_cluster_ticks`, `sd_roles`, `sd_align` and `sd_no_pool_fallback`. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **L14d:** Add `target_hygiene` (retire traded-through arrays, touched HTF arrays). **[built 2026-10-18, targets_partials; see build_log.md]**
+- **M8:** Add `org_reprice` (Judas away from the ORG, T1 = near edge). **[built 2026-10-18, targets_partials; see build_log.md]**
+- **M14.2:** Add `tgif_zone` (20/22.5/25/30% of the weekly range from Sunday 18:00, cap at 30%, stand down at 40%). **[built 2026-10-18, targets_partials; see build_log.md]**
+- **X1:** Add `target_ltf_obs` and `keep_inner_levels`. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **X3a:** Add `run_down` and `ladder_max_levels`. Keep level kinds. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **X3c:** Add `wick_partials` (multi-TF, longest wick, protected rung). **[built 2026-10-18, targets_partials; see build_log.md]**
+- **X3d:** Add `sd_half_partial` (exempt from min_rr) and `halfway_partial`. **[built 2026-10-18, targets_partials; see build_log.md]**
 - **Ep02.5:** Add 30m to htf_targets. Add `runner_htf_exit` (test 15m and 30m). **[built 2026-10-18, owner directives; see build_log.md]** `htf_targets_30m`, `runner_htf_exit` (off). Owner #7: the overhead 15m FVG is RESISTANCE (new row Ep02.10, `htf_resist_cap=True`).
-- **Ep03.5:** Add `measuring_target` with `measuring_anchor` near/ce.
-- **Ep03.22:** Add `final_htf` (last rung = nearest 4h/D/W array or daily VI).
+- **Ep03.5:** Add `measuring_target` with `measuring_anchor` near/ce. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **Ep03.22:** Add `final_htf` (last rung = nearest 4h/D/W array or daily VI). **[built 2026-10-18, targets_partials; see build_log.md]**
 
 Low:
-- **A10:** Add `void_targets` and `leg_start_target`.
-- **A17:** Fix the rejection_blocks window and wick test. Add `rej_targets` and `pool_body_edge`.
-- **A23:** Add `wick_days`, `wick_daily_src`, `wick_week`, `wick_tfs` and `wick_read`. Fix the default doc.
-- **L13:** Add `proj_breaker`, `proj_measuring`, `proj_org_k` and `proj_ext`.
-- **L16:** Add `adr_target`/`adr_frac` and `adr_early` (80% off before 10:00).
-- **L17:** Add `round_step_pts` (targets down and entries up toward price; stops not rounded).
-- **M14.4:** Add `tgif_exits` (25/25/50 at 20/22.5/25%).
-- **X3b:** Add JOLTS dates, SB use of _split, and a slow_frac study.
-- **X3f:** Add `resistance_mode` (full pull at the draw).
-- **X3h:** Add `capture_frac`.
-- **D23:** Add `sd_anchor` broken/leg and sd_levels 0.5-4.5. Fix the models.md note.
-- **Ep01.21:** Add `inter_swing_target` (swing intermediate, pool draw).
-- **Ep03.19:** Add mgmt='unit'.
-- **Ep04.11:** Add `clean_eq_pref`.
-- **Ep04.12:** Add `daily_vi_targets`, `ladder_news_day` and `target_order`.
-- **Ep06.4:** Add sd_anchor manip, `sd_close_hit` and `sd_close_window`.
-- **Ep07.1:** Add `close_draw` (unrealized prior closes, the weekly draw as a pool).
-- **Ep08.9:** Add `mm_targets` with `mm_anchor` ref/leg.
+- **A10:** Add `void_targets` and `leg_start_target`. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **A17:** Fix the rejection_blocks window and wick test. Add `rej_targets` and `pool_body_edge`. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **A23:** Add `wick_days`, `wick_daily_src`, `wick_week`, `wick_tfs` and `wick_read`. Fix the default doc. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **L13:** Add `proj_breaker`, `proj_measuring`, `proj_org_k` and `proj_ext`. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **L16:** Add `adr_target`/`adr_frac` and `adr_early` (80% off before 10:00). **[built 2026-10-18, targets_partials; see build_log.md]**
+- **L17:** Add `round_step_pts` (targets down and entries up toward price; stops not rounded). **[built 2026-10-18, targets_partials; see build_log.md]**
+- **M14.4:** Add `tgif_exits` (25/25/50 at 20/22.5/25%). **[built 2026-10-18, targets_partials; see build_log.md]**
+- **X3b:** Add JOLTS dates, SB use of _split, and a slow_frac study. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **X3f:** Add `resistance_mode` (full pull at the draw). **[built 2026-10-18, targets_partials; see build_log.md]**
+- **X3h:** Add `capture_frac`. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **D23:** Add `sd_anchor` broken/leg and sd_levels 0.5-4.5. Fix the models.md note. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **Ep01.21:** Add `inter_swing_target` (swing intermediate, pool draw). **[built 2026-10-18, targets_partials; see build_log.md]**
+- **Ep03.19:** Add mgmt='unit'. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **Ep04.11:** Add `clean_eq_pref`. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **Ep04.12:** Add `daily_vi_targets`, `ladder_news_day` and `target_order`. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **Ep06.4:** Add sd_anchor manip, `sd_close_hit` and `sd_close_window`. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **Ep07.1:** Add `close_draw` (unrealized prior closes, the weekly draw as a pool). **[built 2026-10-18, targets_partials; see build_log.md]**
+- **Ep08.9:** Add `mm_targets` with `mm_anchor` ref/leg. **[built 2026-10-18, targets_partials; see build_log.md]**
 - **M7.1 (reassigned):** Add `pm_off_lunch` (exempt the lunch high from `seen`, make it the draw) and `pm_judas_1330`. **[built 2026-10-18, owner directives; see build_log.md]** Bug fixed at the root (`seen_from_created=True`: a pool is spent only by bars after it formed - the lunch, overnight, London and AM highs were always dropped); `pm_off_lunch`, `pm_judas_1330` switches (off).
 
 ### setups_models (75 items)
@@ -1118,3 +1118,23 @@ data).
 | Ep05.8 | FULL | `mmxm_rel_eq` (the sweep must be of relative equal lows / highs); the CE exit now reuses the ce_hold rule |
 | A19, A19.2, A20, M0.4, M1.3, Ep07.6, Ep08.4, Ep08.16, Ep01.22 | FULL | under the owner #11 default (OB order before the break) the MSS gates act through `ob_pre_gate` ("cancel" default / "hold"); Ep08.4 "origin" anchored at the sweep extreme (`leg_origin`), the first rule kept as "origin_max" |
 | Ep05.6 | SIMPLIFIED | study variant only, by spec |
+
+
+## 5. targets_partials build (2026-10-18)
+
+Owner #7 REVISED is the default: an opposing HTF FVG between price and the draw is a SPEED BUMP (a protected
+partial at its near edge, the rest stays for the draw; `htf_resist_mode="bump"`). The first build (the cap) and the
+timeframe split stay as `htf_resist_mode="cap"` / `"split"`. Status changes against section 2 (all behind Params
+switches, default off unless the owner directive makes it the default):
+
+| Id | New status | Note |
+|---|---|---|
+| Ep02.10, L9, X3f, Ep02.5 | FULL | owner #7 revised: speed bump default; `htf_resist_mode`, `htf_resist_cap_tfs`, `htf_bump_max` |
+| X3, X3a, X3c, X3d, X3h, Ep03.19, Ep04.12 | FULL | rung planner: `run_down`, `ladder_all_pools`, `ladder_max_levels`, `wick_partials`, `sd_half_partial`, `halfway_partial`, `capture_frac`, `mgmt="unit"`, `target_order`, `ladder_news_day`; `Trade.capture`, `Trade.rungs` |
+| X3f, X3g | FULL | `resistance_mode`; `smt_bank` |
+| A6, Ep03.5, L13, Ep08.9 | FULL | `measuring_gap`, `measuring_target` / `measuring_anchor`, `trail_breakaway`, `proj_*`, `mm_targets` |
+| L12, D23, Ep06.4 | FULL (time alignment not coded) | `sd_anchor` leg / broken / downleg / fulcrum / london / multi, `sd_cluster_ticks`, `sd_roles`, `sd_align`, `sd_no_pool_fallback`, `sd_close_hit` |
+| A22, L9, L14d, A10, A17, L11, A23, X1, Ep01.21, Ep03.22, M8, L16 | FULL | array / pool target sources and filters |
+| M14.2, M14.4 | FULL | `tgif_zone`, `tgif_exits` |
+| L4, Ep04.11, Ep07.1 | FULL (lrlr / clean_eq only without the #9 lock) | `pool_rank`, `rel_tfs`, `draw_below_eq`, `lrlr_max`, `clean_eq_pref`, `pool_runner_pts`, `close_draw` |
+| X3b | PARTIAL | SB uses `_split` (`sb_split`) and a slow_frac study; JOLTS dates before 2026 NOT added (no verifiable source) |

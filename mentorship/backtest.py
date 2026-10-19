@@ -247,7 +247,8 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
     eth = None
     ipda_on = p.ipda_pools or p.ipda_next or p.ipda_eq_day != "off"
     if (p.pd_hl_session == "eth" or p.matrix_full or p.wick_session == "eth" or p.pw_pm_full_session
-            or (ipda_on and p.ipda_session == "eth") or (p.ma_deuce and p.md_eth)):   # M15 md_eth (review fix)
+            or (ipda_on and p.ipda_session == "eth") or (p.ma_deuce and p.md_eth)
+            or p.tgif_zone):   # M15 md_eth (review fix); M14.2 the weekly range from Sunday 18:00
         se = htf.sessions(df)                  # full sessions (evening reopen -> close), by trading date
         eth = {t.date(): (float(r.open), float(r.high), float(r.low), float(r.close)) for t, r in se.iterrows()}
     return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth)
@@ -375,6 +376,12 @@ def report(t: pd.DataFrame) -> dict:
         if col not in t:
             continue
         out[f"by_{col}"] = {str(k): stats(g) for k, g in t.groupby(t[col].astype(str))}
+    if "capture" in t and t.capture.notna().any():        # X3h: the share of the best-case run the exits took
+        c = t.capture.dropna()
+        w = c[t.loc[c.index, "net"] > 0]
+        out["capture"] = {"trades": int(len(c)), "mean": round(float(c.mean()), 3),
+                          "winners_mean": round(float(w.mean()), 3) if len(w) else None,
+                          "winners_median": round(float(w.median()), 3) if len(w) else None}
     t = t.assign(month=pd.to_datetime(t.entry_time.astype(str).str[:10]).dt.strftime("%Y-%m"))
     out["by_month"] = {k: stats(g) for k, g in t.groupby("month")}
     return out
