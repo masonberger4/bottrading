@@ -817,3 +817,16 @@ Two existing tests were adapted (not weakened): `test_reverse_in_session_falls_t
 
 Regression: with `fomc_no_reentry`, `nfp_first_hour`, `fed_chair_skip_am`, `flat_0830_extras`, `fomc_flat` pinned off (study.CURRENT / PRE_OWNER do this) the trades are identical to the commit before: ES 5m
 2023-10..2024-02 with SB, Ma Deuce, pre-open windows and London SB: 36 trades, net -7069.55 both; with the new defaults on, the same 36 trades; the golden window (PRE_OWNER, ES 5m 2024 Q1) 23 trades, net 4693.52.
+
+### news_calendar_times review fixes (2026-10-19)
+- N5 calendar: marked PARTIAL. 2019-2025 PCE / GDP / retail / JOLTS dates NOT built (no verified source; fabricating them was refused). Built: Conference Board consumer confidence (last Tuesday 10:00, `news_conf_board`, default off so results do not move; counts in `release_times(conf=)`, `two_drivers`, the `conf_board` tag only with the switch).
+- N5.5: `fed_chair_skip_am` default now OFF (the FED_CHAIR list is unverified, ends 2025, lacks speeches); the day rules (chair, auction, two drivers, post-FOMC AM) now apply to the NY AM family (AM / PRE9 / NEWS) only, not London / PRE7 / PRE8 / lunch. fomc_am skip and pre-day skips are unchanged.
+- N5.6: `calendar.AUCTIONS` overlay added, `is_auction_day` no longer cached; marked [our interpretation]. Month-end 2/5/7-year, 20-year, TIPS dates are NOT built in.
+- N4: PRE8 pending orders are cut at 08:30 on 08:30 release days with `pre_flat_0830` (as PRE7).
+- N1: `nfp_first_hour` floors PRE8 and the AM at 09:30 on jobs days (PRE8 dropped, `am_from_0830` AM start floored).
+- M9.2: the FOMC Judas gate and held_valid apply on FOMC decision days only (not on minutes days).
+- T4: `or_bias_filter=False` writes the tags `or_bias_with` / `or_bias_against` / `or_bias_flat`; `or_deep_win` is read at the bar close (5m: closes 09:40 / 09:45); `london_kz_start` must be one of PRE_AT_MINUTES (60..300 hourly, 420, 500, 510, 540) or Params raises.
+- NFP-week `blocked()` rules marked [our interpretation]; tests for the Thursday-NFP Fri-after and Tue-NFP weeks.
+- Gates documented as MAIN-ENGINE ONLY (not built for the Silver Bullet / Ma Deuce): news_judas, fomc_judas, side filters (or_bias, or_wide, pm_continue_am), or_no_entry / or_deep, macro gates, fomc_observe, fomc_only_am scalp / tag, and the calendar day rules for Ma Deuce (unless md_blocked). Orders armed outside the scan loop (re-entry, pm_reversal, held orders) skip post_order.
+- Still NOT built: T9 `pm_ob_entry` OB entry path (tag / require only; `pm_skip_after` default 0, spec value 870 left off); the 14:00-14:25 FOMC range pool; the Judas gate with news_wait off; or_wide tag-only mode; SB / Ma Deuce hooks for the gates; DOL / Fed verification of claims / minutes dates (derived; 2025-01-09 mourning day, 2020-03-15 emergency meeting unhandled); a reverse_in_session + fomc_no_reentry test; verified chair calendar.
+- Look-ahead: new sets fomc_c, gates_c, macro_0950 (fomc_flat_before, fomc_judas_end, fomc_whipsaw_skip_london, pre_cpi_risk, two_driver_gate, or_deep_win, or_bias_filter, lunch_win, news_conf_board, macro_only 0950, fomc_only_am tag); flat_0830_extras is in the ES look-ahead test (default on). New study variants: N5.5_fed_chair_skip, N4_pre_cpi_small_03, T4_or_deep_win_1000, T8_lunch_win_1150, T8_lunch_exit_1200, N1_nfp_first_hour_ny_kz, N5_news_conf_board.

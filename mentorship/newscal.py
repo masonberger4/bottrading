@@ -61,18 +61,19 @@ def calendar_block(d, session: str, p, t: int = 0):
             return "fomc_am_skip"
         if fi["only"] and p.fomc_only_am == "skip":
             return "fomc_only_am_skip"
-    if fi["after"] and not pm and (p.skip_post_fomc_am or p.fomc_after_am_block):
+    am_only = session in ("AM", "PRE9", "NEWS")             # the NY AM family (not London / PRE7 / PRE8 / lunch)
+    if fi["after"] and am_only and (p.skip_post_fomc_am or p.fomc_after_am_block):
         return "post_fomc_am"
     if fi["eve"] and p.skip_pre_fomc:
         return "pre_fomc"
     if (p.skip_pre_cpi or p.pre_cpi == "skip") and CAL.eve_of(d, "cpi"):
         return "pre_cpi"
-    if not pm:
+    if am_only:
         if p.fed_chair_skip_am and (d in CAL.FED_CHAIR or d in CAL.FED_CHAIR_EXTRA):
             return "fed_chair"
         if p.skip_auction_am and CAL.is_auction_day(d):
             return "auction_am"
-        if p.skip_two_drivers and CAL.two_drivers(d, p.news_claims):
+        if p.skip_two_drivers and CAL.two_drivers(d, p.news_claims, p.news_conf_board):
             return "two_drivers"
     return None
 
@@ -118,7 +119,7 @@ def day_tags(d, p=None) -> str:
         out.append("fed_chair")
     if CAL.is_auction_day(d):
         out.append("auction")
-    out += sorted(CAL.minor_events(d))
+    out += sorted(t for t in CAL.minor_events(d) if t != "conf_board" or (p is not None and p.news_conf_board))
     return "|".join(out)
 
 
@@ -134,8 +135,9 @@ def releases(day, p) -> list[int]:
     """The release minutes the news gate waits for (calendar.release_times with the minor releases and
     wait_0945 of the Params)."""
     from . import strategy as S
-    if p.news_claims or p.news_minutes or not p.wait_0945:
-        return CAL.release_times(day, claims=p.news_claims, minutes=p.news_minutes, pmi=p.wait_0945)
+    if p.news_claims or p.news_minutes or p.news_conf_board or not p.wait_0945:
+        return CAL.release_times(day, claims=p.news_claims, minutes=p.news_minutes, pmi=p.wait_0945,
+                                 conf=p.news_conf_board)
     return S.release_times(day)
 
 
@@ -261,7 +263,7 @@ def gate(ctx, p, day, session: str, t: int, i: int, wb: int, trades):
       x_pm_skip_after  T9 pm_skip_after: nothing traded by then"""
     if session != "PM" and p.fomc_am == "recipe" and CAL.fomc_info(day)["fomc"] and not recipe_ok(ctx, i):
         return "x_fomc_recipe"
-    if p.two_driver_gate and session in PRE_NAMES and CAL.two_drivers(day, p.news_claims):
+    if p.two_driver_gate and session in PRE_NAMES and CAL.two_drivers(day, p.news_claims, p.news_conf_board):
         last = max((r for r in releases(day, p) if r in (585, 600)), default=0)
         if last and wb <= last:
             return "x_two_driver"
@@ -343,7 +345,8 @@ def judas_gate(ctx, p, day, drv, i: int, t: int):
                 block = fr["dir"]
             elif p.news_judas == "wait":
                 wait = True
-    if (p.fomc_judas or p.fomc_observe == "judas") and R == 840 and t >= p.fomc_judas_end:
+    if ((p.fomc_judas or p.fomc_observe == "judas") and R == 840 and t >= p.fomc_judas_end
+            and CAL.fomc_info(day)["fomc"]):                  # not on an FOMC-minutes day (also a 14:00 release)
         fr = first_run(ctx, 840, p.news_judas_ref_min, end=p.fomc_judas_end)
         if fr["ref"] and fr["k"] is not None and (p.fomc_stage2_cont or t < p.fomc_pm_from):
             block = block or fr["dir"]
@@ -493,6 +496,9 @@ def post_order(ctx, sd, i: int, p, session: str, o_: dict, hist):
                 if pos <= p.or_deep_pd:
                     o_["fill_win"] = (tuple(p.or_deep_win),)
                     tags.append("or_deep")
+    if session != "PM" and p.or_bias != "off" and not p.or_bias_filter and t >= p.or_end:
+        b = or_dir(ctx, p.or_bias, p.or_end)               # T4 or_bias_filter=False: tag only
+        tags.append("or_bias_with" if b and sd.sign == b else "or_bias_against" if b else "or_bias_flat")
     if session == "PM":
         if p.pm_continue_am == "tag":
             b = am_dir(ctx, p)
@@ -519,11 +525,14 @@ def scalp_now(ctx, p, session: str) -> bool:
     return bool(p.fomc_only_am == "scalp" and session != "PM" and CAL.fomc_info(ctx.day)["only"])
 
 
-def fill_ok(o: dict, t: int) -> bool:
-    """T4 / D1: an OR order (fill_from) fills from that minute, or inside its or_deep window."""
+def fill_ok(o: dict, t: int, tf: int = 0) -> bool:
+    """T4 / D1: an OR order (fill_from) fills from that minute, or inside its or_deep window. With tf the window
+    is read at the bar's CLOSE (t + tf in (a, b]), so 09:37-09:46 on 5m bars admits the bars closing 09:40 and 09:45."""
     ff = o.get("fill_from")
     if ff is None or t >= ff:
         return True
+    if tf:
+        return any(a < t + tf <= b for a, b in (o.get("fill_win") or ()))
     return any(a <= t < b for a, b in (o.get("fill_win") or ()))
 
 
@@ -555,7 +564,7 @@ def held_valid(ctx, sd, held: dict, i: int, p) -> bool:
         return False
     if i - 1 > j and sd.h[j + 1:i].max() >= held["t1"]:
         return False
-    if p.fomc_judas or p.fomc_observe == "judas":
+    if (p.fomc_judas or p.fomc_observe == "judas") and CAL.fomc_info(ctx.day)["fomc"]:
         fr = first_run(ctx, 840, p.news_judas_ref_min, end=p.fomc_judas_end)
         if fr["ref"] and fr["k"] is not None and sd.sign == fr["dir"]:
             return False

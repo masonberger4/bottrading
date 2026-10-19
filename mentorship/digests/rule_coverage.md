@@ -970,7 +970,7 @@ Medium:
 - **N1:** Add `nfp_no_adds=True` and `nfp_first_hour=True` (skip PRE9; Ma Deuce off on jobs days). Add an nfp tag. **[built 2026-10-19, news_calendar_times; see build_log.md]**
 - **N3:** Add `fomc_flat_before`, `fomc_eve_risk`, `fomc_after_am_block`, `fomc_only_am` and `fomc_no_reentry`. **[built 2026-10-19, news_calendar_times; see build_log.md]**
 - **N3.1:** Add `fomc_observe` (scan during 14:00-14:45, defer the order, Judas side), `fomc_pm_block_from`, and an SB check at max(a, fomc_pm_from). **[built 2026-10-19, news_calendar_times; see build_log.md]**
-- **N5:** Add the 2019-2025 calendar (PCE/GDP/retail/JOLTS/CB), NEWS_0945 and `release_times()`. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **N5:** Add the 2019-2025 calendar (PCE/GDP/retail/JOLTS/CB), NEWS_0945 and `release_times()`. **[PARTIAL 2026-10-19, news_calendar_times review fixes: NEWS_0945, release_times and the Conference Board (last Tuesday, `news_conf_board`) are built; the 2019-2025 PCE / advance GDP / retail sales / JOLTS dates are NOT (only 2026 exists in claude_hf.daytypes) - owner to supply or verify them; see build_log.md]**
 - **N5.1:** ~~Add `news_wait_min=30` (default on) in all models~~ **Owner #4: the 30-minute wait is NFP-only (`nfp_floor_min=30`); after every release wait for the news dealing range (`news_wait="range"`, default); the fixed wait is `news_wait="fixed"` with `news_wait_min=30` (065B), a switch.** `news_room_pts` still open. **[built 2026-10-18, owner directives; see build_log.md]**
 - **N5.2:** Add the NEWS_0945 set and `news_0945` start at 09:45. **[built 2026-10-18, owner directives; see build_log.md]** `calendar.NEWS_0945` (PMI on ISM days), `release_times()`; the 09:45 release drives the AM range wait.
 - **T4:** Add `or_no_entry` (fills from 10:00, expiry anchored at 10:00), `or_deep` (09:37-09:46), `or_bias` and `or_wide`. **[built 2026-10-19, news_calendar_times; see build_log.md]**
@@ -989,7 +989,7 @@ Low:
 - **N3.5:** Add `fomc_no_reentry=True` (all done keys, skip reentry_half). **[built 2026-10-19, news_calendar_times; see build_log.md]**
 - **N4:** Add pre_cpi skip/small. Generalize the 08:29 flat to Ma Deuce and sb_london. **[built 2026-10-19, news_calendar_times; see build_log.md]**
 - **N5.4:** Add `skip_two_drivers` and the minimal no-trading-ahead-of-the-second-release rule. Add tags. **[built 2026-10-19, news_calendar_times; see build_log.md]**
-- **N5.5:** Add a FED_CHAIR calendar and `fed_chair_skip_am=True`. **[partly built 2026-10-19, news_calendar_times; see build_log.md]**
+- **N5.5:** Add a FED_CHAIR calendar and `fed_chair_skip_am` (default now OFF: unverified calendar). **[partly built 2026-10-19, news_calendar_times; see build_log.md]**
 - **N5.6:** Add an AUCTIONS list and `skip_auction_am`. **[partly built 2026-10-19, news_calendar_times; see build_log.md]**
 - **T7:** Add a 13:39 macro, multi-tag support, `macro_gate`, `macro_done_skip` and `moc_htf_done`. **[built 2026-10-19, news_calendar_times; see build_log.md]**
 - **T9:** Add `pm_skip_after=870`, `pm_bad_am_start`, `pm_continue_am` and `pm_ob_entry`. **[partly built 2026-10-19, news_calendar_times; see build_log.md]**
@@ -1181,11 +1181,11 @@ Calendar and session-window rules (`mentorship/newscal.py`, `calendar.py`, hooks
 | N1 | FULL | `nfp_first_hour` (no pre-09:30 windows / Ma Deuce on jobs days), `nfp_no_adds` (E12f), `nfp_day_from`, the `nfp` tag |
 | N3, N3.1, N3.2, N3.3, N3.4, N3.5, M9.2 | FULL | `fomc_flat` (+ `fomc_flat_before`), `fomc_am`, `fomc_only_am`, `fomc_eve_risk` / `pre_fomc_risk`, `skip_pre_fomc`, `fomc_after_am_block` / `skip_post_fomc_am`, `fomc_no_reentry`, `fomc_observe`, `fomc_pm_block_from`, `sb_fomc_pm`, `fomc_judas` (14:30), `fomc_stage2_cont`, `fomc_whipsaw_skip_london` |
 | N4, D9 | FULL | `pre_cpi` / `pre_cpi_risk` / `skip_pre_cpi`; the 08:29 flat covers PRE8 / LON / Ma Deuce / the London SB |
-| N5 | FULL | owner #4 (earlier) + `news_claims` (jobless claims, derived), `news_minutes` (FOMC minutes, derived) |
+| N5 | PARTIAL | owner #4 (earlier) + `news_claims` (jobless claims, derived), `news_minutes` (FOMC minutes, derived), `news_conf_board` (last Tuesday, rule). PCE / GDP / retail / JOLTS dates before 2026 missing |
 | N5.1, N5.2, Ep02.1 | FULL | owner #4 (earlier); `wait_0945`, `calendar.PMI` |
 | N5.4 | FULL | `skip_two_drivers`, `two_driver_gate`, the `two_driver` tag |
 | N5.5 | SIMPLIFIED | `fed_chair_skip_am`; calendar.FED_CHAIR typed from memory (UNVERIFIED) - OWNER TO VERIFY |
-| N5.6 | SIMPLIFIED | `skip_auction_am`; calendar.is_auction_day is a rule (the 3 / 10 / 30-year week), month-end auctions missing |
+| N5.6 | SIMPLIFIED | `skip_auction_am`; calendar.is_auction_day is a rule [our interpretation] (the 3 / 10 / 30-year week) plus the `AUCTIONS` / AUCTION_EXTRA / AUCTION_SKIP overlay (uncached); no month-end / 20-year / TIPS dates built in |
 | T4, D1 | FULL | `or_no_entry`, `or_end`, `or_deep` (+ `or_deep_win`, `or_deep_pd`), `or_bias`, `or_wide`, `or_no_entry_news1000` |
 | T5, Ep01.10 | FULL | `pre_0820` (PRE8 window, 08:20 snapshot), `am_from_0830` (08:30 AM, snapshot, no double scan) |
 | T7, Ep07.8 | FULL | 13:30 / 13:39 macros, multi-tag (Trade.macro_wins), `macro_gate`, `macro_only`, `macro_by`, `macro_done_skip`, `moc_htf_done` |

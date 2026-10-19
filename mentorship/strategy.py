@@ -1167,6 +1167,7 @@ class Params:
 
     # ---- package news_calendar_times (rule_coverage.md section 3; build_log.md) --------------------------------
     # calendar: the minor releases and the release list the news gate (owner #4) waits for
+    news_conf_board: bool = False        # N5: the Conference Board consumer confidence (last Tuesday, 10:00) counts as a release [our interpretation: rule-based date]
     news_claims: bool = False            # N5: jobless claims (Thursday 08:30, holiday-shifted) count as a release
     news_minutes: bool = False           # N5 / 082: FOMC minutes (14:00, 3 weeks after the decision) count as a release
     wait_0945: bool = True               # Ep02.1 / N5.2 (002 ~0:25): the 09:45 PMI is a release the AM waits for
@@ -1209,9 +1210,10 @@ class Params:
     # N5.4 / N5.5 / N5.6
     skip_two_drivers: bool = False       # N5.4 (100 ~50:59-1:40:56): stand aside the AM when 08:30 and 09:45 / 10:00 both release
     two_driver_gate: bool = True         # N5.4 minimal rule: no entry window ends before the day's last morning release
-    fed_chair_skip_am: bool = True       # N5.5 (037 ~3:09; 038 ~39:59): no AM trade on a Fed chair 10:00 testimony day (calendar.FED_CHAIR, unverified)
+    fed_chair_skip_am: bool = False      # N5.5 (default OFF: the calendar is unverified and incomplete - owner to verify / complete FED_CHAIR incl. 2026 and speeches, then switch on) (037 ~3:09; 038 ~39:59): no AM trade on a Fed chair 10:00 testimony day (calendar.FED_CHAIR, unverified)
     skip_auction_am: bool = False        # N5.6 (cc10_008 ~7:29): avoid the AM on Treasury auction days (calendar.is_auction_day, approximate)
-    # M9 / M9.1 news Judas
+    # M9 / M9.1 news Judas. NOTE (main engine only): the news / FOMC Judas, side filters (or_bias, or_wide, pm_continue_am), or_no_entry / or_deep,
+    # macro gates and fomc_observe / fomc_only_am act in the main engine's scan loop; the Silver Bullet and Ma Deuce ignore them.
     news_judas: str = "off"              # M9 / M9.1 (064 ~52:12; 073 ~10:42): the first run of a pre-release pool after the release is
                                          # the losing side: "block" = that direction is closed, "wait" = also no entry before a run
     news_judas_ref_min: int = 60         # [our interpretation] the pre-release reference pools = the high / low of this many minutes
@@ -1313,6 +1315,8 @@ class Params:
         if (self.fomc_eve_risk <= 0 or self.pre_fomc_risk <= 0 or self.pre_cpi_risk <= 0 or self.or_deep_pd < 0
                 or self.run_done_adr < 0 or self.or_wide_adr < 0 or self.news_judas_ref_min < 1):
             raise ValueError("news_calendar_times: risk multipliers > 0, fractions / ADR multiples >= 0, news_judas_ref_min >= 1")
+        if self.london_kz and self.london_kz_start not in PRE_AT_MINUTES:
+            raise ValueError("london_kz_start: only the minutes in PRE_AT_MINUTES have a precomputed overnight pool (DayCtx.pre_at)")
         if len(self.or_deep_win) != 2 or len(self.lunch_win) != 2 or self.lunch_win[0] >= self.lunch_win[1]:
             raise ValueError("or_deep_win / lunch_win: expected (start_minute, end_minute)")
         if self.lunch and self.lunch_win[0] < self.am[1]:
@@ -1539,6 +1543,9 @@ def adr5(days: list) -> float | None:
 _adr5 = adr5
 
 
+PRE_AT_MINUTES = (60, 120, 180, 240, 300, 420, 500, 510, 540)   # session starts with a precomputed overnight range (DayCtx.pre_at)
+
+
 def _lots(x: float, lot: int) -> int:
     return int(x // lot) * lot
 
@@ -1551,6 +1558,9 @@ def blocked(d: date, session: str, p: "Params | None" = None, t: int = 0) -> str
     tags = events(d)
     if "jobs" in tags and not (p is not None and p.nfp_day):
         return "nfp_day"
+    # [our interpretation] The NFP-week blocks apply only when the week's jobs date is a Thursday or Friday (nfp_shift);
+    # a jobs date on Mon-Wed (2025-12-16, 2026-02-11: shutdown shifts) has no Thu / Fri block, the day after a
+    # Thursday NFP is not blocked, and the shutdown-delayed Thursday 2025-11-20 counts as a normal Thursday NFP.
     sh = _calendar.nfp_shift(d)
     nfp = _calendar.nfp_date(d)
     week_block = p is None or p.nfp_week_block
@@ -1882,7 +1892,7 @@ class DayCtx:
             self.pd["pmh"], self.pd["pml"] = float(pre.high.max()), float(pre.low.min())
         # the same overnight range as known at an earlier session start (no look-ahead)
         self.pre_at = {}
-        for m in (120, 420, 500, 510, 540):
+        for m in PRE_AT_MINUTES:
             q = pre[(pre.index.hour * 60 + pre.index.minute < m) | (pre.index.date < df.index[0].date())]
             if len(q):
                 self.pre_at[m] = (float(q.high.max()), float(q.low.min()))
@@ -3447,6 +3457,10 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     nfp_hour = p.nfp_first_hour and "jobs" in tags         # N1: nobody trades the first hour after 08:30 on a jobs day
     am0830 = p.am_from_0830                                # Ep01.10: the AM covers 09:00-09:30 itself (no double scan)
     ew = _NC.extra_windows(p, ctx, day, symbol)           # T5 / Ep01.10 / Ep06.1: PRE8, LON
+    if nfp_hour:                                           # N1: on a jobs day every entry window is floored at 09:30
+        ew = [w_ for w_ in ew if w_[0] != "PRE8"]          # (PRE8 ends by 09:30 at the latest: it is all inside the first hour)
+        am_lo = max(am_lo, 570)
+        am_start = max(am_start, am_lo)
     pre8 = any(n_ == "PRE8" for n_, *_ in ew)
     pre_windows += [w_ for w_ in ew if w_[0] == "LON"]
     if p.pre_0700:
@@ -3730,7 +3744,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             pending = None                           # #8 guard: no AM-family fills into 12:00
         if pending is not None:
             sd = pending["side"]
-            cut = {"AM": am_hi, "PM": p.pm[1], "PRE7": 510, "PRE8": 510 if p.am_from_0830 else 570, "PRE9": 570,
+            cut = {"AM": am_hi, "PM": p.pm[1], "PRE7": 510, "PRE8": 510 if (p.am_from_0830 or (p.pre_flat_0830 and news(day) == "0830")) else 570, "PRE9": 570,
                    "NEWS": 570, "LON": 300, "LUNCH": p.lunch_win[1]}[pending["session"]]
             if pending.get("done_key", "").startswith("SB_"):
                 cut = p.sb_windows[0][1] if pending["session"] == "AM" else p.sb_windows[1][1]
@@ -3771,7 +3785,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                   pending["ext"] + p.leg_pd * ((pending["leg_hi0"] if pending.get("no_new_extreme") else
                                                 sd.h[pending["ext_i"]:i].max()) - pending["ext"])):
                 pass                                 # not yet in the leg's discount: wait (M2.4: leg high frozen)
-            elif (pos is None and _NC.fill_ok(pending, t) and _fill_at(sd, pending, i) is not None
+            elif (pos is None and _NC.fill_ok(pending, t, tf) and _fill_at(sd, pending, i) is not None
                   and _retrace_ok(sd, pending, i, p)):
                 o = pending
                 fill = _fill_at(sd, o, i)            # a gap through the limit fills at the open

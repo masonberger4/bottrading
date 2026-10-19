@@ -59,7 +59,7 @@ def ctx_for(rows, d=NORMAL, start="09:30", **kw):
 # --- defaults and validation -------------------------------------------------------------------------------
 
 NEW_FIELDS = (
-    "news_claims", "news_minutes", "wait_0945", "nfp_first_hour", "nfp_day_from", "fomc_flat", "fomc_flat_before", "fomc_am", "fomc_only_am",
+    "news_claims", "news_minutes", "news_conf_board", "wait_0945", "nfp_first_hour", "nfp_day_from", "fomc_flat", "fomc_flat_before", "fomc_am", "fomc_only_am",
     "fomc_eve_risk", "pre_fomc_risk", "skip_pre_fomc", "fomc_after_am_block", "skip_post_fomc_am", "fomc_no_reentry",
     "fomc_observe", "fomc_pm_block_from", "sb_fomc_pm", "fomc_whipsaw_skip_london", "fomc_judas", "fomc_judas_end", "fomc_stage2_cont", "pre_cpi",
     "pre_cpi_risk", "skip_pre_cpi", "flat_0830_extras", "skip_two_drivers", "two_driver_gate", "fed_chair_skip_am", "skip_auction_am",
@@ -80,7 +80,7 @@ DEFAULT_ON = {"wait_0945", "nfp_first_hour", "fomc_flat", "fomc_no_reentry", "tw
 def test_defaults_and_validation():
     p = Params()
     assert (p.nfp_first_hour, p.fomc_flat, p.fomc_no_reentry, p.fed_chair_skip_am, p.two_driver_gate, p.wait_0945) == \
-        (True, 840, True, True, True, True)
+        (True, 840, True, False, True, True)
     assert p.fomc_am == "open" and p.fomc_only_am == "off" and p.pre_cpi == "off" and p.fomc_observe == "off"
     assert p.news_judas == "off" and p.macro_only == "off" and p.pm_continue_am == "off" and p.pm_ob_entry == "off"
     assert p.fomc_judas_end == 870                                     # M9.2: 14:30 (no source for 14:25)
@@ -195,8 +195,9 @@ def test_calendar_block_rules():
     assert S.blocked(CPI_EVE, "AM", P(pre_cpi="skip")) == "pre_cpi" and S.blocked(CPI_EVE, "AM", P(skip_pre_cpi=True)) == "pre_cpi"
     assert S.blocked(CPI_EVE, "AM", P(pre_cpi="small")) is None and S.blocked(CPI_EVE, "AM", P()) is None
     ch = date(2025, 2, 11)
-    assert S.blocked(ch, "AM", P()) == "fed_chair" and S.blocked(ch, "PM", P()) is None
-    assert S.blocked(ch, "AM", P(fed_chair_skip_am=False)) is None
+    assert S.blocked(ch, "AM", P(fed_chair_skip_am=True)) == "fed_chair" and S.blocked(ch, "PM", P(fed_chair_skip_am=True)) is None
+    assert S.blocked(ch, "AM", P()) is None                            # default OFF (unverified calendar)
+    assert S.blocked(ch, "LON", P(fed_chair_skip_am=True)) is None     # the day rules cover the NY AM family only
     au = date(2026, 4, 8)
     assert S.blocked(au, "AM", P()) is None and S.blocked(au, "AM", P(skip_auction_am=True)) == "auction_am"
     assert S.blocked(au, "PM", P(skip_auction_am=True)) is None
@@ -716,6 +717,12 @@ LA = {   # name -> (window, switches); each set trades in its window and changes
     "pm_macro_c": ("W1", dict(macro_only="all", pm_ob_entry="require", moc_htf_done=True)),
     "skips": ("W2", dict(skip_pre_cpi=True, skip_auction_am=True, nfp_day_from=600, nfp_first_hour=True, pre_0900=True,
                          post_news=True, fed_chair_skip_am=True)),
+    "fomc_c": ("W0", dict(fomc_flat_before=825, fomc_judas=True, fomc_judas_end=865, fomc_observe="judas",
+                          pre_cpi="small", pre_cpi_risk=0.3, fomc_whipsaw_skip_london=True, london_kz=True,
+                          fomc_no_reentry=True)),
+    "gates_c": ("W0", dict(news_conf_board=True, two_driver_gate=False, pre_0900=True, or_no_entry=True, or_deep=True, or_deep_win=(580, 600),
+                           or_bias="close", or_bias_filter=False, lunch=True, lunch_win=(700, 800), lunch_exit=790)),
+    "macro_0950": ("W1", dict(macro_only="0950", fomc_only_am="tag", pm_ob_entry="tag")),
     "skips_b": ("W2", dict(skip_two_drivers=True, skip_pre_fomc=True, pre_cpi="skip", fomc_after_am_block=True,
                            fomc_am="skip")),
 }
@@ -831,3 +838,57 @@ def test_ma_deuce_is_flat_before_an_0830_release_on_real_bars():
     assert o[o.date == d].exit_reason.iloc[0] == "stop" and str(o[o.date == d].exit_time.iloc[0])[11:16] == "08:30"
     assert n[n.date == d].exit_reason.iloc[0] == "pre_0830" and str(n[n.date == d].exit_time.iloc[0])[11:16] == "08:25"
     assert len(old) == len(new)                                                                # nothing else moves
+
+
+# --- review fixes: calendar, windows, tags ---------------------------------------------------------
+def test_consumer_confidence_last_tuesday_and_auction_overlay():
+    assert C.is_consumer_confidence(date(2025, 3, 25)) and C.is_consumer_confidence(date(2024, 12, 31)) is True
+    assert not C.is_consumer_confidence(date(2025, 3, 18))
+    assert 600 in C.release_times(date(2025, 3, 25), conf=True) and 600 not in C.release_times(date(2025, 3, 25))
+    d = date(2026, 4, 29)
+    assert not C.is_auction_day(d)
+    C.AUCTIONS.add(d)
+    try:
+        assert C.is_auction_day(d)                                   # no cache: edits take effect at once
+    finally:
+        C.AUCTIONS.discard(d)
+    assert not C.is_auction_day(d)
+
+
+def test_judas_not_on_minutes_day_and_or_bias_tag():
+    mn = sorted(C.FOMC_MINUTES)[-1]
+    assert not C.fomc_info(mn)["fomc"]
+    import inspect
+    assert 'CAL.fomc_info(day)["fomc"]' in inspect.getsource(NC.judas_gate)
+    assert "or_bias_with" in inspect.getsource(NC.post_order)
+
+
+def test_fill_ok_window_reads_bar_close():
+    o = dict(fill_from=600, fill_win=((577, 586),))
+    assert [NC.fill_ok(o, t, 5) for t in (575, 580, 585, 590)] == [True, True, False, False]
+
+
+def test_nfp_week_comments_cases():
+    assert S.blocked(date(2025, 7, 4), "AM", Params(nfp_week_block=True)) is None              # holiday after a Thursday NFP: not an NFP-week day
+    assert S.blocked(date(2025, 7, 2), "AM", Params(nfp_week_block=True, nfp_thu=False)) == "nfp_week_thu_fri"
+    assert S.blocked(date(2025, 12, 18), "AM", Params(nfp_week_block=True)) is None           # jobs date on a Tuesday: no Thu / Fri block
+
+
+def test_london_kz_start_validated():
+    with pytest.raises(ValueError):
+        Params(london_kz=True, london_kz_start=123)
+
+
+def test_nfp_first_hour_floors_pre8_and_am_from_0830():
+    """N1: on a jobs day with nfp_first_hour no entry window opens before 09:30 (PRE8 dropped, AM floored)."""
+    for kw in (dict(ny_kz_futures=True), dict(am_from_0830=True), dict(ny_kz_futures=True, am_from_0830=True)):
+        for start in ("08:20", "09:30"):
+            t = go(NFP_ONLY, start=start, nfp_first_hour=True, **kw)
+            assert all(x.entry_time.hour * 60 + x.entry_time.minute >= 570 for x in t), (kw, start)
+
+
+def test_pre8_order_cut_at_release_on_0830_days():
+    """N4: on an 08:30 release day PRE8 orders are cancelled at 08:30 like PRE7 (cut 510), not 09:30."""
+    for start in ("08:20",):
+        t = go(NFP_ONLY, start=start, ny_kz_futures=True, pre_flat_0830=True, nfp_first_hour=False)
+        assert all(not (x.session == "PRE8" and x.entry_time.hour * 60 + x.entry_time.minute >= 510) for x in t)

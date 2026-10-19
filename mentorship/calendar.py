@@ -2,9 +2,10 @@
 
 Release dates come from the BLS archived news release lists (CPI, the employment
 situation report with nonfarm payrolls, PPI), read 2026-10-15; FOMC decision days from the
-Federal Reserve calendars (2020 includes the 03 March emergency cut). PCE, GDP, retail
-sales, JOLTS, ISM and sentiment dates are only known for 2026, so day types before 2026
-can only be fomc / cpi / jobs / ppi / expirations / month turns / weekdays.
+Federal Reserve calendars (2020 includes the 03 March emergency cut). PCE, advance GDP,
+retail sales and JOLTS dates are only known for 2026 (NOT YET BUILT for 2019-2025: N5 is PARTIAL - the dealing-range
+wait, two_drivers, vacuum blocks and lock times miss those releases before 2026); ISM / PMI are rule-based and the
+Conference Board consumer confidence (10:00) is the last Tuesday of the month, for every year.
 """
 from __future__ import annotations
 
@@ -111,12 +112,12 @@ def last_trading_day_of_year(d: date) -> bool:
 
 
 # --- release times (owner directive #4; N5, N5.2, Ep02.1) ---------------------------------
-# PCE, GDP, retail sales and JOLTS dates exist for 2026 only (claude_hf.daytypes); ISM, PMI
+# PCE, GDP, retail sales and JOLTS dates exist for 2026 only (N5 PARTIAL before 2026) (claude_hf.daytypes); ISM, PMI
 # and sentiment are rule-based (ISM manufacturing = 1st trading day, services = 3rd; S&P
 # Global final PMIs come out at 09:45 on the same days; flash PMI dates are not available).
 NEWS_0830 = {"cpi", "jobs", "ppi", "pce", "retail_sales", "gdp"}
 NEWS_0945 = {"pmi_mfg", "pmi_svc"}
-NEWS_1000 = {"ism_manufacturing", "ism_services", "jolts", "sentiment"}
+NEWS_1000 = {"ism_manufacturing", "ism_services", "jolts", "sentiment", "conf_board"}
 PMI = NEWS_0945                                       # Ep02.1: the 'pmi' event set
 
 
@@ -168,11 +169,16 @@ AUCTION_EXTRA: set = set()
 AUCTION_SKIP: set = set()
 
 
-@lru_cache(maxsize=None)
+# [our interpretation] Explicit auction list overlay: AUCTIONS holds known 13:00 ET auction dates (month-end 2-, 5-,
+# 7-year, 20-year, TIPS ...) that the 3 / 10 / 30-year rule below does not cover; none is built in (the owner can
+# add dates). is_auction_day reads the sets on every call (no cache), so edits take effect at once.
+AUCTIONS: set = set()
+
+
 def is_auction_day(d: date) -> bool:
     if d in AUCTION_SKIP:
         return False
-    if d in AUCTION_EXTRA:
+    if d in AUCTION_EXTRA or d in AUCTIONS:
         return True
     if d.weekday() not in (1, 2, 3) or not DT.is_trading_day(d):
         return False
@@ -183,9 +189,19 @@ def is_auction_day(d: date) -> bool:
     return abs((d - wed).days) <= 1
 
 
+def is_consumer_confidence(d: date) -> bool:
+    """Conference Board consumer confidence (10:00): the last Tuesday of the month. [our interpretation]
+    rule-based for every year (the Conference Board's calendar is this rule, a holiday shifting it rarely)."""
+    if d.weekday() != 1 or not DT.is_trading_day(d):
+        return False
+    return (d + timedelta(days=7)).month != d.month
+
+
 def minor_events(d: date) -> set:
-    """Tags of the minor scheduled releases on d: claims (08:30), minutes (14:00)."""
+    """Tags of the minor scheduled releases on d: claims (08:30), minutes (14:00), conf_board (10:00)."""
     out = set()
+    if is_consumer_confidence(d):
+        out.add("conf_board")
     if is_jobless_claims(d):
         out.add("claims")
     if d in FOMC_MINUTES:
@@ -193,14 +209,13 @@ def minor_events(d: date) -> set:
     return out
 
 
-def release_times(d: date, claims: bool = False, minutes: bool = False, pmi: bool = True) -> list[int]:
+def release_times(d: date, claims: bool = False, minutes: bool = False, pmi: bool = True, conf: bool = False) -> list[int]:
     """Scheduled release minutes (ET) on day d, sorted: 510 (08:30 data), 585 (09:45 PMI),
     600 (10:00 data), 840 (FOMC decision). claims adds the 08:30 jobless claims, minutes the
-    14:00 FOMC minutes (both off by default - low impact); pmi=False drops the 09:45 PMI."""
+    14:00 FOMC minutes (both off by default - low impact); pmi=False drops the 09:45 PMI; conf adds the 10:00 Conference Board consumer confidence (off by default)."""
     tags = DT.events(d) | pmi_events(d)
-    if claims or minutes:
-        mn = minor_events(d)
-        tags |= {t for t in mn if (t == "claims" and claims) or (t == "minutes" and minutes)}
+    mn = minor_events(d)
+    tags |= {t for t in mn if (t == "claims" and claims) or (t == "minutes" and minutes) or (t == "conf_board" and conf)}
     out = []
     if tags & NEWS_0830 or "claims" in tags:
         out.append(510)
@@ -252,8 +267,8 @@ def eve_of(d: date, tag: str) -> bool:
 
 
 @lru_cache(maxsize=None)
-def two_drivers(d: date, claims: bool = False) -> bool:
+def two_drivers(d: date, claims: bool = False, conf: bool = False) -> bool:
     """Two scheduled morning releases (08:30 data and a 09:45 / 10:00 one, or 09:45 and 10:00 - the
     PMI and ISM pair counts as one driver). N5.4 (100 ~50:59-1:40:56)."""
-    rt = [r for r in release_times(d, claims=claims) if r < 840]
+    rt = [r for r in release_times(d, claims=claims, conf=conf) if r < 840]
     return (510 in rt and any(r in rt for r in (585, 600)))
