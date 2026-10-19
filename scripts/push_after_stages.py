@@ -44,7 +44,7 @@ def check(rng: str) -> list[str]:
 
 def finished_tests(journal: Path) -> set[str]:
     labels, done = {}, set()
-    for line in journal.read_text(encoding="utf-8").splitlines():
+    for line in journal.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             e = json.loads(line)
         except ValueError:
@@ -62,7 +62,11 @@ def main():
     log(f"watching {journal.name}; stages already done: {sorted(seen)}")
     while True:
         time.sleep(60)
-        now = finished_tests(journal)
+        try:
+            now = finished_tests(journal)
+        except Exception as e:                       # journal being rewritten: try again later
+            log(f"journal read failed ({e!r}); retrying")
+            continue
         for stage in sorted(now - seen):
             for _ in range(30):                      # let the stage's last commit land
                 if not [l for l in git("status", "--porcelain").splitlines() if not l.startswith("??")]:
