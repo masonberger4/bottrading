@@ -74,6 +74,10 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
     # the funnel keys md_* (strategy.FUNNEL) show which gate stops Ma Deuce (setups_models review)
     if len(hist) < 3:
         return []
+    from claude_hf.daytypes import events as _events
+    if p.nfp_first_hour and "jobs" in _events(day):
+        _f("md_x_nfp_first_hour")
+        return []                                      # news_calendar_times N1: nobody trades the first hour after 08:30
     if p.md_need_news and news(day) != "0830":
         _f("md_x_need_news")
         return []                                      # setups_models M15: the release delivers
@@ -213,6 +217,8 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
     if shares < 1:
         return []
     flat = _eff_flat(p)
+    from . import newscal as _NC
+    ff = _NC.fomc_flat_min(day, p)                     # N3.2: an FOMC day is flat at the release
     x = lambda v: sign * v
     tr = None
     left = 0
@@ -326,6 +332,10 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
                 q2 = _EN.cap_add(q2, n_units, p)           # E11 max_contracts_total
                 if q2 >= max(p.lot, 1):
                     add = (px2, q2)
+        if left and ff and t[i] + ctx.tf >= ff:
+            tr.exits.append((ctx.idx[i], x(sc[i]), left, "fomc_flat")); return [tr]
+        if left and p.pre_flat_0830 and p.flat_0830_extras and news(day) == "0830" and t[i] + ctx.tf >= 510:
+            tr.exits.append((ctx.idx[i], x(sc[i]), left, "pre_0830")); return [tr]    # N4: no position into the 08:30 release
         best = max(best, sh[i])
         if pos is not None and left:              # X4 / D14 breakeven modes + X6-X9c invalidation exits (same code as the engine)
             pos.update(left=left, basis=basis, n=n_units, stop=stop, best=best, t1_done=kl > 0, k=kl, last_partial_i=last_part,

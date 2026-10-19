@@ -967,38 +967,38 @@ Low:
 Owns: `calendar.py` events, the news branches of `blocked()`, and the run_day session windows. Merge before day_week_context.
 
 Medium:
-- **N1:** Add `nfp_no_adds=True` and `nfp_first_hour=True` (skip PRE9; Ma Deuce off on jobs days). Add an nfp tag.
-- **N3:** Add `fomc_flat_before`, `fomc_eve_risk`, `fomc_after_am_block`, `fomc_only_am` and `fomc_no_reentry`.
-- **N3.1:** Add `fomc_observe` (scan during 14:00-14:45, defer the order, Judas side), `fomc_pm_block_from`, and an SB check at max(a, fomc_pm_from).
-- **N5:** Add the 2019-2025 calendar (PCE/GDP/retail/JOLTS/CB), NEWS_0945 and `release_times()`.
+- **N1:** Add `nfp_no_adds=True` and `nfp_first_hour=True` (skip PRE9; Ma Deuce off on jobs days). Add an nfp tag. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **N3:** Add `fomc_flat_before`, `fomc_eve_risk`, `fomc_after_am_block`, `fomc_only_am` and `fomc_no_reentry`. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **N3.1:** Add `fomc_observe` (scan during 14:00-14:45, defer the order, Judas side), `fomc_pm_block_from`, and an SB check at max(a, fomc_pm_from). **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **N5:** Add the 2019-2025 calendar (PCE/GDP/retail/JOLTS/CB), NEWS_0945 and `release_times()`. **[built 2026-10-19, news_calendar_times; see build_log.md]**
 - **N5.1:** ~~Add `news_wait_min=30` (default on) in all models~~ **Owner #4: the 30-minute wait is NFP-only (`nfp_floor_min=30`); after every release wait for the news dealing range (`news_wait="range"`, default); the fixed wait is `news_wait="fixed"` with `news_wait_min=30` (065B), a switch.** `news_room_pts` still open. **[built 2026-10-18, owner directives; see build_log.md]**
 - **N5.2:** Add the NEWS_0945 set and `news_0945` start at 09:45. **[built 2026-10-18, owner directives; see build_log.md]** `calendar.NEWS_0945` (PMI on ISM days), `release_times()`; the 09:45 release drives the AM range wait.
-- **T4:** Add `or_no_entry` (fills from 10:00, expiry anchored at 10:00), `or_deep` (09:37-09:46), `or_bias` and `or_wide`.
-- **T5:** Add `pre_0820` (a PRE8 window with a 500 snapshot, skipped on 08:30 days).
-- **T8:** Add a `lunch` session (710-810, no look-ahead AM H/L), `pm_carry_draw` and `draw_done_skip`.
-- **M9:** Add `news_judas` (first post-release run blocks that direction).
-- **M9.1:** Add news_judas with pre-release reference pools and no entries before the first run.
-- **D1:** Add `or_no_entry`, `or_no_entry_news1000` and `or_deep_pd`.
-- **D8:** Add `nfp_day_from`, `skip_post_fomc_am`, `nfp_no_adds` and `fomc_no_reentry`.
-- **Ep01.10:** Add `am_from_0830` (a 510 snapshot, no double scan).
+- **T4:** Add `or_no_entry` (fills from 10:00, expiry anchored at 10:00), `or_deep` (09:37-09:46), `or_bias` and `or_wide`. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **T5:** Add `pre_0820` (a PRE8 window with a 500 snapshot, skipped on 08:30 days). **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **T8:** Add a `lunch` session (710-810, no look-ahead AM H/L), `pm_carry_draw` and `draw_done_skip`. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **M9:** Add `news_judas` (first post-release run blocks that direction). **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **M9.1:** Add news_judas with pre-release reference pools and no entries before the first run. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **D1:** Add `or_no_entry`, `or_no_entry_news1000` and `or_deep_pd`. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **D8:** Add `nfp_day_from`, `skip_post_fomc_am`, `nfp_no_adds` and `fomc_no_reentry`. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **Ep01.10:** Add `am_from_0830` (a 510 snapshot, no double scan). **[built 2026-10-19, news_calendar_times; see build_log.md]**
 
 Low:
-- **N3.2:** Add `fomc_flat=840` (default on) and fomc_am open/recipe/skip.
-- **N3.3:** Add a fomc_only tag and fomc_only_am consolidation/skip.
-- **N3.4:** Add `pre_fomc_risk` (compounded with re-entry) and `skip_post_fomc_am`. Fix _split's holiday handling.
-- **N3.5:** Add `fomc_no_reentry=True` (all done keys, skip reentry_half).
-- **N4:** Add pre_cpi skip/small. Generalize the 08:29 flat to Ma Deuce and sb_london.
-- **N5.4:** Add `skip_two_drivers` and the minimal no-trading-ahead-of-the-second-release rule. Add tags.
-- **N5.5:** Add a FED_CHAIR calendar and `fed_chair_skip_am=True`.
-- **N5.6:** Add an AUCTIONS list and `skip_auction_am`.
-- **T7:** Add a 13:39 macro, multi-tag support, `macro_gate`, `macro_done_skip` and `moc_htf_done`.
-- **T9:** Add `pm_skip_after=870`, `pm_bad_am_start`, `pm_continue_am` and `pm_ob_entry`.
-- **M9.2:** Add `fomc_judas` (a 14:00-14:25 range, fomc_pm_from 865) and `fomc_stage2_cont`.
-- **D9:** Add skip_pre_cpi skip/small with next_trading_day.
+- **N3.2:** Add `fomc_flat=840` (default on) and fomc_am open/recipe/skip. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **N3.3:** Add a fomc_only tag and fomc_only_am consolidation/skip. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **N3.4:** Add `pre_fomc_risk` (compounded with re-entry) and `skip_post_fomc_am`. Fix _split's holiday handling. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **N3.5:** Add `fomc_no_reentry=True` (all done keys, skip reentry_half). **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **N4:** Add pre_cpi skip/small. Generalize the 08:29 flat to Ma Deuce and sb_london. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **N5.4:** Add `skip_two_drivers` and the minimal no-trading-ahead-of-the-second-release rule. Add tags. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **N5.5:** Add a FED_CHAIR calendar and `fed_chair_skip_am=True`. **[partly built 2026-10-19, news_calendar_times; see build_log.md]**
+- **N5.6:** Add an AUCTIONS list and `skip_auction_am`. **[partly built 2026-10-19, news_calendar_times; see build_log.md]**
+- **T7:** Add a 13:39 macro, multi-tag support, `macro_gate`, `macro_done_skip` and `moc_htf_done`. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **T9:** Add `pm_skip_after=870`, `pm_bad_am_start`, `pm_continue_am` and `pm_ob_entry`. **[partly built 2026-10-19, news_calendar_times; see build_log.md]**
+- **M9.2:** Add `fomc_judas` (a 14:00-14:25 range, fomc_pm_from 865) and `fomc_stage2_cont`. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **D9:** Add skip_pre_cpi skip/small with next_trading_day. **[built 2026-10-19, news_calendar_times; see build_log.md]**
 - **Ep01.11:** ~~Add `pm_setup_window` (detect 15:15-15:45, fills until 15:50).~~ **Owner #1: entries 15:00-15:50 (`last_hour=(900,950)`), 15:15-15:45 = sweet-spot tag `lh_sweet`; `last_hour_strict` switch; PM session 13:30-16:15 (futures flatten 16:15).** **[built 2026-10-18, owner directives; see build_log.md]**
-- **Ep02.1:** Add the 'pmi' event set and `wait_0945=True`.
-- **Ep06.1:** Add `london_kz` (a LON window, futures only), `london_kz_start` and `ny_kz_futures`.
-- **Ep07.8:** Add macro_only 0950/all (start-or-arm test).
+- **Ep02.1:** Add the 'pmi' event set and `wait_0945=True`. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **Ep06.1:** Add `london_kz` (a LON window, futures only), `london_kz_start` and `ny_kz_futures`. **[built 2026-10-19, news_calendar_times; see build_log.md]**
+- **Ep07.8:** Add macro_only 0950/all (start-or-arm test). **[built 2026-10-19, news_calendar_times; see build_log.md]**
 
 ### silver_bullet (12 items)
 
@@ -1169,3 +1169,29 @@ Status changes against section 2:
 | Ep07.5, Ep07.7, T11 | FULL | `add_mode="downclose"`, `tp_upclose`; `ep07_body_fixes`; `late_cutoff` |
 | B18.3 | PARTIAL | `smt_bias` (the previous-day high / low SMT in the overnight range, [our interpretation]), `smt_exit_against`; the partials are X3g, the instrument pick is `smt_pick`; `smt_exit` stays the M16.1 time exit |
 | A13.3 | FULL | built earlier (owner #6: `breaker_zone="leg"`, `breaker_mt_*`) |
+
+## 7. news_calendar_times build (2026-10-19)
+
+Calendar and session-window rules (`mentorship/newscal.py`, `calendar.py`, hooks in `strategy.run_day` / `blocked()` / `entries.size_mult` / `manage.stops_from` / `sb_model` / `pre_open`;
+`build_log.md` "Package news_calendar_times" lists every item with its switches and defaults). Four new defaults change the engine (N1 `nfp_first_hour`, N3.5 `fomc_no_reentry`, N5.5
+`fed_chair_skip_am`, N4 `flat_0830_extras`; with `fomc_flat` pinned off too in `study.CURRENT` / `study.PRE_OWNER`); everything else is off. Status changes against section 2:
+
+| Id | New status | Note |
+|---|---|---|
+| N1 | FULL | `nfp_first_hour` (no pre-09:30 windows / Ma Deuce on jobs days), `nfp_no_adds` (E12f), `nfp_day_from`, the `nfp` tag |
+| N3, N3.1, N3.2, N3.3, N3.4, N3.5, M9.2 | FULL | `fomc_flat` (+ `fomc_flat_before`), `fomc_am`, `fomc_only_am`, `fomc_eve_risk` / `pre_fomc_risk`, `skip_pre_fomc`, `fomc_after_am_block` / `skip_post_fomc_am`, `fomc_no_reentry`, `fomc_observe`, `fomc_pm_block_from`, `sb_fomc_pm`, `fomc_judas` (14:30), `fomc_stage2_cont`, `fomc_whipsaw_skip_london` |
+| N4, D9 | FULL | `pre_cpi` / `pre_cpi_risk` / `skip_pre_cpi`; the 08:29 flat covers PRE8 / LON / Ma Deuce / the London SB |
+| N5 | FULL | owner #4 (earlier) + `news_claims` (jobless claims, derived), `news_minutes` (FOMC minutes, derived) |
+| N5.1, N5.2, Ep02.1 | FULL | owner #4 (earlier); `wait_0945`, `calendar.PMI` |
+| N5.4 | FULL | `skip_two_drivers`, `two_driver_gate`, the `two_driver` tag |
+| N5.5 | SIMPLIFIED | `fed_chair_skip_am`; calendar.FED_CHAIR typed from memory (UNVERIFIED) - OWNER TO VERIFY |
+| N5.6 | SIMPLIFIED | `skip_auction_am`; calendar.is_auction_day is a rule (the 3 / 10 / 30-year week), month-end auctions missing |
+| T4, D1 | FULL | `or_no_entry`, `or_end`, `or_deep` (+ `or_deep_win`, `or_deep_pd`), `or_bias`, `or_wide`, `or_no_entry_news1000` |
+| T5, Ep01.10 | FULL | `pre_0820` (PRE8 window, 08:20 snapshot), `am_from_0830` (08:30 AM, snapshot, no double scan) |
+| T7, Ep07.8 | FULL | 13:30 / 13:39 macros, multi-tag (Trade.macro_wins), `macro_gate`, `macro_only`, `macro_by`, `macro_done_skip`, `moc_htf_done` |
+| T8 | FULL | `lunch` session (AM model, AM draw, no look-ahead AM range), `pm_carry_draw`, `draw_done_skip` |
+| T9 | SIMPLIFIED | `pm_skip_after`, `pm_bad_am_start`, `pm_continue_am`; `pm_ob_entry` is a tag / require test on the ordinary entry, not an OB entry path |
+| M9, M9.1 | FULL | `news_judas` block / wait (reference pools = the `news_judas_ref_min` minutes before the release [our interpretation]) |
+| Ep06.1 | FULL | `london_kz`, `london_kz_start`, `ny_kz_futures` (futures only) |
+| Ep01.11 | FULL | owner #1 (earlier) |
+| N2 / D8 (bug) | FULL | `blocked()` NFP-week rules relative to the real jobs date (Thursday NFP weeks) |

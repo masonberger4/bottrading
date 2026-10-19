@@ -327,11 +327,13 @@ and to the notes for context, charts and trade examples. This file states each r
 - **N1 NFP Friday: no live trading.** Nobody trades the first hour after 08:30; experienced traders
   wait out the volatility (Ep 04; 006 ~8:35; 061 ~2:49:35; 105 ~11:50; cc08_001 ~6:37; cc08_006
   ~4:45) [both]. He traded several NFP Fridays live, each labelled an exception (071; 088/089;
-  105). Don't pyramid on NFP (105 ~9:13). Bot: blocked (`nfp_day`). D8.
+  105). Don't pyramid on NFP (105 ~9:13). Bot: `nfp_day` trades the day (owner #4: the 30-minute floor); `nfp_first_hour` (on) drops the
+  pre-09:30 windows and Ma Deuce on jobs days, `nfp_no_adds` (on), `nfp_day_from` test, the `nfp` day tag. D8.
 - **N2 NFP week**: trade Mon, Tue and Wed until 11:00 (end of the NY AM). No Wed PM, Thu or Fri. If
   nothing is done by Wed 11:00, the week is done. A "training wheels" rule (Ep 03; 038 ~8:05; 101
   ~25:12-39:39) [2023]. Monday of NFP week is always a trading day (100 ~33:00; 101 ~30:41). Bot:
-  blocked (`nfp_week_thu_fri`, `nfp_week_wed_pm`). D8.
+  blocked (`nfp_week_thu_fri`, `nfp_week_wed_pm`), relative to the week's REAL jobs date (calendar.nfp_date: Thursday NFP
+  weeks - 2025-07-03 - shift the rule by one day). D8.
 - **N3 FOMC** (14:00 statement, 14:30 press conference):
   - Never trade the 14:00 release; 14:00-14:45 is observation only; the 14:00 move is usually fake
     and the real move starts 14:25-14:30; after 14:45 the normal routine applies (Ep 03; 021
@@ -341,11 +343,17 @@ and to the notes for context, charts and trade examples. This file states each r
   - FOMC-only day: expect AM consolidation, PM volatility (cc10_008 ~2:56).
   - Day before FOMC: slow and imprecise, trade light (042 ~3:50; 094 ~1:48). Day after: sit still
     in the AM (095 ~51:27). Don't re-enter if stopped on FOMC (021 ~43:56).
-  - Bot: FOMC PM blocked; AM open. D8.
+  - After an FOMC whipsaw (both sides of the 14:00 range taken) skip the next London open (cc08_006 ~3:36).
+  - Bot: FOMC PM blocked until `fomc_pm_from` (14:45); AM open (`fomc_am` open / recipe / skip); `fomc_flat` (on) closes anything opened
+    before the release at 14:00; `fomc_observe` scans 14:00-14:45 and holds the order; `fomc_judas` (M9.2: the first run in
+    14:00-14:30 is the Judas, trade the other side from 14:30); `fomc_pm_block_from`, `sb_fomc_pm`; `fomc_only_am`
+    (consolidation scalp / skip); `fomc_eve_risk`, `skip_pre_fomc`, `fomc_after_am_block` / `skip_post_fomc_am`;
+    `fomc_no_reentry` (on: a loss ends the FOMC day for every model); `fomc_whipsaw_skip_london`. D8.
 - **N4 CPI** (08:30): no position into or at the release; stops don't protect (030 ~7:22; 047 ~5:26;
   064 ~4:35). After the print, trading toward remaining liquidity is fine (028 ~3:40; 064). Day
   before CPI: no trade ahead of it, or small bread-and-butter only (028; 029 ~5:22) [2023]. Bot:
-  allowed (entries start 09:30). D9.
+  entries start 09:30 + the dealing range; `pre_flat_0830` also flattens PRE8 / LON / Ma Deuce / London SB before 08:30;
+  `pre_cpi` off / small / skip (`skip_pre_cpi`). D9.
 - **N5 Other releases** [2023]:
   - After any scheduled release, wait for the news dealing range (post-release manipulation
     high/low) to form, then trade from it toward external liquidity; no fixed minute count (Ep02
@@ -357,10 +365,15 @@ and to the notes for context, charts and trade examples. This file states each r
   - No 08:30 news ("soft bias"): wait for 09:30 (Ep 05; 007 ~11:14; 019 ~7:57).
   - Two drivers in one session (08:30 and 10:00): stand aside or at least don't trade ahead of the
     second; expect whipsaw (100 ~50:59-1:40:56). Ideal = exactly one release in the session
-    (cc08_006 ~5:59) [CC].
+    (cc08_006 ~5:59) [CC]. Bot: `two_driver_gate` (on: no pre-open window ends before the second release; the AM waits for
+    its range), `skip_two_drivers`, tag `two_driver`.
   - Fed chair testimony/speech at 10:00: no AM trades, not even demo; use the chart 5-15 min after
-    it ends; trade 13:30-16:00 (037 ~3:09; 038 ~39:59; 067 ~0:34). {needs: Fed-speaker calendar}
-  - Treasury auction day: avoid the AM (cc10_008 ~7:29) [CC] {needs: auction calendar}.
+    it ends; trade 13:30-16:00 (037 ~3:09; 038 ~39:59; 067 ~0:34). Bot: `fed_chair_skip_am` (on) from calendar.FED_CHAIR (the
+    semi-annual testimony days, typed from memory - UNVERIFIED, extend FED_CHAIR_EXTRA).
+  - Treasury auction day: avoid the AM (cc10_008 ~7:29) [CC]. Bot: `skip_auction_am` (off) from calendar.is_auction_day (the 3-/10-/30-year
+    week rule, approximate; AUCTION_EXTRA / AUCTION_SKIP override).
+  - Minor releases: `news_claims` (jobless claims Thursday 08:30, Wednesday before a holiday) and `news_minutes` (FOMC minutes 14:00,
+    21 days after the decision) count as releases for the dealing-range wait (off).
 - **N6 News delivery profile**: the side taken first after the release is usually false; the
   opposite pool is the real move (up-down-up / down-up-down) (064 ~52:12; 073 ~10:42; 078
   ~1:25:47) [2023]. After both pools are taken, price retraces to the CE between them (064
@@ -433,9 +446,12 @@ and to the notes for context, charts and trade examples. This file states each r
   ~11:44; 031 ~4:52; 036 ~27:30; 042 ~4:29; 044 ~4:54; 065B ~4:53:40; 092 ~1:45:24 "amateur hour")
   [2023]. Exceptions: entries at 09:37-09:46 with price already deep in discount (034; 041; 053
   ~10:03). CC: OR = 09:30-10:30, tends to hold the HOD or LOD; wide OR -> its opposite end gets run
-  (cc10_010 ~3:07-7:05) [CC]. Bot: AM entries from 09:30. D1.
+  (cc10_010 ~3:07-7:05) [CC]. Bot: AM entries from 09:30; `or_no_entry` (orders fill from `or_end`; `or_deep` = the 09:37-09:46
+  exception with the entry in the lower quarter of the prior day's range [our interpretation]); `or_bias` (the OR's delivery:
+  the first extreme was the Judas / the close vs the midpoint); `or_wide` (trade toward the far end of a wide OR). D1.
 - **T5 NY AM session**: 08:30-11:00 (Ep 01; 044 ~55:47), 09:30-12:00 (cc10_011; 067), 08:20-11:00
-  (cc10_007). Bot: AM 09:30-11:00 (10:00 on 10:00-release days). D1.
+  (cc10_007). Bot: AM 09:30-11:00 (the release's dealing range on release days); `am_from_0830` opens it at 08:30; `pre_0820` a PRE8
+  window 08:20 -> the AM (skipped on 08:30 release days); `ny_kz_futures` the futures kill zone incl. release days. D1.
 - **T6 Silver Bullet windows** (one-hour windows) [2023]: AM 10:00-11:00 (every SB video: 044 ~50:05;
   048 ~57:36; 054; 058; 090 ~2:00:22), PM 14:00-15:00 (054 ~12:41; 060 ~56:50; 066 ~42:23),
   London 03:00-04:00 (054 ~08:51; 092 ~20:04). 092/099 also list 15:00-16:00; 099 an optional
@@ -454,19 +470,23 @@ and to the notes for context, charts and trade examples. This file states each r
     nothing if the HTF target already hit (Ep 01; 014 ~5:19; 030 ~20:06; 032 ~47:41; 056 ~19:08).
     15:00-16:00 holds three macros, usually two occur (022 ~3:16:42).
   - A macro fails when the day's run is already done (030 ~18:26). Bot: `macro` tag 09:50-10:10,
-    `pm_last_hour` tag 15:15-15:45; add the rest as tags (P2).
+    `pm_last_hour` tag 15:15-15:45; every macro in Trade.macro_wins ("HHMM|...", incl. 13:30 and the 13:39 "2:00 macro");
+    `macro_gate` / `macro_only` ("0950" / "all", `macro_by` arm | start) gate orders; `macro_done_skip`, `moc_htf_done`
+    (the run / HTF target done: `run_done_adr` x ADR5 or a delivered session draw).
 - **T8 Lunch**: 12:00-13:00 (015 ~29:06; 025; 056) or 12:00-13:30 (064 ~1:45:41; 067; 068) or
   11:00-13:00 (cc10_007). Usually a consolidation or retrace; it runs the stops of traders who were
   right in the AM (trailed AM stops) (003 ~1:12:15; 025 ~1:00:20; 046 ~2:03:21; 064). If the AM
   did not reach the draw by lunch, the draw carries to the PM (029 ~1:29:48; 031 ~1:04:22) [2023].
-  No new entries at lunch (065B ~4:12). Bot: no entries 11:00-13:30 (holds).
+  No new entries at lunch (065B ~4:12). Bot: no entries 11:00-13:30 (holds); `lunch` is a test session (AM model, AM draw carried,
+  out by `lunch_exit`), `pm_carry_draw` the AM's undelivered draw as the PM's, `draw_done_skip` no lunch / PM after the AM draw.
 - **T9 PM session**: starts 13:30 (013; 031 ~1:04:22; 037; 067 ~42:30), 14:00 (Ep 01; 047 "sweet
   spot"; 056), or 13:00 (cc10_012). The move usually starts ~14:00 off an OB formed in the AM or at
   lunch, continuing or reversing the AM (cc10_012 ~0:34-7:07) [CC]; the 14:00-16:00 sweet spot
   generally continues the AM (047 ~09:21). A short-term high or low almost always forms right after
   lunch (cc10_014 ~6:33). Divided day: bad AM -> come back at 13:45; nothing by 14:30 -> skip the
   PM (044 ~1:55:03). PM session 13:30-16:15 (Ep 08 wins over Ep 01's 14:00-16:00; owner #1).
-  Bot: PM entries 13:30-15:50. D7.
+  Bot: PM entries 13:30-15:50. `pm_skip_after` (nothing by 14:30 -> skip; the last hour stays unless `pm_skip_lh`), `pm_bad_am_start`
+  (13:45 after a bad AM), `pm_continue_am` (tag / filter), `pm_ob_entry` (tag / require an AM-OB entry). D7.
 - **T10 Last hour** 15:00-16:15. Entries 15:00-15:50 (15:50 = our reading of Ep 01's "10 min
   before", confirmed by the owner); 15:15-15:45 = the typical sweet spot, tag `lh_sweet`;
   `last_hour_strict` switch (Ep 01; 001 ~1:00:45; Ep 08 ~1:05:20) [owner correction #1]. A last-hour run to an old high, old low or imbalance happens
@@ -701,8 +721,10 @@ and to the notes for context, charts and trade examples. This file states each r
 - **M8 ORG repricing** [2023] (069 ~10:06-14:50): after the 09:30 Judas away from the ORG, price
   reprices back into it; target the ORG near edge.
 - **M9 News Judas** [2023]: wait for the release; the first pool run is the losing side; buy after
-  the sell stops are taken (064 ~52:12; 073 ~10:42). FOMC: the real move starts 14:25-14:30 (021;
-  065B). Bot: news-day AM starts at 09:30/10:00 anyway.
+  the sell stops are taken (064 ~52:12; 073 ~10:42). FOMC: the real move starts 14:30 (021; 065B; the 14:25 of the
+  coverage notes has no source). Bot: `news_judas` (block = the first run's direction is closed after it; wait = also no entry before a
+  run; the reference pools = the high / low of the `news_judas_ref_min` minutes before the release [our interpretation]);
+  `fomc_judas` for 14:00.
 - **M10 IFVG entry** [2023]: protocol A8; entry at its CE or near edge (078 ~50:28; 085 ~27:21);
   stop above CE plus 3-4 ES pts; stops under 2 pts are too tight except on 15s-1m (102 ~1:40:20).
   061 ~2:15:00 signature: an IFVG with a normal FVG below; a body close at the FVG high/CE triggers.

@@ -590,9 +590,11 @@ def fam(session: str) -> str:
     return "PM" if session == "PM" else "AM"
 
 
-def any_stop_switch(p) -> bool:
+def any_stop_switch(p, day=None) -> bool:
+    """Any session / day stop in force. fomc_no_reentry (N3 / N3.5) counts only on an FOMC day (day=None: assume so)."""
     return bool(p.session_stop_after_fails or p.loss_ends_morning or p.no_trade_after_win or p.chop_one_win
-                or p.obj_stop or p.done_if_target)
+                or p.obj_stop or p.done_if_target
+                or (p.fomc_day_stop and (day is None or "fomc" in events(day))))
 
 
 def stops_from(p, trades, ts=None) -> tuple:
@@ -602,7 +604,8 @@ def stops_from(p, trades, ts=None) -> tuple:
       chop_one_win        X14b (031 ~9:20) a winner of a trade filled on a chop / slow day ends the day
       stop_day            X12 / Ep04.13 the trade itself ended the day (objective hit, final level before the cut-off)
       loss_ends_morning   X13a (001 ~46:57-48:43) an AM-family loss ends the AM family
-      session_stop_after_fails  X7c (044 ~1:52:49) N failed trades in a row in a session end that session"""
+      session_stop_after_fails  X7c (044 ~1:52:49) N failed trades in a row in a session end that session
+      fomc_no_reentry  N3 / N3.5 (021 ~43:56) a loss on an FOMC day ends the day (every session, every model)"""
     closed = sorted((t for t in trades if t.exits and (ts is None or t.exits[-1][0] <= ts)),
                     key=lambda t: t.exits[-1][0])
     day, sess = None, {}
@@ -616,6 +619,8 @@ def stops_from(p, trades, ts=None) -> tuple:
             day = day or tr.stop_day
         if p.loss_ends_morning and net < 0 and fam(tr.session) == "AM":
             sess["AM"] = "loss_ends_morning"
+        if p.fomc_day_stop and net < 0 and "fomc" in events(tr.date):
+            day = day or "fomc_loss"
     n = p.session_stop_after_fails
     if n:
         for f in ("AM", "PM"):
@@ -632,7 +637,7 @@ def stops_from(p, trades, ts=None) -> tuple:
 def extras_blocked(ctx, p, session: str, ts, extra=()) -> bool:
     """Silver Bullet / Ma Deuce / pre-open: no new order for `session` armed at bar `ts` once the day or the session is
     stopped by the closed trades before it (the main loop's trades + `extra`, the extras' own)."""
-    if not any_stop_switch(p):
+    if not any_stop_switch(p, getattr(ctx, "day", None)):
         return False
     view = getattr(ctx, "risk_view", None)
     base = list(view["trades"]) if view else []
@@ -653,7 +658,7 @@ def apply_stops(trades, p, done: dict, state: dict, ts=None) -> None:
     day). `state["ext"]` = the Silver Bullet / Ma Deuce trades of the previous pass of run_day's fixed point
     (strategy.run_day): they count as of their exit time `ts`, so the stops are two-way (an SB win ends the main
     engine's day, an SB fail counts toward the session fails) without the main loop ever seeing a later trade."""
-    if not any_stop_switch(p):
+    if not any_stop_switch(p, state.get("day")):
         return
     ext = state.get("ext") or []
     if ext and ts is None:
@@ -675,7 +680,7 @@ def apply_stops(trades, p, done: dict, state: dict, ts=None) -> None:
 def sync_ext(trades, p, done: dict, state: dict, ts) -> None:
     """Bar start in the main loop: the extras' trades closed at or before `ts` (previous pass) may have stopped the
     session / the day (X7c / X12 / X13a / X14b / X14d)."""
-    if state.get("ext") and any_stop_switch(p):
+    if state.get("ext") and any_stop_switch(p, state.get("day")):
         apply_stops(trades, p, done, state, ts=ts)
 
 

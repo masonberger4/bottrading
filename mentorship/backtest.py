@@ -156,7 +156,7 @@ def lock_cuts(p: Params) -> set:
     """#9: the draw-lock minutes in use (one htf table each): the AM / PM session starts, the
     09:45 / 10:00 release locks, 07:00 / 09:00 pre-open windows, Ma Deuce 08:00 and the London
     Silver Bullet 02:00 (review fix: London now gets its own cut table like the others)."""
-    cuts = {p.am[0] or 570, p.pm[0] or 810, 585, 600}
+    cuts = {p.am_win[0] or 570, p.pm[0] or 810, 585, 600}
     if p.pre_0700:
         cuts.add(420)
     if p.pre_0900 or p.post_news:
@@ -167,6 +167,8 @@ def lock_cuts(p: Params) -> set:
         cuts.add(120)
     if (p.last_hour_own_slot or p.last_hour_setup) and not p.lh_no_lock:
         cuts.add(p.last_hour[0])                  # setups_models: the own last-hour slot's 15:00 lock
+    from . import newscal as _NC
+    cuts |= _NC.lock_cuts_extra(p)                # news_calendar_times: PRE8 08:20, LON, the 08:30 AM
     return cuts
 
 

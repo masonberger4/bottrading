@@ -32,16 +32,25 @@ from . import manage as MG
 def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
     from .strategy import (Trade, _lots, news, day_type, _eff_flat, _news_gate, _stamp_frame,
                            mark_levels, _split)   # noqa: avoid cycle
+    from . import newscal as NC
     wins = [("AM", "sb_am", p.sb_windows[0], 570), ("PM", "sb_pm", p.sb_windows[1], 810)]
     if p.sb_london:
         wins.insert(0, ("AM", "sb_london", (180, 240), 120))
     out = []
     tol = p.eq_tol_pts * p.es_pt
     flat = _eff_flat(p)
+    ff = NC.fomc_flat_min(day, p)                     # news_calendar_times N3: an FOMC day is flat at the release
     chop = getattr(ctx, "chop", None)
     stand = p.sloppy_mode == "stand_aside"
     for session, setup, (a, b), leg_from in wins:
+        if setup == "sb_london" and NC.fomc_whipsaw(ctx, day, p):
+            continue                                  # N3: skip the London open after an FOMC whipsaw
+        a = NC.sb_start(p, day, session, a, b)        # N3.1: the FOMC PM window opens at max(a, fomc_pm_from)
+        if a >= b:
+            continue
         if p.day_filter and blocked(day, session, p, a):
+            continue
+        if NC.sb_gate(ctx, p, day, session, a):       # N3.2 fomc_am="recipe"
             continue
         if stand and session == "PM" and "nfp_week:PM" in getattr(ctx, "sl_day", ()):
             continue                                  # #10 stand aside (off by default)
@@ -149,6 +158,11 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                             tr.exits.append((ts, sd.x(c), pos["left"], "am_exit")); pos["left"] = 0
                         else:
                             pos["stop"] = new
+                if (pos["left"] and setup == "sb_london" and p.pre_flat_0830 and p.flat_0830_extras and news(day) == "0830"
+                        and t + ctx.tf >= 510):
+                    tr.exits.append((ts, sd.x(c), pos["left"], "pre_0830")); pos["left"] = 0   # N4: no position into 08:30
+                if pos["left"] and ff and pos["fill_t"] < ff and t + ctx.tf >= ff:
+                    tr.exits.append((ts, sd.x(c), pos["left"], "fomc_flat")); pos["left"] = 0     # N3.2: not into the release
                 if pos["left"] and t + ctx.tf >= flat:
                     tr.exits.append((ts, sd.x(c), pos["left"], "eod")); pos["left"] = 0
                 if pos["left"] and ctx.equity:

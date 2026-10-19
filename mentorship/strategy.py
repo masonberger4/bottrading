@@ -226,7 +226,7 @@ class Params:
     pre_0700: bool = False         # 07:00-08:30 window (022, 032, 099), same model; flat before an
                                    # 08:30 release (pre_flat_0830)
     pre_flat_0830: bool = True
-    pre_0900: bool = False         # 09:00-09:29 entries, any day (018, 056, 100)
+    pre_0900: bool = False         # 09:00-09:29 entries, any day (018, 056, 100); not with am_from_0830 (the AM covers it)
     post_news: bool = False        # 08:30 release days: wait 30 min (065), then 09:00-09:29 entries
                                    # off the 08:30-09:00 range's high/low
     ma_deuce: bool = False         # 091: daily BISI premium + 1m FVG inverted before 08:00 ->
@@ -1165,6 +1165,99 @@ class Params:
                                          # one-way order: main loop first, the extras read it, never the other way)
     reentry_stop_only: bool = False      # D18 "re-entry after a stop-out": only a stop / stop_gap exit re-opens (False: any loss)
 
+    # ---- package news_calendar_times (rule_coverage.md section 3; build_log.md) --------------------------------
+    # calendar: the minor releases and the release list the news gate (owner #4) waits for
+    news_claims: bool = False            # N5: jobless claims (Thursday 08:30, holiday-shifted) count as a release
+    news_minutes: bool = False           # N5 / 082: FOMC minutes (14:00, 3 weeks after the decision) count as a release
+    wait_0945: bool = True               # Ep02.1 / N5.2 (002 ~0:25): the 09:45 PMI is a release the AM waits for
+    # N1 NFP Friday (Ep04; 006 ~8:35; 105 ~9:13) and D8
+    nfp_first_hour: bool = True          # N1: nobody trades the first hour after 08:30 on a jobs day: no PRE9 / NEWS window and no
+                                         # Ma Deuce (the 09:30 AM window with the 30-minute NFP floor stays - owner #4)
+    nfp_day_from: int = 0                # D8 test: jobs-day entries only from this minute (0 = the engine's own windows)
+    # N3 / N3.1 / N3.2 / N3.3 / N3.4 / N3.5 / M9.2 FOMC (14:00 statement, 14:30 press conference)
+    fomc_flat: int = 840                 # N3 fomc_flat_before / N3.2: never hold into the release - flat at this minute on an FOMC
+                                         # day (the bar ending at it; 0 = off). Orders still working are cancelled
+    fomc_flat_before: int | None = None  # N3 spelling of fomc_flat (None = use fomc_flat; a number overrides it, 0 = off)
+    fomc_am: str = "open"                # N3.2 (cc10_009 ~3:48; cc08_001 ~6:37): FOMC-day AM: "open" = traded, "recipe" = only if the
+                                         # trending-day recipe holds (the HTF table's reaction and draw agree), "skip" = sit out
+    fomc_only_am: str = "off"            # N3.3 (cc10_008 ~2:56): an FOMC-ONLY day (no other release) consolidates in the AM:
+                                         # "off", "tag", "scalp" (single exit min(+5, T1), no adds), "skip"
+    fomc_eve_risk: float = 1.0           # N3 (042 ~3:50; 094 ~1:48): the day before FOMC is slow and imprecise - trade light (x risk)
+    pre_fomc_risk: float = 1.0           # N3.4: the same switch in the D8 spelling; both multiply (a re-entry compounds with them)
+    skip_pre_fomc: bool = False          # filters.md: the day before FOMC is skipped
+    fomc_after_am_block: bool = False    # N3 (095 ~51:27): the day after FOMC sit still in the AM
+    skip_post_fomc_am: bool = False      # N3.4 / D8: the same switch in the D8 spelling (either blocks)
+    fomc_no_reentry: bool = True         # N3 / N3.5 (021 ~43:56): a loss on an FOMC day ends the day for every session and model
+    fomc_observe: str = "off"            # N3.1 (021 ~2:40-6:18): "defer" = scan 14:00 .. fomc_pm_from but hold the order until
+                                         # then ("judas" = defer + the M9.2 side rule); "off" = the PM stays blocked
+    fomc_pm_block_from: int = 0          # N3.1: the FOMC PM is open before this minute (default 0: blocked from the PM start,
+                                         # fomc_pm_from lifts it); 840 = trade 13:30-14:00, sit out the release
+    sb_fomc_pm: bool = False             # N3.1: the Silver Bullet PM window (14:00-15:00) runs on FOMC days from max(a, fomc_pm_from)
+    fomc_whipsaw_skip_london: bool = False   # N3 (cc08_006 ~3:36): after an FOMC whipsaw (both sides of the 13:00-14:00 range taken in
+                                         # 14:00-15:00) skip the next London open (the LON window and the London Silver Bullet)
+    fomc_judas: bool = False             # M9.2 (021; 065B ~5:30): the 14:00 move is the Judas; the real move starts at
+                                         # fomc_judas_end - only the side opposite to the first run in 14:00 .. end is traded,
+                                         # and the PM opens at fomc_judas_end instead of fomc_pm_from
+    fomc_judas_end: int = 870            # M9.2 correction: 14:30 (no source for 14:25 was found)
+    fomc_stage2_cont: bool = False       # M9.2 (065B): the real-move side holds through the whole PM, not only to fomc_pm_from
+    # N4 / D9 CPI
+    pre_cpi: str = "off"                 # N4 / D9 (028; 029 ~5:22): the day before CPI: "off", "small" (pre_cpi_risk), "skip"
+    pre_cpi_risk: float = 0.5
+    skip_pre_cpi: bool = False           # D9: the same as pre_cpi="skip"
+    flat_0830_extras: bool = True        # N4 (030 ~7:22; 047 ~5:26): with pre_flat_0830, the 08:29 flat also covers Ma Deuce and the
+                                         # London Silver Bullet (the PRE7 / PRE8 / LON main-engine trades always follow pre_flat_0830)
+    # N5.4 / N5.5 / N5.6
+    skip_two_drivers: bool = False       # N5.4 (100 ~50:59-1:40:56): stand aside the AM when 08:30 and 09:45 / 10:00 both release
+    two_driver_gate: bool = True         # N5.4 minimal rule: no entry window ends before the day's last morning release
+    fed_chair_skip_am: bool = True       # N5.5 (037 ~3:09; 038 ~39:59): no AM trade on a Fed chair 10:00 testimony day (calendar.FED_CHAIR, unverified)
+    skip_auction_am: bool = False        # N5.6 (cc10_008 ~7:29): avoid the AM on Treasury auction days (calendar.is_auction_day, approximate)
+    # M9 / M9.1 news Judas
+    news_judas: str = "off"              # M9 / M9.1 (064 ~52:12; 073 ~10:42): the first run of a pre-release pool after the release is
+                                         # the losing side: "block" = that direction is closed, "wait" = also no entry before a run
+    news_judas_ref_min: int = 60         # [our interpretation] the pre-release reference pools = the high / low of this many minutes
+    # T4 / D1 opening range
+    or_no_entry: bool = False            # T4 / D1 (031 ~4:52; 044 ~4:54): AM orders may be armed in the OR but fill from or_end
+                                         # (the pending expiry counts from then)
+    or_end: int = 600                    # the OR no-entry end (600 = 10:00; the CC OR runs to 630)
+    or_no_entry_news1000: bool = False   # D1: also apply it on 10:00-release days (the release gate already holds those)
+    or_deep: bool = False                # T4 (034; 041; 053 ~10:03): the exception - a fill inside or_deep_win with the entry deep in
+                                         # discount of the prior day's range is allowed
+    or_deep_win: tuple = (577, 586)      # 09:37-09:46
+    or_deep_pd: float = 0.25             # D1: "deep" = the entry within this fraction of the prior RTH range from its low (high)
+    or_bias: str = "off"                 # T4 (042 ~4:29): the OR's delivery gives the bias: "judas" (the first OR extreme was the
+                                         # Judas -> the other way), "close" (the OR close vs its midpoint)
+    or_bias_filter: bool = True          # or_bias: True = only that side after the OR, False = a tag
+    or_wide: bool = False                # T4 (cc10_010 ~3:07-7:05): a wide OR gets its opposite end run - trade toward the far end
+    or_wide_adr: float = 0.5             # wide = the OR range >= this x ADR5
+    or_wide_end: int = 630               # the CC OR (09:30-10:30)
+    # T5 / Ep01.10 / Ep06.1 session windows
+    pre_0820: bool = False               # T5 / Ep01.10 (cc10_007): a PRE8 window 08:20 .. the AM start, skipped on 08:30 release days
+    am_from_0830: bool = False           # Ep01.10 (Ep 01; 044 ~55:47): the AM window opens at 08:30 (lock and snapshot at 08:30)
+    ny_kz_futures: bool = False          # Ep06.1 (cc10_007 ~4:35): the futures NY kill zone 08:20-11:00 (PRE8 window on release days
+                                         # too - the news gate holds those; futures only)
+    london_kz: bool = False              # Ep06.1: a LON window london_kz_start .. 05:00 on the main model (futures only)
+    london_kz_start: int = 120
+    # T8 lunch
+    lunch: bool = False                  # T8 (064 ~1:45:41): a lunch session (the AM family's model, the AM draw carried, its own slot)
+    lunch_win: tuple = (710, 810)        # 11:50 (the lunch macro) - 13:30
+    lunch_exit: int = 810                # a lunch trade is out by then (never held into the PM)
+    pm_carry_draw: bool = False          # T8 (029 ~1:29:48; 031 ~1:04:22): the AM's undelivered draw is the PM's draw
+    draw_done_skip: bool = False         # T8: the AM draw delivered = the day's objective - no lunch / PM entries
+    # T9 PM session
+    pm_skip_after: int = 0               # T9 (044 ~1:55:03): nothing traded by this minute (870 = 14:30) -> the PM is skipped
+    pm_skip_lh: bool = False             # pm_skip_after also skips the last hour (default: the owner's last hour stays open)
+    pm_bad_am_start: int = 0             # T9: after a losing AM the PM restarts here (825 = 13:45)
+    pm_continue_am: str = "off"          # T9 (047 ~09:21): the PM generally continues the AM: "tag" / "filter"
+    pm_ob_entry: str = "off"             # T9 (cc10_012 ~0:34-7:07): the PM move starts off an AM / lunch OB: "tag" / "require"
+    # T7 / Ep07.8 macros (timing, never direction)
+    macro_gate: bool = False             # T7: an order must be armed inside an ICT macro window
+    macro_only: str = "off"              # Ep07.8: "0950" = only the 09:50-10:10 macro, "all" = any macro (as macro_gate)
+    macro_by: str = "arm"                # "arm" = the order is armed inside the window, "start" = the sweep that began the run was
+                                         # (009 ~18:24: the run only needs to start inside)
+    macro_done_skip: bool = False        # T7 (030 ~18:26): a macro fails when the day's run is done - no entry then
+    moc_htf_done: bool = False           # T7 (Ep 01; 030 ~20:06): the MOC macro does nothing when the run / HTF target is done
+    run_done_adr: float = 1.0            # "the day's run is done": the day's range so far >= this x ADR5 (or the session draw delivered)
+
     def __post_init__(self):
         if self.unicorn_sides not in ("both", "long", "short"):
             raise ValueError(f"unicorn_sides {self.unicorn_sides!r}")
@@ -1210,6 +1303,21 @@ class Params:
                          ("ob_pre_gate", ("off", "cancel", "hold")), ("cc_profile", ("off", "tag", "gate"))):
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
+        for name, ok in (("fomc_am", ("open", "recipe", "skip")), ("fomc_only_am", ("off", "tag", "scalp", "skip")),
+                         ("fomc_observe", ("off", "defer", "judas")), ("pre_cpi", ("off", "small", "skip")),
+                         ("news_judas", ("off", "block", "wait")), ("or_bias", ("off", "judas", "close")),
+                         ("pm_continue_am", ("off", "tag", "filter")), ("pm_ob_entry", ("off", "tag", "require")),
+                         ("macro_only", ("off", "0950", "all")), ("macro_by", ("arm", "start"))):   # news_calendar_times
+            if getattr(self, name) not in ok:
+                raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
+        if (self.fomc_eve_risk <= 0 or self.pre_fomc_risk <= 0 or self.pre_cpi_risk <= 0 or self.or_deep_pd < 0
+                or self.run_done_adr < 0 or self.or_wide_adr < 0 or self.news_judas_ref_min < 1):
+            raise ValueError("news_calendar_times: risk multipliers > 0, fractions / ADR multiples >= 0, news_judas_ref_min >= 1")
+        if len(self.or_deep_win) != 2 or len(self.lunch_win) != 2 or self.lunch_win[0] >= self.lunch_win[1]:
+            raise ValueError("or_deep_win / lunch_win: expected (start_minute, end_minute)")
+        if self.lunch and self.lunch_win[0] < self.am[1]:
+            raise ValueError(f"lunch_win {self.lunch_win}: the lunch session must start at or after the AM end {self.am[1]} "
+                             "(its AM range is read from the bars before it)")
         bad = [x for x in self.htf_resist_src if x not in CF_SRC]       # review: validate here, not
         if bad:                                                          # as a KeyError mid-run
             raise ValueError(f"htf_resist_src {bad}: expected names from {tuple(CF_SRC)}")
@@ -1351,6 +1459,16 @@ class Params:
 
     # --- package entries_stops_sizing helpers --------------------------------------------------
     @property
+    def fomc_day_stop(self) -> bool:
+        """N3 / N3.5: a loss on an FOMC day ends the day - unless X13b `reentry_fomc_ok` explicitly allows a re-entry there."""
+        return bool(self.fomc_no_reentry and not self.reentry_fomc_ok)
+
+    @property
+    def am_win(self) -> tuple:
+        """The AM entry window: `am`, opening at 08:30 with am_from_0830 (Ep01.10)."""
+        return (510 if self.am_from_0830 else self.am[0], self.am[1])
+
+    @property
     def tick(self) -> float:
         """One tick in price units (E3 tick_pts x es_pt)."""
         return self.tick_pts * self.es_pt
@@ -1426,25 +1544,39 @@ def _lots(x: float, lot: int) -> int:
 
 
 def blocked(d: date, session: str, p: "Params | None" = None, t: int = 0) -> str | None:
-    """Day-type rule that blocks this session (at minute t), or None."""
+    """Day-type rule that blocks this session (at minute t), or None. The NFP-week rules are relative
+    to the week's ACTUAL jobs date (calendar.nfp_date): 2025-07-03 was a Thursday, so the day before
+    it is the Wednesday (the old code assumed a Friday: Thursday = the day before, Wednesday PM = two
+    days before). news_calendar_times adds the FOMC / CPI / chair / auction day rules (newscal)."""
     tags = events(d)
     if "jobs" in tags and not (p is not None and p.nfp_day):
         return "nfp_day"
-    mon = d - timedelta(days=d.weekday())
-    jd = [j for j in JOBS if mon <= j <= mon + timedelta(days=4)]
+    sh = _calendar.nfp_shift(d)
+    nfp = _calendar.nfp_date(d)
     week_block = p is None or p.nfp_week_block
-    if jd and week_block and d.weekday() >= 3 and "jobs" not in tags and not (p is not None and p.nfp_thu and d.weekday() == 3):
-        return "nfp_week_thu_fri"
-    if jd and week_block and d.weekday() == 2 and session == "PM":
-        return "nfp_week_wed_pm"
-    if "fomc" in tags and session == "PM" and not (p is not None and p.fomc_pm_from and t >= p.fomc_pm_from):
-        return "fomc_pm"
+    if sh >= 0 and week_block and d < nfp:
+        w = d.weekday() + sh                         # the day's place as if the NFP were on a Friday
+        if w >= 3 and not (p is not None and p.nfp_thu and w == 3):
+            return "nfp_week_thu_fri"
+        if w == 2 and session == "PM":
+            return "nfp_week_wed_pm"
+    if "fomc" in tags and session == "PM":
+        frm = p.fomc_pm_from if p is not None else 885
+        if p is not None and p.fomc_judas:
+            frm = min(frm, p.fomc_judas_end)         # M9.2: the real move starts at 14:30
+        if p is not None and p.fomc_pm_block_from and t < p.fomc_pm_block_from:
+            pass                                     # N3.1: open before the release (flat by fomc_flat)
+        elif not (frm and t >= frm) and not (p is not None and p.fomc_observe != "off" and t >= 840):
+            return "fomc_pm"                         # (fomc_observe scans from 14:00; the order is held)
     if p is not None and p.skip_cpi and "cpi" in tags:
         return "cpi"
     if p is not None and p.skip_monday and d.weekday() == 0:
+        mon = d - timedelta(days=d.weekday())
         week = [mon + timedelta(days=k) for k in range(5)]
-        if not jd and not any("fomc" in events(x) for x in week):
+        if not _calendar.nfp_date(d) and not any("fomc" in events(x) for x in week):
             return "monday"
+    if p is not None:
+        return _NC.calendar_block(d, session, p, t)
     return None
 
 
@@ -1557,6 +1689,10 @@ class Trade:
     slow_chop: bool = False        # X14b: the day was chop / slow at the fill
     reentry: bool = False          # X13b / D18: the trade is a re-entry after a stop-out
     stop_day: str = ""             # what ended the day when this trade closed (obj_stop / done_target / chop_win / win)
+    # package news_calendar_times
+    macro_wins: str = ""           # T7: every ICT macro window the order was armed in, "HHMM|..." (macro_win keeps the first)
+    news_tags: str = ""            # the day's news tags: nfp, nfp_week, fomc, fomc_only, fomc_eve, fomc_after, cpi, pre_cpi,
+                                   # two_driver, fed_chair, auction, claims, minutes (newscal.day_tags)
 
     REAL_FIELDS = ("entry", "stop", "t1", "t2", "draw_px", "bz_top", "bz_bottom", "bz_mt",
                    "resist_lo", "resist_hi", "ext_px", "leg_hi_px")
@@ -1746,7 +1882,7 @@ class DayCtx:
             self.pd["pmh"], self.pd["pml"] = float(pre.high.max()), float(pre.low.min())
         # the same overnight range as known at an earlier session start (no look-ahead)
         self.pre_at = {}
-        for m in (420, 540):
+        for m in (120, 420, 500, 510, 540):
             q = pre[(pre.index.hour * 60 + pre.index.minute < m) | (pre.index.date < df.index[0].date())]
             if len(q):
                 self.pre_at[m] = (float(q.high.max()), float(q.low.min()))
@@ -1946,6 +2082,9 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
     ae = min(810, getattr(ctx, "am_end", 810))   # L1 (review fix): a pool from am_range_end itself
     if ctx.t[i] >= ae and ctx.am_hl:        # (13:30 old / 12:00); Params checks 570 < end <= 810
         pools.append((sd.x(ctx.am_hl[0] if sd.sign > 0 else ctx.am_hl[1]), at(ae)))
+    if getattr(ctx, "cur_session", "") == "LUNCH" and getattr(ctx, "am_lunch_hl", None) is not None:
+        pools.append((sd.x(ctx.am_lunch_hl[0] if sd.sign > 0 else ctx.am_lunch_hl[1]),     # T8: the AM range, complete
+                      at(getattr(ctx, "am_lunch_end", 660))))                                # before the lunch session
     for on, hl in ((p.pool_prev_week, ctx.pw), (p.pool_prev_month, ctx.pm_)):
         if on and hl is not None:
             pools.append((sd.x(hl[0] if sd.sign > 0 else hl[1]), ctx.start))
@@ -2206,7 +2345,7 @@ def _extra_levels(ctx, df: pd.DataFrame, hist: list, p: "Params", eth: dict | No
     # L8: vacuum blocks at the releases (session opens are the ORG / NDOG - not duplicated)
     ctx.vac = []
     if p.vacuum_blocks:
-        for R in release_times(ctx.day):
+        for R in _NC.releases(ctx.day, p):
             k = _idx_at(ctx, R)
             if k >= len(ctx.t) or k - 1 < S or ctx.t[k] != R or ctx.t[k - 1] + ctx.tf != R:
                 continue
@@ -2482,7 +2621,8 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
     net_ = gross - costs
     key = pos.get("done_key", tr.session)
     reopened = False
-    if lost is not None and p.reentry_half and not state["reentered"].get(tr.session):
+    if (lost is not None and p.reentry_half and not state["reentered"].get(tr.session)
+            and not (p.fomc_day_stop and "fomc" in events(tr.date))):            # N3.5: none on an FOMC day
         # X13b / D18: one more try, same direction, half risk (reentry_gate: only while the idea is intact); the flag of
         # the trade's OWN done key is re-opened (an SB_AM loss no longer re-opens the plain AM slot)
         rc = (_MG.reentry_open(ctx, pos, tr, i if i is not None else pos["fill_i"], p, state, net_) if ctx is not None
@@ -2807,7 +2947,7 @@ def _news_ranges(ctx, day, p) -> dict:
     t, n = ctx.t, (p.news_range_pivot or p.pivot_n)
     jobs = "jobs" in events(day)
     piv = None
-    for R in release_times(day):
+    for R in _NC.releases(day, p):
         kR = _idx_at(ctx, R)
         d = dict(R=R, hi=None, lo=None, eq=None, made=None)
         out[R] = d
@@ -2866,11 +3006,11 @@ def _lock_times(p, day, pre_windows) -> dict:
     """[our interpretation] lock = the session's start: AM 09:30 (the 09:45 / 10:00 release on
     those days), PM 13:30, PRE7 07:00, PRE9 / NEWS 09:00. SB / last-hour / pm_sb windows inherit
     their parent's lock."""
-    a = p.am[0] or 570
-    rs = [R for R in release_times(day) if a <= R < (p.am[1] or 660)]
+    a = p.am_win[0] or 570
+    rs = [R for R in _NC.releases(day, p) if a <= R < (p.am[1] or 660)]
     out = {"AM": max([a] + rs), "PM": p.pm[0] or 810}
     for name, a_, _ in pre_windows:
-        out[name] = 420 if name == "PRE7" else 540
+        out[name] = a_                                   # PRE7 07:00, PRE8 08:20, PRE9 / NEWS 09:00, LON its start
     if _SM.lh_on(p, "last_hour_own_slot") and not p.lh_no_lock:
         # setups_models review fix (owner #9 x M5.2 / Ep01.13): the own last-hour slot locks ITS
         # draw at 15:00 (bars closed by then, htf table cut at 15:00), like the MD / SB own locks
@@ -3119,7 +3259,7 @@ def _make_trade(ctx, day, symbol, o, sd, ts, fill, i, t, p, btag):
                draw_name=o.get("draw_name", ""), draw_kind=o.get("draw_kind", ""),
                lock_capped=o.get("lock_capped", False), sloppy=o.get("sloppy", ""), news_wait_min_actual=o.get("news_wait_min_actual"),
                news_pd=o.get("news_pd"), lv_tags=o.get("lv_tags", ""), fvg_state=o.get("fvg_state", ""),
-               imm_rebal=bool(o.get("imm_rebal", False)),
+               imm_rebal=bool(o.get("imm_rebal", False)), macro_wins=o.get("macro_wins", ""),
                ext_px=None if o.get("ext") is None else float(sd.x(o["ext"])),
                leg_hi_px=None if not o.get("leg") else float(sd.x(o["leg"][1])), **btag)
     eq = ctx.equity
@@ -3193,7 +3333,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
     pass only."""
     kw = dict(partner=partner, live=live, bias=bias, conf=conf, gaps=gaps, closes=closes, evening=evening,
               partner2=partner2, intermarket=intermarket, equity=equity, bias_by_cut=bias_by_cut, meta=meta, eth=eth)
-    if not (_MG.any_stop_switch(p) and (p.ma_deuce or p.sb_model) and p.stops_passes > 1):
+    if not (_MG.any_stop_switch(p, df.index[0].date()) and (p.ma_deuce or p.sb_model) and p.stops_passes > 1):
         return _run_day_once(df, hist, symbol, p, tf, log=log, locks=locks, skips=skips, risk_state=risk_state, **kw)
     import copy
     ext, sig, res, sc = None, None, [], {}
@@ -3237,11 +3377,17 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     risk_state (E10 loss_halving) {m, deficit, peak} carried across days by backtest.run (mutated)"""
     day = df.index[0].date()
     flat = _eff_flat(p)
+    ff = _NC.fomc_flat_min(day, p)                        # N3 / N3.2: an FOMC day is flat at the release (0 = n/a)
+    am_lo, am_hi = p.am_win                               # Ep01.10 am_from_0830
     ctx = DayCtx(df, day, hist, tf, p.htf, closes, p.or_minutes, evening if p.globex_pool else None)
     ctx.conf = conf
     ctx.gaps = gaps if (p.gap_mode == "ict" and gaps is not None) else None
     ctx.equity = float(equity) if (equity is not None and p.risk_basis == "equity") else p.account_equity
     ctx.symbol = symbol
+    ctx.hist = hist
+    ctx.am_lunch_end = p.am[1]
+    ctx.am_lunch_hl = _NC.am_range(ctx, p) if p.lunch else None     # T8: the AM range, complete before the lunch session
+    ctx.lon_start = p.london_kz_start
     ctx.bias_row = bias                                   # setups_models: htf table row (draws)
     ctx.eth = eth
     _attach_meta(ctx, meta, p, symbol)
@@ -3270,7 +3416,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                              -1: Side(-1, c2.o, c2.h, c2.l, c2.c, p.pivot_n, mg, **sk)},
                         pd.Series(np.arange(len(c2.idx)), index=c2.idx))
     tags = events(day)
-    am_start = 600 if tags & NEWS_1000 else p.am[0]          # news_wait="off" only
+    am_start = 600 if tags & NEWS_1000 else am_lo            # news_wait="off" only
     dt, block_side = day_context(hist, day, p)
     ctx.block_side = block_side
     if p.neutral_skip and "big_prev" in dt:
@@ -3294,16 +3440,23 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     ctx.day_tags = "|".join(sorted(dt))
     ctx.intermarket = intermarket or {}
     trades: list[Trade] = []
-    done = {"AM": False, "PM": False, "PRE7": False, "PRE9": False, "NEWS": False}
+    done = {"AM": False, "PM": False, "PRE7": False, "PRE9": False, "NEWS": False, "PRE8": False, "LON": False,
+            "LUNCH": False}
     ctx.done_ref = done                                   # setups_models T10 moc_run
     pre_windows = []
+    nfp_hour = p.nfp_first_hour and "jobs" in tags         # N1: nobody trades the first hour after 08:30 on a jobs day
+    am0830 = p.am_from_0830                                # Ep01.10: the AM covers 09:00-09:30 itself (no double scan)
+    ew = _NC.extra_windows(p, ctx, day, symbol)           # T5 / Ep01.10 / Ep06.1: PRE8, LON
+    pre8 = any(n_ == "PRE8" for n_, *_ in ew)
+    pre_windows += [w_ for w_ in ew if w_[0] == "LON"]
     if p.pre_0700:
-        pre_windows.append(("PRE7", 420, 510))
-    if p.post_news and news(day) == "0830":
+        pre_windows.append(("PRE7", 420, 500 if pre8 else 510))
+    pre_windows += [w_ for w_ in ew if w_[0] == "PRE8"]
+    if p.post_news and news(day) == "0830" and not nfp_hour and not am0830:
         pre_windows.append(("NEWS", 540, 570))
-    if p.pre_0900:
+    if p.pre_0900 and not nfp_hour and not am0830:
         pre_windows.append(("PRE9", 540, 570))
-    state = {"reentered": {}, "re_ctx": {}, "only_side": {}, "reversed": {}, "day_pts": 0.0, "day_loss": False,
+    state = {"day": day, "reentered": {}, "re_ctx": {}, "only_side": {}, "reversed": {}, "day_pts": 0.0, "day_loss": False,
              "rs": (risk_state if risk_state is not None else _EN.new_risk_state()) if p.loss_halving else None,
              "ext": list(_ext or ())}              # run_day fixed point: the extras' trades of the previous pass
     ctx.ext_other = [t_ for t_ in (_ext or ()) if t_.setup.startswith("sb_")]   # Ma Deuce reads the SB's (it runs first)
@@ -3476,10 +3629,12 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 if pos["left"]:
                     _MG.be_modes(sd, pos, tr, i, p)                # D14 / Ep03.15 after_mss / stall / pool breakeven
                     _MG.trail_extra(sd, pos, i, p)                 # Ep03.10 first-FVG and Ep03.20 measuring-gap trails
-            if (pos["left"] and tr.session == "PRE7" and p.pre_flat_0830 and news(day) == "0830"
+            if (pos["left"] and tr.session in ("PRE7", "PRE8", "LON") and p.pre_flat_0830 and news(day) == "0830"
                     and t + tf >= 510):
-                tr.exits.append((ts, sd.x(c), pos["left"], "pre_0830")); pos["left"] = 0
-            if pos["left"] and tr.session != "PM" and p.am_exit and t + tf >= p.am_exit:
+                tr.exits.append((ts, sd.x(c), pos["left"], "pre_0830")); pos["left"] = 0     # N4: no position into the release
+            if pos["left"] and tr.session == "LUNCH" and t + tf >= p.lunch_exit:
+                tr.exits.append((ts, sd.x(c), pos["left"], "lunch_exit")); pos["left"] = 0   # T8: never held into the PM
+            if pos["left"] and tr.session not in ("PM", "LUNCH") and p.am_exit and t + tf >= p.am_exit:
                 # Ep 03 / owner #8: CLOSE (not tighten) all remaining AM-family units at the close
                 # of the bar ending 12:00; "tighten" is a test-only switch [our interpretation]
                 if p.am_exit_mode == "close":
@@ -3493,6 +3648,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                         _MG.raise_stop(pos, new)               # X5c: a day trade keeps its stop
             if pos["left"] and tr.session == "PM" and p.pm_done_by and pos["t1_done"] and t + tf >= p.pm_done_by:
                 tr.exits.append((ts, sd.x(c), pos["left"], "pm_done")); pos["left"] = 0
+            if pos["left"] and ff and pos["fill_t"] < ff and t + tf >= ff:
+                tr.exits.append((ts, sd.x(c), pos["left"], "fomc_flat")); pos["left"] = 0   # N3.2: never hold into the release
             if pos["left"] and t + tf >= flat:
                 tr.exits.append((ts, sd.x(c), pos["left"], "eod")); pos["left"] = 0
             if pos["left"]:                            # #12: open risk against the current stop
@@ -3557,15 +3714,24 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 if can_add and (p.add_low_end or p.add_fvg_low_end or p.add_fvg_low):   # E12c / E12 / Ep04.10
                     _EN.low_end_add(sd, pos, tr, i, p, lambda px, size: _arm_add(pos, tr, px, i, p, ctx.equity, size=size))
         # --- 2. pending limit order
+        held_ = state.get("fomc_held")
+        if held_ is not None and t >= _NC.first_pm_minute(p):    # N3.1 fomc_observe: arm the order seen in 14:00 - fomc_pm_from
+            state["fomc_held"] = None
+            if pending is None and pos is None and _NC.held_valid(ctx, held_["side"], held_, i, p):
+                pending = dict(held_, i=i - 1)
+        if pending is not None and ff and ctx.t[pending["i"]] < ff <= t + tf:
+            pending = None                           # N3 fomc_flat: nothing armed before the release rests into it
         if pending is not None and chop_before:
             pending = None                           # #10 stand aside: chop drops the order
         if pending is not None and _MG.blocked_now(state, pending["session"]):
             pending = None                           # management_exits: the session / day was stopped meanwhile
-        if pending is not None and pending["session"] != "PM" and p.am_exit and t + tf >= p.am_exit:
+        if (pending is not None and pending["session"] not in ("PM", "LUNCH") and p.am_exit
+                and t + tf >= p.am_exit):
             pending = None                           # #8 guard: no AM-family fills into 12:00
         if pending is not None:
             sd = pending["side"]
-            cut = {"AM": p.am[1], "PM": p.pm[1], "PRE7": 510, "PRE9": 570, "NEWS": 570}[pending["session"]]
+            cut = {"AM": am_hi, "PM": p.pm[1], "PRE7": 510, "PRE8": 510 if p.am_from_0830 else 570, "PRE9": 570,
+                   "NEWS": 570, "LON": 300, "LUNCH": p.lunch_win[1]}[pending["session"]]
             if pending.get("done_key", "").startswith("SB_"):
                 cut = p.sb_windows[0][1] if pending["session"] == "AM" else p.sb_windows[1][1]
             if p.sb_only:                               # fills only inside the session's SB window
@@ -3574,7 +3740,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 cut = min(cut, pending["cut"])
             ob_pre = pending.get("ob_pre", False)
             mkt = pending.get("market") or pending.get("stop_entry")
-            if t >= cut or i - pending["i"] > max(1, p.pending_minutes // tf):
+            if t >= cut or i - max(pending["i"], pending.get("anchor_i", -1)) > max(1, p.pending_minutes // tf):
                 pending = None
             elif ob_pre and i - 1 > pending["i"] and sd.c[i - 1] < pending["ob_body_low"]:
                 pending = None                       # #11: a close below the OB bodies (bar i-1)
@@ -3605,7 +3771,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                   pending["ext"] + p.leg_pd * ((pending["leg_hi0"] if pending.get("no_new_extreme") else
                                                 sd.h[pending["ext_i"]:i].max()) - pending["ext"])):
                 pass                                 # not yet in the leg's discount: wait (M2.4: leg high frozen)
-            elif pos is None and _fill_at(sd, pending, i) is not None and _retrace_ok(sd, pending, i, p):
+            elif (pos is None and _NC.fill_ok(pending, t) and _fill_at(sd, pending, i) is not None
+                  and _retrace_ok(sd, pending, i, p)):
                 o = pending
                 fill = _fill_at(sd, o, i)            # a gap through the limit fills at the open
                 tr = _make_trade(ctx, day, symbol, o, sd, ts, fill, i, t, p, btag)
@@ -3675,12 +3842,15 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 session, w0, wa, wb = name, a_, a_, b_
                 break
         if session is None:
-            if p.am[0] <= t < p.am[1]:
-                session, w0, wa, wb = "AM", am_start, p.am[0], p.am[1]
+            if am_lo <= t < am_hi:
+                session, w0, wa, wb = "AM", am_start, am_lo, am_hi
+            elif p.lunch and p.lunch_win[0] <= t < p.lunch_win[1]:
+                session, w0, wa, wb = "LUNCH", p.lunch_win[0], p.lunch_win[0], p.lunch_win[1]    # T8
             elif p.pm[0] <= t < p.pm[1]:
                 session, w0, wa, wb = "PM", p.pm[0], p.pm[0], p.pm[1]
             else:
                 continue
+        ctx.cur_session = session
         drv = None
         if p.news_wait != "off":                     # owner #4: wait for the news dealing range
             w0 = wa
@@ -3694,6 +3864,16 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     if i < drv["made"]:
                         continue
         ctx.cur_news = drv
+        if session == "PM":
+            w0 = _NC.pm_start(p, w0, trades)                  # T9 pm_bad_am_start
+        why_ = _NC.gate(ctx, p, day, session, t, i, wb, trades)
+        if why_ is not None:                                  # N3.2 / N5.4 / T8 / T9 per-bar gates
+            _f(why_)
+            continue
+        jb_side, jb_wait = _NC.judas_gate(ctx, p, day, drv, i, t)    # M9 / M9.1 / M9.2
+        if jb_wait:
+            _f("x_news_judas_wait")
+            continue
         if (session == "PM" and p.last_hour_strict and t >= p.last_hour[0]
                 and not (p.last_hour_sweet[0] <= t < p.last_hour_sweet[1])):
             continue                                  # #1 test: last hour = sweet spot only
@@ -3736,7 +3916,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     break
             if skip_main or armed:
                 continue
-        lks = "LH" if (lh_slot and "LH" in lock_t) else session   # the own LH slot has its own lock
+        lks = "LH" if (lh_slot and "LH" in lock_t) else ("AM" if session == "LUNCH" else session)   # LH: its own lock;
+                                                      # T8: the lunch session carries the AM's draw
         lk = ctx.lock.get(lks) if lock_t else None
         if lock_t and lks in lock_t and lk is None:
             continue                                  # #9: not locked yet - nothing to trade toward
@@ -3748,7 +3929,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         if p.ipda_eq_day == "skip":                   # B21: range day until the first release
             if session not in state.setdefault("ipda_eq", {}):
                 state["ipda_eq"][session] = _ipda_eq(ctx, p, i)
-            rel = release_times(day)
+            rel = _NC.releases(day, p)
             if state["ipda_eq"][session] and (not rel or t < min(rel)):
                 continue
         ctx.cur_no_draw = False
@@ -3781,6 +3962,13 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 continue
             if sd.sign in block_side.get("year_end", ()):
                 continue                              # #3 (off by default)
+            if jb_side and sd.sign == jb_side:
+                _f("x_news_judas")
+                continue                              # M9 / M9.2: the first run after the release is the losing side
+            why_ = _NC.side_filter(ctx, p, session, sd.sign, i, t)
+            if why_ is not None:
+                _f(why_)
+                continue                              # T4 or_bias / or_wide, T9 pm_continue_am
             if lk is not None and lk["side"] and sd.sign != lk["side"]:
                 continue                              # #9: trade only toward the locked draw
             if state.get("flip") and sd.sign != state["flip"]:
@@ -3800,6 +3988,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 o_["lv_tags"] = "|".join(x for x in (o_.get("lv_tags", ""), "smt_bias_agree" if sd.sign == smtb
                                                      else "smt_bias_against") if x)
             if o_ is not None:
+                o_ = _NC.post_order(ctx, sd, i, p, session, o_, hist)    # T4 / T7 / T9 / Ep07.8 filters and tags
+            if o_ is not None:
                 if done_key.startswith("SB_"):
                     o_.update(done_key=done_key, setup="sb_" + session.lower())
                 elif done_key == "LH" and "done_key" not in o_:
@@ -3808,10 +3998,14 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                         and pending["side"] is sd and not p.ob_entry_cancel_on_mss
                         and pending["entry"] <= o_["entry"]):
                     continue                          # #11 "both": keep the lower entry (side space)
+                if _NC.observing(p, day, session, t):
+                    state["fomc_held"] = o_             # N3.1: seen during the FOMC observation, armed from fomc_pm_from
+                    continue
                 pending = o_
                 if log is not None:
                     log.append((ts, symbol, session, sname, o_["swept"], sd.x(o_["entry"]),
                                 sd.x(o_["stop"]), sd.x(o_["t1"])))
+    ctx.cur_session = ""                                  # (T8: the extras' _targets must not see the last window)
     n_main = len(trades)
     if p.ma_deuce:
         from .pre_open import run_ma_deuce
@@ -3832,6 +4026,10 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         _EN.replay_risk_state(state["rs"], ctx.risk_view["rs0"], trades, p)   # E10: carried state in time order
     if locks is not None:
         locks += [dict(lk, symbol=symbol, marked=len(lk["marked"])) for lk in all_locks + list(ctx.lock.values())]
+    if trades:
+        nt_ = _NC.day_tags(day, p)                         # news_calendar_times: the day's news tags on every trade
+        for tr_ in trades:
+            tr_.news_tags = nt_
     return trades
 
 
@@ -3940,6 +4138,7 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
             row = (bias_by_cut or {}).get(tl)
             lk = mark_levels(ctx, row, tl, "PM" if s_ == "LH" else s_, p, spent)   # LH: a PM mark-up
             lk["session"] = s_
+            lk = _NC.carry_lock(ctx, p, s_, lk)                  # T8 pm_carry_draw
             ctx.lock[s_] = lk
             if lk["side"] == 0 and p.draw_lock_neutral == "skip":
                 done[s_] = True
@@ -4018,12 +4217,14 @@ def _sell_side(ctx: DayCtx, sd: Side, session: str, i: int | None = None,
                extra: bool = False, p: "Params | None" = None) -> dict[str, float]:
     keys = ("pdl1", "pdl2", "pdl3") if sd.sign > 0 else ("pdh1", "pdh2", "pdh3")
     out = {k: sd.x(ctx.pd[k]) for k in keys if k in ctx.pd}
-    if session in ("PRE7", "PRE9", "NEWS"):
-        m = 420 if session == "PRE7" else 540
+    if session in ("PRE7", "PRE8", "PRE9", "NEWS", "LON"):
+        m = {"PRE7": 420, "PRE8": 500, "LON": getattr(ctx, "lon_start", 120)}.get(session, 540)
         if m in ctx.pre_at:
             hi, lo = ctx.pre_at[m]
             out["overnight"] = sd.x(lo if sd.sign > 0 else hi)
         for name in ("london", "prev_pm"):
+            if name == "london" and session == "LON":
+                continue                     # the London range is still being made (complete at 05:00)
             if name in ctx.sess:
                 hi, lo, _ = ctx.sess[name]
                 out[name] = sd.x(lo if sd.sign > 0 else hi)
@@ -4048,10 +4249,12 @@ def _sell_side(ctx: DayCtx, sd: Side, session: str, i: int | None = None,
                 out["news_range" if R == 510 else f"news_range_{R}"] = sd.x(d["lo"] if sd.sign > 0 else d["hi"])
         for v in _round_levels(ctx, sd, i, False):   # #13: the nearest untaken round handle
             out["round"] = v
-    if session == "AM":
+    if session in ("AM", "LUNCH"):
         k = "pml" if sd.sign > 0 else "pmh"
         if k in ctx.pd:
             out["premarket"] = sd.x(ctx.pd[k])
+        if session == "LUNCH" and getattr(ctx, "am_lunch_hl", None) is not None:   # T8: the AM range, complete before
+            out["am_session"] = sd.x(ctx.am_lunch_hl[1] if sd.sign > 0 else ctx.am_lunch_hl[0])   # the lunch session
         if extra:
             for name in ("london", "prev_pm"):
                 if name in ctx.sess:
@@ -4104,6 +4307,8 @@ def _level_created(ctx, k: str, session: str) -> int:
         a = at(570)                         # setups_models M16.1: the 05:00-09:30 low, from 09:30
     elif k == "pm_judas_array":
         a = at(810)                         # setups_models M7.3
+    elif k == "am_session" and session == "LUNCH":
+        a = at(getattr(ctx, "am_lunch_end", 660))      # T8 (the AM range ends at p.am[1])
     elif k == "am_session" and session == "PM":
         a = at(min(810, getattr(ctx, "am_end", 810)))
     elif k.startswith("news_range_"):
@@ -4111,7 +4316,7 @@ def _level_created(ctx, k: str, session: str) -> int:
     elif k == "news_range" and 510 in getattr(ctx, "news_dr", {}):
         a = ctx.news_dr[510]["made"]
     else:
-        created = ctx.start if session == "AM" else at(810)
+        created = ctx.start if session in ("AM", "LUNCH") else at(810)
         a = {"am_session": created, "lunch": created, "opening_range": at(ctx.or_end),
              "london": at(300), "or60": at(630),
              "news_range": getattr(ctx, "news_made", at(540))}.get(k, ctx.start)
@@ -5377,7 +5582,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             lv, kinds = [f] + lv, ["fixed"] + kinds
     scalp = False
     sl = getattr(ctx, "cur_sloppy", "")
-    if sl and p.sloppy_mode == "scalp":   # #10 scalp mode: one exit at min(+5, T1), no adds
+    if (sl and p.sloppy_mode == "scalp") or _NC.scalp_now(ctx, p, session):   # #10 scalp mode (N3.3: the FOMC-only AM):
+                                          # one exit at min(+5, T1), no adds
         lv, kinds, scalp, final_T = [min(entry + p.sloppy_scalp_pts * p.es_pt, lv[0])], [kinds[0]], True, False
     smt_n = int(sw["smt"] is True) + int(sw.get("smt2") is True)
     if smt_n < p.smt_min:
@@ -5552,6 +5758,7 @@ def _smt_rel_eq(ctx, sd, i, level, pctx, ps, j, p):
     return not _thru(ps.l[a:j + 1].min(), twin, getattr(ctx, "tk", 0.0))
 
 
+from . import newscal as _NC  # noqa: E402  (news_calendar_times package; imports this module back)
 from . import setups as _SM   # noqa: E402  (setups_models package; imports this module back)
 from . import entries as _EN  # noqa: E402  (entries_stops_sizing package; imports this module back)
 from . import targets as _TP  # noqa: E402  (targets_partials package: speed bump, rung plan, partials)

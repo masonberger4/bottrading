@@ -1183,8 +1183,8 @@ def test_reverse_in_session_falls_through_when_the_reentry_gate_refuses():
     fomc = date(2024, 1, 31)
     pos, tr = _closed_pos(-100.0, day_=fomc)
     done, st = {"AM": True}, _state()
-    p = Params(**BASE, reentry_half=True, reentry_gate=True, reverse_in_session=True)
-    S._after_close(pos, [], p, done, st, i=7, ctx=_ctx(fomc))
+    p = Params(**BASE, reentry_half=True, reentry_gate=True, reverse_in_session=True, fomc_no_reentry=False)   # (N3.5 would
+    S._after_close(pos, [], p, done, st, i=7, ctx=_ctx(fomc))                                         # end an FOMC day)
     assert not done["AM"] and st["only_side"]["AM"] == -1 and not st["re_ctx"]          # the gate refused: the reversal still opens
     pos, tr = _closed_pos(-100.0)                                                       # an allowed re-entry wins over the reversal
     done, st = {"AM": True}, _state()

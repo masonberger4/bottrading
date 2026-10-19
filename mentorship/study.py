@@ -212,7 +212,9 @@ CURRENT = dict(mt_mode="range", exit_mode="before", min_draw_pts=0.0, leg_pd=0.0
                seen_from_created=False, sweep_ticks=0.0, fvg_c2_dir=False, nwog_trading_days=False,
                breaker_ll=False, breaker_cand_to="ext",   # review fix: Ep01.6 defaults pinned back
                stop_tick_pts=0.0, nfp_no_adds=False,      # entries_stops_sizing: the old 0.01 pad, adds on NFP days,
-               add_arrays=())                              # no HTF-FVG add zone (owner #7 revised)
+               add_arrays=(),                              # no HTF-FVG add zone (owner #7 revised)
+               fomc_no_reentry=False, nfp_first_hour=False, fed_chair_skip_am=False, fomc_flat=0,   # news_calendar_times defaults
+               flat_0830_extras=False)
 # the defaults just before the owner directives of 2026-10-18 (A/B baseline for the new defaults).
 # Bug fixes it can NOT undo (no switch, by design): the London-pool look-ahead (London 02:00-05:00
 # pools hidden before 05:00), the _split news-ahead holiday skip (N3.4), the M1.2 swing-low intact
@@ -232,7 +234,9 @@ PRE_OWNER = dict(ob_entry="post_mss", draw_lock="off", htf_resist_cap=False, new
                  # came after the golden numbers were recorded
                  year_end="off", sloppy_mode="off",
                  # entries_stops_sizing defaults (Ep08.17 one-tick pad; E12f no adds on NFP days)
-                 stop_tick_pts=0.0, nfp_no_adds=False, add_arrays=())
+                 stop_tick_pts=0.0, nfp_no_adds=False, add_arrays=(),
+                 # news_calendar_times defaults (N3.5 no re-entry on FOMC, N1 no first hour on NFP, N5.5 chair days)
+                 fomc_no_reentry=False, nfp_first_hour=False, fed_chair_skip_am=False, fomc_flat=0, flat_0830_extras=False)
 LEGACY_1PCT_2PCT = dict(risk_dollars=1000.0, max_total_risk=2000.0)   # E8 / owner #12 preset
 # setups_models review: the FVG-path variants need the FVG path to trade at all - post_mss with the
 # owner #9 lock and #7 cap produced 0 trades on ES 5m 2023H2, so those variants drop both too
@@ -1002,6 +1006,82 @@ DECISIONS = {
     "B18.3_smt_bias_filter": dict(smt_bias="filter"),
     "B18.3_smt_exit_against": dict(smt_exit_against=True),
     "B18.3_smt_exit_against_bank": dict(smt_exit_against=True, smt_bank=True),
+    # --- package news_calendar_times (rule_coverage.md section 3; build_log.md) ----------------------------
+    "N1_nfp_first_hour_off": dict(nfp_first_hour=False, pre_0900=True, ma_deuce=True),
+    "N1_nfp_first_hour": dict(nfp_first_hour=True, pre_0900=True, ma_deuce=True),
+    "D8_nfp_day_from_1000": dict(nfp_day_from=600),
+    "D8_nfp_week_block": dict(nfp_week_block=True),                      # the blocked() fix: relative to the real NFP date
+    "N3_fomc_flat_off": dict(fomc_flat=0),
+    "N3_fomc_flat_before_1330": dict(fomc_flat_before=810),
+    "N3_fomc_eve_risk_half": dict(fomc_eve_risk=0.5),
+    "N3.4_pre_fomc_risk_half": dict(pre_fomc_risk=0.5),
+    "N3_skip_pre_fomc": dict(skip_pre_fomc=True),
+    "N3_fomc_after_am_block": dict(fomc_after_am_block=True),
+    "D8_skip_post_fomc_am": dict(skip_post_fomc_am=True),
+    "N3.5_fomc_reentry_ok": dict(fomc_no_reentry=False),
+    "N3.2_fomc_am_recipe": dict(fomc_am="recipe"),
+    "N3.2_fomc_am_skip": dict(fomc_am="skip"),
+    "N3.3_fomc_only_am_tag": dict(fomc_only_am="tag"),
+    "N3.3_fomc_only_am_scalp": dict(fomc_only_am="scalp"),
+    "N3.3_fomc_only_am_skip": dict(fomc_only_am="skip"),
+    "N3.1_fomc_pm_block_from_1400": dict(fomc_pm_block_from=840),
+    "N3.1_fomc_observe_defer": dict(fomc_observe="defer"),
+    "N3.1_fomc_observe_judas": dict(fomc_observe="judas"),
+    "N3.1_sb_fomc_pm": dict(sb_model=True, sb_fomc_pm=True),
+    "N3_fomc_whipsaw_skip_london": dict(fomc_whipsaw_skip_london=True, london_kz=True, sb_model=True, sb_london=True),
+    "M9.2_fomc_judas": dict(fomc_judas=True),
+    "M9.2_fomc_judas_stage2": dict(fomc_judas=True, fomc_stage2_cont=True),
+    "M9.2_fomc_judas_1425": dict(fomc_judas=True, fomc_judas_end=865),
+    "N4_pre_cpi_small": dict(pre_cpi="small"),
+    "N4_pre_cpi_skip": dict(pre_cpi="skip"),
+    "D9_skip_pre_cpi": dict(skip_pre_cpi=True),
+    "N4_pre_flat_0830_sb_london_md": dict(pre_flat_0830=True, sb_model=True, sb_london=True, ma_deuce=True),
+    "N4_flat_0830_extras_off": dict(flat_0830_extras=False, sb_model=True, sb_london=True, ma_deuce=True),
+    "N5_news_claims": dict(news_claims=True),
+    "N5_news_minutes": dict(news_minutes=True),
+    "N5_news_claims_minutes": dict(news_claims=True, news_minutes=True),
+    "Ep02.1_wait_0945_off": dict(wait_0945=False),
+    "N5.4_skip_two_drivers": dict(skip_two_drivers=True),
+    "N5.4_two_driver_gate_off": dict(two_driver_gate=False, pre_0900=True),
+    "N5.5_fed_chair_open": dict(fed_chair_skip_am=False),
+    "N5.6_skip_auction_am": dict(skip_auction_am=True),
+    "M9_news_judas_block": dict(news_judas="block"),
+    "M9.1_news_judas_wait": dict(news_judas="wait"),
+    "M9.1_news_judas_ref30": dict(news_judas="wait", news_judas_ref_min=30),
+    "T4_or_no_entry": dict(or_no_entry=True),
+    "T4_or_no_entry_1030": dict(or_no_entry=True, or_end=630),
+    "D1_or_no_entry_news1000": dict(or_no_entry=True, or_no_entry_news1000=True),
+    "T4_or_deep": dict(or_no_entry=True, or_deep=True),
+    "D1_or_deep_pd33": dict(or_no_entry=True, or_deep=True, or_deep_pd=0.33),
+    "T4_or_bias_judas": dict(or_bias="judas"),
+    "T4_or_bias_close": dict(or_bias="close"),
+    "T4_or_bias_tag": dict(or_bias="judas", or_bias_filter=False),
+    "T4_or_wide": dict(or_wide=True),
+    "T4_or_wide_1000": dict(or_wide=True, or_wide_end=600, or_wide_adr=0.4),
+    "T5_pre_0820": dict(pre_0820=True),
+    "Ep01.10_am_from_0830": dict(am_from_0830=True),
+    "Ep01.10_am_from_0830_pre_0820": dict(am_from_0830=True, pre_0820=True),
+    "Ep06.1_ny_kz_futures": dict(ny_kz_futures=True),
+    "Ep06.1_london_kz": dict(london_kz=True),
+    "Ep06.1_london_kz_0100": dict(london_kz=True, london_kz_start=60),
+    "T8_lunch": dict(lunch=True),
+    "T8_lunch_pm_carry": dict(lunch=True, pm_carry_draw=True),
+    "T8_pm_carry_draw": dict(pm_carry_draw=True),
+    "T8_draw_done_skip": dict(draw_done_skip=True),
+    "T9_pm_skip_after_1430": dict(pm_skip_after=870),
+    "T9_pm_skip_after_lh": dict(pm_skip_after=870, pm_skip_lh=True),
+    "T9_pm_bad_am_1345": dict(pm_bad_am_start=825),
+    "T9_pm_continue_am_tag": dict(pm_continue_am="tag"),
+    "T9_pm_continue_am_filter": dict(pm_continue_am="filter"),
+    "T9_pm_ob_entry_tag": dict(pm_ob_entry="tag"),
+    "T9_pm_ob_entry_require": dict(pm_ob_entry="require"),
+    "T7_macro_gate": dict(macro_gate=True),
+    "Ep07.8_macro_only_0950": dict(macro_only="0950"),
+    "Ep07.8_macro_only_0950_start": dict(macro_only="0950", macro_by="start"),
+    "Ep07.8_macro_only_all": dict(macro_only="all"),
+    "T7_macro_done_skip": dict(macro_gate=True, macro_done_skip=True),
+    "T7_macro_done_skip_adr05": dict(macro_gate=True, macro_done_skip=True, run_done_adr=0.5),
+    "T7_moc_htf_done": dict(moc_htf_done=True),
 }
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
 
