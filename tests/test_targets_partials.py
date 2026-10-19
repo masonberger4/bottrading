@@ -61,7 +61,7 @@ def flag_log():
 
 def test_defaults_validation_and_aliases():
     p = Params()
-    assert p.htf_resist_mode == "bump" and p.htf_resist_cap and p.htf_bump_max == 2          # owner #7 REVISED default
+    assert p.htf_resist_mode == "bump" and p.htf_resist_cap and p.htf_bump_max == 1          # owner #7 REVISED default
     assert p.mgmt == "ladder" and not p.run_down and p.capture_frac == 0.0
     for kw in (dict(htf_resist_mode="x"), dict(rb_targets="x"), dict(resistance_mode="x"), dict(sd_anchor="x"),
                dict(measuring_anchor="x"), dict(wick_read="x"), dict(mgmt="x"), dict(matrix_targets=("x",)),
@@ -98,7 +98,7 @@ def test_study_has_a_variant_for_every_new_switch():
 
 
 NEW_FIELDS = (
-    "htf_resist_mode", "htf_resist_cap_tfs", "htf_bump_max", "ladder_all_pools", "run_down", "ladder_max_levels",
+    "htf_resist_mode", "htf_resist_cap_tfs", "htf_bump_max", "htf_bump_frac", "htf_bump_below_min", "smt_bank_against_frac", "ladder_all_pools", "run_down", "ladder_max_levels",
     "partial_extra_frac", "partial_extra_cap", "wick_partials", "wick_ce_partial", "wick_partial_tfs",
     "wick_partial_longest", "wick_partial_protect", "wick_partial_min_pts", "sd_half_partial", "sd_neg05_first",
     "halfway_partial", "halfway_min_pts", "smt_bank", "smt_bank_frac", "smt_bank_min_r", "resistance_mode",
@@ -113,7 +113,7 @@ NEW_FIELDS = (
     "tgif_stand_down", "tgif_exits", "tgif_exit_fracs", "target_order", "ladder_fracs_bulk", "ladder_news_day",
     "clean_eq_pref", "close_draw", "pool_rank", "pool_rank_reach", "rel_tfs", "draw_below_eq", "lrlr_max",
     "pool_runner_pts", "wick_daily_src", "wick_week", "wick_tfs", "wick_read", "sb_split")
-KNOBS = {"htf_resist_cap_tfs", "partial_extra_frac", "partial_extra_cap", "wick_partial_longest", "wick_partial_protect",
+KNOBS = {"htf_resist_cap_tfs", "htf_bump_max", "htf_bump_frac", "partial_extra_frac", "partial_extra_cap", "wick_partial_longest", "wick_partial_protect",
          "wick_partial_min_pts", "halfway_min_pts", "smt_bank_frac", "smt_bank_min_r", "res_low_max", "res_high_min",
          "measuring_band", "adr_frac", "adr_early_frac", "sd_swings", "sd_align_tol_pts", "tgif_zone_levels", "tgif_cap",
          "tgif_stand_down", "tgif_exit_fracs", "ladder_fracs_bulk", "pool_rank_reach", "inner_min_pts",
@@ -156,8 +156,10 @@ def test_apply_resist_bump_cap_and_split_long():
     near = conf([(-1, 4996.0, 4992.0, np.inf, 0)])
     assert TP.apply_resist(fake_ctx(near), sd, 5, Params(es_pt=1.0, htf_resist_mode="cap"), 4990.0, 4.0, lv, kd, flag) is None
     assert "x_htf_resist" in log
+    r = TP.apply_resist(fake_ctx(near), sd, 5, Params(es_pt=1.0, htf_bump_below_min=False), 4990.0, 4.0, lv, kd, flag)
+    assert r["bumps"] == [] and r["lv"] == [5010.25]                                         # 1.5 pt < 1R: dropped by the switch
     r = TP.apply_resist(fake_ctx(near), sd, 5, Params(es_pt=1.0), 4990.0, 4.0, lv, kd, flag)
-    assert r["bumps"] == [] and r["lv"] == [5010.25]                                         # 1.5 pt < 1R: not a partial
+    assert r["bumps"] == [4991.5]                                                            # default: a small protected partial (extra path)
     # master off: byte-identical
     off = TP.apply_resist(ctx, sd, 5, Params(es_pt=1.0, htf_resist_cap=False), 4990.0, 4.0, lv, kd, flag)
     assert off["lv"] == lv and off["kinds"] == kd and off["bumps"] == []
@@ -189,6 +191,8 @@ def test_apply_resist_mirror_existing_rung_and_behind_the_trade():
                         lambda n: None)
     assert r["bumps"] == [4997.5]
     r = TP.apply_resist(fake_ctx(two), side(), 5, Params(es_pt=1.0), 4990.0, 4.0, [5020.0], ["pool"], lambda n: None)
+    assert r["bumps"] == [4997.5]                                                            # default htf_bump_max = 1
+    r = TP.apply_resist(fake_ctx(two), side(), 5, Params(es_pt=1.0, htf_bump_max=2), 4990.0, 4.0, [5020.0], ["pool"], lambda n: None)
     assert r["bumps"] == [4997.5, 5003.5]
 
 
@@ -380,11 +384,11 @@ def test_sd_levels_first_beyond_roles_cluster_align_and_fallback():
     pool = [(114.0, "pool")]
     p = Params(es_pt=1.0, sd_targets=True, sd_anchor="broken", sd_levels=(0.5, 1.0, 1.5, 2.0))
     out = TP.sd_levels(ctx, sd, 8, p, sw, 112.0, rr, pool, 103.0, 3.0, [])
-    assert out == [(116.0, "array")]                                      # the first level beyond the pool 114: 108 + 1 x 8
+    assert out == [(116.0, "sd")]                                      # the first level beyond the pool 114: 108 + 1 x 8
     no_pool = TP.sd_levels(ctx, sd, 8, p, sw, 112.0, rr, [], 103.0, 3.0, [])
     assert no_pool == []                                                  # no pool: nothing (the first build)
     fb = TP.sd_levels(ctx, sd, 8, Params(**{**p.__dict__, "sd_no_pool_fallback": True}), sw, 112.0, rr, [], 103.0, 3.0, [])
-    assert fb == [(112.0, "array")]                                       # the first level paying 1R (108 + 0.5 x 8 = 112)
+    assert fb == [(112.0, "sd")]                                       # the first level paying 1R (108 + 0.5 x 8 = 112)
     pr = Params(**{**p.__dict__, "sd_roles": True, "sd_first_beyond": False})
     kinds = {round(v, 1): k for v, k in TP.sd_levels(ctx, sd, 8, pr, sw, 112.0, rr, pool, 103.0, 3.0, [])}
     assert kinds == {112.0: "sd_half", 116.0: "sd_mm", 120.0: "sd", 124.0: "sd_ext"}
@@ -406,7 +410,7 @@ def test_sd_old_block_matches_new_engine_for_the_leg_anchor():
     sw = dict(ext=100.0, ext_i=3)
     p = Params(es_pt=1.0, sd_targets=True, sd_levels=(1.0, 1.5, 2.0), sd_first_beyond=False)
     old = S._targets(ctx_for_targets(sd), sd, 8, 112.0, [], p, (100.0, 112.0), 3)
-    sdv = [v for v, k in old if v > 114 and k == "array"]
+    sdv = [v for v, k in old if v > 114 and k == "sd"]
     assert sdv                                                            # the first build still produces SD levels
 
 
@@ -440,13 +444,12 @@ def test_plan_inert_by_default_and_bump_promotion():
     keep = [(102.0, "array"), (104.0, "pool"), (106.0, "pool")]
     assert _plan(keep) is None                                            # no switch, no bump: the old ladder runs
     p = Params(es_pt=1.0)
-    four = [(101.5, "bump"), (102.0, "array"), (104.0, "pool"), (106.0, "pool")]
+    four = [(102.0, "bump"), (103.5, "array"), (104.5, "pool"), (106.0, "pool")]
     rp = _plan(four)
     lv, kd, fr = TP.fill_plan(_order(rp), p.ladder_fracs, p)
-    # 3 main slots (50/25/25): the bump is protected - it rides along as an extra share, the last main is kept
-    assert lv == [101.5, 102.0, 104.0] or 101.5 in lv
+    # 3 main slots (50/25/25): the bump is a small protected extra, the mains keep their 3 slots and the last one
+    assert lv == [102.0, 103.5, 104.5, 106.0] and kd[0] == "bump"
     assert abs(sum(fr) - 1.0) < 1e-9 and len(lv) == len(fr) == len(kd)
-    assert "bump" in kd
     slow = TP.fill_plan(_order(rp), p.ladder_fracs_slow, p)
     assert len(slow[0]) <= 3 and abs(sum(slow[2]) - 1.0) < 1e-9
 
@@ -743,7 +746,7 @@ def test_scenario_speed_bump_partial_then_the_draw():
     # a partial at the opposing 15m FVG (105 - 0.5), the rest rides to the locked draw 108 - 0.5
     assert [e[:2] for e in exits(t)] == [("t1", 102.75), ("t2", 104.5), ("t3", 107.5)]
     assert "speed_bump" in t.lv_tags and not t.capped
-    assert t.rungs == "102.75:pool:0.50|104.50:bump:0.25|107.50:array:0.25"
+    assert t.rungs == "102.75:pool:0.38|104.50:bump:0.25|107.50:array:0.38"        # the bump is a small extra
     assert t.capture is not None and 0.3 < t.capture <= 1.0
 
 
@@ -765,12 +768,14 @@ def test_scenario_extra_partials_and_capture():
     assert sum(float(x.split(":")[2]) for x in t.rungs.split("|")) == pytest.approx(1.0, abs=0.02)
     assert len(t.exits) == 4 and "sd_half" in t.lv_tags
     c = scen(capture_frac=0.85)[0]
-    assert c.rungs.endswith("106.38:array:0.25") and "capture" in c.lv_tags       # 100 + 0.85 x 7.5
+    assert c.rungs.endswith("106.38:array:0.38") and "capture" in c.lv_tags       # 100 + 0.85 x 7.5
     h = scen(halfway_partial=True, halfway_min_pts=1.0)[0]
-    assert "halfway" in h.rungs and len(h.exits) == 4
+    assert "halfway" not in h.rungs                                        # the speed bump already sits at the middle (within 1 pt)
     u = scen(mgmt="unit")[0]
-    assert [round(float(x.split(":")[2]), 2) for x in u.rungs.split("|")] == [0.33, 0.33, 0.33]
-    lo = scen(resistance_mode="low_full", res_low_max=9)[0]
+    assert [round(float(x.split(":")[2]), 2) for x in u.rungs.split("|")] == [0.38, 0.25, 0.38]     # bump extra + two equal mains
+    keep_bump = scen(resistance_mode="low_full", res_low_max=9)[0]
+    assert "bump" in keep_bump.rungs                                        # low_full yields to the #7 speed bump
+    lo = scen(resistance_mode="low_full", res_low_max=9, htf_resist_cap=False)[0]
     assert lo.rungs == "107.50:array:1.00" and len(lo.exits) == 1
     rd = scen(run_down=True, ladder_all_pools=True)[0]
     assert len(rd.exits) == 3
@@ -881,3 +886,174 @@ def test_look_ahead_es_tgif_and_partner_switches():
     p = Params(**FUT, draw_lock="off", tgif=True, tgif_zone=True, tgif_exits=True, smt_bank=True, smt_bank_min_r=0.0,
                org_reprice=True, adr_target=True, proj_ext=(1.27,), proj_org_k=(1,))
     _no_look_ahead(df, 5, "ES", p, COLS, every=3, meta=meta, exits=True, min_trades=1, partner=pa)
+
+
+# --- review fixes (2026-10-18): bump share, old fractions, SD kinds, wick_ce, target_order, X3g 80% ---------------
+
+def test_main_fractions_keep_the_old_remainder_rule():
+    base = (0.5, 0.25, 0.25)
+    assert TP._ext_fracs(base, 3, False) == [0.5, 0.25, 0.25]
+    assert TP._ext_fracs(base, 2, False) == [0.5, 0.5]                    # the old engine: the last rung takes the remainder
+    assert TP._ext_fracs(base, 1, False) == [1.0]
+    assert TP._ext_fracs((0.8, 0.2), 2, False) == pytest.approx([0.8, 0.2])
+    assert TP._ext_fracs(base, 4, False) == pytest.approx([0.5, 1 / 6, 1 / 6, 1 / 6])
+
+
+def test_speed_bump_is_a_small_extra_and_the_draw_keeps_the_majority():
+    p = Params(es_pt=1.0)
+    keep = [(101.5, "bump"), (104.0, "pool"), (106.0, "array")]
+    lv, kd, fr = TP.fill_plan(_order(_plan(keep)), p.ladder_fracs, p)
+    assert kd == ["bump", "pool", "array"] and abs(sum(fr) - 1.0) < 1e-9
+    assert fr[0] == pytest.approx(p.htf_bump_frac) and fr[0] < max(fr[1:])
+    assert fr[1] + fr[2] > 0.7                                            # most of the position stays for the draw side
+    two = TP.fill_plan(_order(_plan([(101.5, "bump"), (106.0, "array")])), p.ladder_fracs, p)
+    assert two[2] == pytest.approx([0.25, 0.75])                          # draw rung holds the majority
+    big = Params(es_pt=1.0, htf_bump_frac=0.5, partial_extra_cap=0.4)
+    assert TP.fill_plan(_order(_plan(keep, big)), big.ladder_fracs, big)[2][0] == pytest.approx(0.4)    # capped
+    assert TP.bump_fracs([101.5, 104.0, 106.0], [101.5], p.ladder_fracs, p) == pytest.approx([0.25, 0.375, 0.375])
+    assert TP.bump_fracs([104.0, 106.0], [], p.ladder_fracs, p) == list(p.ladder_fracs)
+
+
+def test_sd_levels_carry_an_sd_kind_so_the_close_rule_acts():
+    assert "sd" in TP.SD_KINDS
+    pos = dict(level_kinds=["sd"])
+    p = Params(es_pt=1.0, sd_close_hit=True)
+    assert TP.rung_hit(pos, 0, 105.0, 106.0, 104.0, 610, 5, p, 0.0) == (False, 104.0)      # a wick above is not a hit
+    assert TP.rung_hit(pos, 0, 105.0, 106.0, 105.5, 610, 5, p, 0.0) == (True, 105.5)
+
+
+def test_target_order_keeps_the_locked_draw_last_and_low_full_yields_to_extras():
+    keep = [(102.0, "vi"), (104.0, "pool_eq"), (106.0, "array")]
+    p = Params(es_pt=1.0, target_order=("vi", "eq"))
+    rp = _plan(keep, p, final_T=True, risk=1.0)
+    assert [r["v"] for r in rp["rungs"]][-1] == 106.0                    # the draw is still the last rung
+    rp2 = _plan(keep, p, final_T=False, risk=1.0)
+    assert [r["v"] for r in rp2["rungs"]] == [102.0, 104.0]
+    lo = Params(es_pt=1.0, resistance_mode="low_full", res_low_max=99)
+    rp3 = _plan([(101.5, "bump"), (106.0, "array")], lo)
+    assert any(r["k"] == "bump" for r in rp3["rungs"]) and rp3["fracs_fixed"] is None        # the bump is not removed
+
+
+def test_capture_is_clipped_and_needs_a_real_run():
+    sd = S.Side(1, np.zeros(3), np.ones(3), np.zeros(3), np.zeros(3), 1, 0.0)
+    pos = dict(side=sd, basis=1000.0, n=10, best=101.0)
+    tr = SimpleNamespace(entry=100.0, stop=98.0, exits=[(None, 90.0, 10, "stop")])
+    assert TP.capture_ratio(pos, tr) is None                              # best - entry < 1R: no metric
+    pos2 = dict(pos, best=110.0)
+    assert TP.capture_ratio(pos2, tr) == 0.0                              # a loser reads 0, not -1
+    tr2 = SimpleNamespace(entry=100.0, stop=98.0, exits=[(None, 120.0, 10, "t1")])
+    assert TP.capture_ratio(pos2, tr2) == 1.0
+
+
+def test_manage_smt_bank_against_the_trade():
+    n = 12
+    o = np.full(n, 100.0); c = np.full(n, 100.0)
+    h = np.full(n, 100.5); l = np.full(n, 99.5)
+    c[5] = 102.0; h[5] = 102.2
+    ctx = bar_ctx(None, o, h, l, c)
+    ctx.pd = {}
+    sd = S.Side(1, o, h, l, c, 1, 0.0)
+    lp = l.copy(); lp[5] = 98.9                                           # the sister prints a new low, we hold ours
+    pctx = SimpleNamespace(start=0)
+    ps = {1: S.Side(1, o, h, lp, c, 1, 0.0)}
+    ppos = pd.Series(np.arange(n), index=ctx.idx)
+    p = Params(es_pt=1.0, smt_bank_against_frac=0.8, lot=1)
+    pos, tr = _pos(fill_i=1), _Tr()
+    TP.manage(ctx, sd, pos, tr, 5, ctx.idx[5], p, pctx, ps, ppos)
+    assert [e[3] for e in tr.exits] == ["smt_bank2"] and tr.exits[0][2] == 8 and pos["left"] == 2
+    TP.manage(ctx, sd, pos, tr, 5, ctx.idx[5], p, pctx, ps, ppos)
+    assert len(tr.exits) == 1
+    same = {1: S.Side(1, o, h, l, c, 1, 0.0)}                            # the sister holds: nothing
+    pos2, tr2 = _pos(fill_i=1), _Tr()
+    TP.manage(ctx, sd, pos2, tr2, 5, ctx.idx[5], p, pctx, same, ppos)
+    assert tr2.exits == []
+    pos3, tr3 = _pos(fill_i=1), _Tr()                                    # we broke our own low too: not a divergence
+    TP.manage(ctx, S.Side(1, o, h, lp, c, 1, 0.0), pos3, tr3, 5, ctx.idx[5], p, pctx, ps, ppos)
+    assert tr3.exits == []
+
+
+def test_look_ahead_synthetic_bump_extras_and_smt_against():
+    x, y = _syn_set(seed=4)
+    p = Params(**SYN, smt_bank_against_frac=0.8, smt_bank_min_r=0.0, htf_bump_max=2, htf_bump_frac=0.3)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        _no_look_ahead(x, 5, "RW", p, COLS, every=3, partner=y, exits=True, min_trades=1)
+
+
+@pytest.mark.skipif(not ES, reason="no ES data")
+class TestEsReviewFixes:
+    def _es(self, a="2024-01-08", b="2024-02-09"):
+        es = B.load("ES", 5, source="databento")
+        nq = B.load("NQ", 5, source="databento")
+        cut = lambda d: d[(d.index >= a) & (d.index < b)]
+        return cut(es), cut(nq), B.load_meta("ES", 5)
+
+    def _run(self, window=(), **kw):
+        df, pa, meta = self._es(*window)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return B.run(df, 5, "ES", Params(**FUT, **kw), pa, meta=meta)
+
+    def test_default_bump_leaves_the_draw_the_majority(self):
+        t = self._run()
+        b = t[t.rungs.str.contains("bump")]
+        assert len(b)
+        for rg in b.rungs:
+            sh = [(x.split(":")[1], float(x.split(":")[2])) for x in rg.split("|")]
+            assert sum(s for k, s in sh if k != "bump") > sum(s for k, s in sh if k == "bump")
+            assert sum(1 for k, _ in sh if k == "bump") <= 1
+
+    def test_sd_close_hit_changes_exits(self):
+        kw = dict(draw_lock="off", sd_targets=True, sd_anchor="broken", sd_first_beyond=False, sd_levels=(0.5, 1.0, 1.5, 2.0))
+        win = ("2024-06-03", "2024-06-25")                 # holds a trade whose SD rung (kind "sd") is only reached by a wick
+        a, b = self._run(window=win, **kw), self._run(window=win, sd_close_hit=True, **kw)
+        assert a.rungs.str.contains(":sd:").any()
+        assert len(a) == len(b) and (a.net.round(2).tolist() != b.net.round(2).tolist())
+
+    def test_sb_and_ma_deuce_speed_bump_paths(self):
+        df, pa, meta = self._es()
+        for kw in (dict(sb_model=True), dict(ma_deuce=True)):
+            p = Params(**FUT, **kw)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                full = _no_look_ahead(df, 5, "ES", p, ["entry_time", "entry", "stop", "t1", "shares"], every=3, meta=meta,
+                                      exits=True, min_trades=1)
+            assert len(full) >= 1 and full.lv_tags.str.contains("speed_bump").any(), kw
+
+
+# --- each of these switches changes real trades (not inert), one at a time -------------------------------------
+
+FIRES = {
+    "wick_tfs": dict(wick_tfs=("1h", "4h")),
+    "org_reprice": dict(org_reprice=True),
+    "smt_bank": dict(smt_bank=True, smt_bank_min_r=0.0),
+    "smt_against80": dict(smt_bank_against_frac=0.8, smt_bank_min_r=0.0),
+    "trail_breakaway": dict(trail_breakaway=True),
+    "measuring": dict(measuring_gap=True, measuring_target=True, measuring_pool_pts=0.0),
+    "wick_read": dict(wick_tfs=("1h", "4h"), wick_read="exit"),
+}
+
+
+@pytest.fixture(scope="module")
+def es_fire_base():
+    es = B.load("ES", 5, source="databento")
+    nq = B.load("NQ", 5, source="databento")
+    cut = lambda d: d[(d.index >= "2024-01-08") & (d.index < "2024-03-15")]
+    df, pa, meta = cut(es), cut(nq), B.load_meta("ES", 5)
+
+    def run(**kw):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return B.run(df, 5, "ES", Params(**FUT, draw_lock="off", **kw), pa, meta=meta)
+    return run, run()
+
+
+_sig = lambda t: (t.rungs.tolist(), t.lv_tags.tolist(), t.exit_reason.tolist(), t.net.round(1).tolist())
+
+
+@pytest.mark.skipif(not ES, reason="no ES data")
+@pytest.mark.parametrize("name", list(FIRES))
+def test_switch_changes_real_trades(name, es_fire_base):
+    run, base = es_fire_base
+    assert len(base) >= 10
+    assert _sig(run(**FIRES[name])) != _sig(base), name

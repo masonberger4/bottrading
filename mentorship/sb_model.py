@@ -169,7 +169,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                     pos = dict(trade=tr, side=sd, stop=o_["stop"], t1=o_["t1"], t2=o_["t2"],
                                left=o_["shares"], entry=fill, t1_done=False, n=o_["shares"],
                                levels=o_["levels"], k=0, away=None, fill_i=i, lvx=o_.get("lvx") or {},
-                               fracs=(1.0,) if o_["scalp"] else (_split(p, ctx, getattr(ctx, "hist", []), day, i, t) if p.sb_split else p.ladder_fracs))
+                               fracs=(1.0,) if o_["scalp"] else _bump_fr(o_, p, _split(p, ctx, getattr(ctx, "hist", []), day, i, t) if p.sb_split else p.ladder_fracs))
                     pending = None
                     if sd.l[i] <= pos["stop"]:
                         tr.exits.append((ts, sd.x(pos["stop"]), pos["left"], "stop")); pos["left"] = 0
@@ -205,6 +205,15 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
         if pos is not None:                           # data ended
             out.append(pos["trade"])
     return out
+
+
+def _bump_fr(o: dict, p, base):
+    """Owner #7 revised: ladder shares of an armed order; a speed-bump rung takes the small htf_bump_frac share, the
+    other rungs split the rest like the old ladder (targets.bump_fracs)."""
+    from . import targets as _TP
+    if o.get("bumps") and len(o["levels"]) > 1:
+        return tuple(_TP.bump_fracs(o["levels"], o["bumps"], tuple(base), p))
+    return base
 
 
 def immediate_rebalance(sd, a: int, i: int, tick: float) -> bool:
@@ -271,6 +280,7 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=()):
     if not dr:
         return None
     capped = False
+    bm = []
     if p.sb_target_mode == "fixed":                   # the old list: +sb_target_pts first
         draws = [v for v, kind in dr]
         draw = draws[0]
@@ -291,6 +301,7 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=()):
                 else tv - p.exit_before_pts * p.es_pt
             draws = [d for d in draws if d < T - p.es_pt] + [T]
         cap_tfs, bump_tfs = _TP.resist_cfg(p)             # owner #7 REVISED: cap tfs / speed-bump tfs
+        bm = []
         if cap_tfs and getattr(ctx, "conf", None) is not None:   # #7 cap
             now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
             r = ctx.conf.resistance(now, sd.x(entry), sd.sign, cap_tfs,
@@ -317,8 +328,9 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=()):
         if t1 - entry < p.min_rr * risk * p.sb_min_rr:
             return None
         t2 = (draws[-1] if lock is not None else draws[1]) if (p.sb_runner and len(draws) > 1) else None
-        levels = draws[:len(p.ladder_fracs)] if lock is None else (
-            draws[:len(p.ladder_fracs) - 1] + [draws[-1]] if len(draws) > len(p.ladder_fracs) else draws)
+        nl_ = len(p.ladder_fracs) + len([b for b in bm if b in draws])      # a speed bump is an extra small rung
+        levels = draws[:nl_] if lock is None else (
+            draws[:nl_ - 1] + [draws[-1]] if len(draws) > nl_ else draws)
     chop = getattr(ctx, "chop", None)                # #10: sloppy reasons known at this close
     sl_set = {r for r in getattr(ctx, "sl_day", ()) if session == "PM" or not r.endswith(":PM")}
     if chop is not None and chop.active_before(i + 1):
@@ -348,4 +360,4 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=()):
                 draw_side=0 if lock is None else lock["side"],
                 draw_px=None if lock is None else lock["target"],
                 draw_name="" if lock is None else lock["name"],
-                draw_kind="" if lock is None else lock["kind"])
+                draw_kind="" if lock is None else lock["kind"], bumps=bm)

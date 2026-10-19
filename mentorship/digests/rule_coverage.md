@@ -329,7 +329,7 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | X2 | Exit before arrays, beyond pools | FULL | exit_mode split | (none) | no |
 | X3 | Partials | SIMPLIFIED | ladder | Many sub-rules partial. | no |
 | X3a | Scale out at each pool | SIMPLIFIED | ladder cap 3 | No run-down. | no |
-| X3b | Bulk at first target | SIMPLIFIED | _split | SB ignores _split. JOLTS before 2026 missing. | no |
+| X3b | Bulk at first target | PARTIAL | _split | SB ignores _split. JOLTS before 2026 missing. | no |
 | X3c | Wick-CE partial | SIMPLIFIED | prior-day wick | Scope limited, can be dropped. | no |
 | X3d | -0.5 SD / halfway partials | MISSING | (none) | Not built. | no |
 | X3e | Never the exact FVG edge | FULL | exit_before | (none) | no |
@@ -676,7 +676,7 @@ High:
 Medium:
 - **A6:** Add a breakaway tag, `measuring_gap` (near-edge projection) and `trail_breakaway`. **[built 2026-10-18, targets_partials; see build_log.md]**
 - **A22:** Add `matrix_targets` (breakers, mitigation and rejection blocks), `breaker_first` and `skip_exhausted`. **[built 2026-10-18, targets_partials; see build_log.md]**
-- **L4:** Add `pool_rank` (touch count + TF), `rel_tfs`, `draw_below_eq`, `lrlr_max` and `pool_runner_pts`. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **L4:** Add `pool_rank` (touch count + TF), `rel_tfs`, `draw_below_eq`, `lrlr_max` and `pool_runner_pts`. **[PARTIAL 2026-10-18: lrlr_max / rel_tfs / clean_eq_pref act only with draw_lock="off"; gap-note extras not built; see build_log.md]**
 - **L9:** Add `fvg_over_ob`, `fvg_remainder` (far-edge test) and `weekly_gap_ce_only`. **[built 2026-10-18, targets_partials; see build_log.md]**
 - **L11:** Add `rb_targets` ladder/replace at the body edge. **[built 2026-10-18, targets_partials; see build_log.md]**
 - **L12:** Add sd_levels 0.5-4.5, `sd_anchor` (sweep_leg/fulcrum/london/multi), `sd_cluster_ticks`, `sd_roles`, `sd_align` and `sd_no_pool_fallback`. **[built 2026-10-18, targets_partials; see build_log.md]**
@@ -699,7 +699,7 @@ Low:
 - **L16:** Add `adr_target`/`adr_frac` and `adr_early` (80% off before 10:00). **[built 2026-10-18, targets_partials; see build_log.md]**
 - **L17:** Add `round_step_pts` (targets down and entries up toward price; stops not rounded). **[built 2026-10-18, targets_partials; see build_log.md]**
 - **M14.4:** Add `tgif_exits` (25/25/50 at 20/22.5/25%). **[built 2026-10-18, targets_partials; see build_log.md]**
-- **X3b:** Add JOLTS dates, SB use of _split, and a slow_frac study. **[built 2026-10-18, targets_partials; see build_log.md]**
+- **X3b:** Add JOLTS dates, SB use of _split, and a slow_frac study. **[PARTIAL 2026-10-18: _split and slow_frac built; JOLTS dates before 2026 missing; see build_log.md]**
 - **X3f:** Add `resistance_mode` (full pull at the draw). **[built 2026-10-18, targets_partials; see build_log.md]**
 - **X3h:** Add `capture_frac`. **[built 2026-10-18, targets_partials; see build_log.md]**
 - **D23:** Add `sd_anchor` broken/leg and sd_levels 0.5-4.5. Fix the models.md note. **[built 2026-10-18, targets_partials; see build_log.md]**
@@ -856,7 +856,7 @@ High:
 - **M2.6:** Add `add_in_pd` and `add_cutoff=0.25` (fixed leg at the fill, block adds past the 25% line) and `pool_size_rank`.
 
 Medium:
-- **X3g:** Add `smt_partial` (50% when a sister refuses to break, 80% when the sister breaks against the trade).
+- **X3g:** Add `smt_partial` (50% when a sister refuses to break, 80% when the sister breaks against the trade). **[built 2026-10-18: `smt_bank` 50% + `smt_bank_against_frac` 80%]**
 - **X5:** Umbrella.
 - **X5a:** Add ladder_trail breakaway/measuring and `trail_pad_pts=0.25`.
 - **X6:** Rework `fvg_abort` (close-only arm, confirm on the next bar only, clear the arm, 5m candles).
@@ -1129,12 +1129,14 @@ switches, default off unless the owner directive makes it the default):
 
 | Id | New status | Note |
 |---|---|---|
-| Ep02.10, L9, X3f, Ep02.5 | FULL | owner #7 revised: speed bump default; `htf_resist_mode`, `htf_resist_cap_tfs`, `htf_bump_max` |
+| Ep02.10, L9, Ep02.5 | FULL | owner #7 revised: speed bump default (a small protected partial `htf_bump_frac`, `htf_bump_max=1`, `htf_bump_below_min`); `htf_resist_mode`, `htf_resist_cap_tfs` |
 | X3, X3a, X3c, X3d, X3h, Ep03.19, Ep04.12 | FULL | rung planner: `run_down`, `ladder_all_pools`, `ladder_max_levels`, `wick_partials`, `sd_half_partial`, `halfway_partial`, `capture_frac`, `mgmt="unit"`, `target_order`, `ladder_news_day`; `Trade.capture`, `Trade.rungs` |
-| X3f, X3g | FULL | `resistance_mode`; `smt_bank` |
+| X3f | FULL | `resistance_mode` (low_full yields to any speed bump / wick / SD partial) |
+| X3g | FULL (review fix 2026-10-18) | `smt_bank` (50%, the sister refuses a new high) and `smt_bank_against_frac` (0.8: the sister breaks against the trade) |
 | A6, Ep03.5, L13, Ep08.9 | FULL | `measuring_gap`, `measuring_target` / `measuring_anchor`, `trail_breakaway`, `proj_*`, `mm_targets` |
-| L12, D23, Ep06.4 | FULL (time alignment not coded) | `sd_anchor` leg / broken / downleg / fulcrum / london / multi, `sd_cluster_ticks`, `sd_roles`, `sd_align`, `sd_no_pool_fallback`, `sd_close_hit` |
+| L12, D23, Ep06.4 | PARTIAL (the "time" alignment of `sd_align` not coded: no rule gives a clock) | `sd_anchor` leg / broken / downleg / fulcrum / london / multi, `sd_cluster_ticks`, `sd_roles`, `sd_align`, `sd_no_pool_fallback`, `sd_close_hit` |
 | A22, L9, L14d, A10, A17, L11, A23, X1, Ep01.21, Ep03.22, M8, L16 | FULL | array / pool target sources and filters |
 | M14.2, M14.4 | FULL | `tgif_zone`, `tgif_exits` |
-| L4, Ep04.11, Ep07.1 | FULL (lrlr / clean_eq only without the #9 lock) | `pool_rank`, `rel_tfs`, `draw_below_eq`, `lrlr_max`, `clean_eq_pref`, `pool_runner_pts`, `close_draw` |
-| X3b | PARTIAL | SB uses `_split` (`sb_split`) and a slow_frac study; JOLTS dates before 2026 NOT added (no verifiable source) |
+| L4 | PARTIAL | `pool_rank`, `draw_below_eq` act under the lock; `lrlr_max`, `rel_tfs`, `clean_eq_pref` only with `draw_lock="off"`; NOT built: hrlr_time_k, clear_path, hrlr_news_only, resist_def, session_pool_first, eq_beyond_imb |
+| Ep04.11, Ep07.1 | FULL (clean_eq only without the #9 lock) | `pool_rank`, `rel_tfs`, `draw_below_eq`, `lrlr_max`, `clean_eq_pref`, `pool_runner_pts`, `close_draw` |
+| X3b | PARTIAL | SB uses `_split` (`sb_split`) and a slow_frac study; MISSING: JOLTS release dates before 2026 (no verifiable source, none invented) |

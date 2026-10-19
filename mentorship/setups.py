@@ -1239,7 +1239,8 @@ def more_targets(ctx, sd, i, above, p) -> list:
     if p.daily_vi_targets and conf is not None:
         now = ctx.idx[i] + _tf(ctx)
         for near, ce, far, tf_, _ in conf.opposing(now, sd.x(above), sd.sign, ("D",), (3,)):
-            out += [(sd.x(near), "array"), (sd.x(ce), "array")]
+            kd = "vi" if p.target_order else "array"             # Ep04.12: only the daily VI rungs are told apart
+            out += [(sd.x(near), kd), (sd.x(ce), kd)]
     if p.news_ce_target:
         for d in getattr(ctx, "news_dr", {}).values():
             m = d["made"]

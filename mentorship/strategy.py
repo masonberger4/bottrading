@@ -912,7 +912,12 @@ class Params:
     # is never a target (it is the add zone, add_arrays "htf_fvg"). htf_resist_cap=False switches both off.
     htf_resist_mode: str = "bump"
     htf_resist_cap_tfs: tuple = ("1h", "4h", "D", "W")   # "split": these timeframes cap, the rest bump
-    htf_bump_max: int = 2                # speed bumps taken per trade (the nearest N opposing FVGs)
+    htf_bump_max: int = 1                # speed bumps taken per trade (the nearest N opposing FVGs); review: 1 so most of the
+                                         # position stays for the draw ("take a partial at it and keep the rest for the draw")
+    htf_bump_frac: float = 0.25          # [our interpretation] the share each bump partial takes (a small extra rung, not a main
+                                         # ladder rung); all extras together stay under partial_extra_cap, the draw side keeps the rest
+    htf_bump_below_min: bool = True      # a bump nearer than min_rr x risk (but >= inner_min_pts) is still a protected partial
+                                         # (owner #7: "take a partial at it"); False = it is dropped (first review build)
     # X3 / X3a ladder shape ----------------------------------------------------------------------------
     ladder_all_pools: bool = False       # X3 (Ep 03; 003 ~1:04:25; 027 ~43:36): a partial at EVERY pool on the way
     run_down: bool = False               # X3a "running down equity": one piece per rung (the first keeps ladder_fracs[0],
@@ -934,6 +939,9 @@ class Params:
     smt_bank: bool = False               # X3 / X3g (046 ~1:02:40; 037 ~32:56): the sister refuses to confirm a new high
     smt_bank_frac: float = 0.5           # -> bank this share of what is left (once)
     smt_bank_min_r: float = 0.5          # [our interpretation] only when the trade is at least this many R in profit
+    smt_bank_against_frac: float = 0.0   # X3g (037 ~32:56 "80% off"): the sister index BREAKS against the trade (prints a new low
+                                         # since the fill) while our bar holds its low -> bank this share of what is left (once;
+                                         # 0 = off, 0.8 = the lesson's 80%); same min-R gate [our interpretation]
     resistance_mode: str = "off"         # X3f (089 ~8:46; 092 ~1:28:54; 102 ~2:15:30): "low_full" = a low-resistance run
                                          # (<= res_low_max obstacles) is one full pull at the draw; "high_run" = a
                                          # high-resistance run (>= res_high_min obstacles) runs down equity; "both"
@@ -985,7 +993,9 @@ class Params:
     # L12 / D23 / Ep06.4 standard deviations --------------------------------------------------------------
     sd_anchor: str = "leg"               # D23: "leg" (sweep extreme .. leg high; "sweep_leg"), "broken" (.. the broken MSS
                                          # swing), "downleg" (014: the one-sided down-leg into the low), "fulcrum", "london"
-                                         # (= "manip": the London manipulation swing, once its high was taken), "multi" (all)
+                                         # (= "manip": [our interpretation] execution.md ~205 "on the manipulation leg" is read as the
+                                         # London swing low..high, measured once its high was taken - NOT the sweep leg that runs
+                                         # stops; the sweep leg is "leg"), "multi" (all)
     sd_swings: int = 3                   # [our interpretation] "multi": also the last N confirmed swing legs
     sd_cluster_ticks: int = 0            # L12 (014 ~2:54-4:43; 030 ~26:01): levels from several anchors within N ticks are
                                          # a cluster (high-probability turn); only clusters are kept when any exist
@@ -1832,7 +1842,7 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
         if p.sd_first_beyond:              # only the first SD level beyond the nearest pool (014/030)
             pool = min((v for v, kind in lv if kind == "pool" and v > above), default=None)
             sds = [min((x for x in sds if x > pool), default=None)] if pool is not None else []
-        lv += [(x, "array") for x in sds if x is not None]
+        lv += [(x, "sd") for x in sds if x is not None]
     out = []
     for v, kind in sorted(x for x in set(lv) if x[0] > above):   # merge levels within ~1 ES point
         if not out or v - out[-1][0] > p.es_pt:
@@ -3140,7 +3150,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                     q = pos["left"] if last else min(pos["left"], max(p.lot, _lots(pos["n"] * fr[k], p.lot)))
                     tr.exits.append((ts, sd.x(px_), q, f"t{k + 1}")); pos["left"] -= q
                     if (p.wick_read == "exit" and pos["left"] and pos.get("level_kinds")
-                            and k < len(pos["level_kinds"]) and pos["level_kinds"][k] == "wick"):
+                            and k < len(pos["level_kinds"]) and pos["level_kinds"][k] in ("wick", "wick_ce")):
                         pos["wick_chk"] = (i, lv_[k] + p.exit_before_pts * p.es_pt)      # A23: read the next close
                     pos["k"] += 1
                     pos["last_partial_i"] = i
@@ -3208,7 +3218,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             if (pos["left"] and pos["t1_done"] and pos.get("heavy_dead") is not None
                     and (ts + pd.Timedelta(minutes=tf)).value >= pos["heavy_dead"]):
                 tr.exits.append((ts, sd.x(c), pos["left"], "htf_heavy")); pos["left"] = 0   # #7 Ep02 30m
-            if pos["left"] and (p.smt_bank or p.adr_early or p.wick_read != "off" or p.trail_breakaway):
+            if pos["left"] and (p.smt_bank or p.smt_bank_against_frac or p.adr_early or p.wick_read != "off" or p.trail_breakaway):
                 _TP.manage(ctx, sd, pos, tr, i, ts, p, pctx, psides, ppos)      # X3g / L16 / A23 / A6 partials
             if pos["left"]:
                 pos["best"] = max(pos["best"], h)
@@ -4906,8 +4916,6 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         extra = _lv_finish_targets(ctx, sd, i, above, p, htf_t)    # levels_detectors arrays
         if p.daily_vi_targets or p.news_ce_target:                 # setups_models M1.1 / N6
             more = _SM.more_targets(ctx, sd, i, above, p)
-            if p.target_order:             # Ep04.12: the daily VI rungs are told apart ("vi")
-                more = [(v, "vi") for v, _ in more]
             extra = list(extra) + more
         if extra:
             lv = sorted(set(lv) | set(extra))
@@ -5089,6 +5097,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     if (fixed is None and not scalp and not p.t1_fixed_all and not tags.get("fracs") and not tags.get("single_exit")
             and not (p.moc_pool_exit and session == "PM" and p.last_hour[0] <= t < p.last_hour[1])):
         extras_ = list(inner_ex)
+        if p.htf_bump_below_min:          # owner #7: a bump nearer than min_rr x risk is still a small protected partial
+            extras_ += [(b, "bump", True) for b in bumps if p.inner_min_pts * p.es_pt <= b - entry < p.min_rr * risk - eps]
         if p.sd_half_partial or p.wick_partials:
             extras_ += _TP.partial_extras(ctx, sd, i, p, sw, entry, leg_hi, lv[-1], rr_, lvt)
         rp = _TP.plan(ctx, sd, i, p, entry, risk, above, list(zip(lv, kinds)), final_T, extras_, tg, eq_hi, lvt)

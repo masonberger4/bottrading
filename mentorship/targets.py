@@ -45,11 +45,11 @@ def _ns(ctx) -> np.ndarray:
 
 
 def _hist_hl(ctx):
-    """(bar start ns, high, low, close) of up to 30 regular sessions BEFORE the day frame's first
+    """(bar start ns, high, low, close) of up to 120 regular sessions BEFORE the day frame's first
     (previous-session) block - the frame itself covers that one and today."""
     c = getattr(ctx, "_tp_hist", None)
     if c is None:
-        fr = list(getattr(ctx, "hist", None) or [])[-31:-1]
+        fr = list(getattr(ctx, "hist", None) or [])[-121:-1]      # review: 120 sessions (was 30)
         if fr:
             f = pd.concat(fr)
             c = (np.asarray(f.index.as_unit("ns").asi8), f.high.values.astype(float), f.low.values.astype(float),
@@ -110,7 +110,8 @@ def bump_levels(ctx, sd, i: int, p, entry: float, risk: float, tfs, src, capx=No
     the draw, as exit prices (side space) just before the near edge (htf_resist_buffer_pts). An
     array the entry sits inside (its near edge is behind the entry) is a bump at its CE, or its far
     edge when the CE is behind the entry too [our interpretation]. A bump under min_rr x risk from
-    the entry is not a partial point and is dropped; one beyond a cap is dropped."""
+    the entry stays a (protected, small) partial when htf_bump_below_min is on and it is at least
+    inner_min_pts from the entry; otherwise it is dropped. One beyond a cap is dropped."""
     conf = ctx.conf
     rows = conf.opposing_ext(now_ts(ctx, i) if now is None else now, sd.x(entry), sd.sign, tfs, src, straddle=True)
     buf = p.htf_resist_buffer_pts * p.es_pt
@@ -122,7 +123,7 @@ def bump_levels(ctx, sd, i: int, p, entry: float, risk: float, tfs, src, capx=No
         else:
             ce = (near + far) / 2
             v = (ce if ce > entry else far) - buf
-        if v - entry < p.min_rr * risk:
+        if v - entry < (p.inner_min_pts * p.es_pt if p.htf_bump_below_min else p.min_rr * risk):
             continue
         if capx is not None and v > capx:
             continue
@@ -581,7 +582,7 @@ def sd_levels(ctx, sd, i: int, p, sw: dict, leg_hi: float, rr, lv: list, entry: 
         if p.sd_roles:
             kind = "sd_half" if abs(k - 0.5) < 1e-9 else "sd_mm" if abs(k - 1.0) < 1e-9 else "sd_ext" if k >= 2 else "sd"
         else:
-            kind = "array"
+            kind = "sd"                     # review: always an SD kind so sd_close_hit sees it (exits treat it like "array")
         out.append((float(v), kind))
     if out:
         lvt.append("sd_" + (p.sd_anchor if p.sd_anchor not in ("leg", "sweep_leg") else "leg"))
@@ -669,7 +670,11 @@ def extra_sources(ctx, sd, i: int, p, sw: dict, entry: float, risk: float, leg_h
             out.append((base + (base - ext), "array"))
             lvt.append("mm_target")
     if p.proj_breaker and rr is not None and float(rr[1]) > ext and sw.get("broke") is not None:
-        bz = S._breaker(ctx, sd, sw, rr[0], rr[2], i, p)
+        fun, S.FUNNEL = S.FUNNEL, None                          # review: a helper call must not bump the x_breaker_* counters
+        try:
+            bz = S._breaker(ctx, sd, sw, rr[0], rr[2], i, p)
+        finally:
+            S.FUNNEL = fun
         if bz is not None:
             B = float(rr[1])
             out.append((B + (B - ext), "array"))                 # L13 (070 ~37:31): B + 1 x (B - A)
@@ -891,7 +896,7 @@ def plan_active(p, keep: list, extras: list, tg) -> bool:
     return bool(extras or tg is not None or any(k == "bump" for _, k in keep) or p.run_down or p.ladder_all_pools
                 or p.ladder_max_levels or p.halfway_partial or p.resistance_mode != "off" or p.capture_frac
                 or p.target_order or p.final_htf or p.pool_runner_pts or p.mgmt == "unit" or p.sd_roles
-                or any(k in SD_KINDS or k == "wick_ce" for _, k in keep))
+                or any(k == "wick_ce" for _, k in keep))
 
 
 def _R(v, k, role="main", prot=False):
@@ -903,12 +908,18 @@ def plan(ctx, sd, i: int, p, entry: float, risk: float, above: float, keep: list
     """Build the rung plan from `keep` (sorted exit prices with kinds). Returns "skip" (a TGIF day with
     no room inside the zone), None (inert) or dict(rungs, final_T, fracs_fixed, run_local).
     Order: TGIF zone, final_htf, target_order chain, resistance_mode, capture_frac, pool runner, then
-    the extra rungs (protected ones survive min_rr; none beyond the last main rung or within 1 pt of a
+    the extra rungs (protected ones survive min_rr; low_full yields to any extra - a speed bump, wick or SD
+    partial - so the #7 bump is never silently removed; tgif_exits fixed fractions DO drop extras [documented]; none beyond the last main rung or within 1 pt of a
     main) and the halfway rung between the first two mains."""
     from . import strategy as S
     if not plan_active(p, keep, extras, tg):
         return None
-    mains = [_R(v, k, prot=(k == "bump")) for v, k in keep]
+    mains = [_R(v, k) for v, k in keep]
+    bump_ex = []
+    if len(mains) > 1:                                   # review: a speed bump is a small protected partial, not a main
+        bump_ex = [(m["v"], "bump", True) for m in mains[:-1] if m["k"] == "bump"]
+        mains = [m for j, m in enumerate(mains) if not (j < len(mains) - 1 and m["k"] == "bump")]
+    extras = list(extras) + bump_ex
     fixed = None
     run_local = False
     if tg is not None:                                   # M14.2 / M14.4
@@ -941,11 +952,13 @@ def plan(ctx, sd, i: int, p, entry: float, risk: float, above: float, keep: list
                 picks.append(cand[0])
                 prev = cand[0]["v"]
         if picks:
+            if final_T and mains[-1] not in picks and mains[-1]["v"] > picks[-1]["v"]:
+                picks.append(mains[-1])                  # the locked draw stays the last rung (review)
             mains = picks
             lvt.append("target_order")
     if p.resistance_mode != "off" and mains:
         n = resistance_count(ctx, sd, i, p, entry, mains[-1]["v"])
-        if p.resistance_mode in ("low_full", "both") and n <= p.res_low_max:
+        if p.resistance_mode in ("low_full", "both") and n <= p.res_low_max and not extras:
             mains = [mains[-1]]                          # a low-resistance run: one full pull at the draw
             fixed = (1.0,)
             lvt.append("res_low")
@@ -999,11 +1012,29 @@ def _type_of(m: dict, typ: str, eq_raw: list, p) -> bool:
 
 
 def _ext_fracs(base: tuple, K: int, run: bool) -> list:
+    """Main-rung shares. Same as the old engine: with K <= len(base) the first K-1 rungs take base[k] and the
+    last takes the remainder (a 2-rung ladder on 50/25/25 is 50/50); running down / more rungs than fractions:
+    the first keeps base[0], the rest is even."""
     if K <= 1:
         return [1.0]
     if run or K > len(base):
         return [float(base[0])] + [(1.0 - float(base[0])) / (K - 1)] * (K - 1)
-    return [float(f) for f in base[:K]]
+    head = [float(f) for f in base[:K - 1]]
+    return head + [max(1.0 - sum(head), 0.0)]
+
+
+def bump_fracs(levels: list, bumps: list, base: tuple, p) -> list:
+    """Shares for a ladder that carries speed-bump rungs (Silver Bullet / Ma Deuce, which keep their own ladder
+    code): each bump rung (a level within one point of a bump, never the last) takes htf_bump_frac (all bumps
+    together under partial_extra_cap), the other rungs share the rest like the old ladder (_ext_fracs)."""
+    isb = [k < len(levels) - 1 and any(abs(v - b) <= p.es_pt for b in bumps) for k, v in enumerate(levels)]
+    nb = sum(isb)
+    if not nb:
+        return [float(f) for f in base]
+    per = min(p.htf_bump_frac, p.partial_extra_cap / nb)
+    main = iter(_ext_fracs(base, len(levels) - nb, False))
+    rest = 1.0 - per * nb
+    return [per if b else next(main) * rest for b in isb]
 
 
 def fill_plan(o: dict, base: tuple, p):
@@ -1020,7 +1051,7 @@ def fill_plan(o: dict, base: tuple, p):
     cap = p.ladder_max_levels or (6 if (run or p.ladder_all_pools) else len(base))
     elig = mains
     if p.ladder_all_pools:
-        elig = [m for m in mains if m["k"] in POOL_KINDS or m["k"] == "bump"] or mains
+        elig = [m for m in mains if m["k"] in POOL_KINDS] or mains
         if mains[-1] not in elig:
             elig = elig + [mains[-1]]
     K = max(min(len(elig), cap), 1)
@@ -1049,11 +1080,12 @@ def fill_plan(o: dict, base: tuple, p):
             j = kinds.index("sd_ext")
             small = fr.index(min(fr))
             fr[j], fr[small] = fr[small], fr[j]
-    n_ex = len(extras)
-    per = min(p.partial_extra_frac, p.partial_extra_cap / n_ex) if n_ex else 0.0
-    tot = per * n_ex
+    want = [p.htf_bump_frac if e["k"] == "bump" else p.partial_extra_frac for e in extras]
+    scale = min(1.0, p.partial_extra_cap / sum(want)) if want else 1.0
+    shares = [w * scale for w in want]
+    tot = sum(shares)
     s = sum(fr) or 1.0
-    items = [(m["v"], m["k"], f * (1.0 - tot) / s) for m, f in zip(chosen, fr)] + [(e["v"], e["k"], per) for e in extras]
+    items = [(m["v"], m["k"], f * (1.0 - tot) / s) for m, f in zip(chosen, fr)] + [(e["v"], e["k"], sh) for e, sh in zip(extras, shares)]
     items.sort(key=lambda x: x[0])
     return [x[0] for x in items], [x[1] for x in items], [x[2] for x in items]
 
@@ -1087,7 +1119,9 @@ def breakaway_gap(sd, ext_i: int, i: int):
 
 def manage(ctx, sd, pos: dict, tr, i: int, ts, p, pctx, psides, ppos) -> None:
     """Mid-trade partials / stops run on each closed bar (after the bar's stop and ladder tests; changes
-    take effect from the next bar):
+    take effect from the next bar). smt_bank, smt_bank_against_frac, adr_early, wick_revisit and the SD close hit
+    are market-on-close exits filled at the deciding bar's close (like htf_heavy / ce_close / lvx exits) - slightly
+    optimistic against "armed on bar i, fills from bar i+1", but they use no data past that close [documented]:
       smt_bank        X3 / X3g (046 ~1:02:40; 037 ~32:56): our bar prints a new high since the fill, the sister
                       index does not -> bank smt_bank_frac of what is left (once), when >= smt_bank_min_r in profit
       adr_early       L16 (cc08_001 ~1:53): the day's range reached ADR5 before 10:00 -> take adr_early_frac, keep a runner
@@ -1109,6 +1143,18 @@ def manage(ctx, sd, pos: dict, tr, i: int, ts, p, pctx, psides, ppos) -> None:
                 tr.exits.append((ts, sd.x(c), q, "smt_bank"))
                 pos["left"] -= q
                 pos["smt_banked"] = True
+    if p.smt_bank_against_frac and not pos.get("smt_banked2") and pos["left"] and pctx is not None and i > pos["fill_i"]:
+        risk_s = abs(tr.entry - tr.stop)
+        if risk_s > 0 and (c - basis) / risk_s >= p.smt_bank_min_r:          # X3g: the sister breaks against the trade
+            ps = psides[sd.sign]
+            j = ppos.index.searchsorted(ctx.idx[i], side="right") - 1
+            jf = ppos.index.searchsorted(ctx.idx[pos["fill_i"]], side="right") - 1
+            if (jf >= pctx.start and j > jf and ps.l[j] < ps.l[jf:j].min() - 1e-9
+                    and sd.l[i] > sd.l[pos["fill_i"]:i].min() - 1e-9):
+                q = min(pos["left"], max(p.lot, S._lots(pos["left"] * p.smt_bank_against_frac, p.lot)))
+                tr.exits.append((ts, sd.x(c), q, "smt_bank2"))       # market-on-close exit, like smt_bank
+                pos["left"] -= q
+                pos["smt_banked2"] = True
     if p.adr_early and not pos.get("adr_done") and pos["left"] and t + tf <= 600:
         adr = S.adr5(getattr(ctx, "hist", [])[-5:])
         if adr:
@@ -1140,13 +1186,14 @@ def capture_ratio(pos: dict, tr) -> float | None:
         return None
     basis = pos["basis"] / pos["n"]
     best = pos.get("best")
-    if best is None or best - basis <= 1e-9 or not tr.exits:
+    risk = abs(getattr(tr, "entry", 0.0) - getattr(tr, "stop", 0.0))
+    if best is None or best - basis < max(risk, 1e-9) or not tr.exits:     # review: no meaningful run (< 1R) = no metric
         return None
     q = sum(e[2] for e in tr.exits)
     if q <= 0:
         return None
     avg = sum(sd.sign * e[1] * e[2] for e in tr.exits) / q
-    return round(float((avg - basis) / (best - basis)), 4)
+    return round(float(min(max((avg - basis) / (best - basis), 0.0), 1.0)), 4)     # clipped to [0, 1]
 
 
 def _pool_weight(name: str) -> float:

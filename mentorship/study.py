@@ -390,6 +390,10 @@ DECISIONS = {
     "X3_extra_share": dict(draw_lock="off", wick_partials=True, sd_half_partial=True, halfway_partial=True,
                            partial_extra_frac=0.15, partial_extra_cap=0.45),
     "X3g_smt_bank": dict(smt_bank=True, smt_bank_frac=0.5, smt_bank_min_r=0.5),
+    "X3g_smt_bank_against80": dict(smt_bank_against_frac=0.8, smt_bank_min_r=0.5),    # the 80% half: sister breaks against the trade
+    "Ep02.10_bump_max2": dict(htf_bump_max=2),                            # two speed bumps (review: default is 1)
+    "Ep02.10_bump_frac50": dict(htf_bump_frac=0.5),
+    "Ep02.10_bump_drop_inner": dict(htf_bump_below_min=False),            # a bump under min_rr x risk is dropped
     "X3f_resistance_low_full": dict(draw_lock="off", resistance_mode="low_full", res_low_max=1),
     "X3f_resistance_both": dict(draw_lock="off", resistance_mode="both", res_low_max=0, res_high_min=2),
     "X3h_capture_85": dict(capture_frac=0.85),

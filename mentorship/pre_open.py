@@ -184,6 +184,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
         if np.isfinite(cap) and (not levels or max(raw) >= cap - p.es_pt):
             levels.append(float(cap))
         levels = levels or [target]
+    bump_set = []
     if bump_tfs and getattr(ctx, "conf", None) is not None:     # owner #7 REVISED: a partial at the opposing HTF FVG
         shim = SimpleNamespace(sign=sign, x=lambda v: sign * v)  # between the entry and the draw (the speed bump)
         bumps = _TP.bump_levels(ctx, shim, k8, p, entry, risk, bump_tfs, tuple(CF_SRC[x] for x in p.htf_resist_src),
@@ -191,6 +192,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
         bumps = [b for b in bumps if entry + p.sb_room_pts * p.es_pt <= b < max(levels) - p.es_pt]
         if bumps:
             levels = sorted(set(levels) | set(bumps))
+            bump_set = list(bumps)
             lvt.append("speed_bump")
     chop = getattr(ctx, "chop", None)
     sloppy = set(r for r in getattr(ctx, "sl_day", ()) if not r.endswith(":PM"))
@@ -269,7 +271,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
             if i > fill_i and (not pre_t1 or not kl) and sc[i] < lvl_:
                 tr.exits.append((ctx.idx[i], x(sc[i]), left, nm_)); return [tr]
         if len(levels) > 1:                           # M15 md_ladder: scale out, BE after the first
-            fr = p.ladder_fracs
+            fr = _TP.bump_fracs(levels, bump_set, p.ladder_fracs, p) if bump_set else p.ladder_fracs
             while kl < len(levels) and left and sh[i] >= levels[kl] + p.exit_fill_through * p.tick:
                 q = left if kl == len(levels) - 1 else min(left, max(p.lot, _lots(n_units * fr[min(kl, len(fr) - 1)], p.lot)))
                 tr.exits.append((ctx.idx[i], x(levels[kl]), q, f"t{kl + 1}")); left -= q
