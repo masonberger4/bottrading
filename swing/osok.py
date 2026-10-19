@@ -38,7 +38,8 @@ class Params:
     ob_entry: str = "high"            # "high" (fair) | "open" (conservative)
     mt: str = "range"                 # multi-candle OB mean threshold: "range" (2023) | "body" (CC)
     matrix_order: str = "spoken"      # "spoken" | "slide"
-    stop: str = "swing"               # "swing" (beyond the sweep / swing low) | "array"
+    stop: str = "swing"               # "swing" (beyond the prior swing low) | "array" (beyond the OB candle)
+    stop_tf: str = "1h"               # timeframe of the swing low the stop sits beyond: "1h" | "4h" | "D"
     target: str = "ict"               # "ict" (opposing array one TF lower) | "prev_week"
     fib_gate: bool = True             # target must converge with 1.27 / 1.68 / 1.0 projection
     fib_tol: float = 0.25             # x ADR5 [our interpretation]
@@ -95,6 +96,11 @@ class Prepared:
         self.h1_highs, self.h1_lows = L.pivots(self.h, self.l, n=1)
         f4 = frames["4h"]
         self.h4hi, self.l4 = L.pivots(f4.high.to_numpy(float), f4.low.to_numpy(float), n=1)
+        self.sw = {}
+        for tf, fr in (("1h", h1), ("4h", f4), ("D", frames["D"])):
+            ph, pl = L.pivots(fr.high.to_numpy(float), fr.low.to_numpy(float), n=1)
+            self.sw[tf] = tuple(np.array(x, float) for x in (
+                [q.known for q in ph], [q.price for q in ph], [q.known for q in pl], [q.price for q in pl]))
         dh, dl = d.high.to_numpy(float), d.low.to_numpy(float)
         self.adr5 = pd.Series(dh - dl).rolling(5).mean().to_numpy()
         body_hi = np.maximum(d.open, d.close).to_numpy(float)
@@ -125,18 +131,20 @@ def _conviction(pr: Prepared, k: int, level: float) -> int:
 
 
 def _sweep_stop(pr: Prepared, k: int, below: float, side: int) -> float | None:
-    """Nearest known 1h swing low below `below` (high above, shorts), 1 tick beyond."""
+    """Nearest known swing low below `below` (swing high above, for shorts) on timeframe
+    `stop_tf`, 1 tick beyond (cc06_004 ~21:17: beyond the prior swing low's liquidity)."""
     p = pr.p
-    best = None
+    tf = p.stop_tf
+    fr = pr.f[tf]
+    kn = int(fr.end.searchsorted(pr.h1.start.iloc[k], side="right"))   # bars closed before bar k
+    hk, hp, lk, lp = pr.sw[tf]
     if side > 0:
-        for q in pr.h1_lows:
-            if q.known < k and q.price < below and (best is None or q.price > best):
-                best = q.price
-        return None if best is None else best - p.tick
-    for q in pr.h1_highs:
-        if q.known < k and q.price > below and (best is None or q.price < best):
-            best = q.price
-    return None if best is None else best + p.tick
+        pr_ = lp[lk < kn]
+        pr_ = pr_[pr_ < below]
+        return float(pr_.max()) - p.tick if len(pr_) else None
+    pr_ = hp[hk < kn]
+    pr_ = pr_[pr_ > below]
+    return float(pr_.min()) + p.tick if len(pr_) else None
 
 
 def _targets(pr: Prepared, k: int, entry: float, stop: float, side: int, frame_tf: str,
