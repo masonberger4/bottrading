@@ -272,3 +272,133 @@ def two_drivers(d: date, claims: bool = False, conf: bool = False) -> bool:
     PMI and ISM pair counts as one driver). N5.4 (100 ~50:59-1:40:56)."""
     rt = [r for r in release_times(d, claims=claims, conf=conf) if r < 840]
     return (510 in rt and any(r in rt for r in (585, 600)))
+
+
+# --- day_week_context: holidays, weeks, early closes, roll (N7 family) --------------------------------
+# Pure calendar functions of the date (no bars). [our interpretation] throughout: "a holiday" is a NYSE
+# weekday holiday (claude_hf.daytypes.HOLIDAYS); the Columbus / Veterans Day bank holidays (market open) are
+# an opt-in extra (N7.1 "and bank holidays").
+
+def is_market_holiday(d: date) -> bool:
+    """A weekday on which the exchange is closed."""
+    return d.weekday() < 5 and d in DT.HOLIDAYS
+
+
+def prev_weekday(d: date) -> date:
+    x = d - timedelta(days=1)
+    while x.weekday() > 4:
+        x -= timedelta(days=1)
+    return x
+
+
+def next_weekday(d: date) -> date:
+    x = d + timedelta(days=1)
+    while x.weekday() > 4:
+        x += timedelta(days=1)
+    return x
+
+
+def bank_holiday(d: date) -> bool:
+    """Columbus Day (2nd Monday of October) and Veterans Day (Nov 11, observed on the nearest weekday): bank
+    holidays on which the stock market is open (N7.1)."""
+    if d.month == 10 and d.weekday() == 0 and 8 <= d.day <= 14:
+        return True
+    if d.month == 11:
+        v = date(d.year, 11, 11)
+        obs = v - timedelta(days=1) if v.weekday() == 5 else (v + timedelta(days=1) if v.weekday() == 6 else v)
+        return d == obs
+    return False
+
+
+def is_holiday_eve(d: date, bank: bool = False) -> bool:
+    """N7.1 the last trading day before a long weekend / market holiday: a weekday holiday lies between d and
+    the next trading day (Friday before a Monday holiday, Thursday before Good Friday, the day before a
+    midweek holiday). bank=True also counts the day before a bank holiday."""
+    if not is_trading_day(d):
+        return False
+    x = next_weekday(d)
+    if x in DT.HOLIDAYS:
+        return True
+    return bool(bank and bank_holiday(x))
+
+
+def is_post_holiday(d: date) -> bool:
+    """N7.2 the previous weekday was a market holiday (the morning after: Tuesday after a Monday holiday, Monday
+    after a Friday holiday, the Friday after Thanksgiving ...)."""
+    return is_trading_day(d) and prev_weekday(d) in DT.HOLIDAYS
+
+
+def week_dates(d: date) -> list[date]:
+    mon = d - timedelta(days=d.weekday())
+    return [mon + timedelta(days=k) for k in range(5)]
+
+
+def holiday_in_week(d: date) -> bool:
+    """N7.3 the Monday-Friday week holds a weekday market holiday."""
+    return any(x in DT.HOLIDAYS for x in week_dates(d))
+
+
+def week_day_index(d: date) -> int:
+    """1-based place of d among the trading days of its Monday-Friday week (a Monday holiday makes Tuesday 1)."""
+    return 1 + sum(1 for x in week_dates(d) if x < d and is_trading_day(x))
+
+
+def is_week_start(d: date) -> bool:
+    """d is the first trading day of its week (Monday, or Tuesday after a Monday holiday: it 'acts like Monday')."""
+    return is_trading_day(d) and week_day_index(d) == 1
+
+
+def after_monday_holiday(d: date) -> bool:
+    """N7.2 the week's Monday was a holiday (Tuesday acts like Monday, Wednesday is the likely reversal day)."""
+    return week_dates(d)[0] in DT.HOLIDAYS
+
+
+def first_trading_day_of_year(d: date) -> bool:
+    return is_trading_day(d) and next_trading_day(date(d.year - 1, 12, 31)) == d
+
+
+def _thanksgiving(year: int) -> date:
+    x = date(year, 11, 1)
+    x += timedelta(days=(3 - x.weekday()) % 7)
+    return x + timedelta(days=21)
+
+
+def early_close_min(d: date) -> int:
+    """N7.1 EARLY_CLOSE: the cash-session close of a shortened day in minutes (13:00 = 780), else 0: the day
+    after Thanksgiving, Christmas Eve (a trading weekday) and July 3 when July 4 is a weekday holiday."""
+    if not is_trading_day(d):
+        return 0
+    if d == _thanksgiving(d.year) + timedelta(days=1):
+        return 780
+    if d.month == 12 and d.day == 24:
+        return 780
+    if d.month == 7 and d.day == 3 and date(d.year, 7, 4) in DT.HOLIDAYS and date(d.year, 7, 4).weekday() < 5:
+        return 780
+    return 0
+
+
+def roll_week(d: date) -> bool:
+    """N7.5 the index-futures roll week, independent of the other day types (claude_hf day_type gives the tag away
+    to any event): in a quarterly month (Mar / Jun / Sep / Dec) the Monday-Friday week that holds the roll Thursday,
+    8 days before the quarterly expiry (the third Friday). [our interpretation] The roll week is the week BEFORE
+    expiry week; the real roll day of the data is the meta `roll` flag (Trade.roll_day)."""
+    if d.month not in (3, 6, 9, 12):
+        return False
+    exp = DT.expiration(d.year, d.month)
+    roll_thu = exp - timedelta(days=8)
+    return week_dates(d)[0] == roll_thu - timedelta(days=3)
+
+
+def trading_days_between(a: date, b: date) -> int:
+    """Trading days strictly after a up to and including b (b <= a gives 0)."""
+    n, x = 0, a
+    while x < b:
+        x += timedelta(days=1)
+        if is_trading_day(x):
+            n += 1
+    return n
+
+
+def month_trading_day(d: date) -> int:
+    """1-based trading-day number of d in its month."""
+    return trading_days_between(date(d.year, d.month, 1) - timedelta(days=1), d)

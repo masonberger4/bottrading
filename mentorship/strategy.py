@@ -57,6 +57,8 @@ from . import calendar as _calendar  # noqa: F401  (loads 2019-2025 event dates)
 from .calendar import next_trading_day, release_times
 from . import levels as L
 from .confluence import TFS as CF_TFS
+from . import daycontext as _DW
+from .daycontext import SEASONAL_DOW20
 
 # ICT macro windows (T6): 08:50-09:10, 09:50-10:10, 10:50-11:10, 11:50-12:10, 13:10-13:40,
 # 14:50-15:10, 15:15-15:45
@@ -1260,6 +1262,157 @@ class Params:
     moc_htf_done: bool = False           # T7 (Ep 01; 030 ~20:06): the MOC macro does nothing when the run / HTF target is done
     run_done_adr: float = 1.0            # "the day's run is done": the day's range so far >= this x ADR5 (or the session draw delivered)
 
+    # ---- package day_week_context (rule_coverage.md section 3; mentorship/daycontext.py; build_log.md) ---------------
+    # B11 / B11b / B11c candle-pattern day context (completed daily / weekly candles only)
+    b11_inside_week: str = "off"         # B11 / B11c (103 ~12:53): the last completed week was an inside week: "tag", or "scalp" -
+                                         # expansion within b11_inside_week_days candles (a daily close outside the inside week's
+                                         # range) else scalp-only for the rest of the week [our interpretation]
+    b11_inside_week_days: int = 2
+    b11_inside_expansion: str = "off"    # B11 / B11c (012 ~16:17): yesterday an inside day -> a large range is due: "tag", or
+                                         # "no_chop_skip" (the consolidation stand-aside, #10 chop, is waived that day)
+    outside_day_rule: str = "off"        # B11b (081 ~1:31): a down-close outside day -> lower prices until that day's high is taken:
+                                         # "tag", or "block" (no longs until today's price has traded that high)
+    outside_day_mirror: bool = True      # [our interpretation] the up-close outside day blocks shorts until its low trades
+    nr_tags: tuple = ()                  # B11 (cc06_007 ~21:24): tag "nr3" / "nr7" (yesterday has the smallest range of 3 / 7 days)
+                                         # and "inside_body" (yesterday's body inside the day before's body)
+    nr_expansion: str = "off"            # B11: an NR / inside-bar day -> expansion, no direction: "tag" or "no_chop_skip"
+    # B15 ORG direction tell and gap x bias (030 ~1:27:01; 055 ~17:50)
+    org_tell: str = "off"                # "tag" / "filter": the 09:30 gap with NO attempt back to org_tell_level of it by
+                                         # 09:30 + org_break_min is very bullish (gap up) / bearish (gap down): only that side after 10:00
+    org_tell_level: float = 0.5          # the attempt = price back to this share of the way to the prior close (50%)
+    org_tell_wait: bool = False          # [our interpretation] no AM entry before the tell is known (10:00)
+    org_bias_gap: str = "off"            # "tag" / "filter" (AM only): with the htf bias on the gap's side (bullish + gap up) price
+                                         # reprices into the gap first, then goes higher (trade the bias side only after it); against it
+                                         # (bearish + gap up) the fill is a false run (trade the bias side only)
+    org_bias_src: str = "draw"           # the htf table column that is the bias: react / draw / pd
+    org_gap_fill_frac: float = 0.5       # "repriced" = price back to this share of the gap
+    # B16 Sunday gap scenarios (futures only: needs the Sunday 18:00 open; 028 ~1:09:37-1:16:09)
+    sunday_scenario: str = "off"         # "tag" / "filter": at Monday 09:30 the scenarios "fill" (back to the gap CE) / "away"
+                                         # (ran away from it) / "neither"; "filter": neither = no trade Monday (trade from Tuesday)
+    sunday_away_mult: float = 1.0        # [our interpretation] "away" = beyond the Sunday open by >= this x the gap
+    sunday_min_gap_pts: float = 1.0      # smaller gaps = "no_gap" (neither scenario can play out)
+    # N7 holidays and calendar (cc08_006 ~5:06; 090 ~8:00; 072 ~3:36; 079 ~8:54; 093 ~0:32)
+    skip_holiday_eve: bool = False       # N7.1: no trading the day before a long weekend / market holiday
+    holiday_eve_bank: bool = False       # N7.1 "and bank holidays": Columbus / Veterans Day count as holidays
+    early_close_flat: bool = True        # N7.1 EARLY_CLOSE: flat before a shortened day's close (those days are not loaded by
+                                         # backtest.days(); matters for live / custom frames)
+    skip_post_holiday_am: bool = True    # N7.2 (090 ~8:00): the morning after a holiday is choppy - no AM trade (PM / next day)
+    post_holiday_pm_sync: bool = False   # N7.2: the PM trades only once ES / NQ move in step (needs the partner instrument)
+    holiday_week_thu_fri: str = "off"    # N7.3 (072 ~3:36): holiday weeks deliver cleaner Thu / Fri: "trade" lifts the NFP-week
+                                         # Thu / Fri block in a holiday week (the holiday_week tag is always set)
+    year_first_am_from: int = 0          # N7.4 / Ep02.7: first trading day of the year, no AM entry before this minute (e.g. 600)
+    roll_week_src: str = "calendar"      # N7.5: where the roll week comes from: "calendar" (the week of the roll Thursday, 8 days before the
+                                         # third Friday), "data" (the databento roll flag / contract change known by the day's first bar:
+                                         # the roll's own day, tagged roll_day) or "either"
+    skip_roll_week: bool = False         # N7.5 (093 ~0:32): the futures roll week is more volatile / choppy - no trading
+    roll_risk: float = 1.0               # N7.5: risk multiplier in the roll week (e.g. 0.5)
+    august_risk: float = 1.0             # N7.6 (079 ~8:54): August "meat grinder": trade small (risk multiplier from august_from_day)
+    august_from_day: int = 1             # 15 = the last two weeks only
+    skip_august: bool = False            # N7.6: stand aside in August (from august_from_day)
+    low_vol_inside: str = "off"          # Ep01.8 / N7.4 (Ep 01 ~16:42): the last trading day of the year is a low-volatility inside
+                                         # day: "tag", "scalp" or "skip"
+    low_vol_holiday_adj: bool = False    # also the days next to a market holiday
+    first_day_wait: int = 0              # Ep02.7 (Ep 02 "don't rush"): first trading day of the year, AM entries from this minute (> 600)
+    first_day_skip_am: bool = False      # Ep02.7: no AM trade on the first trading day of the year (PM allowed)
+    # N8 day type
+    adr_basis: str = "rth"               # N8.5 / X16a: the ranges of the day_week_context rules: "rth" (09:30-16:00) or "eth" (full sessions)
+    consol_skip: bool = True             # N8.1 (cc01_001): consolidation = no trade - the #10 chop test (range < 0.35 ADR5 and 4+ crosses of
+                                         # the midnight open) stands aside; False = chop never stops a session (expansion resumes trading)
+    trend_recipe: str = "off"            # N8.2 (cc10_009 ~1:17-2:46): small / contracting prior ranges + price just traded into a daily
+                                         # array + high / medium 08:30 news: "tag", "only" (trade only such days), "side" (the array's side)
+    trend_small_frac: float = 0.8        # [our interpretation] small = yesterday's range < this x ADR5
+    trend_contract: bool = False         # require three contracting ranges (instead of small OR contracting)
+    trend_news: tuple = ("high", "medium")
+    trend_array_days: int = 2            # price "just traded into" the array within this many sessions
+    consol_day_rules: str = "off"        # N8.3 (cc10_008 ~1:51-17:19): consolidation-day predictors (no report today / HTF array / HTF 50% /
+                                         # holiday eve / auction): "tag" or "apply" (AM scalps only if the opening range is small, out by
+                                         # 11:00, PM only if the AM has not run a stop pool)
+    consol_predictors: tuple = ("no_report", "htf_array", "htf_50", "holiday_eve", "auction")
+    consol_min_predictors: int = 1
+    consol_or_frac: float = 0.25         # [our interpretation] a small opening range: 09:30-10:00 range < this x ADR5
+    consol_am_out: int = 660             # out by 11:00
+    consol_eq_tol: float = 0.1           # [our interpretation] "at the HTF 50%": within 10% of the prior week's range of its midpoint
+    consol_pm_rule: bool = True
+    consol_pm_pools: tuple = ("pd", "london", "draw")   # N8.3 "the AM ran a stop pool": the prior day's high / low, London's, the AM lock's own
+                                         # draw; "on" (the overnight range: nearly always run) is opt-in [our interpretation]
+    big_day_am_skip: bool = False        # N8.4 (033 ~13:27): a very large prior range or a large ORG gap -> the first 30-45 min chop:
+                                         # sacrifice the AM (everything before 13:30), keep the PM
+    big_day_range_mult: float = 1.5      # [our interpretation] very large = prior range > this x the ADR5 before it
+    big_day_org_frac: float = 0.5        # [our interpretation] large ORG = |open - prior close| >= this x ADR5
+    expansion_due: bool = False          # N8.5 (cc08_006 ~23:33): prior range < expansion_frac x ADR5 -> expansion_due tag
+    expansion_frac: float = 1.0
+    expansion_targets: tuple = ()        # N8.5: multiples of ADR5 above (below) today's extreme as array targets, e.g. (1.5, 2.0)
+    sd_no_hold: bool = False             # N8.6 (024 ~13:57; cc07_002 ~7:42) seek & destroy: once both sides of yesterday's range ran
+                                         # today, new trades are scalps (no hold, no runner)
+    sd_week_skip: str = "off"            # N8.6: S&D weeks (waiting on rates / NFP, July-August): "tag" or "skip"
+    sd_week_months: tuple = (7, 8)
+    sd_week_news: bool = True            # FOMC and NFP weeks count as S&D weeks
+    sd_context_required: bool = False    # sd_no_hold only inside an S&D week
+    # N9 in-day no-trade conditions
+    eve_draw: bool = False               # N9.2: Trade.eve_draw_px / side / done - the draw at the prior close and whether it was delivered pre-09:30
+    pre_draw_pm: bool = False            # N9.2 (022 ~1:16:11): that draw delivered before 09:30 -> choppy 09:30, no AM trade, PM kept
+    objective_done_skip: bool = False    # N9.3 (015 ~16:22): the day's objective delivered before 12:00 (the AM lock, or a morning
+                                         # trade's last level) -> the PM (and lunch) are done
+    min_on_range_frac: float = 0.0       # N9.4 (015 ~11:58): overnight range < this x ADR5 -> no AM trade (0 = off)
+    min_raid_pts: float = 0.0            # N9.4: pre-09:30 raid shallower than this many ES pts -> no AM trade (0 = off)
+    raid_ref: str = "pd"                 # the raided level: "pd" (the prior day's high / low) or "london" (the London range)
+    on_range_from: str = "midnight"      # the overnight range from midnight or the "globex" 18:00 reopen (needs the evening bars)
+    macro_no_move: bool = False          # N9.5 (073 ~30:51): the AM macro (09:50-10:10, 10:50-11:10) makes no move toward the draw ->
+                                         # the AM is over (the charts are closed)
+    macro_no_move_pm: bool = False       # the same for the PM macros (13:10-13:40, 14:50-15:10)
+    macro_no_move_wins: tuple = ((590, 610), (650, 670))
+    macro_no_move_pm_wins: tuple = ((790, 820), (890, 910))
+    macro_move_pts: float = 0.0          # [our interpretation] "a move" = the window's extreme beyond the reference extreme by > this
+    macro_ref_min: int = 30              # reference = the extremes of the minutes before the window
+    london_adr_skip: float = 0.8         # N9.6 (cc08_001 ~13:41): London already made this x ADR5 (0 = off) -> skip NY
+    london_adr_win: tuple = (120, 480)   # [our interpretation] the London range: 02:00-08:00
+    # N10 day of week
+    monday_mode: str = "trade"           # N10.2 / D20 (065B ~4:12; 101 ~30:53): "skip", "pm_only" or "obvious" outside NFP / FOMC weeks;
+                                         # Tuesday after a Monday holiday acts like Monday (cc09_008 ~55:24)
+    monday_small_range: float = 0.0      # D20 (cc08_001): Monday's range is small - no new entry once the day's range >= this x ADR5 (0 = off)
+    tue_off_monday: str = "off"          # N10.2 (cc12_003 ~15:40): "tag" / "filter": Tuesday off Monday's low / high, Wednesday off
+                                         # Tuesday's - the sweep must take the prior day's extreme (main engine, Silver Bullet and Ma Deuce -
+                                         # whose "sweep" is the day's lowest low before the retest; no reference after a Monday holiday).
+                                         # "tag": day tag tue_off_monday + per-trade off_ref_swept / off_ref_not_swept
+    pool_mon_wed: bool = False           # N10.3 (cc07_008 ~1:35): Thu / Fri: the Mon-Wed high / low are sweep pools and targets
+    mon_wed_extreme: str = "off"         # N10 / N10.3: "tag" mw_break_up / mw_break_dn (Thu / Fri break of the Mon-Wed extreme) and thu_reversal
+    thu_fri_break: str = "off"           # N10.3 (cc07_001 ~42:44): "side": after a Thu / Fri break of the Mon-Wed extreme only the break side
+    friday_slow_split: bool = True       # N10.4 (070 ~1:06:37): Friday takes most at the first pool - the 80/20 split (main engine via _split,
+                                         # and the Silver Bullet ladder when sb_split is on; Ma Deuce keeps its own ladder)
+    friday_first_pool: bool = False      # N10: everything off at the first pool on Fridays (main engine and Silver Bullet; Ma Deuce's
+                                         # target is the daily FVG's CE, not a pool: n/a)
+    friday_objective: str = "off"        # N10.4 (cc08_001): "tag" / "scalp" / "skip" when the weekly objective is already delivered
+    friday_week_done: str = "off"        # N10.4 (100 ~7:05): "draw" (the weekly objective delivered) / "trades" (every trade of the week
+                                         # hit its last target) -> no Friday trading
+    strong_thu_no_long: bool = False     # N10 (cc09_008 ~41:53): no Friday longs after a strong (up) Thursday
+    strong_thu_mirror: bool = False      # [our interpretation] and no shorts after a strong down Thursday
+    no_fri_after_strong_thu: bool = False   # N10.4: no Friday trading at all after a strong Thursday
+    strong_thu_mult: float = 1.0         # strong = range >= this x ADR5 and the close in the top / bottom strong_thu_frac of the range
+    strong_thu_frac: float = 0.25
+    tue_week_extreme: str = "off"        # T14 (cc08_001 ~20:43; study_week.py): "tag" / "side" - on Tuesday trade the htf draw side only
+    # M14 / M14.1 / M14.3 TGIF model
+    tgif_model: bool = False             # M14: the whole model - tgif, tgif_zone, tgif_htf_array, tgif_timing, tgif_week_sweep (forced on
+                                         # by __post_init__, replace() re-runs it); tgif_model_skip names the sub-switches it must not force
+    tgif_model_skip: tuple = ()          # e.g. ("tgif_zone",): the umbrella leaves those alone (set them explicitly)
+    tgif_htf_array: bool = False         # M14.1 (066; 074): the week's extreme touched a D / W / 4h array or an NWOG / NDOG; the week from Sunday 18:00
+    tgif_htf_tfs: tuple = ("4h", "D", "W")
+    tgif_timing: tuple = ()              # M14.3 (066; 084): entry windows on TGIF days, e.g. ((600, 720), (810, 900))
+    tgif_week_sweep: bool = False        # M14.3: Friday has swept the Mon-Thu extreme before the order (all three engines)
+    # X10d / X15 / X15d / D19
+    am_range_skip_pm: float = 0.0        # X10d: AM (09:30-12:00) range >= this x ADR5 -> no PM / lunch entries (0 = off)
+    week_done_on_draw: str = "off"       # X15d (038 ~6:33; 101 ~34:21): the weekly objective (all-hours prior-week high / low, this week's
+                                         # NWOG CE) delivered -> "tag" / "skip": done for the week
+    week_done_levels: tuple = ("pwh", "pwl", "nwog_ce")
+    week_done_pick: str = "any"          # "any" delivered objective, or "nearest" to the week's first open
+    be_counts_as_win: bool = True        # D19: no_pm_after_am_win counts a breakeven (net >= 0) as a win (the old behaviour); False = net > 0
+    # B23 / X16
+    seasonal_tag: bool = False           # B23 (cc10_015 ~5:04): month map tag, HTF agreement, fail after day 10 - reported only
+    seasonal_map: tuple = SEASONAL_DOW20
+    seasonal_map_b: tuple = ()           # an optional second sample: the tag is "none" unless both lines agree
+    seasonal_fail_day: int = 10
+    journal_tags: bool = True            # X16 / X16a / X16b / X16d: adr5_prev, adr_prev, adr_fill, adr5_today, taken_3d, entry_array_tf columns
+
+
     def __post_init__(self):
         if self.unicorn_sides not in ("both", "long", "short"):
             raise ValueError(f"unicorn_sides {self.unicorn_sides!r}")
@@ -1445,6 +1598,48 @@ class Params:
                 or self.session_stop_after_fails < 0 or self.meander_bars < 0 or self.far_edge_min < 0):
             raise ValueError("management_exits: pd3_n / trail_after / be_stall_bars >= 1, fractions in (0, 1], "
                              "add_pd_level in [0, 1], counts >= 0")
+        # package day_week_context: validation and the TGIF model master switch
+        for name, ok in (("b11_inside_week", ("off", "tag", "scalp")), ("b11_inside_expansion", ("off", "tag", "no_chop_skip")),
+                         ("outside_day_rule", ("off", "tag", "block")), ("nr_expansion", ("off", "tag", "no_chop_skip")),
+                         ("org_tell", ("off", "tag", "filter")), ("org_bias_gap", ("off", "tag", "filter")),
+                         ("org_bias_src", ("react", "draw", "pd")), ("sunday_scenario", ("off", "tag", "filter")),
+                         ("holiday_week_thu_fri", ("off", "trade")), ("low_vol_inside", ("off", "tag", "scalp", "skip")),
+                         ("adr_basis", ("rth", "eth")), ("trend_recipe", ("off", "tag", "only", "side")),
+                         ("consol_day_rules", ("off", "tag", "apply")), ("sd_week_skip", ("off", "tag", "skip")),
+                         ("raid_ref", ("pd", "london")), ("on_range_from", ("midnight", "globex")),
+                         ("monday_mode", ("trade", "skip", "pm_only", "obvious")), ("tue_off_monday", ("off", "tag", "filter")),
+                         ("mon_wed_extreme", ("off", "tag")), ("thu_fri_break", ("off", "tag", "side")),
+                         ("friday_objective", ("off", "tag", "scalp", "skip")), ("friday_week_done", ("off", "draw", "trades")),
+                         ("tue_week_extreme", ("off", "tag", "side")), ("week_done_on_draw", ("off", "tag", "skip")),
+                         ("week_done_pick", ("any", "nearest")), ("roll_week_src", ("calendar", "data", "either"))):
+            if getattr(self, name) not in ok:
+                raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
+        if (set(self.nr_tags) - {"nr3", "nr7", "inside_body"} or set(self.trend_news) - {"high", "medium"}
+                or set(self.consol_predictors) - {"no_report", "htf_array", "htf_50", "holiday_eve", "auction"}
+                or set(self.consol_pm_pools) - {"pd", "london", "on", "draw"}
+                or set(self.tgif_model_skip) - {"tgif", "tgif_zone", "tgif_htf_array", "tgif_week_sweep", "tgif_timing"}
+                or set(self.week_done_levels) - {"pwh", "pwl", "nwog_ce"} or set(self.tgif_htf_tfs) - set(CF_TFS)):
+            raise ValueError("day_week_context: nr_tags / trend_news / consol_predictors / week_done_levels / tgif_htf_tfs name an unknown item")
+        if len(self.seasonal_map) != 12 or (self.seasonal_map_b and len(self.seasonal_map_b) != 12):
+            raise ValueError("seasonal_map / seasonal_map_b: expected 12 entries, January first")
+        if (self.roll_risk <= 0 or self.august_risk <= 0 or not 1 <= self.august_from_day <= 31 or self.london_adr_skip < 0
+                or self.min_on_range_frac < 0 or self.min_raid_pts < 0 or self.monday_small_range < 0
+                or self.am_range_skip_pm < 0 or self.b11_inside_week_days < 1 or self.consol_min_predictors < 1
+                or not 0 < self.org_tell_level <= 1 or not 0 < self.org_gap_fill_frac <= 1 or self.macro_ref_min < 1
+                or self.year_first_am_from < 0 or self.first_day_wait < 0 or self.trend_array_days < 1):
+            raise ValueError("day_week_context: risk multipliers > 0, ADR fractions >= 0, day / minute counts >= 1 (or 0 = off)")
+        for name in ("macro_no_move_wins", "macro_no_move_pm_wins", "tgif_timing", "london_adr_win"):
+            w = getattr(self, name)
+            if name == "london_adr_win":
+                w = (w,)
+            if any(len(x) != 2 or x[0] >= x[1] for x in w):
+                raise ValueError(f"{name} {getattr(self, name)!r}: expected (start_minute, end_minute) windows")
+        if self.tgif_model:                          # M14: the umbrella switches the sub-switches on (replace() re-runs this)
+            for nm_ in ("tgif", "tgif_zone", "tgif_htf_array", "tgif_week_sweep"):
+                if nm_ not in self.tgif_model_skip:
+                    setattr(self, nm_, True)
+            if not self.tgif_timing and "tgif_timing" not in self.tgif_model_skip:
+                self.tgif_timing = ((600, 720), (810, 900))     # 10:00-12:00 (London close) and 13:30-15:00 (PM)
         inert = []                                  # switches the current draw_lock / vi_arrays make inert
         if self.vi_news_draw and self.draw_lock != "session":
             inert.append("vi_news_draw acts only in the #9 lock (draw_lock='session')")
@@ -1460,6 +1655,24 @@ class Params:
                          "set stop_tick_pts=0 to use stop_buffer, or stop_pad_ticks=N")
         if inert:
             warnings.warn("inert switches: " + "; ".join(inert), stacklevel=3)
+
+    # --- package day_week_context helpers ------------------------------------------------------
+    @property
+    def dw_needs_eth(self) -> bool:
+        """The day_week_context switches that read full (all-hours) sessions: backtest.prepare then builds the eth dict."""
+        return bool(self.tgif_htf_array or self.week_done_on_draw != "off" or self.friday_week_done == "draw"
+                    or self.friday_objective != "off" or self.adr_basis == "eth" or self.pool_mon_wed
+                    or self.mon_wed_extreme != "off" or self.thu_fri_break != "off")
+
+    @property
+    def dw_needs_eve(self) -> bool:
+        """The switches that read the evening session (18:00-24:00) before the day (futures / CFDs with overnight bars)."""
+        return bool(self.sunday_scenario != "off" or self.eve_draw or self.pre_draw_pm or self.on_range_from == "globex")
+
+    @property
+    def dw_needs_week(self) -> bool:
+        """The switches that read the week's trade state (backtest.week_state)."""
+        return bool(self.max_trades_week or self.friday_week_done == "trades")
 
     # --- package entries_stops_sizing helpers --------------------------------------------------
     @property
@@ -1567,7 +1780,9 @@ def blocked(d: date, session: str, p: "Params | None" = None, t: int = 0) -> str
     if sh >= 0 and week_block and d < nfp:
         w = d.weekday() + sh                         # the day's place as if the NFP were on a Friday
         if w >= 3 and not (p is not None and p.nfp_thu and w == 3):
-            return "nfp_week_thu_fri"
+            if not (p is not None and p.holiday_week_thu_fri == "trade" and d.weekday() in (3, 4)
+                    and _calendar.holiday_in_week(d)):          # N7.3: holiday weeks deliver cleaner Thu / Fri
+                return "nfp_week_thu_fri"
         if w == 2 and session == "PM":
             return "nfp_week_wed_pm"
     if "fomc" in tags and session == "PM":
@@ -1704,8 +1919,23 @@ class Trade:
     news_tags: str = ""            # the day's news tags: nfp, nfp_week, fomc, fomc_only, fomc_eve, fomc_after, cpi, pre_cpi,
                                    # two_driver, fed_chair, auction, claims, minutes (newscal.day_tags)
 
+    # package day_week_context (daycontext.stamp): the day's tags and the journal columns (reporting only)
+    dw_tags: str = ""              # "|"-joined: holiday_eve, post_holiday, holiday_week, inside_day, outside_down, nr7, tgif, consol_day, ...
+    week_idx: int = 0              # N7.2: the trading-day number within the week (a Monday holiday makes Tuesday 1)
+    adr5_prev: float | None = None   # X16: ADR5 (points) known at the day start
+    adr_prev: float | None = None    # X16a: yesterday's range / the ADR5 before it
+    adr5_today: float | None = None  # X16: today's whole-session range / ADR5 (study only: known after the close)
+    adr_fill: float | None = None    # X16a: the range from the day's first bar to the fill bar / ADR5
+    taken_3d: int | None = None      # X16b: how many of the last 3 days' highs / lows were taken at the fill
+    prev3_taken: str = ""            # X16 / X16b: which ("pdh1|pdl2 ...")
+    entry_array_tf: str = ""         # X16 / X16d: chart timeframe, ">tf" the highest higher-timeframe array holding the entry
+    seasonal: str = ""               # B23: bull / bear / cons / split (":fail", ":htf_agree" / ":htf_against")
+    eve_draw_px: float | None = None     # N9.2: the draw at the prior close (engine frame)
+    eve_draw_side: int = 0
+    eve_draw_done: bool | None = None    # delivered before 09:30
+
     REAL_FIELDS = ("entry", "stop", "t1", "t2", "draw_px", "bz_top", "bz_bottom", "bz_mt",
-                   "resist_lo", "resist_hi", "ext_px", "leg_hi_px")
+                   "resist_lo", "resist_hi", "ext_px", "leg_hi_px", "eve_draw_px")
 
     def pnl(self, cost: float) -> tuple[float, float]:
         s = 1 if self.side == "long" else -1
@@ -2387,6 +2617,7 @@ def _lv_target_pools(ctx, sd, i: int, p) -> list:
     oa = getattr(ctx, "or_alt", None)
     if oa is not None and t >= oa[0]:                      # L3 or_extra
         out.append((hi_(oa[1]), _idx_at(ctx, oa[0])))
+    out += _DW.target_pools(ctx, sd, i, p)                 # day_week_context N10.3 pool_mon_wed
     return out
 
 
@@ -2400,6 +2631,7 @@ def _lv_target_arrays(ctx, sd, i: int, p) -> list:
         out += [(sd.x(near), "array"), (sd.x(mt), "array")]
         if R == 510:                   # review fix: the spec gives the far edge at 08:30 only
             out.append((sd.x(far), "array"))
+    out += _DW.expansion_levels(ctx, sd, i, p)             # day_week_context N8.5 expansion_targets
     return out
 
 
@@ -2467,6 +2699,7 @@ def _lv_sell_side(ctx, sd, session: str, i: int, p, out: dict, extra: bool) -> N
             for q, v in (("lo", min(a, b)), ("ce", (a + b) / 2), ("hi", max(a, b))):
                 if sd.x(v) < last:
                     out[f"{tag}_{q}"] = sd.x(v)
+    out.update(_DW.sell_pools(ctx, sd, i, p))          # day_week_context N10.3 pool_mon_wed
     if p.pool_gaps:                                    # M2.1: NWOG / NDOG as sweep pools
         gl = ctx.gaps if getattr(ctx, "gaps", None) is not None else \
             [("monday", max(a, b), min(a, b), (a + b) / 2) for a, b in _nwogs(ctx, i)]
@@ -2626,7 +2859,9 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
         if hit_:
             state["flip"] = -s_
     if lost is None and tr.session == "AM" and p.no_pm_after_am_win:
-        done["PM"] = True
+        g_, c_ = tr.pnl(p.cost_per_share)
+        if p.be_counts_as_win or g_ - c_ > 0:                # D19: a breakeven counts as a win (the old behaviour) unless off
+            done["PM"] = True
     gross, costs = tr.pnl(p.cost_per_share)
     net_ = gross - costs
     key = pos.get("done_key", tr.session)
@@ -2701,7 +2936,8 @@ def december_dir(hist: list[pd.DataFrame], day, flat_frac: float = 0.25) -> int:
     return int(np.sign(c - o))
 
 
-def day_context(hist: list[pd.DataFrame], day, p: "Params | None" = None) -> tuple[set, dict]:
+def day_context(hist: list[pd.DataFrame], day, p: "Params | None" = None, eth: dict | None = None,
+                conf=None) -> tuple[set, dict]:
     """Daily-candle context from the prior regular sessions (B11, B17, N8, M14, N7.4):
       big_prev     yesterday's range > 2x the average of the 5 days before it
       inside_day   yesterday inside the day before
@@ -2736,7 +2972,12 @@ def day_context(hist: list[pd.DataFrame], day, p: "Params | None" = None) -> tup
     if len(d) == 3 and abs(d.sum()) == 3:
         tags.add("three_up" if d[0] > 0 else "three_down")
         block["three"] = (int(d[0]),)
-    if day.weekday() == 4:
+    if day.weekday() == 4 and p is not None and p.tgif_htf_array:
+        tag_, blk_ = _DW.tgif_context(hist, day, p, eth, conf)        # M14.1: full-session week + the HTF array check
+        if tag_:
+            tags.add(tag_)
+            block["tgif"] = (blk_,)
+    elif day.weekday() == 4:
         mon = day - timedelta(days=4)
         wk = [x for x in hist if x.index[0].date() >= mon]
         prior = {}
@@ -2909,6 +3150,8 @@ def _split(p, ctx, hist, day, i, t) -> tuple:
     nxt = next_trading_day(day)
     if events(nxt) & {"cpi", "jobs", "fomc"}:
         ahead = True
+    if p.friday_slow_split and day.weekday() == 4:          # N10.4 (070 ~1:06:37): most at the first pool on a Friday
+        return p.ladder_fracs_slow
     slow = _slow_day(p, ctx, hist, i)
     return p.ladder_fracs_slow if (ahead or slow) else p.ladder_fracs
 
@@ -3118,6 +3361,9 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
                           (min([float(ctx.l[S:k0].min())] + [float(x.low.min()) for x in hs3]), "pool", "m3l", -1, k0)]
     if p.prev_am_pool and getattr(ctx, "prev_am", None) is not None:
         cands += [(ctx.prev_am[0], "pool", "prev_am_high", 1, S), (ctx.prev_am[1], "pool", "prev_am_low", -1, S)]
+    mw_ = getattr(getattr(ctx, "dplan", None), "info", {}).get("mw")
+    if p.pool_mon_wed and mw_ is not None:             # day_week_context N10.3: the Mon-Wed extremes on Thu / Fri
+        cands += [(mw_[0], "pool", "mon_wed_high", 1, S), (mw_[1], "pool", "mon_wed_low", -1, S)]
     prefs = []
     if p.vi_news_draw and row and release_times(ctx.day):     # Ep02.8 / Ep 02 ~9:19
         for key_ in ("vi_up", "vi_dn"):
@@ -3333,7 +3579,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             conf=None, gaps: list | None = None, closes: dict | None = None, evening=None, partner2=None,
             intermarket: dict | None = None, equity: float | None = None,
             bias_by_cut: dict | None = None, meta=None, locks: list | None = None, skips: list | None = None,
-            eth: dict | None = None, risk_state: dict | None = None) -> list[Trade]:
+            eth: dict | None = None, risk_state: dict | None = None, week: dict | None = None,
+            eve: tuple | None = None) -> list[Trade]:
     """Trades for one day (see `_run_day_once` for the arguments). The main loop runs BEFORE the Silver Bullet / Ma Deuce
     (they read its trades), so the session / day stops (X7c / X12 / X13a / X14b / X14d) would be one-way. With a stop
     switch on and an extra engine on, this wrapper makes them two-way by a fixed point: pass 1 as usual; its Silver Bullet
@@ -3342,8 +3589,10 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
     by its own bar, so there is no look-ahead; the side effects (locks, skips, log, the E10 risk state) come from the last
     pass only."""
     kw = dict(partner=partner, live=live, bias=bias, conf=conf, gaps=gaps, closes=closes, evening=evening,
-              partner2=partner2, intermarket=intermarket, equity=equity, bias_by_cut=bias_by_cut, meta=meta, eth=eth)
-    if not (_MG.any_stop_switch(p, df.index[0].date()) and (p.ma_deuce or p.sb_model) and p.stops_passes > 1):
+              partner2=partner2, intermarket=intermarket, equity=equity, bias_by_cut=bias_by_cut, meta=meta, eth=eth,
+              week=week, eve=eve)
+    if not ((_MG.any_stop_switch(p, df.index[0].date()) or p.max_trades_week) and (p.ma_deuce or p.sb_model)
+            and p.stops_passes > 1):                       # (the D19 / X15 week budget is two-way across the engines the same way)
         return _run_day_once(df, hist, symbol, p, tf, log=log, locks=locks, skips=skips, risk_state=risk_state, **kw)
     import copy
     ext, sig, res, sc = None, None, [], {}
@@ -3376,7 +3625,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             intermarket: dict | None = None, equity: float | None = None,
             bias_by_cut: dict | None = None, meta: pd.DataFrame | None = None,
             locks: list | None = None, skips: list | None = None, eth: dict | None = None,
-            risk_state: dict | None = None, _ext: list | None = None, _out: dict | None = None) -> list[Trade]:
+            risk_state: dict | None = None, week: dict | None = None, eve: tuple | None = None,
+            _ext: list | None = None, _out: dict | None = None) -> list[Trade]:
     """Trades for one day. With `live`, a position still open at the last bar is returned
     with no exit (exit_reason "open") instead of being closed at the last price.
     equity     (#12) start-of-day equity for risk_basis="equity"
@@ -3384,9 +3634,11 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     meta       (#13) databento meta (adj, instrument_id, roll) covering the day
     locks / skips  optional lists that receive the session locks and the sloppy-day skips
     eth        (levels_detectors) {date: (o, h, l, c)} of full sessions, prior dates only
-    risk_state (E10 loss_halving) {m, deficit, peak} carried across days by backtest.run (mutated)"""
+    risk_state (E10 loss_halving) {m, deficit, peak} carried across days by backtest.run (mutated)
+    week       (day_week_context) the week's trade state before today: {n, net, final_hits, all_final} (backtest.week_state)
+    eve        (day_week_context) (open, high, low, close) of the evening session (18:00-24:00) before today"""
     day = df.index[0].date()
-    flat = _eff_flat(p)
+    flat = _DW.flat_for(day, p, _eff_flat(p))                # N7.1 EARLY_CLOSE
     ff = _NC.fomc_flat_min(day, p)                        # N3 / N3.2: an FOMC day is flat at the release (0 = n/a)
     am_lo, am_hi = p.am_win                               # Ep01.10 am_from_0830
     ctx = DayCtx(df, day, hist, tf, p.htf, closes, p.or_minutes, evening if p.globex_pool else None)
@@ -3427,7 +3679,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                         pd.Series(np.arange(len(c2.idx)), index=c2.idx))
     tags = events(day)
     am_start = 600 if tags & NEWS_1000 else am_lo            # news_wait="off" only
-    dt, block_side = day_context(hist, day, p)
+    dt, block_side = day_context(hist, day, p, eth, conf)
     ctx.block_side = block_side
     if p.neutral_skip and "big_prev" in dt:
         if skips is not None:
@@ -3441,13 +3693,23 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             skips.append((day, symbol, "sloppy", "|".join(sorted(sl_all_day))))
         return []
     ctx.sl_day = sl_day
+    ctx.day_tags = "|".join(sorted(dt))
+    dw = _DW.plan(ctx, hist, p, week, eve, dt)            # day_week_context: the day's blocks / flags / tags
+    wl = dw.info.get("week_left")                         # D19 / X15: trades left in the week's budget (None = no cap)
+    why_dw = next((r_ for ss_, r_ in dw.blocks if ss_ is None), None)
+    if why_dw is not None:
+        if skips is not None:
+            skips.append((day, symbol, "day_week", why_dw))
+        return []
     tt_ = df.index.hour * 60 + df.index.minute    # M12.3 or60: the 09:30-10:30 range (read from 10:30)
     o60 = df[(tt_ >= 570) & (tt_ < 630)]
     ctx.or60 = (float(o60.high.max()), float(o60.low.min())) if len(o60) else None
     ctx.bias_by_cut = bias_by_cut or {}
     chop = Chop(ctx, hist, p)
+    if not p.consol_skip or (dw.expansion and (("inside_day" in dw.expansion and p.b11_inside_expansion == "no_chop_skip")
+                                               or ("nr" in dw.expansion and p.nr_expansion == "no_chop_skip"))):
+        chop.inert = True                                 # N8.1 consol_skip off / B11 expansion due: no chop stand-aside
     ctx.chop = chop
-    ctx.day_tags = "|".join(sorted(dt))
     ctx.intermarket = intermarket or {}
     trades: list[Trade] = []
     done = {"AM": False, "PM": False, "PRE7": False, "PRE9": False, "NEWS": False, "PRE8": False, "LON": False,
@@ -3664,6 +3926,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 tr.exits.append((ts, sd.x(c), pos["left"], "pm_done")); pos["left"] = 0
             if pos["left"] and ff and pos["fill_t"] < ff and t + tf >= ff:
                 tr.exits.append((ts, sd.x(c), pos["left"], "fomc_flat")); pos["left"] = 0   # N3.2: never hold into the release
+            if pos["left"] and _DW.day_exit(ctx, p, tr.session, t + tf):
+                tr.exits.append((ts, sd.x(c), pos["left"], "consol_out")); pos["left"] = 0   # N8.3: consolidation-day AM out by 11:00
             if pos["left"] and t + tf >= flat:
                 tr.exits.append((ts, sd.x(c), pos["left"], "eod")); pos["left"] = 0
             if pos["left"]:                            # #12: open risk against the current stop
@@ -3900,7 +4164,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         if lh_slot:                                   # setups_models M5.2 / Ep01.13: own LH slot
             done_key = "LH"
             done.setdefault("LH", False)
-        skip_main = t < w0 or done[done_key] or pos is not None
+        skip_main = (t < w0 or done[done_key] or pos is not None
+                     or (wl is not None and _DW.budget_full(ctx, ts, trades, state["ext"])))   # D19 / X15 week budget, all engines
         if _MG.blocked_now(state, session):
             continue                                  # X7c / X12 / X13a / X14b / X14d: the session or the day is stopped
         if (session == "PM" and p.pm_consol_exit and t >= p.pm_consol_exit and pos is None
@@ -3912,6 +4177,11 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             continue
         if (p.day_filter and blocked(day, session, p, t)) or (p.skip_news and news(day) != "none"):
             continue
+        why_ = _DW.gate(ctx, p, session, i, t, trades)        # day_week_context: the day / week rules (N7-N10, X10d, X15d ...)
+        if why_ is not None:
+            _f(why_)
+            pending = None                            # an order armed earlier does not fill into a day / week rule that has
+            continue                                  # switched on since (the Silver Bullet drops its order the same way)
         sl_now = set(sl_day if session == "PM" else sl_all_day)
         if chop.on:
             sl_now.add("chop")
@@ -3976,6 +4246,10 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 continue
             if sd.sign in block_side.get("year_end", ()):
                 continue                              # #3 (off by default)
+            why_ = _DW.side_ok(ctx, p, sd.sign, session, i)
+            if why_ is not None:
+                _f(why_)
+                continue                              # day_week_context: outside day, ORG tell, strong Thursday, ...
             if jb_side and sd.sign == jb_side:
                 _f("x_news_judas")
                 continue                              # M9 / M9.2: the first run after the release is the losing side
@@ -4004,6 +4278,11 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             if o_ is not None:
                 o_ = _NC.post_order(ctx, sd, i, p, session, o_, hist)    # T4 / T7 / T9 / Ep07.8 filters and tags
             if o_ is not None:
+                why_ = _DW.order_ok(ctx, sd, o_, session, i, p)          # day_week_context per-order rules
+                if why_ is not None:
+                    _f(why_)
+                    o_ = None
+            if o_ is not None:
                 if done_key.startswith("SB_"):
                     o_.update(done_key=done_key, setup="sb_" + session.lower())
                 elif done_key == "LH" and "done_key" not in o_:
@@ -4029,6 +4308,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         trades += run_sb(ctx, sides, p, day, symbol, blocked, btag)
     if _out is not None:
         _out["extras"] = list(trades[n_main:])
+    if wl is not None and len(trades) > wl:                # X15 / D19: the week's budget in ENTRY-time order across all engines
+        trades.sort(key=lambda t_: t_.entry_time)
+        del trades[wl:]
     if pos is not None:   # data ended early
         tr = pos["trade"]
         if not live:
@@ -4044,6 +4326,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         nt_ = _NC.day_tags(day, p)                         # news_calendar_times: the day's news tags on every trade
         for tr_ in trades:
             tr_.news_tags = nt_
+        _DW.stamp(ctx, trades, p)                          # day_week_context: dw_tags and the X16 journal columns
     return trades
 
 
@@ -5596,7 +5879,10 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             lv, kinds = [f] + lv, ["fixed"] + kinds
     scalp = False
     sl = getattr(ctx, "cur_sloppy", "")
-    if (sl and p.sloppy_mode == "scalp") or _NC.scalp_now(ctx, p, session):   # #10 scalp mode (N3.3: the FOMC-only AM):
+    dws = _DW.scalp_now(ctx, p, session, i)                    # day_week_context: inside week, low-vol day, S&D, ...
+    if dws:
+        lvt.append("scalp_" + dws)
+    if (sl and p.sloppy_mode == "scalp") or _NC.scalp_now(ctx, p, session) or dws:   # #10 scalp mode (N3.3: the FOMC-only AM):
                                           # one exit at min(+5, T1), no adds
         lv, kinds, scalp, final_T = [min(entry + p.sloppy_scalp_pts * p.es_pt, lv[0])], [kinds[0]], True, False
     smt_n = int(sw["smt"] is True) + int(sw.get("smt2") is True)
@@ -5632,7 +5918,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         levels = lv[:max(1, len(p.ladder_fracs))]
     rp = None                                       # targets_partials: the rung plan (None = the old ladder)
     if (fixed is None and not scalp and not p.t1_fixed_all and not tags.get("fracs") and not tags.get("single_exit")
-            and not (p.moc_pool_exit and session == "PM" and p.last_hour[0] <= t < p.last_hour[1])):
+            and not (p.moc_pool_exit and session == "PM" and p.last_hour[0] <= t < p.last_hour[1])
+            and not (p.friday_first_pool and ctx.day.weekday() == 4)):
         extras_ = list(inner_ex)
         if p.htf_bump_below_min:          # owner #7: a bump nearer than min_rr x risk is still a small protected partial
             extras_ += [(b, "bump", True) for b in bumps if p.inner_min_pts * p.es_pt <= b - entry < p.min_rr * risk - eps]
@@ -5695,6 +5982,13 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             order["levels"] = order["levels"][:js[0] + 1]
             order["level_kinds"] = order["level_kinds"][:js[0] + 1]
             order["final_T"] = False
+    if p.friday_first_pool and ctx.day.weekday() == 4:   # N10 (070 ~1:06:37): Friday takes everything at the first pool
+        js = [k for k, kd in enumerate(order["level_kinds"]) if kd in POOL_KINDS]
+        if js:
+            order["levels"] = order["levels"][:js[0] + 1]
+            order["level_kinds"] = order["level_kinds"][:js[0] + 1]
+            order["final_T"] = False
+            order["lv_tags"] = "|".join(x for x in (order.get("lv_tags", ""), "friday_first_pool") if x)
     if p.pm_last_hour_model and lh_ and "cut" not in order:
         order["cut"] = _SM.lh_window(p)[1]       # M5: the owner #1 window end (15:50; strict 15:45)
     if p.po3_runner:

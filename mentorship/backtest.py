@@ -221,6 +221,7 @@ class Prepared:
     cf: object
     meta: pd.DataFrame | None
     eth: dict | None = None        # L2 / L3 / L10 / Ep08.10: {date: (open, high, low, close)} of full sessions
+    eve: dict | None = None        # day_week_context: {date: (open, high, low, close)} of the evening session before that date
 
 
 def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
@@ -250,13 +251,37 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
     ipda_on = p.ipda_pools or p.ipda_next or p.ipda_eq_day != "off"
     if (p.pd_hl_session == "eth" or p.matrix_full or p.wick_session == "eth" or p.pw_pm_full_session
             or (ipda_on and p.ipda_session == "eth") or (p.ma_deuce and p.md_eth)
-            or p.tgif_zone):   # M15 md_eth (review fix); M14.2 the weekly range from Sunday 18:00
+            or p.tgif_zone or p.dw_needs_eth):   # M15 md_eth (review fix); M14.2 the weekly range from Sunday 18:00; day_week_context
         se = htf.sessions(df)                  # full sessions (evening reopen -> close), by trading date
         eth = {t.date(): (float(r.open), float(r.high), float(r.low), float(r.close)) for t, r in se.iterrows()}
-    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth)
+    eve = evenings(df) if (ov and p.dw_needs_eve) else None
+    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth, eve)
 
 
-def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: dict | None = None) -> dict:
+def evenings(df: pd.DataFrame) -> dict:
+    """{date: (open, high, low, close)} of the evening session (18:00-24:00) BEFORE each date: the Sunday 18:00 reopen
+    for a Monday (B16 Sunday scenarios, N9.2 eve draw, on_range_from="globex")."""
+    t = df.index
+    ev = df[t.hour >= 18]
+    if not len(ev):
+        return {}
+    lab = (ev.index.normalize() + pd.Timedelta(days=1)).date
+    g = ev.groupby(lab)
+    return {d: (float(o), float(h), float(l), float(c)) for d, o, h, l, c in
+            zip(g.open.first().index, g.open.first(), g.high.max(), g.low.min(), g.close.last())}
+
+
+def week_state(rows: list, d) -> dict:
+    """The week's trade state before day d from the trade rows so far: n trades, net P&L, how many hit their last
+    target (final_hit) and whether every one did (X15 / D19 weekly budget, N10.4 friday_week_done="trades")."""
+    wk = d.isocalendar()[:2]
+    mine = [r for r in rows if r["date"].isocalendar()[:2] == wk and r["date"] < d]
+    fh = sum(1 for r in mine if r.get("final_hit"))
+    return dict(n=len(mine), net=float(sum(r["net"] for r in mine)), final_hits=fh, all_final=bool(mine) and fh == len(mine))
+
+
+def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: dict | None = None,
+               week: dict | None = None) -> dict:
     """run_day inputs for day k of pr.ds (the partner / log / locks plumbing is the caller's)."""
     p, g = pr.p, pr.ds[k]
     d = g.index[0].date()
@@ -269,7 +294,7 @@ def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: d
                 closes=pr.closes, evening=_evening(pr.df, d) if p.globex_pool else None,
                 intermarket=intermarket, equity=equity,
                 bias_by_cut={m: t_.loc[d].to_dict() for m, t_ in pr.cuts.items() if d in t_.index},
-                meta=pr.meta)
+                meta=pr.meta, week=week, eve=(pr.eve or {}).get(d))
 
 
 def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
@@ -303,10 +328,11 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             eq = None
             if p.risk_basis == "equity":               # #12: start-of-day equity, closed trades only
                 eq = p.account_equity + sum(r["net"] for r in rows)
-            kw = day_kwargs(pr, k, eq, (intermarket or INTERMARKET()).get(d))
+            kw = day_kwargs(pr, k, eq, (intermarket or INTERMARKET()).get(d), week_state(rows, d) if p.dw_needs_week else None)
             day_trades = run_day(partner=pa, partner2=pa2, locks=locks, skips=skips, risk_state=rs, **kw)
-            if p.max_trades_week:
-                day_trades = day_trades[:p.max_trades_week - n_wk]
+            if p.max_trades_week:                        # X15: the week's budget is applied in ENTRY-time order (run_day did it
+                day_trades = sorted(day_trades, key=lambda t_: t_.entry_time)[:p.max_trades_week - n_wk]   # already; the main loop first, then
+                                                         # the Silver Bullet / Ma Deuce: the old slice dropped the earlier trade)
             for tr in day_trades:
                 rows.append(tr.row(p.cost_per_share))
         if d in pmap:

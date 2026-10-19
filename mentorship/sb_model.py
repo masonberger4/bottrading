@@ -27,6 +27,7 @@ import pandas as pd
 
 from . import levels as L
 from . import manage as MG
+from . import daycontext as _DW
 
 
 def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
@@ -38,7 +39,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
         wins.insert(0, ("AM", "sb_london", (180, 240), 120))
     out = []
     tol = p.eq_tol_pts * p.es_pt
-    flat = _eff_flat(p)
+    flat = _DW.flat_for(day, p, _eff_flat(p))                # N7.1 EARLY_CLOSE
     ff = NC.fomc_flat_min(day, p)                     # news_calendar_times N3: an FOMC day is flat at the release
     chop = getattr(ctx, "chop", None)
     stand = p.sloppy_mode == "stand_aside"
@@ -163,6 +164,8 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                     tr.exits.append((ts, sd.x(c), pos["left"], "pre_0830")); pos["left"] = 0   # N4: no position into 08:30
                 if pos["left"] and ff and pos["fill_t"] < ff and t + ctx.tf >= ff:
                     tr.exits.append((ts, sd.x(c), pos["left"], "fomc_flat")); pos["left"] = 0     # N3.2: not into the release
+                if pos["left"] and _DW.day_exit(ctx, p, session, t + ctx.tf):
+                    tr.exits.append((ts, sd.x(c), pos["left"], "consol_out")); pos["left"] = 0    # N8.3: consolidation-day AM out by 11:00
                 if pos["left"] and t + ctx.tf >= flat:
                     tr.exits.append((ts, sd.x(c), pos["left"], "eod")); pos["left"] = 0
                 if pos["left"] and ctx.equity:
@@ -179,7 +182,14 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                 continue
             chopped = stand and chop is not None and chop.active_before(i)
             blk = MG.extras_blocked(ctx, p, session, ts, out)       # X7c / X12 / X13a / X14b / X14d: stopped session / day
-            if pending is not None and (chopped or i < made or blk):
+            dws = "LON" if setup == "sb_london" else session
+            seen_ = list(getattr(ctx, "risk_view", {}).get("trades", []))      # the main loop's (+ Ma Deuce's) trades
+            dwb = _DW.budget_full(ctx, ts, out, seen_)               # D19 / X15: the week's budget, all engines
+            # day_week_context: the day / week rules. A pending order is cancelled by the state at the PREVIOUS close (it
+            # would fill inside this bar); a new order is armed only when the rules allow it at this close.
+            dw_prev = bool(pending is not None and i - 1 >= ctx.start and _DW.gate(ctx, p, dws, i - 1, ctx.t[i - 1], seen_ + out))
+            dw_now = bool(not blk and _DW.gate(ctx, p, dws, i, t, seen_ + out))
+            if pending is not None and (chopped or i < made or blk or dwb or dw_prev):
                 pending = None
             if pending is not None and session == "AM" and p.am_exit and p.am_exit_extras and t + ctx.tf >= p.am_exit:
                 pending = None                        # #8 guard
@@ -202,6 +212,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                                day_type=day_type(day), news=news(day), sb=True, weekday=day.weekday(),
                                lv_tags=o_.get("lv_tags", ""),
                                capped=o_["capped"], draw_side=o_["draw_side"], draw_px=o_["draw_px"],
+                               ext_px=None if o_.get("ext") is None else float(sd.x(o_["ext"])),
                                draw_name=o_["draw_name"], draw_kind=o_["draw_kind"], sloppy=o_["sloppy"],
                                **btag)
                     tr.entry_risk_pct = tr.peak_risk_pct = (round(o_["shares"] * (fill - o_["stop"]) / ctx.equity, 5)
@@ -225,7 +236,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                 if pending is None:
                     break
                 continue
-            if i < made or chopped or blk:
+            if i < made or chopped or blk or dwb or dw_now:
                 continue
             lk = lock if isinstance(lock, dict) else None
             if lk is not None and lk.get("delivered_i") is not None and i >= lk["delivered_i"]:
@@ -235,10 +246,16 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
             for sd in sides:
                 if sd.sign in getattr(ctx, "block_side", {}).get("year_end", ()):
                     continue
+                if p.tgif and sd.sign in getattr(ctx, "block_side", {}).get("tgif", ()):
+                    continue                              # M14: the Friday after a one-way week (as in the main engine)
+                if _DW.side_ok(ctx, p, sd.sign, dws, i):
+                    continue                              # day_week_context: outside day, ORG tell, strong Thursday ...
                 if lk is not None and lk["side"] and sd.sign != lk["side"]:
                     continue
                 o_ = _arm(ctx, sd, i, k0, p, tol, lk if (lk is not None and lk["side"] == sd.sign) else None,
                           session, a, out)
+                if o_ is not None and _DW.order_ok(ctx, sd, o_, dws, i, p):
+                    o_ = None                             # day_week_context: tue_off_monday / tgif_week_sweep per-order rules
                 if o_ is not None and (best is None or o_["fvg_i"] > best["fvg_i"]):
                     best = o_
             if best is not None and (pending is None or best["fvg_i"] != pending["fvg_i"]
@@ -378,7 +395,10 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=()):
     if chop is not None and chop.active_before(i + 1):
         sl_set.add("chop")
     sl, scalp = "|".join(sorted(sl_set)), False
-    if p.sloppy_mode == "scalp" and sl_set:
+    dws_ = _DW.scalp_now(ctx, p, session, i)           # day_week_context: inside week, low-vol day, S&D no-hold ...
+    if dws_:
+        lvt.append("scalp_" + dws_)
+    if (p.sloppy_mode == "scalp" and sl_set) or dws_:
         t1 = min(entry + p.sloppy_scalp_pts * p.es_pt, t1)   # scalp: one exit, no runner
         t2, levels, scalp = None, [t1], True
     rm = _EN.extras_risk_mult(ctx, p, ctx.idx[i], prior)      # E10 loss_halving / Ep08.12 after_loss_mult
@@ -396,6 +416,13 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=()):
             swept = name
         if name.startswith(("pdh", "pmh")) and sd.sign < 0 and _thru(lo_seg, lv_, _tick(p)):
             swept = name
+    kinds = _kinds(levels, dr, bm)
+    if p.friday_first_pool and ctx.day.weekday() == 4 and not scalp:     # N10 (070 ~1:06:37): Friday takes everything at the first pool
+        js = [k_ for k_, kd in enumerate(kinds) if kd in POOL_KINDS]
+        if js and js[0] + 1 < len(levels):
+            levels, kinds = levels[:js[0] + 1], kinds[:js[0] + 1]
+            t1, t2 = levels[0], None
+            lvt.append("friday_first_pool")
     return dict(side=sd, i=i, fvg_i=g.i, entry=entry, stop=stop, t1=t1, t2=t2, shares=shares,
                 swept=swept, levels=levels, capped=capped, scalp=scalp, sloppy=sl,
                 lv_tags="|".join(dict.fromkeys(lvt)), lvx=lvx,
@@ -405,7 +432,8 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=()):
                 draw_kind="" if lock is None else lock["kind"], bumps=bm,
                 zone_bottom=float(g.bottom), zone_top=float(g.top), zone_ce=float((g.top + g.bottom) / 2),
                 ext=float(l[li]), ext_i=li, leg_hi=float(h[li:i + 1].max()),
-                level_kinds=_kinds(levels, dr, bm), draw=None if lock is None else float(sd.x(lock["target"])))
+                level_kinds=kinds, draw=None if lock is None else float(sd.x(lock["target"])))
+
 
 
 def _kinds(levels, dr, bm) -> list:

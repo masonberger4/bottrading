@@ -344,6 +344,8 @@ def size_mult(ctx, sd, sw, i, p, session, entry, htf_tag, sloppy: str, lvt: list
             lvt.append("size_" + r)
     from . import newscal as _NC
     m *= _NC.day_risk(day, p, lvt)               # news_calendar_times: the eve of FOMC / CPI (N3, N3.4, N4, D9)
+    from . import daycontext as _DW
+    m *= _DW.day_risk(ctx, p, lvt)               # day_week_context: August (N7.6) and roll-week (N7.5) risk
     for r in p.size_up_rules:
         on = False
         if r == "bpr":

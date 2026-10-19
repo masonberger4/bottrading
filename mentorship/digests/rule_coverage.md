@@ -907,6 +907,8 @@ Low:
 
 ### day_week_context (49 items)
 
+**[built 2026-10-19, stage 8]** All items built except B17.4 (partial: daily-BISI / premium-run tests open) and B23 (report-only tag by design); per-item status and switches in `build_log.md` section "day_week_context". Original build specs below.
+
 Owns: `day_context`, the day branches of `blocked()`, the weekly state in BT.run, and the study scripts. Build `adr5()` and `next_trading_day()` here first.
 
 Medium:

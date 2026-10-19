@@ -70,6 +70,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
     from . import entries as _EN
     from . import targets as _TP
     from . import manage as _MG
+    from . import daycontext as _DW
     from types import SimpleNamespace
     # the funnel keys md_* (strategy.FUNNEL) show which gate stops Ma Deuce (setups_models review)
     if len(hist) < 3:
@@ -205,8 +206,8 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
     def scalp_cap(lv_, t_):                            # #10 scalp: every rung capped at +scalp pts
         s_ = entry + p.sloppy_scalp_pts * p.es_pt      # (review fix: the ladder too, not only target)
         return sorted({min(v, s_) for v in lv_}), min(t_, s_)
-    if p.sloppy_mode == "scalp" and sloppy:
-        levels, target = scalp_cap(levels, target)     # #10 scalp mode
+    if (p.sloppy_mode == "scalp" and sloppy) or _DW.scalp_now(ctx, p, "PRE8", k8 - 1):
+        levels, target = scalp_cap(levels, target)     # #10 scalp mode (+ day_week_context: inside week, low-vol day, ...)
     rm = _EN.extras_risk_mult(ctx, p, ctx.idx[k8 - 1])        # E10 loss_halving / Ep08.12 after_loss_mult
     if sd_ is not None:
         sw_ = dict(ext=float(inv.bottom), ext_i=inv.i)
@@ -216,7 +217,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
     shares = _EN.cap_initial(_first_units(p, ctx.equity, risk, entry, rm, xcap), p)    # E11
     if shares < 1:
         return []
-    flat = _eff_flat(p)
+    flat = _DW.flat_for(day, p, _eff_flat(p))          # N7.1 EARLY_CLOSE
     from . import newscal as _NC
     ff = _NC.fomc_flat_min(day, p)                     # N3.2: an FOMC day is flat at the release
     x = lambda v: sign * v
@@ -237,6 +238,17 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
             if _MG.extras_blocked(ctx, p, "AM", ctx.idx[i], getattr(ctx, "ext_other", ())):
                 _f("md_x_day_stop")
                 return []                              # X12 / X13a / X14d: the morning / day is stopped
+            main_ = list(getattr(ctx, "risk_view", {}).get("trades", []))
+            if _DW.budget_full(ctx, ctx.idx[i], (), main_ + list(getattr(ctx, "ext_other", ()))):
+                _f("md_x_week_budget")
+                return []                              # D19 / X15: the week's trade budget (every engine, as of this bar)
+            # day_week_context: the day / week rules, read at the PREVIOUS close (the limit can fill inside this bar)
+            if _DW.gate(ctx, p, "PRE8", i - 1, t[i - 1], main_):
+                _f("md_x_day_week")
+                return []                              # (pre-09:30 windows)
+            if _DW.side_ok(ctx, p, sign, "PRE8", i - 1) or (p.tgif and sign in getattr(ctx, "block_side", {}).get("tgif", ())):
+                _f("md_x_day_week_side")
+                return []
             if sl[i] <= entry - p.fill_through * p.tick - (0.0 if p.fill_through else 1e-9):
                                                      # retest fills the limit - E3: it must print THROUGH it
                                                      # (the first build filled on a touch, `<=`)
@@ -244,6 +256,12 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
                 on_chop = chop is not None and chop.active_before(i)
                 if p.sloppy_mode == "scalp" and on_chop:
                     levels, target = scalp_cap(levels, target)
+                if p.tue_off_monday == "filter" or p.tgif_week_sweep:
+                    sh_ = SimpleNamespace(sign=sign, x=lambda v: sign * v)       # day_week_context per-order rules: the "sweep"
+                    why_dw = _DW.order_ok(ctx, sh_, dict(ext=float(sl[ctx.start:i].min())), "PRE8", i - 1, p)   # = the lowest low (side
+                    if why_dw:                                                   # space) of the day before the retest bar
+                        _f("md_x_day_week_order")
+                        return []
                 tag = "|".join(sorted(sloppy | ({"chop"} if on_chop else set())))
                 tr = Trade(day, symbol, "AM", "ma_deuce", "long" if sign > 0 else "short", "daily_fvg",
                            False, None, ctx.idx[k8], ctx.idx[i], x(fill), x(stop), x(levels[0] if len(levels) > 1 else target),
@@ -334,6 +352,8 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
                     add = (px2, q2)
         if left and ff and t[i] + ctx.tf >= ff:
             tr.exits.append((ctx.idx[i], x(sc[i]), left, "fomc_flat")); return [tr]
+        if left and _DW.day_exit(ctx, p, "PRE8", t[i] + ctx.tf):
+            tr.exits.append((ctx.idx[i], x(sc[i]), left, "consol_out")); return [tr]    # N8.3: consolidation-day AM out by 11:00
         if left and p.pre_flat_0830 and p.flat_0830_extras and news(day) == "0830" and t[i] + ctx.tf >= 510:
             tr.exits.append((ctx.idx[i], x(sc[i]), left, "pre_0830")); return [tr]    # N4: no position into the 08:30 release
         best = max(best, sh[i])

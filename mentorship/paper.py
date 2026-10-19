@@ -62,7 +62,35 @@ def save_risk_state(path: Path, today, start: dict | None, end: dict | None) -> 
     Path(path).write_text(json.dumps(dict(date=str(today), start=start, end=end)))
 
 
-def snapshot(c, symbol: str, partner: str | None, minutes: int, p: Params, risk_state: dict | None = None):
+def week_state(out_dir: Path, symbol: str, today) -> dict:
+    """X15 / D19 the week's trade state before `today` for paper mode (the backtest's backtest.week_state): read from the
+    paper CSVs already written for the earlier days of the same Monday-Friday week (one row per trade; a trade that
+    was logged again when it closed counts once, the last row wins). {n, net, final_hits, all_final}."""
+    wk = today.isocalendar()[:2]
+    last: dict = {}
+    for f in sorted(Path(out_dir).glob(f"paper_{symbol}_*.csv")):
+        try:
+            d = datetime.strptime(f.stem.rsplit("_", 1)[1], "%Y%m%d").date()
+        except ValueError:
+            continue
+        if d >= today or d.isocalendar()[:2] != wk:
+            continue
+        with f.open(newline="") as fh:
+            for r in csv.DictReader(fh):
+                last[(d, r.get("entry_time"))] = r
+    n = len(last)
+    fh_ = sum(1 for r in last.values() if str(r.get("final_hit")).lower() == "true")
+    net = 0.0
+    for r in last.values():
+        try:
+            net += float(r.get("net") or 0.0)
+        except ValueError:
+            pass
+    return dict(n=n, net=net, final_hits=fh_, all_final=bool(n) and fh_ == n)
+
+
+def snapshot(c, symbol: str, partner: str | None, minutes: int, p: Params, risk_state: dict | None = None,
+             week: dict | None = None):
     """Today's trades and armed setups from the bars closed so far (Schwab). `risk_state` (E10) is
     advanced in place by the simulated day - pass a copy of the day's starting state."""
     from silver_bullet.data import schwab_history
@@ -70,13 +98,13 @@ def snapshot(c, symbol: str, partner: str | None, minutes: int, p: Params, risk_
     now = pd.Timestamp.now(tz=B.NY)
     df = schwab_history(c, symbol, days=days, minutes=minutes)
     q = schwab_history(c, partner, days=days, minutes=minutes) if partner else None
-    trades, log, _ = evaluate(df, symbol, minutes, p, now, q, risk_state=risk_state)
+    trades, log, _ = evaluate(df, symbol, minutes, p, now, q, risk_state=risk_state, week=week)
     return trades, log
 
 
 def evaluate(df: pd.DataFrame, symbol: str, minutes: int, p: Params, now: pd.Timestamp,
              partner_df: pd.DataFrame | None = None, meta: pd.DataFrame | None = None,
-             risk_state: dict | None = None):
+             risk_state: dict | None = None, week: dict | None = None):
     """The paper decision for `now` from a recorded / live frame: closed bars only, today's
     session as a partial day, built by backtest.prepare / day_kwargs exactly like a backtest
     (same session close, lock tables, confluence, gaps, history length). Returns (trades, log,
@@ -94,7 +122,7 @@ def evaluate(df: pd.DataFrame, symbol: str, minutes: int, p: Params, now: pd.Tim
             pa = (qs[-1], [B.rth(x) for x in qs[:-1]][-21:])
     log: list = []
     locks: list = []
-    kw = B.day_kwargs(pr, len(ds) - 1)
+    kw = B.day_kwargs(pr, len(ds) - 1, week=week)
     msg = short_history(len(kw["hist"]), pr.p)
     if msg:
         warnings.warn(msg)
@@ -120,7 +148,8 @@ def run(symbol="SPY", partner="QQQ", minutes=1, p: Params | None = None, out="ru
             print("session over"); break
         try:
             rs_try = None if rs_start is None else dict(rs_start)
-            trades, log = snapshot(c, symbol, partner, minutes, p, risk_state=rs_try)
+            wk_ = week_state(Path(out), symbol, now.date()) if p.dw_needs_week else None   # X15 / D19 weekly cap
+            trades, log = snapshot(c, symbol, partner, minutes, p, risk_state=rs_try, week=wk_)
             rs_day = rs_try
         except Exception as e:                        # keep going through API hiccups
             print(f"{now:%H:%M:%S} fetch failed: {e}"); trades, log = [], []
