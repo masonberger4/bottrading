@@ -842,7 +842,7 @@ def ep01_manage(ctx, sd, pos, tr, i, p, can_add: bool) -> None:
     for g in new:                                      # the trail under each new gap's bodies
         b = min(min(sd.o[k], sd.c[k]) for k in range(g.i - 2, g.i + 1)) - p.trail_pad
         if b < sd.c[i] and pos.get("ep01_trail_ok"):
-            pos["stop"] = max(pos["stop"], b)
+            S._MG.raise_stop(pos, b)                       # X5c: never on a day trade
     if not (can_add and pos["add"] is None and S._nadds(pos, tr) < len(p.adds)):
         return
     if st == 0 and i > pos["fill_i"] and sd.c[i] > pos["fvg_ce"] > pos["stop"]:
@@ -1282,16 +1282,30 @@ def unengaged_ok(ctx, sd, i, p, session, draw) -> bool:
 
 # --- adds (M2 add_leg_cut, Ep05.4, M4, M12.2, M4.4) ------------------------------------------------
 
+def add_leg(pos):
+    """The leg the add rules measure (M2.6): fixed at the fill (`leg_fill`), else the position's leg."""
+    return pos.get("leg_fill") or pos.get("leg")
+
+
+def add_pd_ok(pos, px, p) -> bool:
+    """M2.6 add_in_pd (022 ~49:26; 058 ~43:12): pyramid only on the entry side of the leg's EQ (add_pd_level). Checked in
+    `add_ok` AND in `strategy._arm_add`, so every add path (FVG, Ep04.10 low end, retest, Ep01 CE add, down-close) honours it."""
+    leg = add_leg(pos)
+    if not (p.add_in_pd and leg):
+        return True
+    ext, hi = leg
+    return px <= ext + p.add_pd_level * (hi - ext) + 1e-9
+
+
 def add_ok(sd, pos, px, i, p) -> bool:
-    if p.add_leg_cut and pos.get("leg"):
-        ext, hi = pos["leg"]
+    leg = add_leg(pos)
+    if p.add_leg_cut and leg:
+        ext, hi = leg
         lg = hi - ext
         if px > ext + 0.5 * lg or sd.h[pos["fill_i"]:i + 1].max() > ext + 0.75 * lg:
             return False
-    if p.add_in_pd and pos.get("leg"):                  # M2.6 (022 ~49:26; 058 ~43:12): pyramid only on the entry side of the EQ
-        ext, hi = pos["leg"]
-        if px > ext + p.add_pd_level * (hi - ext) + 1e-9:
-            return False
+    if not add_pd_ok(pos, px, p):
+        return False
     if p.adds_in_breaker and pos.get("bz_side"):
         top, bot = pos["bz_side"]
         if not (bot - 1e-12 <= px <= top + 1e-12):

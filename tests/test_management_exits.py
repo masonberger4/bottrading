@@ -5,6 +5,7 @@ arrays), scenario tests go through run_day (the real engine path), and the no-lo
 full run with runs truncated just after every entry and exit (synthetic window and, when the data is on
 disk, a short ES window) for every switch this package added."""
 import warnings
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -81,7 +82,7 @@ def test_defaults_validation_and_aliases():
                dict(session_fail_mode="x"), dict(offside_level="x"), dict(time_stop_ref="x"), dict(obj_source="x"),
                dict(reentry_risk="x"), dict(add_mode="x"), dict(pd3_list=("x",)), dict(pd3_n=0), dict(time_stop_frac=0.0),
                dict(far_edge_frac=1.5), dict(pd3_half_frac=1.0), dict(am_bulk_frac=0.0), dict(trail_after=0),
-               dict(add_pd_level=1.5), dict(session_stop_after_fails=-1)):
+               dict(add_pd_level=1.5), dict(session_stop_after_fails=-1), dict(extras_be_on="x"), dict(stops_passes=0)):
         with pytest.raises(ValueError):
             Params(**kw)
     assert Params(pool_size_rank=True).pool_rank and Params(prop_exit=True).prop_mt_exit
@@ -337,9 +338,11 @@ def test_pd3_needs_the_full_list_and_half_off_needs_all_three_kinds():
 
 def test_pd3_dynamic_reads_arrays_formed_after_the_fill():
     p = Params(**BASE, pd3_exit=True, pd3_dynamic=True, pd3_n=1)
-    ctx, sd, pos, tr, _ = mk([(102.9, 103.0, 102.4, 102.8)], p, pd3=[], pd3_broken=set())
+    ctx, sd, pos, tr, _ = mk([(101.0, 101.0, 98.9, 99.5)], p, pd3=[], pd3_broken=set())        # an empty fixed list is ignored
     out = drive(ctx, sd, pos, tr, p)
-    assert out == [] or out[0][0] == "pd3"                    # a dynamic list is re-read each bar (smoke: no crash, no fixed list)
+    assert out == [("pd3", 99.5, 100)]                        # the list is re-read at the bar: the entry FVG's bottom (100.0) broke
+    ctx, sd, pos, tr, _ = mk([(101.0, 101.0, 98.9, 99.5)], replace(p, pd3_dynamic=False), pd3=[], pd3_broken=set())
+    assert drive(ctx, sd, pos, tr, replace(p, pd3_dynamic=False)) == []        # the fixed (here empty) list never fires
 
 
 # --- X8 other invalidations --------------------------------------------------------------------------------------
@@ -577,8 +580,17 @@ def test_run_day_time_stop_cuts_and_be_pad_and_after_mss():
     assert [e[3] for e in tr.exits][0] == "time_cut" and tr.exits[0][2] == tr.shares // 2
     tr = _a(rows, time_stop_bars=2)[0]
     assert tr.exits[0][3] == "time"
-    tr = _a(rows, far_edge_min=2, far_edge_frac=1.0)
-    assert tr == [] or tr[0].exits
+    # X9c far edge / X8g meander / X7a pd3 through run_day on the FVG scenario B (the breaker-MT exit switched off)
+    post = [(102.3, 102.4, 101.2, 101.6), (101.6, 101.7, 99.9, 100.2), (100.2, 100.4, 100.0, 100.3)]
+    from test_review_fixes import B_ROWS, B_POST
+
+    def fvg_day(**kw):
+        t, *_ = run(day(B_ROWS + post), history(hi=112.0, lo=88.0), Params(**B_POST, breaker_mt_respect=False, **kw))
+        return [(e[3], round(float(e[1]), 2)) for e in t[0].exits]
+    assert fvg_day() == [("am_exit", 100.3)]
+    assert fvg_day(far_edge_min=5, far_edge_frac=1.0) == [("far_edge", 100.2)]
+    assert fvg_day(meander_bars=2) == [("meander", 100.3)]
+    assert fvg_day(pd3_exit=True, pd3_n=1) == [("pd3", 100.2)]
 
 
 def test_run_day_late_cutoff_default_and_switch_off():
@@ -610,6 +622,20 @@ LA = {
                    time_stop_min=10, offside_exit=True, add_pd_level=0.3, add_in_pd=True, adds=(0.5,), done_target_before=600),
     "adds": dict(adds=(0.5, 0.33), add_in_pd=True, add_cutoff=0.25, add_cut_ref="leg", add_mode="downclose", tp_upclose=True,
                  ep07_body_exit=True, late_cutoff=600, pool_size_rank=True),
+    # review fixes: the Silver Bullet / Ma Deuce run the same breakeven modes and invalidation exits, the stops are two-way
+    "extras_a": dict(extras_be_on="follow", be_on="after_mss", meander_bars=3, fvg_abort=True, pd3_exit=True, time_stop_min=10,
+                     time_stop_ref="array_far", sb_model=True, ma_deuce=True, am_bulk_t=600),
+    "extras_b": dict(extras_be_on="follow", be_on="stall", leg_mt_exit=True, far_edge_min=5, first_fvg_fail=True, offside_exit=True,
+                     time_stop_bars=3, time_stop_ref="leg_high", sb_model=True, ma_deuce=True, pm_consol_exit=840),
+    "extras_c": dict(extras_be_on="follow", be_on="pool", ir_eq_exit=True, pd3_exit=True, pd3_dynamic=True, pd3_half=True,
+                     pd3_half_frac=0.33, sb_model=True, ma_deuce=True, invalidations_extras=True),
+    "stops2": dict(no_trade_after_win=True, session_stop_after_fails=2, loss_ends_morning=True, sb_model=True, ma_deuce=True,
+                   obj_stop=True, obj_source="htf_ce"),
+    "stops3": dict(chop_one_win=True, reverse_in_session=True, reverse_after_loss=False, lost_side_session=True, reentry_half=True,
+                   reentry_gate=True, reentry_stop_only=True, sb_model=True, first_fvg_fail_after_t1=True, first_fvg_fail=True,
+                   fvg_abort=True, fvg_abort_tf=15, pd3_exit=True, pd3_half=True, pd3_half_frac=0.33),
+    "adds2": dict(adds=(0.5, 0.33), add_in_pd=True, add_fvg_low=True, pm_ep01_adds=True, add_pd_level=0.3, trade_type="day",
+                  trail_breakaway=True, ladder_trail="breakaway"),
 }
 
 
@@ -620,13 +646,13 @@ def test_look_ahead_synthetic(name):
 
 
 @pytest.mark.skipif(not ES, reason="no ES data")
-@pytest.mark.parametrize("name", ["time", "session", "loss", "misc", "adds"])
+@pytest.mark.parametrize("name", list(LA))
 def test_look_ahead_es_short_window(name):
     es = B.load("ES", 5, source="databento")
     df = es[(es.index >= "2024-01-08") & (es.index < "2024-02-02")]
     meta = B.load_meta("ES", 5)
     p = Params(**FUT, draw_lock="off", htf_resist_cap=False, leg_pd=0, min_draw_pts=0, use_bias=False, ob_entry="post_mss",
-               entry="edge_1tick", max_risk_pts=40, sb_model=True, ma_deuce=True, **LA[name])
+               entry="edge_1tick", max_risk_pts=40, **{"sb_model": True, "ma_deuce": True, **LA[name]})
     _no_look_ahead(df, 5, "ES", p, COLS, every=3, meta=meta, exits=True)
 
 
@@ -750,14 +776,16 @@ def test_leg_is_fixed_at_the_fill_for_the_add_cuts():
     p = Params(**BASE, add_cutoff=0.25, add_cut_ref="leg")
     ctx, sd, pos, tr, _ = mk([], p, leg=(99.0, 102.0))
     MG.init_pos(ctx, sd, pos, tr, o, pos["fill_i"], p)
-    assert pos["leg"] == (99.0, 103.0)                             # the displacement ran to 103.0 before the fill (bar 3)
+    assert pos["leg_fill"] == (99.0, 103.0)                        # the displacement ran to 103.0 before the fill (bar 3)
+    assert pos["leg"] == (99.0, 102.0)                             # review fix: the other leg readers never see it
+    assert S._SM.add_leg(pos) == (99.0, 103.0)
     p = Params(**BASE, add_cutoff=0.25, add_cut_ref="leg", add_leg_at_fill=False)
     ctx, sd, pos, tr, _ = mk([], p, leg=(99.0, 102.0))
     MG.init_pos(ctx, sd, pos, tr, o, pos["fill_i"], p)
-    assert pos["leg"] == (99.0, 102.0)
+    assert pos["leg_fill"] == (99.0, 102.0) and pos["leg"] == (99.0, 102.0)
     ctx, sd, pos, tr, _ = mk([], Params(**BASE), leg=(99.0, 102.0))
     MG.init_pos(ctx, sd, pos, tr, o, pos["fill_i"], Params(**BASE))
-    assert pos["leg"] == (99.0, 102.0)                              # no add cut on: untouched
+    assert pos["leg"] == (99.0, 102.0)                              # no add switch on: leg unchanged either way
 
 
 def test_downclose_add_arms_at_a_down_close_candle_that_holds():
@@ -844,7 +872,7 @@ def test_synthetic_reentry_gate_risk_and_session_stop():
     assert len(t) == 7 and t.reentry.sum() == 1
     re_ = t[t.reentry].iloc[0]
     assert re_.side == "short" and re_.session == "PM" and str(re_.date) == "2026-03-13"      # the same side, the same session
-    assert t.equals(_syn_run(reentry_half=True, reentry_gate=True)) or len(_syn_run(reentry_half=True, reentry_gate=True)) == 7
+    assert len(_syn_run(reentry_half=True, reentry_gate=True)) == 7
     # D18: half of the LOSING trade's own risk (0.40% -> 0.20% of equity)
     tl = _syn_run(reentry_half=True, reentry_risk="loss")
     first = tl[(tl.date == re_.date) & ~tl.reentry].iloc[0]
@@ -855,3 +883,397 @@ def test_synthetic_reentry_gate_risk_and_session_stop():
     assert len(_syn_run(reentry_half=True, session_stop_after_fails=2)) == 7              # two fails would be needed first
     # the stop is a structural failure, so "arrays" counts it too; a lock / target on the re-entry is wired
     assert len(_syn_run(reentry_half=True, reentry_lock_r=2.0, reentry_target_r=3.0)) == 7
+
+
+# =====================================================================================================================
+# review fixes (management_exits): two-way stops, Silver Bullet / Ma Deuce parity, add_in_pd everywhere, day trade guards
+# =====================================================================================================================
+
+from dataclasses import replace  # noqa: E402
+
+from mentorship import sb_model, targets as TP  # noqa: E402
+from test_review_fixes import B_ROWS, B_POST  # noqa: E402
+from test_targets_partials import _pos as _tpos, _Tr as _TpTr, bar_ctx  # noqa: E402
+
+SB0 = replace(Params(**B_POST), wick_levels=False, am=(0, 0), pm=(0, 0), sb_model=True)     # only the Silver Bullet trades
+SB_POST = [(102.3, 102.4, 101.2, 101.6)] + [(101.6, 101.8, 101.4, 101.6)] * 6                # fill 10:15, then flat
+SB_INSIDE = [(102.3, 102.4, 101.2, 101.1), (101.1, 101.3, 100.9, 101.0), (101.0, 101.2, 100.9, 101.1),
+             (101.1, 101.3, 100.8, 100.9)] + [(100.9, 101.0, 100.8, 100.9)] * 4
+SB_BREAK = [(102.3, 102.4, 101.2, 101.6), (101.6, 101.7, 101.3, 101.5), (101.5, 101.5, 99.9, 100.2),
+            (100.2, 100.3, 100.0, 100.3), (100.3, 100.3, 98.6, 98.9), (98.9, 98.9, 98.0, 98.2)]
+SB_T1 = [(102.3, 102.4, 101.2, 101.6), (101.6, 106.4, 101.5, 106.0), (106.0, 106.1, 100.5, 100.8),
+         (100.8, 100.9, 100.4, 100.6), (100.6, 100.7, 100.3, 100.5)]           # fixed mode: T1 106.3, retrace at once
+SB_EXP = [(102.3, 102.4, 101.2, 101.6), (101.6, 106.4, 101.5, 106.0), (106.0, 107.5, 105.9, 107.4),
+          (107.4, 107.5, 100.5, 100.8), (100.8, 100.9, 100.4, 100.6)]          # T1, an expansion close, then the retrace
+
+
+def _sb_go(post, **kw):
+    tr, *_ = run(day(B_ROWS + post), history(hi=112.0, lo=88.0), replace(SB0, **kw))
+    return tr
+
+
+def _sb_exits(tr):
+    return [(e[3], round(float(e[1]), 2), e[2]) for e in tr[0].exits]
+
+
+def _sb_direct(rows, trades=(), start="09:30", **kw):
+    """sb_model.run_sb on a hand-made day with `trades` as the main engine's closed trades."""
+    p = replace(SB0, **kw)
+    ctx = S.DayCtx(day(rows, start=start), D0, history(hi=112.0, lo=88.0), 5)
+    S._setup_news(ctx, D0, p)
+    ctx.equity, ctx.conf, ctx.lock = p.account_equity, None, {}
+    ctx.risk_view = dict(rs0=None, trades=list(trades))
+    sides = [S.Side(1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, 0.25), S.Side(-1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, 0.25)]
+    return ctx, sb_model.run_sb(ctx, sides, p, D0, "ES", lambda *a: False, {})
+
+
+# --- Silver Bullet: breakeven default kept, other modes implemented, same time stop / bulk / invalidations -------------
+
+def test_sb_breakeven_default_is_the_first_build_and_follow_uses_be_on():
+    fixed = dict(sb_target_mode="fixed", sb_runner=True)
+    base = _sb_exits(_sb_go(SB_T1, **fixed))
+    assert base == [("t1", 106.3, 277), ("be", 101.3, 70)]                    # BE at the first target (the pre-package SB)
+    assert Params().extras_be_on == "t1"
+    assert _sb_exits(_sb_go(SB_T1, **fixed, be_on="off")) == base               # be_on alone never changes the SB / MD default
+    assert _sb_exits(_sb_go(SB_T1, **fixed, extras_be_on="follow", be_on="off"))[1][0] == "am_exit"   # never BE: carried to noon
+    assert _sb_exits(_sb_go(SB_T1, **fixed, extras_be_on="follow"))[1][0] == "am_exit"      # expansion: no close above T1 yet
+    for mode in ("t1", "pool", "after_mss"):
+        assert _sb_exits(_sb_go(SB_T1, **fixed, extras_be_on="follow", be_on=mode)) == base, mode
+    # expansion: a later close above the first target moves the stop to breakeven, the retrace is taken out there
+    assert _sb_exits(_sb_go(SB_EXP, **fixed, extras_be_on="follow")) == [("t1", 106.3, 277), ("be", 101.3, 70)]
+    assert _sb_exits(_sb_go(SB_EXP, **fixed, extras_be_on="follow", be_on="off"))[1][0] == "am_exit"
+    stall = _sb_exits(_sb_go(SB_T1, **fixed, extras_be_on="follow", be_on="stall", be_stall_bars=1, be_stall_min_r=0.1))
+    assert stall[1][0] == "stop_gap" and stall[1][1] == 100.8                  # the stall moved the stop to BE, the gap went through
+    assert _sb_exits(_sb_go(SB_T1, **fixed, be_pad_pts=0.5))[1][1] == 101.8      # the pad applies to the "t1" default as well
+
+
+def test_sb_time_stop_refs_bulk_and_invalidations_run_in_the_silver_bullet():
+    assert _sb_exits(_sb_go(SB_POST)) == [("am_exit", 101.6, 347)]
+    assert _sb_exits(_sb_go(SB_POST, time_stop_min=10, time_stop_pts=1.0))[0][0] == "time"
+    # X9a: leg_high needs the leg high (102.5) reached; array_far needs the entry FVG's top (101.3): best 101.8 delivers it
+    assert _sb_exits(_sb_go(SB_POST, time_stop_min=10, time_stop_pts=0.2, time_stop_ref="leg_high"))[0][0] == "time"
+    assert _sb_exits(_sb_go(SB_POST, time_stop_min=10, time_stop_pts=5, time_stop_ref="array_far"))[0][0] == "am_exit"
+    assert _sb_exits(_sb_go(SB_POST, time_stop_min=10, time_stop_pts=1.0, time_stop_extras=False))[0][0] == "am_exit"
+    assert _sb_exits(_sb_go(SB_POST, time_stop_min=10, time_stop_pts=1.0, time_stop_frac=0.5))[0][0] == "time_cut"
+    out = _sb_exits(_sb_go(SB_POST + [(101.6, 101.8, 101.4, 101.6)] * 4, am_bulk_t=630, am_bulk_frac=0.8))
+    assert out[0] == ("am_bulk", 101.6, 277) and out[1][0] == "am_exit"        # X10b bulk off, the rest at noon
+    # X8g meander (closes inside the FVG), X6 abort, X7a three arrays (n=1), X8b leg MT, Ep03.10 first FVG fail, X9c far edge
+    assert _sb_exits(_sb_go(SB_INSIDE, meander_bars=2))[0][:2] == ("meander", 101.1)
+    assert _sb_exits(_sb_go(SB_BREAK, fvg_abort=True))[0][:2] == ("abort", 98.6)
+    t = _sb_go(SB_BREAK, pd3_exit=True, pd3_n=1)
+    assert _sb_exits(t)[0][:2] == ("pd3", 100.2) and "pd3_n1" in t[0].lv_tags
+    assert _sb_exits(_sb_go(SB_BREAK, leg_mt_exit=True))[0][:2] == ("leg_mt", 98.9)
+    assert _sb_exits(_sb_go(SB_BREAK, first_fvg_fail=True))[0][0] == "first_fvg_fail"
+    assert _sb_exits(_sb_go(SB_BREAK, far_edge_min=5, far_edge_frac=1.0))[0][:2] == ("far_edge", 100.2)
+    # invalidations_extras=False keeps the main-engine-only behaviour
+    assert _sb_exits(_sb_go(SB_INSIDE, meander_bars=2, invalidations_extras=False))[0][0] == "am_exit"
+    assert _sb_exits(_sb_go(SB_BREAK, fvg_abort=True, invalidations_extras=False))[0][0] == "am_exit"
+
+
+def test_sb_day_and_session_stops_block_orders_and_pm_consolidation(monkeypatch):
+    rows = B_ROWS + SB_POST
+    w = closed("AM", 50.0, "t1", ts="2026-06-23 10:00")
+    l = closed("AM", -50.0, "stop", ts="2026-06-23 10:00")
+    assert len(_sb_direct(rows)[1]) == 1 and len(_sb_direct(rows, [w])[1]) == 1
+    assert _sb_direct(rows, [w], no_trade_after_win=True)[1] == []                    # X14d: a winner ended the day
+    assert _sb_direct(rows, [l], loss_ends_morning=True)[1] == []                     # X13a: the morning is over
+    assert _sb_direct(rows, [l], session_stop_after_fails=1)[1] == []                 # X7c
+    assert len(_sb_direct(rows, [l], session_stop_after_fails=2)[1]) == 1
+    late = closed("AM", 50.0, "t1", ts="2026-06-23 10:30")
+    assert len(_sb_direct(rows, [late], no_trade_after_win=True)[1]) == 1             # closed AFTER the order bar: not seen
+    # X11c: no PM Silver Bullet window after the exit time on a consolidation day; a trade already in is out at that time
+    assert [x.session for x in _sb_direct(rows, start="13:30")[1]] == ["PM"]
+    monkeypatch.setattr(MG, "consol_day", lambda ctx, i, p: True)
+    assert _sb_direct(rows, start="13:30", pm_consol_exit=840)[1] == []
+    monkeypatch.setattr(MG, "consol_day", lambda ctx, i, p: bool(ctx.t[i] >= 855))
+    ctx, t = _sb_direct(rows, start="13:30", pm_consol_exit=840)
+    assert [x.exits[-1][3] for x in t] == ["pm_consol"]
+
+
+# --- Ma Deuce on real ES bars (the 2020-03-02 trade, its bars after the fill replaced by a flat tape) -----------------
+
+MD_ES = Path("data/mentorship/ES_5min_db.csv").exists() and Path("data/mentorship/NQ_5min_db.csv").exists()
+
+
+def _md_run(flat=3746.65, hi_pad=0.2, upto="11:00", **kw):
+    from test_setups_models import _es, ES_BASE
+    df, pa, meta = _es("2020-02-03", "2020-03-04")
+    d = df.copy()
+    day_ = pd.Timestamp("2020-03-02", tz=NY)
+    m = (d.index >= day_ + pd.Timedelta(hours=8, minutes=25)) & (d.index < day_ + pd.Timedelta(hours=int(upto[:2]), minutes=int(upto[3:])))
+    d.loc[m, ["open", "high", "low", "close"]] = np.array([flat, flat + hi_pad, flat - 0.2, flat])
+    p = Params(**ES_BASE, ma_deuce=True, md_eth=True, md_ladder=True, md_second=True, md_blocked=True, am=(0, 0), pm=(0, 0), **kw)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        t = B.run(d, 5, "ES", p, pa, meta=meta)
+    return t[(t.setup == "ma_deuce") & (t.date.astype(str) == "2020-03-02")]
+
+
+@pytest.mark.skipif(not MD_ES, reason="no ES / NQ data")
+def test_ma_deuce_time_stop_refs_bulk_meander_and_invalidations():
+    assert list(_md_run().exit_reason) == ["am_exit"]
+    assert list(_md_run(time_stop_min=10).exit_reason) == ["time"]
+    assert list(_md_run(time_stop_min=10, time_stop_ref="array_far").exit_reason) == ["am_exit"]     # X9a: the zone top was reached
+    assert list(_md_run(time_stop_min=10, time_stop_ref="leg_high").exit_reason) == ["time"]         # ... the leg high was not
+    assert list(_md_run(time_stop_min=10, time_stop_extras=False).exit_reason) == ["am_exit"]
+    assert list(_md_run(am_bulk_t=540).exit_reason) == ["am_bulk+am_exit"]                           # X10b in Ma Deuce
+    # X8g meander: closes INSIDE the inverted FVG (below its top 3746.25, above the stop) three bars in a row
+    assert list(_md_run(flat=3745.9, meander_bars=3).exit_reason) == ["meander"]
+    assert list(_md_run(flat=3745.9, meander_bars=3, invalidations_extras=False).exit_reason) == ["am_exit"]
+    assert list(_md_run(flat=3745.9).exit_reason) == ["am_exit"]
+
+
+# --- two-way day / session stops between the main engine and the Silver Bullet / Ma Deuce ------------------------------
+
+def _fake_sb(win=True, hhmm="09:40", setup="sb_am", session="AM"):
+    def run_sb(ctx, sides, p, day_, symbol, blocked, btag):
+        t = pd.Timestamp(f"{day_} {hhmm}", tz=NY)
+        tr = S.Trade(day_, symbol, session, setup, "long", "x", False, None, t - pd.Timedelta(minutes=10), t - pd.Timedelta(minutes=5),
+                     100.0, 99.0, 102.0, None, 10, sb=True)
+        tr.exits.append((t, 105.0 if win else 98.0, 10, "t1" if win else "stop"))
+        return [tr]
+    return run_sb
+
+
+def test_silver_bullet_win_stops_the_main_engine_two_way(monkeypatch):
+    assert len(_a()) == 1                                                                  # the main engine trades on scenario A
+    monkeypatch.setattr(sb_model, "run_sb", _fake_sb(win=True, hhmm="09:40"))
+    main = lambda **k: [t for t in _a(sb_model=True, **k) if not t.sb]
+    assert len(main()) == 1 and len(main(no_trade_after_win=True, stops_passes=1)) == 1   # one-way: the main loop never saw it
+    assert main(no_trade_after_win=True) == []                                             # two-way (default 3 passes)
+    assert [t.setup for t in _a(sb_model=True, no_trade_after_win=True)] == ["sb_am"]      # only the SB trade is left
+    # a LOSS in the AM ends the morning for the main engine; fails count toward the session stop
+    monkeypatch.setattr(sb_model, "run_sb", _fake_sb(win=False, hhmm="09:40"))
+    assert main(loss_ends_morning=True) == [] and len(main(loss_ends_morning=True, stops_passes=1)) == 1
+    assert main(session_stop_after_fails=1) == [] and len(main(session_stop_after_fails=2)) == 1
+    # an SB win AFTER the main trade's exit cannot unwind it: the exit time decides, not the pass
+    monkeypatch.setattr(sb_model, "run_sb", _fake_sb(win=True, hhmm="11:30"))
+    assert len(main(no_trade_after_win=True)) == 1
+
+
+def test_run_day_wrapper_side_effects_come_from_the_last_pass_only(monkeypatch):
+    monkeypatch.setattr(sb_model, "run_sb", _fake_sb(win=True, hhmm="09:40"))
+    p = Params(**BASE, sb_model=True, no_trade_after_win=True)
+    locks, log = [], []
+    S.run_day(day(A_ROWS, spike=True), history(), "ES", p, 5, locks=locks, log=log, bias_by_cut=A_LOCK)
+    locks1, log1 = [], []
+    S.run_day(day(A_ROWS, spike=True), history(), "ES", replace(p, stops_passes=1), 5, locks=locks1, log=log1, bias_by_cut=A_LOCK)
+    assert len(locks) == len(locks1) and len(locks) > 0                                   # not doubled by the extra passes
+    assert len(log) <= len(log1)                                                           # the stopped pass logs fewer orders
+
+
+def test_ma_deuce_reads_the_silver_bullets_trade_through_the_fixed_point():
+    ctx = SimpleNamespace(risk_view=dict(trades=[]), ext_other=[closed("AM", 50.0, "t1", ts="2026-06-23 08:10")])
+    p = Params(**BASE, no_trade_after_win=True)
+    ts = pd.Timestamp("2026-06-23 08:20", tz=NY)
+    assert MG.extras_blocked(ctx, p, "AM", ts, ctx.ext_other) and not MG.extras_blocked(ctx, p, "AM", ts)
+    assert not MG.extras_blocked(ctx, p, "AM", pd.Timestamp("2026-06-23 08:05", tz=NY), ctx.ext_other)   # not closed yet
+
+
+def test_apply_stops_with_the_extras_counts_trades_only_as_of_their_exit():
+    p = Params(**BASE, no_trade_after_win=True)
+    w = closed("AM", 50.0, "t1", ts="2026-06-23 09:50")                  # exits 09:55
+    done, st = {"AM": False}, {"ext": [w]}
+    MG.sync_ext([], p, done, st, pd.Timestamp("2026-06-23 09:50", tz=NY))
+    assert not done["AM"] and not MG.blocked_now(st, "AM")
+    MG.sync_ext([], p, done, st, pd.Timestamp("2026-06-23 09:55", tz=NY))
+    assert done["AM"] and MG.blocked_now(st, "PM") and st["day_done"]
+    f = [closed("AM", -50.0, ts=f"2026-06-23 09:{50 + 3 * k}") for k in range(2)]            # fails across the two engines
+    main_f = [closed("AM", -50.0, ts="2026-06-23 09:40")]
+    st = {"ext": f}
+    MG.apply_stops(main_f, Params(**BASE, session_stop_after_fails=3), {"AM": False}, st, ts=pd.Timestamp("2026-06-23 10:30", tz=NY))
+    assert MG.blocked_now(st, "AM")
+
+
+# --- X11c: one explicit 13:30 index ---------------------------------------------------------------------------------
+
+def test_consol_day_uses_the_first_bar_at_or_after_1330_even_when_it_is_missing():
+    df = day([(100.0, 100.2, 99.8, 100.0)] * 30)
+    df = df[df.index.strftime("%H:%M") != "13:30"]
+    p = Params(**BASE, pm_consol_exit=840)
+    ctx = S.DayCtx(df, D0, history(), 5)
+    S._setup_news(ctx, D0, p)
+    k = S._idx_at(ctx, 810)
+    assert ctx.t[k] == 815                                               # 13:30 is missing: the next bar is the index
+    assert MG.consol_day(ctx, k - 1, p) is False                         # before it: no classification
+    r1, r2 = MG.consol_day(ctx, k, p), MG.consol_day(ctx, len(ctx.t) - 1, p)
+    assert r1 == r2                                                      # the same answer from any later bar (cached)
+
+
+# --- M2.6 add_in_pd on every add path; the fixed leg is its own field --------------------------------------------------
+
+def _add_pos(leg_fill, **kw):
+    ctx, sd, pos, tr, p = mk([(101.0, 101.3, 100.9, 101.2)], Params(**{**BASE, "adds": (0.5,)}, **kw), lead=LEG)
+    pos.update(add=None, leg_fill=leg_fill, ep01_stage=0, ob_add_used=set())
+    ctx.equity = 100_000.0
+    return ctx, sd, pos, tr, p
+
+
+def test_add_in_pd_is_honoured_by_every_add_path():
+    ctx, sd, pos, tr, p = _add_pos((99.0, 105.0), add_in_pd=True)               # EQ 102.0
+    S._arm_add(pos, tr, 103.0, 6, p, 100_000.0)                                  # above the EQ: refused (any caller)
+    assert pos["add"] is None
+    S._arm_add(pos, tr, 101.5, 6, p, 100_000.0)
+    assert pos["add"] is not None and pos["add"]["px"] == 101.5
+    # the Ep 01 CE add (stage 0) arms at the entry FVG's CE (100.5): allowed under a 102 EQ, refused above a 100.0 EQ
+    ctx, sd, pos, tr, p = _add_pos((99.0, 105.0), add_in_pd=True, pm_ep01_adds=True)
+    S._SM.ep01_manage(ctx, sd, pos, tr, len(ctx.t) - 1, p, True)
+    assert pos["add"] is not None
+    ctx, sd, pos, tr, p = _add_pos((99.0, 101.0), add_in_pd=True, pm_ep01_adds=True)       # EQ 100.0 < the CE 100.5
+    S._SM.ep01_manage(ctx, sd, pos, tr, len(ctx.t) - 1, p, True)
+    assert pos["add"] is None
+    ctx, sd, pos, tr, p = _add_pos((99.0, 101.0), pm_ep01_adds=True)                       # off: the CE add is armed
+    S._SM.ep01_manage(ctx, sd, pos, tr, len(ctx.t) - 1, p, True)
+    assert pos["add"] is not None
+
+
+def test_the_fixed_leg_does_not_leak_into_the_other_leg_readers():
+    o = dict(ext_i=1, session="AM")
+    for kw in (dict(add_in_pd=True), dict(add_cutoff=0.25), dict(add_cut="eq"), dict(add_leg_cut=True)):
+        p = Params(**BASE, be_on="after_mss", **kw)
+        ctx, sd, pos, tr, _ = mk([(102.2, 102.6, 102.1, 102.5), (102.5, 102.7, 102.4, 102.6)], p, leg=(99.0, 102.0))
+        MG.init_pos(ctx, sd, pos, tr, o, pos["fill_i"], p)
+        assert pos["leg"] == (99.0, 102.0) and pos["leg_fill"] == (99.0, 103.0), kw
+        drive(ctx, sd, pos, tr, p)
+        assert pos["stop"] == 101.0, kw     # after_mss read the REAL leg high (102): the 102.5 close passed it (not the fixed 103.0)
+
+
+# --- X5c: a day trade is never trailed, whatever the switch ---------------------------------------------------------------
+
+def test_raise_stop_helper_and_every_trail_site_skips_a_day_trade():
+    pos = dict(stop=99.0)
+    MG.raise_stop(pos, 100.0)
+    MG.raise_stop(pos, 98.0)
+    assert pos["stop"] == 100.0
+    pos = dict(stop=99.0, day_trade=True)
+    MG.raise_stop(pos, 100.0)
+    assert pos["stop"] == 99.0
+    # targets.manage trail_breakaway
+    post = [(101.0, 101.5, 100.9, 101.4), (101.4, 102.0, 101.3, 101.9)]
+    for day_, expect in ((False, True), (True, False)):
+        ctx, sd, pos, tr, p = mk(post, Params(**BASE, trail_breakaway=True), day_trade=day_)
+        ctx.pd = {}
+        for i in range(pos["fill_i"] + 1, len(ctx.t)):
+            TP.manage(ctx, sd, pos, tr, i, ctx.idx[i], p, None, None, None)
+        assert (pos["stop"] > 99.0) == expect, day_
+    # the Ep 01 trail under each new gap's bodies
+    new = [(101.4, 101.6, 101.2, 101.5), (101.7, 103.0, 101.6, 102.9), (103.0, 103.5, 102.5, 103.4)]
+    for day_, expect in ((False, True), (True, False)):
+        ctx, sd, pos, tr, p = mk(new, Params(**BASE, pm_ep01_adds=True), day_trade=day_)
+        pos.update(add=None, ep01_stage=2, ep01_trail_ok=True, ob_add_used=set())
+        S._SM.ep01_manage(ctx, sd, pos, tr, len(ctx.t) - 1, p, False)
+        assert (pos["stop"] > 99.0) == expect, day_
+
+
+def test_day_trade_unavailable_is_counted_in_the_funnel():
+    import collections
+    S.FUNNEL = collections.Counter()
+    try:
+        rows = A_ROWS[:5] + [(100.3, 103.0, 100.2, 102.9)]
+        tr, *_ = run(day(rows, spike=True), history(), Params(**BASE, min_risk_pts=0.3, trade_type="day", day_stop="open"), A_LOCK)
+        assert tr and "day_trade" not in tr[0].lv_tags                       # open 100.0 is not under the 100.0 entry
+        assert S.FUNNEL["x_day_trade_unavailable"] >= 1
+    finally:
+        S.FUNNEL = None
+
+
+# --- X13a / X13b / D18 ------------------------------------------------------------------------------------------------
+
+def test_reverse_in_session_falls_through_when_the_reentry_gate_refuses():
+    fomc = date(2024, 1, 31)
+    pos, tr = _closed_pos(-100.0, day_=fomc)
+    done, st = {"AM": True}, _state()
+    p = Params(**BASE, reentry_half=True, reentry_gate=True, reverse_in_session=True)
+    S._after_close(pos, [], p, done, st, i=7, ctx=_ctx(fomc))
+    assert not done["AM"] and st["only_side"]["AM"] == -1 and not st["re_ctx"]          # the gate refused: the reversal still opens
+    pos, tr = _closed_pos(-100.0)                                                       # an allowed re-entry wins over the reversal
+    done, st = {"AM": True}, _state()
+    S._after_close(pos, [], p, done, st, i=7, ctx=_ctx())
+    assert not done["AM"] and st["re_ctx"]["AM"] and not st["only_side"]
+
+
+def test_synthetic_reverse_in_session_works_with_the_lost_side_lock():
+    base = _syn_run(reverse_after_loss=False, lost_side_session=True)
+    rev = _syn_run(reverse_after_loss=False, lost_side_session=True, reverse_in_session=True)
+    assert len(rev) >= len(base)
+    assert len(_syn_run(reverse_in_session=True)) >= len(_syn_run())
+
+
+def test_reentry_stop_only_and_the_lock_stop_stays_under_the_price():
+    pos, tr = _closed_pos(-100.0, reason="time")
+    done, st = {"AM": True}, _state()
+    S._after_close(pos, [], Params(**BASE, reentry_half=True, reentry_stop_only=True), done, st, i=7, ctx=_ctx())
+    assert done["AM"] and not st["re_ctx"]
+    pos, tr = _closed_pos(-100.0, reason="stop")
+    done, st = {"AM": True}, _state()
+    S._after_close(pos, [], Params(**BASE, reentry_half=True, reentry_stop_only=True), done, st, i=7, ctx=_ctx())
+    assert not done["AM"] and st["re_ctx"]
+    p = Params(**BASE, reentry_lock_r=2.0)
+    ctx, sd, pos, tr, _ = mk([(101.0, 105.5, 100.9, 105.0)], p, reentry=True, re_loss=900.0)           # a big prior loss
+    drive(ctx, sd, pos, tr, p)
+    assert pos["re_locked"] and pos["stop"] <= 105.0 - p.tick + 1e-9                                      # never above the market
+
+
+def test_reentry_order_reads_the_fvg_bar_of_the_order():
+    p = Params(**BASE, reentry_gate=True)
+    rc = dict(side="long", stop_i=10)
+    sd = SimpleNamespace(sign=1)
+    assert MG.reentry_order_ok(dict(ext_i=11, i=15, fvg_i=12), sd, rc, p)
+    assert not MG.reentry_order_ok(dict(ext_i=11, i=15, fvg_i=9), sd, rc, p)       # the FVG was made before the stop-out
+    assert MG.reentry_order_ok(dict(ext_i=11, i=15), sd, rc, p)                    # no fvg_i (other entry kinds): the arming bar
+
+
+def test_fvg_orders_carry_their_fvg_bar(monkeypatch):
+    seen = []
+    orig = S._scan
+
+    def spy(*a, **k):
+        o = orig(*a, **k)
+        if o is not None:
+            seen.append(o)
+        return o
+    monkeypatch.setattr(S, "_scan", spy)
+    run(day(B_ROWS + [(102.3, 102.4, 101.2, 101.6)]), history(hi=112.0, lo=88.0), Params(**B_POST))
+    fv = [o for o in seen if "fvg_i" in o]
+    assert fv and all(isinstance(o["fvg_i"], int) and o["fvg_i"] <= o["i"] for o in fv)
+
+
+# --- X7a: the fixed list is cut to pd3_n and tagged ---------------------------------------------------------------------
+
+def test_pd3_fixed_list_is_cut_to_pd3_n_and_tagged():
+    o = dict(ext_i=1, session="AM")
+    for n_ in (1, 2):
+        p = Params(**BASE, pd3_exit=True, pd3_n=n_)
+        ctx, sd, pos, tr, _ = mk([], p, lead=STACK, fill=105.0, ext_i=1)
+        MG.init_pos(ctx, sd, pos, tr, o, pos["fill_i"], p)
+        assert len(pos["pd3"]) <= n_
+        assert f"pd3_n{len(pos['pd3'])}" in tr.lv_tags.split("|")
+        assert ("pd3_short" in tr.lv_tags.split("|")) == (len(pos["pd3"]) < n_)
+    p = Params(**BASE, pd3_exit=True, pd3_n=6)                                       # more than the stack holds
+    ctx, sd, pos, tr, _ = mk([], p, lead=STACK, fill=105.0, ext_i=1)
+    MG.init_pos(ctx, sd, pos, tr, o, pos["fill_i"], p)
+    assert "pd3_short" in tr.lv_tags.split("|") and len(pos["pd3"]) < 6
+    p = Params(**BASE, pd3_exit=True, pd3_dynamic=True)                              # the dynamic list is not tagged
+    ctx, sd, pos, tr, _ = mk([], p, lead=STACK, fill=105.0, ext_i=1)
+    MG.init_pos(ctx, sd, pos, tr, o, pos["fill_i"], p)
+    assert "pd3_n" not in tr.lv_tags
+
+
+# --- B18.3 ----------------------------------------------------------------------------------------------------------------
+
+def test_smt_exit_against_works_without_smt_bank():
+    p = Params(es_pt=1.0, smt_exit_against=True, lot=1)
+    assert p.smt_bank_against_frac == 1.0 and not p.smt_bank
+    n = 12
+    o = np.full(n, 100.0); c = np.full(n, 100.0)
+    h = np.full(n, 100.5); l = np.full(n, 99.5)
+    c[5] = 102.0; h[5] = 102.2
+    ctx = bar_ctx(None, o, h, l, c)
+    ctx.pd = {}
+    sd = S.Side(1, o, h, l, c, 1, 0.0)
+    lp = l.copy(); lp[5] = 98.9                                           # the sister prints a new low, we hold ours
+    ps = {1: S.Side(1, o, h, lp, c, 1, 0.0)}
+    ppos = pd.Series(np.arange(n), index=ctx.idx)
+    pos, tr = _tpos(fill_i=1), _TpTr()
+    TP.manage(ctx, sd, pos, tr, 5, ctx.idx[5], p, SimpleNamespace(start=0), ps, ppos)
+    assert [e[3] for e in tr.exits] == ["smt_bank2"] and pos["left"] == 0                # the WHOLE position is out

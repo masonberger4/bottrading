@@ -217,6 +217,8 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
     tr = None
     left = 0
     fill = None
+    pos = None
+    last_part = -1
     tightened = False
     kl, n_units, add, away, basis = 0, 0, None, False, 0.0
     for i in range(k8, len(t)):
@@ -226,7 +228,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
             if p.sloppy_mode == "stand_aside" and chop is not None and chop.active_before(i):
                 _f("md_x_chop")
                 return []                              # #10: chop known before this bar
-            if _MG.extras_blocked(ctx, p, "AM", ctx.idx[i]):
+            if _MG.extras_blocked(ctx, p, "AM", ctx.idx[i], getattr(ctx, "ext_other", ())):
                 _f("md_x_day_stop")
                 return []                              # X12 / X13a / X14d: the morning / day is stopped
             if sl[i] <= entry - p.fill_through * p.tick - (0.0 if p.fill_through else 1e-9):
@@ -258,6 +260,19 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
                 best = fill
                 ts_st = {}
                 bulk_done = False
+                last_part = -1
+                if sd_ is not None:       # X4 / X6-X9c: the position dict exits() / be_modes() read (side space)
+                    hi_ = float(max(sh[inv.i:k8].max(), inv.top))
+                    pos = dict(entry=fill, n=n_units, left=left, basis=basis, stop=stop, t1_done=False, k=0, best=fill,
+                               fill_i=i, fill_t=t[i], levels=levels, t1=levels[0], side=sd_, trade=tr, lvx=lvx,
+                               stop0=stop)
+                    kinds_ = ["level"] * len(levels)
+                    if lock is not None and lock["side"] and kinds_ and abs(levels[-1] - T) < 1e-9:
+                        kinds_[-1] = lock["kind"]
+                    _MG.extras_init(ctx, sd_, pos, tr, dict(
+                        zone_bottom=float(inv.bottom), zone_top=float(inv.top), zone_ce=float((inv.top + inv.bottom) / 2),
+                        ext=float(inv.bottom), ext_i=inv.i, leg_hi=hi_, level_kinds=kinds_, session="AM",
+                        draw=None if lock is None or not lock["side"] else float(sign * lock["target"])), i, p)
                 continue
             if sh[i] >= target:
                 return []
@@ -283,7 +298,9 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
                 q = left if kl == len(levels) - 1 else min(left, max(p.lot, _lots(n_units * fr[min(kl, len(fr) - 1)], p.lot)))
                 tr.exits.append((ctx.idx[i], x(levels[kl]), q, f"t{kl + 1}")); left -= q
                 kl += 1
-                stop = max(stop, _MG.be_stop(basis / n_units, p))        # X4: the pad
+                last_part = i
+                if _MG.extras_be_mode(p) == "t1":                        # X4: BE at the first rung (extras_be_on "t1", the
+                    stop = max(stop, _MG.be_stop(basis / n_units, p))    # default) with the pad; "follow" = be_on, below
             if not left:
                 tr.final_hit = tr.exits[-1][3] == f"t{len(levels)}"          # X12 / Ep04.13
                 _MG.mark_day_stop(tr, p)
@@ -310,6 +327,15 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
                 if q2 >= max(p.lot, 1):
                     add = (px2, q2)
         best = max(best, sh[i])
+        if pos is not None and left:              # X4 / D14 breakeven modes + X6-X9c invalidation exits (same code as the engine)
+            pos.update(left=left, basis=basis, n=n_units, stop=stop, best=best, t1_done=kl > 0, k=kl, last_partial_i=last_part,
+                       day_trade=False)
+            _MG.extras_be_bar(sd_, pos, tr, i, p)
+            stop = max(stop, pos["stop"])
+            _MG.exits(ctx, sd_, pos, tr, i, ctx.idx[i], p, None, extras=True)
+            left = pos["left"]
+            if not left:
+                return [tr]
         if (p.am_bulk_t and not bulk_done and left and t[fill_i] < p.am_bulk_t and t[i] + ctx.tf >= p.am_bulk_t):
             bulk_done = True                                       # X10b: the bulk off at am_bulk_t
             q_ = _MG.cut_qty(left, p.am_bulk_frac, p)
@@ -318,7 +344,9 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
                 return [tr]
         if p.time_stop_extras and (p.time_stop_min or p.time_stop_bars) and not kl and left:    # X9 / X9d
             frac = _MG.time_stop_frac(p, ts_st, nbars=i - fill_i + 1, elapsed=(t[i] + ctx.tf) - t[fill_i],
-                                      best=best, basis=basis / n_units)
+                                      best=best, basis=basis / n_units,
+                                      leg_hi=None if pos is None else pos["leg"][1],
+                                      zone_top=None if pos is None else pos["zone_top"])      # X9a: leg_high / array_far
             if frac > 0:
                 q_ = _MG.cut_qty(left, frac, p)
                 tr.exits.append((ctx.idx[i], x(sc[i]), q_, "time" if q_ >= left else "time_cut")); left -= q_

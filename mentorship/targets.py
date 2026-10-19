@@ -1175,7 +1175,8 @@ def manage(ctx, sd, pos: dict, tr, i: int, ts, p, pctx, psides, ppos) -> None:
     if p.trail_breakaway and pos["left"]:
         g = breakaway_gap(sd, pos["ext_i"], i)
         if g is not None and c > g.top:
-            pos["stop"] = max(pos["stop"], g.bottom - p.trail_pad)
+            from . import manage as _MG
+            _MG.raise_stop(pos, g.bottom - p.trail_pad)            # X5c: never on a day trade
 
 
 def capture_ratio(pos: dict, tr) -> float | None:

@@ -638,13 +638,13 @@ How the exits work: `manage.exits` runs once per closed bar after the legacy exi
 htf_heavy), the objective and the re-entry target are limits that fill at their price when the high reaches them. Position data fixed at the fill
 (`manage.init_pos`): the pd3 array list, the leg MT / offside level / IR EQ, the pool levels of the ladder, the fixed leg for the add cuts, the day-trade flag.
 Session / day stops are ONE function (`manage.stops_from`) over the closed trades, read by the main loop (`apply_stops` -> done flags), the Silver Bullet and
-Ma Deuce (`extras_blocked`, as of the order bar, so no later trade is seen); Ma Deuce runs before the SB in the code, so MD does not see an earlier SB
-trade (limit, documented).
+Ma Deuce (`extras_blocked`, as of the order bar, so no later trade is seen). The stops are TWO-WAY since the review fixes (below): `run_day` runs a fixed
+point so the main loop also sees the Silver Bullet / Ma Deuce trades as of their exit time, and Ma Deuce sees the SB's.
 
 - M2.6 premium pyramid / 25% cutoff / larger pool | done | `add_in_pd`, `add_pd_level`, `add_leg_at_fill`, `pool_size_rank` (+ the existing `add_cutoff`, `add_cutoff_read`, `add_cut_ref`) | False, 0.5, True, False | add price on the entry side of the leg's EQ; the leg high is fixed at the fill (highest high from the sweep extreme through the fill bar) for add_cutoff / add_cut / add_in_pd / add_leg_cut; pool_size_rank = alias of pool_rank (L4). `add_cutoff` itself stays 0 by default: the two sources disagree on the reading of the "25% line" (study: `M2.6_add_cutoff25_fixed_leg`, `_leg_at_arming`, `E12e_add_cutoff25_progress`)
 - Ep04.10 / E12c add at the FVG low end | done earlier (entries_stops_sizing) | `add_fvg_low`, `add_fvg_low_end`, `add_low_end` | False | verified in this package: one add at the last add FVG's bottom + 1 tick after a body close into it; study `Ep04.10_add_fvg_low`
 - X3g SMT bank 50% / 80% | done earlier (targets_partials) | `smt_bank`, `smt_bank_against_frac` | False, 0 | `smt_exit_against=True` (B18.3) = the 80% at 100%
-- X4 breakeven pad | done | `be_pad_pts`, `be_cost_pad` | 0.0, False | BE = average entry + pad (+ 2 x cost_per_share); every BE move goes through `manage.be_move` (never on a day trade); the Silver Bullet now follows `be_on` (t1 / expansion, others read as expansion; default expansion = a later close beyond the first target) and Ma Deuce uses the pad. Study `X4_be_pad_cost`, `X4_be_t1`, `X4_sb_follows_be_t1`
+- X4 breakeven pad | done | `be_pad_pts`, `be_cost_pad` | 0.0, False | BE = average entry + pad (+ 2 x cost_per_share); every BE move goes through `manage.be_move` (never on a day trade); the Silver Bullet now follows `be_on` (t1 / expansion, others read as expansion; default expansion = a later close beyond the first target) and Ma Deuce uses the pad. REVIEW FIX: the SB / Ma Deuce default is back to the first build (BE the moment the first target / rung is taken, `extras_be_on="t1"`); `extras_be_on="follow"` makes them follow `be_on` (t1 / expansion / after_mss / stall / pool / off). Study `X4_be_pad_cost`, `X4_be_t1`, `X4_sb_follows_be_t1`, `X4_extras_follow_be_*`
 - X5 trailing umbrella | done | `ladder_trail`, `trail_after`, `trail_first_fvg`, `trail_pad_pts`, `trade_type` | "fvg", 1, False, 0.0, "session" | see X5a / X5c / Ep03.10 / Ep03.20; `trail` (every new FVG) stays off
 - X5a breakaway / measuring trail, trail pad | done | `ladder_trail="breakaway"` / `"measuring"`, `trail_pad_pts` (+ the existing `trail_breakaway`) | "fvg", 0.0 | after `trail_after` rounds of partials the stop goes under the breakaway gap (targets.breakaway_gap) / the measuring gap (targets.measuring_gap) once a close is above it; trail_pad_pts 0 = stop pad + mohawk (0.25 = one tick = the default pad). Study `X5a_*`
 - X5c day trade keeps its stop | done | `trade_type`, `day_stop` | "session", "open" | trade_type "day": the stop is the 08:30 candle open / its lower-wick CE minus the pad (when below the entry and the min risk holds; futures only), tagged `day_trade`; no BE, no ladder / FVG / Ep07 trail. Study `X5c_*`
@@ -658,7 +658,7 @@ trade (limit, documented).
 - X8d propulsion MT | done | `prop_exit` (alias of `prop_mt_exit`) | False | the existing A16 lvx exit
 - X8e offside test | done | `offside_exit`, `offside_level` | False, "open" | [our interpretation] the nearest up-close candle above the entry (within 12 bars before the sweep through the fill): a close above its open (or its upper-wick CE) passes the test; the high reaching it with a close below arms it, then a close below the average entry exits
 - X8g meander | done | `meander_bars` | 0 | N consecutive closes inside the entry FVG (bottom..top) without a close above its top (a rejection resets), before the first partial; `pos["fvg_top"]` stored at the fill
-- X9 time stops umbrella (SB / Ma Deuce) | done | `time_stop_extras` | True | the Silver Bullet and Ma Deuce follow `time_stop_min` / `time_stop_bars` / `time_stop_ref` / `time_stop_frac` (far_edge_* and the other exits are main-engine only)
+- X9 time stops umbrella (SB / Ma Deuce) | done | `time_stop_extras` | True | the Silver Bullet and Ma Deuce follow `time_stop_min` / `time_stop_bars` / `time_stop_ref` (pts, leg_high, array_far - REVIEW FIX: the leg high / zone top are now passed) / `time_stop_frac`; the invalidation exits (far_edge, meander, abort, pd3, leg MT, IR EQ, offside, first-FVG fail) run there too with `invalidations_extras` (default True; each is still its own switch)
 - X9a deliver in 2-3 candles | done | `time_stop_ref`, `time_stop_bars` | "pts", 0 | pts = `time_stop_pts` of progress, leg_high = reach the leg high, array_far = the entry zone's top; bars: the fill candle is the first. One rule for the three engines (`manage.time_stop_frac`)
 - X9c far edge in 2 minutes | done | `far_edge_min`, `far_edge_frac` | 0, 0.5 | after the entry FVG's bottom is touched, a close at its CE within `far_edge_min` minutes or `far_edge_frac` is off (1 = all); meaningful on 1m bars (a 5m bar is judged at its own close)
 - X9d lethargic -> cut half | done | `time_stop_frac` | 1.0 | 0.5: the time stop cuts half once (`time_cut`), a remainder at minimum size is closed (`manage.cut_qty`)
@@ -688,8 +688,69 @@ trade (limit, documented).
 - B18.3 SMT uses | done | `smt_bias`, `smt_exit_against` (+ `smt_bank*` X3g, `smt_pick` existing) | "off", False | smt_bias: our overnight range took the previous RTH low while the sister held its own (+1; mirror at the high -1; both: the later one) read from bars before 09:30; "tag" = `smt_bias_agree` / `smt_bias_against`, "filter" = only with the bias [our interpretation of "Uses: bias"]; smt_exit_against = the X3g 80% bank at 100% (the name `smt_exit` already means the M16.1 time exit)
 
 Notes
-- Limits: Ma Deuce does not see an earlier Silver Bullet trade in the day / session stops (it runs first); far_edge, meander, abort, pd3 and the other invalidations are main-engine only; the Silver Bullet reads after_mss / stall / pool as expansion.
+- Limits (before the review fixes, now removed; see "management_exits review fixes" below): Ma Deuce did not see an earlier Silver Bullet trade; the invalidations were main-engine only; the SB read after_mss / stall / pool as expansion.
 - `session_stop_after_fails` counts the failed trades the three engines closed before the order bar; `X7c` "arrays" is a judgment call [our interpretation] (structural exit reasons: stop, abort, pd3, ce_close, breaker_mt, body_low, first_fvg_fail, leg_mt, ir_eq, offside, meander, far_edge, ...).
 - ES fire evidence (2024-01-08..02-09, free config): `M2.6_add_in_pd`, `M2.6_add_cutoff25_*`, `X4_sb_follows_be_t1`, `X9a_time_stop_leg_high`, `X9_time_stop_sb_md`, `X10b_am_bulk_1100`, `X13a_loss_ends_morning`, `X7c_fails2_trades_sb` change trades; synthetic window: `D18_*`, `X13b_*`, `X7c_*`, `X5c_*`, `M2.6_pool_size_rank` change trades. The rest are verified by the unit / scenario tests (the real windows are too sparse: 3-25 trades).
 - Test results: `tests/test_management_exits.py` 54 passed (unit, `_after_close`, run_day scenarios, the synthetic window with a real re-entry, look-ahead on entries AND exits for 14 switch sets on the synthetic window and 5 on ES 5m 2024-01-08..02-02 with SB + Ma Deuce); `tests/test_mentorship.py -k look_ahead` 12 passed; test_strategy / test_owner_directives / test_review_fixes / test_targets_partials / test_entries_stops 206 passed; test_setups_models / test_levels_detectors / test_levels_review / test_portability 95 passed. Parity: ES 5m 2023-10..11 and 2024-03..04 (default, free, SB + Ma Deuce + adds + reentry_half configs) give identical trades to the commit before, also with the default `late_cutoff=945`.
-- Known limits: `tp_upclose` treats every add after the fill as an add unit (entry-ladder rung fills E2 would be sold too if both are on); `far_edge_*`, `meander_bars`, the abort and the three-array rules are main-engine only; the day/session stops are read by Ma Deuce without the Silver Bullet's earlier trades.
+- Known limits: `tp_upclose` treats every add after the fill as an add unit (entry-ladder rung fills E2 would be sold too if both are on).
+
+
+### management_exits review fixes (2026-10-19)
+
+Findings of the review of the package above, fixed in `manage.py`, `strategy.py`, `sb_model.py`, `pre_open.py`, `setups.py`, `entries.py`, `targets.py`,
+`study.py`; tests in `tests/test_management_exits.py` (section "review fixes"). Default behaviour: every default is the pre-package behaviour except the
+documented `late_cutoff=945` (T11); with all new switches at their defaults the ES 5m trades of the SB + Ma Deuce configs (2023-10..11, 2024-01..02, default / free /
+adds / re-entry / loss-halving configs) are identical to the commit before the package (checked against `0ec979a` with `late_cutoff=0`).
+
+Major
+- Day / session stops are now TWO-WAY (X14d, X13a, X7c, X12, X14b, Ep04.13). `strategy.run_day` is a thin wrapper over `_run_day_once`: with a stop switch on and the
+  Silver Bullet / Ma Deuce on, it runs a fixed point (`stops_passes`, default 3; 1 = the old one-way order). Pass 1 as before; the extras' closed trades are then fed back
+  (`state["ext"]`): the main loop applies `stops_from(main + extras)` once per bar with `ts = the bar` (so an extras trade counts from its exit time only), Ma Deuce reads the
+  SB's trades through `ctx.ext_other` (it runs first), and passes repeat until the extras' trades stop changing. The result has no look-ahead (every decision reads trades
+  closed by its own bar; look-ahead sets `stops2` / `stops3` pass on the synthetic window and on ES). Side effects (locks, log, skips, the E10 risk state) come from the last
+  pass only. ES 5m 2023-10..2024-02 (SB + Ma Deuce): `no_trade_after_win` one-way 46 trades, two-way 45 (an SB win now ends the main engine's day).
+- X4 default restored: the SB and Ma Deuce breakeven is back to "BE the moment the first target / rung is taken" (`extras_be_on="t1"`, the pre-package behaviour; the package had
+  silently changed the SB to `be_on` expansion). `extras_be_on="follow"` follows `be_on` in BOTH engines with every mode: t1, expansion (a later close above the first
+  target), after_mss (a close above the leg high), stall, pool (the ladder's pool levels, kinds taken from the draws the rungs came from), off; the pad applies to the "t1"
+  default too. This is a switch, not a default change: no owner sign-off needed. Study `X4_extras_follow_be_*`.
+- Silver Bullet / Ma Deuce get the position fields `manage.exits` reads (`manage.extras_init`: entry zone, sweep / leg extreme, leg high, level kinds, draw) and call
+  `manage.exits(..., extras=True)`: first-FVG fail (Ep03.10), abort (X6), three arrays (X7a, tag `pd3_n<k>`), half off (X7b), leg MT (X8b), IR EQ (X8c), offside (X8e), meander
+  (X8g), far edge (X9c) and the PM consolidation exit (X11c). `invalidations_extras` (default True) = on whenever the individual switch is on. [our interpretation: SB sweep = the
+  leg extreme before its MSS, zone = the setup FVG; Ma Deuce sweep and zone = the inverted FVG.] The time stop passes the leg high / zone top in both engines (X9a `leg_high` /
+  `array_far` no longer fall back to pts). Not applied there (by design): the objective limit exit (the draw is their last rung), the re-entry rules, up-close take profit.
+  X10c `smt_hold_*` is inert in the SB / Ma Deuce: their trades carry no SMT tag (limit, as before).
+
+Minor
+- M2.6: `add_in_pd` is checked in `_arm_add` (every add path: FVG add, Ep04.10 low end, retest, Ep01 CE add, down-close, arrays) and in `add_ok`; the leg the add rules measure is its
+  own `pos["leg_fill"]` (set whenever a leg exists; `add_leg_at_fill` False = the leg as it was), `pos["leg"]` stays the real leg for after_mss / leg MT / IR EQ / time stop. OPEN
+  QUESTION for the owner: `add_cutoff=0.25` stays OFF by default (the two sources disagree on "covered" vs "progress"; study `M2.6_add_cutoff25_*`, `E12e_add_cutoff25_progress`); this item
+  is NOT built as a default. `pool_size_rank` is only the alias of the existing `pool_rank` (L4) - no separate M2.6 ranking was found in the sources.
+- X5c: `manage.raise_stop` is the one place a stop is lifted; trail_breakaway, the Ep01 trail, M5.1 stop_to_next, `am_exit_mode="tighten"` and the D18 lock all use it, so a day
+  trade is never trailed. An order that cannot get the day stop (no 08:30 candle yet / its level not below the entry / risk too small) stays a session trade and counts the funnel
+  key `x_day_trade_unavailable`.
+- B18.3: `smt_exit_against` is the same rule as the X3g 80% bank at 100% and works without `smt_bank`; the name `smt_exit` is taken by M16.1, so it is kept under this name [OWNER:
+  confirm]. `smt_bias` is still our reading (overnight divergence at the previous RTH high / low, first partner only) [OWNER: confirm]. Study variants added for both.
+- X13a: `reverse_in_session` passes the `reverse_after_loss=False` lock for its one reversal (the pair "beginner lock for the day / experienced reverse once" can be combined), and
+  it applies when `reentry_half` is on but its gate refused the re-entry.
+- X13b / D18: the order carries `fvg_i` (FVG entries) so "an FVG made after the stop" is tested on the FVG bar; `reentry_stop_only` (new, off) restricts the re-entry to stop /
+  stop_gap exits (D18 "after a stop-out"); the lock stop stays under the close.
+- X7a: the fixed list is cut to the nearest `pd3_n` at the fill and tagged `pd3_n<k>` / `pd3_short` (fewer arrays than `pd3_n`: it can never fire).
+- X11c: `consol_day` uses the explicit index of the first bar at or after 13:30 in the main engine and the SB (also when 13:30 is missing).
+- Study variants: `M2.6_add_pd_level_03`, `_add_in_pd_low_end`, `_add_in_pd_ep01_adds`, `D14_be_stall_3bars` / `_min_r_05`, `Ep03.10_first_fvg_fail_after_t1`, `X6_fvg_abort_tf1` / `tf15`,
+  `X7a_pd3_n2` / `n4`, `X7b_pd3_half_033` / `067`, `X9_time_stop_extras_off`, `X9a_*_sb_md`, `X6_abort_sb_md`, `X7a_pd3_sb_md`, `X8b_leg_mt_exit_sb_md`, `X8e_offside_sb_md`,
+  `X8g_meander4_sb_md`, `X9c_far_edge2_sb_md`, `Ep03.10_first_fvg_fail_sb_md`, `X6_invalidations_extras_off`, `X7c_stops_one_way`, `X14d_no_trade_after_win_two_way`,
+  `X13a_reverse_in_session_lost_side` / `_reentry_gate`, `D18_reentry_stop_only`, `Ep04.13_done_target_1030`, `B18.3_smt_bias_tag` / `_filter`, `B18.3_smt_exit_against` / `_bank`.
+- Commit trailer: the commits of this work carry the attribution line the session's harness gives (the model that actually wrote them); earlier commits keep theirs (nothing was pushed, history untouched).
+
+Fire evidence (ES 5m 2023-10-02..2024-02-29, free config, SB + Ma Deuce, 50 trades in the base; "rows" = trade rows that differ from the base): extras_be follow + be_on t1 8, after_mss 16,
+stall 16 (follow with expansion / off / pool: 0 - no SB / MD trade retraced between T1 and the expansion close in this window; the 5m SB scenarios in the tests show them), abort 30, pd3 16, leg_mt 4,
+far_edge 32, first_fvg_fail 18, offside 12, ir_eq 2, time leg_high 70, pm_consol 4 (46 trades), no_trade_after_win one-way 46 trades / two-way 45, add_in_pd 2; meander 4, time array_far,
+fails-2 and loss_ends_morning do not change a trade in this window (the scenario tests exercise them: Silver Bullet hand-made days, Ma Deuce on the 2020-03-02 bars).
+
+Tests (`tests/test_management_exits.py`, 54 -> 94 tests incl. 38 look-ahead runs): Silver Bullet scenarios through `run_day` (BE default and every `extras_be_on="follow"` mode, time stop refs, bulk, meander, abort,
+three arrays, leg MT, first-FVG fail, far edge, `invalidations_extras=False`), `run_sb` with injected main-engine trades (day / session stops, X11c block and exit), Ma Deuce on the real
+2020-03-02 ES bars with a flat tape after the fill (time stop refs, bulk, meander), the two-way stops (fake SB trade: win / loss / late win; wrapper side effects; Ma Deuce reads the SB),
+`add_in_pd` on every add path, the leg independence, the day-trade guards (trail_breakaway, Ep01 trail), reverse / re-entry fall-through, `reentry_stop_only`, `fvg_i` on the orders,
+`pd3_n` slicing and tags, `smt_exit_against` alone, `consol_day` without a 13:30 bar, and the vacuous run_day far-edge assertion replaced (far edge / meander / pd3 through run_day). Look-ahead:
+19 sets (6 new: extras_a / b / c, stops2, stops3, adds2 - covering obj_source htf_ce, first_fvg_fail_after_t1, fvg_abort_tf, pd3_half_frac, the extras modes and the two-way stops) on the synthetic
+window AND on ES 5m 2024-01-08..02-02 with SB + Ma Deuce (all 19; before: 5 of 14 on ES).

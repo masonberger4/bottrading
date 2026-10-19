@@ -100,13 +100,11 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                         q = pos["left"] if k == len(lv_) - 1 else min(pos["left"], max(p.lot, _lots(pos["n"] * fr[min(k, len(fr) - 1)], p.lot)))
                         tr.exits.append((ts, sd.x(lv_[k]), q, f"t{k + 1}")); pos["left"] -= q
                         pos["k"] += 1
+                        pos["last_partial_i"] = i
                         if not pos["t1_done"]:
-                            pos["t1_done"] = True
                             pos["t1_i"] = i
-                            if p.be_on == "t1":                 # X4: the SB follows be_on (default: after expansion)
-                                pos["stop"] = max(pos["stop"], MG.be_stop(pos["entry"], p))
-                                pos["be_done"] = True
-                        pos["away"] = lv_[k]
+                            MG.extras_t1(pos, p)                # X4: breakeven at the first target (extras_be_on "t1", the
+                        pos["away"] = lv_[k]                    # default) or the main engine's be_on ("follow")
                     if pos["left"] and pos["away"] is not None and c >= pos["away"] + p.away_pts * p.es_pt:
                         pos["stop"] = max(pos["stop"], pos["away"] - p.trail_pad)
                         pos["away"] = None
@@ -115,24 +113,21 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                         q = pos["left"] if pos["t2"] is None else max(p.lot, _lots(pos["left"] * 0.8, p.lot))
                         q = min(q, pos["left"])
                         tr.exits.append((ts, sd.x(pos["t1"]), q, "t1")); pos["left"] -= q
-                        pos["t1_done"] = True
-                        pos["t1_i"] = i
-                        if p.be_on == "t1":                     # X4: the SB follows be_on
-                            pos["stop"] = max(pos["stop"], MG.be_stop(pos["entry"], p))
-                            pos["be_done"] = True
+                        pos["t1_i"] = pos["last_partial_i"] = i
+                        MG.extras_t1(pos, p)                    # X4: see above
                     if pos["left"] and pos["t2"] is not None and pos["t1_done"] and h >= pos["t2"] + p.exit_fill_through * p.tick:
                         tr.exits.append((ts, sd.x(pos["t2"]), pos["left"], "t2")); pos["left"] = 0
-                if (pos["left"] and pos["t1_done"] and not pos.get("be_done") and p.be_on in ("expansion", "after_mss", "stall", "pool")
-                        and pos["t1_i"] < i and c > (pos["levels"][0] if pos["levels"] else pos["t1"])):
-                    pos["stop"] = max(pos["stop"], MG.be_stop(pos["entry"], p))      # X4: BE after expansion (after_mss /
-                    pos["be_done"] = True                                           # stall / pool read as expansion in the SB)
                 pos["best"] = max(pos["best"], h)
+                MG.extras_be_bar(sd, pos, tr, i, p)             # X4 / D14: expansion / after_mss / stall / pool / off
                 if pos["left"] and p.time_stop_extras and (p.time_stop_min or p.time_stop_bars) and not pos["t1_done"]:
                     frac = MG.time_stop_frac(p, pos.setdefault("ts", {}), nbars=i - pos["fill_i"] + 1,
-                                             elapsed=(t + ctx.tf) - pos["fill_t"], best=pos["best"], basis=pos["entry"])
+                                             elapsed=(t + ctx.tf) - pos["fill_t"], best=pos["best"], basis=pos["entry"],
+                                             leg_hi=pos["leg"][1], zone_top=pos["zone_top"])   # X9a: leg_high / array_far
                     if frac > 0:                                                    # X9 / X9d: the same time stop as the engine
                         q_ = MG.cut_qty(pos["left"], frac, p)
                         tr.exits.append((ts, sd.x(c), q_, "time" if q_ >= pos["left"] else "time_cut")); pos["left"] -= q_
+                if pos["left"]:
+                    MG.exits(ctx, sd, pos, tr, i, ts, p, None, extras=True)   # X6-X9c invalidations + X11c (invalidations_extras)
                 if pos["left"] and pos["lvx"] and i > pos["fill_i"]:
                     for nm_, (lvl_, pre_t1) in pos["lvx"].items():       # A4 mohawk: a body close beyond the raw
                         if (not pre_t1 or not pos["t1_done"]) and c < lvl_:   # level exits (as in run_day)
@@ -202,6 +197,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                                left=o_["shares"], entry=fill, t1_done=False, n=o_["shares"],
                                levels=o_["levels"], k=0, away=None, fill_i=i, fill_t=t, best=fill, lvx=o_.get("lvx") or {},
                                fracs=(1.0,) if o_["scalp"] else _bump_fr(o_, p, _split(p, ctx, getattr(ctx, "hist", []), day, i, t) if p.sb_split else p.ladder_fracs))
+                    MG.extras_init(ctx, sd, pos, tr, dict(o_, session=session), i, p)      # X4 / X6-X9c: what exits() reads
                     pending = None
                     if sd.l[i] <= pos["stop"]:
                         tr.exits.append((ts, sd.x(pos["stop"]), pos["left"], "stop")); pos["left"] = 0
@@ -392,4 +388,21 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=()):
                 draw_side=0 if lock is None else lock["side"],
                 draw_px=None if lock is None else lock["target"],
                 draw_name="" if lock is None else lock["name"],
-                draw_kind="" if lock is None else lock["kind"], bumps=bm)
+                draw_kind="" if lock is None else lock["kind"], bumps=bm,
+                zone_bottom=float(g.bottom), zone_top=float(g.top), zone_ce=float((g.top + g.bottom) / 2),
+                ext=float(l[li]), ext_i=li, leg_hi=float(h[li:i + 1].max()),
+                level_kinds=_kinds(levels, dr, bm), draw=None if lock is None else float(sd.x(lock["target"])))
+
+
+def _kinds(levels, dr, bm) -> list:
+    """The kind of each ladder level (for be_on="pool" / the pool levels): the kind of the nearest draw it came from
+    ("speed_bump" for a bump rung) [our interpretation: the exit prices sit a few points off the raw levels]."""
+    out = []
+    for v in levels:
+        if any(abs(v - b) < 1e-9 for b in bm):
+            out.append("speed_bump")
+        elif dr:
+            out.append(min(dr, key=lambda x: abs(x[0] - v))[1])
+        else:
+            out.append("level")
+    return out

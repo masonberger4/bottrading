@@ -893,8 +893,9 @@ and to the notes for context, charts and trade examples. This file states each r
   Earlier BE in some 2023 charts (003 right after the MSS; 009 when stalling; 042) [chart]. Bot:
   `be_on="expansion"` (default: after the first partial and a later close beyond the first target; "t1",
   "after_mss", "stall", "pool" (Ep03.15: the first pool taken) and "off" are switches); the BE level carries
-  `be_pad_pts` / `be_cost_pad` (105 ~10:41); a day trade has none; the Silver Bullet and Ma Deuce follow it
-  (SB: after_mss / stall / pool read as expansion). D14, X4.
+  `be_pad_pts` / `be_cost_pad` (105 ~10:41); a day trade has none. The Silver Bullet and Ma Deuce keep the first build
+  (BE the moment their first target / rung is taken) unless `extras_be_on="follow"`: then they follow `be_on` (every
+  mode, incl. the pad). D14, X4.
 - **X5 Trailing** [2023]:
   - Trail under the first breakaway (protected) FVG after the shift, under the measuring gap after
     two rounds of partials, or under each newer FVG after each partial (003 ~42:40, ~1:05:00; 002
@@ -908,7 +909,8 @@ and to the notes for context, charts and trade examples. This file states each r
     newest FVG formed since a partial, from `trail_after` rounds of partials (1). Switches: "measuring" (Ep03.20:
     under the measuring gap after two rounds, `trail_after=2`), "hit", "prior", "off"; `trail_first_fvg` (Ep03.10:
     under the first FVG after the shift), `trail_breakaway`, `trail_pad_pts` (X5a); `trade_type="day"` (X5c) =
-    initial stop at the 08:30 open / wick CE, no trail, no BE. D14, X5.
+    initial stop at the 08:30 open / wick CE, no trail, no BE (every stop-raising site goes through `manage.raise_stop`,
+    which skips a day trade; an order that cannot get the day stop stays a session trade, funnel `x_day_trade_unavailable`). D14, X5.
 
 **Invalidation and aborts**
 - **X6 FVG abort**: a candle body closes beyond the FVG against you AND the next candle trades
@@ -922,7 +924,9 @@ and to the notes for context, charts and trade examples. This file states each r
   OB MT -> take half off (045 ~1:49:28). Three arrays in a row failing -> stop for the session (044
   ~1:52:49). Which arrays count is discretionary. Bot: `pd3_exit` (off) lists the nearest `pd3_n` arrays (`pd3_list`:
   FVG / VI / OB MT / breaker) at the fill (`pd3_dynamic` re-reads each bar), tags `pd3_warn` at the second break and
-  exits at the third; `pd3_half` (X7b); `session_stop_after_fails` (X7c; main engine, SB and Ma Deuce share it).
+  exits at the third; `pd3_half` (X7b); `session_stop_after_fails` (X7c; main engine, SB and Ma Deuce share it, two-way: `run_day` feeds the extras' closed
+  trades back to the main loop). The fixed list is cut to the nearest `pd3_n` and tagged `pd3_n<k>` (`pd3_short` when
+  fewer exist: it can never fire).
 - **X8 Other invalidations** [both]: bodies close through a bullish FVG's CE -> close early (030
   ~15:46); retrace through the MT of the candle that started the leg (026 ~28:28); immediate-
   rebalance trade back above range EQ (100 ~1:37:18); propulsion-block MT lost (cc04_008 ~5:15); a
@@ -931,7 +935,8 @@ and to the notes for context, charts and trade examples. This file states each r
   the swing low (Ep 07; 009 ~15:36); meandering inside the SIBI instead of rejecting -> close (092
   ~1:04:38). Bot (all off): `leg_mt_exit` (X8b), `ir_eq_exit` (X8c), `prop_exit` (X8d = prop_mt_exit), `offside_exit` with
   `offside_level` open / wick_ce (X8e), `meander_bars` (X8g); the CE close-through is `ce_hold`, the swing-low bodies
-  `ep07_body_exit` (also on the fill bar, `ep07_body_fixes`).
+  `ep07_body_exit` (also on the fill bar, `ep07_body_fixes`). The invalidation exits (X6-X8, X9c) also run in the Silver
+  Bullet and Ma Deuce (`invalidations_extras`, default on; each exit is still its own switch).
 - **X9 Time stops** [2023]: once price touches the entry array it should deliver on that candle or
   the next, or within 2-3 one-minute candles (022 ~1:43:27; 031 ~24:29; 071 ~32:41; 092 ~1:41:14);
   a 1m trade should show movement within ~10 min (025 ~17:17); after touching the SIBI's far edge,

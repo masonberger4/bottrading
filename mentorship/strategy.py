@@ -159,8 +159,8 @@ class Params:
                                    # "t1" = at the first partial; "after_mss" = a close above the leg high (003 ~40:15);
                                    # "stall" = the trade stalls after 1R (009 ~09:46); "pool" = the high reaches the first
                                    # liquidity pool of the ladder (Ep03.15); "off" = never. The BE level is the average
-                                   # entry + be_pad_pts (+ the round-trip cost with be_cost_pad). Silver Bullet and Ma Deuce
-                                   # follow it too (SB: after_mss / stall / pool read as expansion)
+                                   # entry + be_pad_pts (+ the round-trip cost with be_cost_pad). The Silver Bullet and Ma
+                                   # Deuce follow it only with extras_be_on="follow" (default: BE at their first target)
     ce_hold: bool = False           # A5/A6: the entry FVG is a breakaway gap - once filled, a candle BODY closing
                                    # beyond its CE (wicks may poke) exits the trade before T1
     skip_news: bool = False        # no trades at all on 08:30 / 10:00 release days
@@ -1147,7 +1147,23 @@ class Params:
     smt_bias: str = "off"                # B18.3 (B18 "Uses: bias"): SMT at the previous day's high / low in the overnight range gives a
                                          # session bias: "tag" = tag entries smt_bias_agree / smt_bias_against, "filter" = only with it
     smt_exit_against: bool = False       # B18.3 (037 ~32:56): the whole position is out when the sister breaks against the trade (the
-                                         # X3g 80% bank at 100%; smt_exit is the unrelated M16.1 time exit)
+                                         # X3g 80% bank at 100%; smt_exit is the unrelated M16.1 time exit). Works on its own (no
+                                         # smt_bank needed). B18.3 names "smt_exit": that name is taken by M16.1, so this is the
+                                         # same rule under another name [OWNER: confirm the name / the reading]
+    # --- management_exits review fixes
+    extras_be_on: str = "t1"             # X4: the Silver Bullet / Ma Deuce breakeven. "t1" = the first build (the stop goes to
+                                         # breakeven when the first target / rung is taken - the DEFAULT, so their trades are the
+                                         # same as before the package); "follow" = the main engine's be_on (t1 / expansion /
+                                         # after_mss / stall / pool / off) incl. its pad
+    invalidations_extras: bool = True    # X6-X9c / X7a / X8: the invalidation exits (first-FVG fail, abort, three arrays, leg MT,
+                                         # IR EQ, offside, meander, far edge) also run in the Silver Bullet and Ma Deuce (each is
+                                         # still its own switch, default off); False = main engine only [our interpretation:
+                                         # SB: the entry FVG = the setup FVG, the sweep = the leg extreme before its MSS;
+                                         # Ma Deuce: the inverted FVG is the entry zone and the sweep]
+    stops_passes: int = 3                # X7c / X12 / X13a / X14b / X14d: passes of run_day's fixed point that makes the session /
+                                         # day stops two-way between the main engine and the Silver Bullet / Ma Deuce (1 = the old
+                                         # one-way order: main loop first, the extras read it, never the other way)
+    reentry_stop_only: bool = False      # D18 "re-entry after a stop-out": only a stop / stop_gap exit re-opens (False: any loss)
 
     def __post_init__(self):
         if self.unicorn_sides not in ("both", "long", "short"):
@@ -1297,6 +1313,7 @@ class Params:
         if self.smt_exit_against:
             self.smt_bank_against_frac = 1.0
         for name, ok in (("be_on", ("expansion", "t1", "after_mss", "stall", "pool", "off")),
+                         ("extras_be_on", ("t1", "follow")),
                          ("ladder_trail", ("fvg", "hit", "prior", "off", "measuring", "breakaway")),
                          ("trade_type", ("session", "day")), ("day_stop", ("open", "wick_ce")),
                          ("fvg_abort_mode", ("rule", "legacy")), ("session_fail_mode", ("trades", "arrays")),
@@ -1308,6 +1325,8 @@ class Params:
         bad = set(self.pd3_list) - {"fvg", "vi", "ob", "breaker"}
         if bad:
             raise ValueError(f"pd3_list {sorted(bad)}: expected from ('fvg', 'vi', 'ob', 'breaker')")
+        if self.stops_passes < 1:
+            raise ValueError(f"stops_passes {self.stops_passes}: expected >= 1")
         if (self.pd3_n < 1 or not 0 < self.time_stop_frac <= 1 or not 0 < self.far_edge_frac <= 1
                 or not 0 < self.pd3_half_frac < 1 or not 0 < self.am_bulk_frac <= 1 or self.fvg_abort_tf < 1
                 or not 0 <= self.add_pd_level <= 1 or self.trail_after < 1 or self.be_stall_bars < 1
@@ -2462,6 +2481,7 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
     gross, costs = tr.pnl(p.cost_per_share)
     net_ = gross - costs
     key = pos.get("done_key", tr.session)
+    reopened = False
     if lost is not None and p.reentry_half and not state["reentered"].get(tr.session):
         # X13b / D18: one more try, same direction, half risk (reentry_gate: only while the idea is intact); the flag of
         # the trade's OWN done key is re-opened (an SB_AM loss no longer re-opens the plain AM slot)
@@ -2471,8 +2491,11 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
             done[key] = False
             state["reentered"][tr.session] = True
             state.setdefault("re_ctx", {})[tr.session] = rc
-    elif lost is not None and p.reverse_in_session and not state.setdefault("reversed", {}).get(tr.session):
-        # X13a (experienced, 001 ~47:32): the session may reverse once after a loss - the opposite side only
+            reopened = True
+    if (lost is not None and not reopened and p.reverse_in_session
+            and not state.setdefault("reversed", {}).get(tr.session)):
+        # X13a (experienced, 001 ~47:32): the session may reverse once after a loss - the opposite side only (also when
+        # reentry_half is on but its gate refused the re-entry)
         done[key] = False
         state["reversed"][tr.session] = True
         state.setdefault("only_side", {})[tr.session] = -1 if tr.side == "long" else 1
@@ -3150,7 +3173,51 @@ def _fill_at(sd, o, i):
     return float(min(o["entry"], sd.o[i])) if sd.l[i] < o["entry"] else None
 
 
+def _extra_sig(trs) -> tuple:
+    return tuple(sorted((t.setup, t.side, str(t.entry_time), tuple((str(e[0]), round(float(e[1]), 4), int(e[2]), e[3])
+                                                                 for e in t.exits)) for t in trs))
+
+
 def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, tf: int,
+            partner=None, log: list | None = None, live: bool = False, bias: dict | None = None,
+            conf=None, gaps: list | None = None, closes: dict | None = None, evening=None, partner2=None,
+            intermarket: dict | None = None, equity: float | None = None,
+            bias_by_cut: dict | None = None, meta=None, locks: list | None = None, skips: list | None = None,
+            eth: dict | None = None, risk_state: dict | None = None) -> list[Trade]:
+    """Trades for one day (see `_run_day_once` for the arguments). The main loop runs BEFORE the Silver Bullet / Ma Deuce
+    (they read its trades), so the session / day stops (X7c / X12 / X13a / X14b / X14d) would be one-way. With a stop
+    switch on and an extra engine on, this wrapper makes them two-way by a fixed point: pass 1 as usual; its Silver Bullet
+    / Ma Deuce trades are fed back to a second pass (the main loop reads them as of their exit time, Ma Deuce reads the
+    SB's), until the extras' trades stop changing (at most `stops_passes` passes). Every decision only uses trades closed
+    by its own bar, so there is no look-ahead; the side effects (locks, skips, log, the E10 risk state) come from the last
+    pass only."""
+    kw = dict(partner=partner, live=live, bias=bias, conf=conf, gaps=gaps, closes=closes, evening=evening,
+              partner2=partner2, intermarket=intermarket, equity=equity, bias_by_cut=bias_by_cut, meta=meta, eth=eth)
+    if not (_MG.any_stop_switch(p) and (p.ma_deuce or p.sb_model) and p.stops_passes > 1):
+        return _run_day_once(df, hist, symbol, p, tf, log=log, locks=locks, skips=skips, risk_state=risk_state, **kw)
+    import copy
+    ext, sig, res, sc = None, None, [], {}
+    for k in range(p.stops_passes):
+        sc = dict(log=None if log is None else [], locks=None if locks is None else [],
+                  skips=None if skips is None else [],
+                  risk_state=None if risk_state is None else copy.deepcopy(risk_state))
+        out: dict = {}
+        res = _run_day_once(df, hist, symbol, p, tf, _ext=ext, _out=out, **sc, **kw)
+        new = out.get("extras", [])
+        nsig = _extra_sig(new)
+        if (k == 0 and not new) or nsig == sig:
+            break
+        ext, sig = new, nsig
+    for key, real in (("log", log), ("locks", locks), ("skips", skips)):
+        if real is not None:
+            real.extend(sc[key])
+    if risk_state is not None and sc.get("risk_state") is not None:
+        risk_state.clear()
+        risk_state.update(sc["risk_state"])
+    return res
+
+
+def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, tf: int,
             partner: tuple[pd.DataFrame, list[pd.DataFrame]] | None = None,
             log: list | None = None, live: bool = False, bias: dict | None = None,
             conf=None, gaps: list | None = None, closes: dict | None = None,
@@ -3159,7 +3226,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             intermarket: dict | None = None, equity: float | None = None,
             bias_by_cut: dict | None = None, meta: pd.DataFrame | None = None,
             locks: list | None = None, skips: list | None = None, eth: dict | None = None,
-            risk_state: dict | None = None) -> list[Trade]:
+            risk_state: dict | None = None, _ext: list | None = None, _out: dict | None = None) -> list[Trade]:
     """Trades for one day. With `live`, a position still open at the last bar is returned
     with no exit (exit_reason "open") instead of being closed at the last price.
     equity     (#12) start-of-day equity for risk_basis="equity"
@@ -3237,7 +3304,9 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
     if p.pre_0900:
         pre_windows.append(("PRE9", 540, 570))
     state = {"reentered": {}, "re_ctx": {}, "only_side": {}, "reversed": {}, "day_pts": 0.0, "day_loss": False,
-             "rs": (risk_state if risk_state is not None else _EN.new_risk_state()) if p.loss_halving else None}
+             "rs": (risk_state if risk_state is not None else _EN.new_risk_state()) if p.loss_halving else None,
+             "ext": list(_ext or ())}              # run_day fixed point: the extras' trades of the previous pass
+    ctx.ext_other = [t_ for t_ in (_ext or ()) if t_.setup.startswith("sb_")]   # Ma Deuce reads the SB's (it runs first)
     # E9 / E10 / E11 / Ep08.12 for the setups that run AFTER the loop (Silver Bullet, Ma Deuce): they read
     # the day's closed trades as of their order time (entries.extras_risk_mult) - never a later loss
     ctx.risk_view = dict(rs0=None if state["rs"] is None else dict(state["rs"]), trades=trades)
@@ -3256,6 +3325,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         t = ctx.t[i]
         ts = ctx.idx[i]
         chop_before = chop.active_before(i) and p.sloppy_mode == "stand_aside"
+        if state["ext"]:
+            _MG.sync_ext(trades, p, done, state, ts)       # X7c / X12 / X13a / X14b / X14d: the extras' closed trades count too
         # --- 1. manage the open position on this bar
         if pos is not None:
             tr, sd = pos["trade"], pos["side"]
@@ -3302,7 +3373,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                         pos["stop_to_next"] = (a["stop_to"], i)   # M5.1: from the next bar (stop already
                                                              # tested on this bar after the fill)
             if pos.get("stop_to_next") is not None and pos["stop_to_next"][1] < i:   # M5.1 Ep 01: after the
-                pos["stop"] = max(pos["stop"], pos.pop("stop_to_next")[0])   # breakaway-gap add, below its bodies
+                _MG.raise_stop(pos, pos.pop("stop_to_next")[0])   # breakaway-gap add, below its bodies (X5c: not on a day trade)
             stop = pos["stop"]
             if p.ambiguous == "target" and o > stop and not pos["t1_done"] and h >= pos["t1"]:
                 stop = -np.inf                        # optimistic bound: target before stop
@@ -3419,7 +3490,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                     if new >= c:
                         tr.exits.append((ts, sd.x(c), pos["left"], "am_exit")); pos["left"] = 0
                     else:
-                        pos["stop"] = new
+                        _MG.raise_stop(pos, new)               # X5c: a day trade keeps its stop
             if pos["left"] and tr.session == "PM" and p.pm_done_by and pos["t1_done"] and t + tf >= p.pm_done_by:
                 tr.exits.append((ts, sd.x(c), pos["left"], "pm_done")); pos["left"] = 0
             if pos["left"] and t + tf >= flat:
@@ -3690,8 +3761,10 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         for sd in sides:
             sname = "long" if sd.sign > 0 else "short"
             if (not p.reverse_after_loss and lost_side is not None and sname != lost_side
-                    and (not p.lost_side_session or state.get("lost_fam") == _MG.fam(session))):
-                continue                              # no reversals after a loss (X13a: lost_side_session = this session only)
+                    and (not p.lost_side_session or state.get("lost_fam") == _MG.fam(session))
+                    and not state["only_side"].get(session)):
+                continue                              # no reversals after a loss (X13a: lost_side_session = this session only;
+                                                      # reverse_in_session is the one reversal the lock lets through)
             os_ = state["only_side"].get(session)
             if os_ and sd.sign != os_:
                 continue                              # X13a reverse_in_session: the opposite side only
@@ -3739,12 +3812,15 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
                 if log is not None:
                     log.append((ts, symbol, session, sname, o_["swept"], sd.x(o_["entry"]),
                                 sd.x(o_["stop"]), sd.x(o_["t1"])))
+    n_main = len(trades)
     if p.ma_deuce:
         from .pre_open import run_ma_deuce
         trades += run_ma_deuce(ctx, hist, p, day, symbol, btag, sides)
     if p.sb_model:
         from .sb_model import run_sb
         trades += run_sb(ctx, sides, p, day, symbol, blocked, btag)
+    if _out is not None:
+        _out["extras"] = list(trades[n_main:])
     if pos is not None:   # data ended early
         tr = pos["trade"]
         if not live:
@@ -3791,6 +3867,9 @@ def _arm_add(pos, tr, px, i, p, eq, floor=None, g=None, pos_g=False, size=None, 
     at_risk = max(0.0, pos["basis"] - pos["stop"] * pos["n"])
     d = px - pos["stop"]
     if d <= 0:
+        return
+    if not _SM.add_pd_ok(pos, px, p):
+        _f("x_add_not_in_pd")                          # M2.6 add_in_pd: every add path, not only add_ok
         return
     room = _total_cap(p, eq) + extra_room * eq - at_risk
     if d * q > room:
@@ -4556,7 +4635,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         lvx["q_close"] = (top - 0.25 * (top - bottom), True)   # the upper quarter must hold
     ir = _ir_in_leg(sd, sw, i, p)
     tags = dict(unicorn=bool(uni) and g in uni if not p.unicorn_pref else bool(uni), fvg_bottom=bottom,
-                fvg_ce=(top + bottom) / 2, zone_top=float(top),
+                fvg_ce=(top + bottom) / 2, zone_top=float(top), fvg_i=int(g.i),
                 entry_kind="ifvg" if is_ifvg else "implied_fvg" if is_imp else
                 ("vi" if any(g is z for z in sd.vis("bull")) else "void") if is_xz else "fvg", mitigation=bool(mit),
                 propulsion=bool(prop), ce_hold=ce_hold_,
@@ -4978,6 +5057,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
                     stop = lvl - p.pad
     if p.trade_type == "day":            # X5c (064 ~1:38:44): a day trade's stop sits below the 08:30 open / its wick CE
         k830 = _idx_at(ctx, 510)         # and is never moved (no trail, no breakeven): partials pay for it
+        day_ok = False
         if k830 < i and k830 < len(ctx.t) and ctx.t[k830] == 510:
             b830 = min(sd.o[k830], c[k830])
             lvl = float(sd.o[k830]) if p.day_stop == "open" else float(b830 - (b830 - l[k830]) / 2)
@@ -4985,6 +5065,10 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
                 stop = lvl - p.pad
                 tags["day_trade"] = True
                 lvt.append("day_trade")
+                day_ok = True
+        if not day_ok:
+            _f("x_day_trade_unavailable")   # no 08:30 candle yet / its level is not below the entry / too small:
+                                            # the order stays an ordinary session trade (stop unchanged)
     stop = _EN.refine_stop(ctx, sd, sw, i, p, entry, stop, tags, lvx, lvt)   # A4 / A12 / E6d / E6f
     risk = entry - stop
     if not (p.min_risk_pts * p.es_pt <= risk <= p.max_risk_pts * p.es_pt):

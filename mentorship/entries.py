@@ -426,7 +426,7 @@ def adds_blocked(ctx, sd, pos, i, p) -> bool:
 def add_range(pos, p):
     """The range the E12e / D12 add cut measures: (low, high) in side space = the sweep extreme and
     the locked draw (add_cut_ref="range") or the leg high ("leg"); None when unknown."""
-    leg = pos.get("leg")
+    leg = S._SM.add_leg(pos)                    # M2.6: fixed at the fill
     if not leg:
         return None
     ext, hi = leg
@@ -442,7 +442,7 @@ def add_cut_passed(sd, pos, i, p) -> bool:
     add_cutoff 0.25 = 75% covered)."""
     if not (p.add_cut or p.add_cutoff):
         return False
-    r = add_range(pos, p) if p.add_cut != "leg75" else (pos["leg"] if pos.get("leg") else None)
+    r = add_range(pos, p) if p.add_cut != "leg75" else (S._SM.add_leg(pos) or None)
     if r is None:
         return False
     lo, hi = r

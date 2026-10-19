@@ -65,6 +65,14 @@ def be_stop(pos_or_entry, p, n=None) -> float:
     return px + p.be_pad_pts * p.es_pt + (2.0 * p.cost_per_share if p.be_cost_pad else 0.0)
 
 
+def raise_stop(pos, new: float) -> None:
+    """The ONE place a trail / lock / tighten lifts a position's stop (side space, never down). A day trade (X5c
+    trade_type="day", 064 ~1:38:44) keeps its initial stop: no trail, no breakeven, nothing raises it."""
+    if pos.get("day_trade"):
+        return
+    pos["stop"] = max(pos["stop"], new)
+
+
 def be_move(pos, p) -> None:
     """Move the stop to breakeven (never down, never on a day trade: X5c)."""
     if pos.get("day_trade"):
@@ -72,7 +80,7 @@ def be_move(pos, p) -> None:
     pos["stop"] = max(pos["stop"], be_stop(pos, p))
 
 
-def be_modes(sd, pos, tr, i: int, p) -> None:
+def be_modes(sd, pos, tr, i: int, p, mode=None) -> None:
     """D14 / Ep03.15 be_on modes that are not tied to the first partial (called once per bar, after the bar's
     stop and ladder tests; a move applies from the next bar):
       after_mss  (003 ~40:15, 042) a close above the leg high (the short-term high the shift took) after the fill
@@ -81,7 +89,7 @@ def be_modes(sd, pos, tr, i: int, p) -> None:
       pool       (Ep03.15, Ep 03 "breakeven after buy-side is run") the high reaches the first liquidity pool of the
                  ladder - the pool levels are carried from the fill whatever rungs were taken; no pool in the ladder:
                  the default (expansion) rule"""
-    mode = p.be_on
+    mode = mode or p.be_on
     if mode not in ("after_mss", "stall", "pool") or pos.get("be_done") or pos.get("day_trade") or not pos["left"]:
         return
     h, c = sd.h[i], sd.c[i]
@@ -135,12 +143,12 @@ def trail_extra(sd, pos, i: int, p) -> None:
     if p.trail_first_fvg:
         g = first_fvg(sd, pos["ext_i"], i)
         if g is not None and c > g.top and sd.c[g.i + 1:i + 1].min(initial=np.inf) >= g.bottom:
-            pos["stop"] = max(pos["stop"], g.bottom - p.trail_pad)
+            raise_stop(pos, g.bottom - p.trail_pad)
     if p.mgmt in ("ladder", "unit") and p.ladder_trail == "breakaway" and pos["k"] >= p.trail_after:
         from . import targets as _TP
         g = _TP.breakaway_gap(sd, pos["ext_i"], i)          # A6: the shift's gap while price has not retraced past its half
         if g is not None and c > g.top:
-            pos["stop"] = max(pos["stop"], g.bottom - p.trail_pad)
+            raise_stop(pos, g.bottom - p.trail_pad)
     if p.mgmt in ("ladder", "unit") and p.ladder_trail == "measuring" and pos["k"] >= p.trail_after:
         from . import targets as _TP
         leg = pos.get("leg")
@@ -148,7 +156,7 @@ def trail_extra(sd, pos, i: int, p) -> None:
         hi = max(hi, float(sd.h[pos["ext_i"]:i + 1].max()))
         g = _TP.measuring_gap(sd, dict(ext=pos["ext"], ext_i=pos["ext_i"]), i, hi, p)
         if g is not None and c > g.top:
-            pos["stop"] = max(pos["stop"], g.bottom - p.trail_pad)
+            raise_stop(pos, g.bottom - p.trail_pad)
 
 
 # --- per-position data fixed at the fill ----------------------------------------------------------------------
@@ -219,13 +227,18 @@ def init_pos(ctx, sd, pos, tr, o: dict, i: int, p, state=None) -> None:
     pos["done_key"] = o.get("done_key", o["session"])
     pos["stop0"] = float(pos["stop"])
     pos["fill_px"] = float(fill_px)
-    if (p.add_leg_at_fill and pos.get("leg") and
-            (p.add_cutoff or p.add_cut or p.add_in_pd or p.add_leg_cut)):
+    if pos.get("leg"):
         ext, hi = pos["leg"]
-        pos["leg"] = (ext, max(float(hi), float(sd.h[o["ext_i"]:i + 1].max())))      # M2.6: the leg fixed at the fill
+        # M2.6: the leg the ADD rules measure (add_cutoff / add_cut / add_in_pd / add_leg_cut) is FIXED at the fill; it is
+        # its own field, so the other leg readers (be_on after_mss, leg MT, IR EQ, time stop leg_high) never see it
+        pos["leg_fill"] = ((ext, max(float(hi), float(sd.h[o["ext_i"]:i + 1].max()))) if p.add_leg_at_fill
+                           else (ext, hi))
     if p.pd3_exit and not p.pd3_legacy:
-        pos["pd3"] = _arrays(sd, pos, i - 1, p, fill_px, pos["stop0"], p.pd3_list)
+        pos["pd3"] = _arrays(sd, pos, i - 1, p, fill_px, pos["stop0"], p.pd3_list)[:p.pd3_n]    # the NEAREST pd3_n, fixed
         pos["pd3_broken"] = set()
+        if not p.pd3_dynamic:                       # audit tag: how many arrays the fixed list holds ("pd3_short" = fewer
+            add_ = [f"pd3_n{len(pos['pd3'])}"] + (["pd3_short"] if len(pos["pd3"]) < p.pd3_n else [])   # than pd3_n: never fires)
+            tr.lv_tags = "|".join(x for x in [tr.lv_tags] + add_ if x)
     if p.pd3_half:
         three = []
         for kd in ("vi", "fvg", "ob"):
@@ -249,6 +262,50 @@ def init_pos(ctx, sd, pos, tr, o: dict, i: int, p, state=None) -> None:
         tr.reentry = True
         pos["re_loss"] = re.get("loss", 0.0)
     tr.slow_chop = bool((state or {}).get("fill_slow_chop", False))
+
+
+# --- Silver Bullet / Ma Deuce: the same breakeven modes and invalidation exits (X4 / D14 / X6-X9c) -----------------------
+
+def extras_be_mode(p) -> str:
+    """The breakeven mode of the Silver Bullet / Ma Deuce: `extras_be_on` "t1" (the first build: the stop goes to
+    breakeven the moment the first target / rung is taken - the default, so nothing changes) or "follow" (the main
+    engine's `be_on`: t1 / expansion / after_mss / stall / pool / off)."""
+    return "t1" if p.extras_be_on == "t1" else p.be_on
+
+
+def extras_t1(pos, p) -> None:
+    """The first target / rung was taken in the Silver Bullet / Ma Deuce: breakeven now when the mode is "t1"."""
+    pos["t1_done"] = True
+    if extras_be_mode(p) == "t1":
+        be_move(pos, p)
+        pos["be_done"] = True
+
+
+def extras_be_bar(sd, pos, tr, i: int, p) -> None:
+    """The other breakeven modes, once per closed bar, after the bar's exits (a move applies from the next bar):
+    expansion (a close above the first target after the bar that took it), after_mss / stall / pool (`be_modes`).
+    "t1" / "off" do nothing here."""
+    mode = extras_be_mode(p)
+    if not pos["left"] or pos.get("be_done") or mode in ("t1", "off"):
+        return
+    if mode == "expansion":
+        if pos["t1_done"] and pos["last_partial_i"] < i and sd.c[i] > (pos["levels"][0] if pos["levels"] else pos["t1"]):
+            be_move(pos, p)
+            pos["be_done"] = True
+        return
+    be_modes(sd, pos, tr, i, p, mode)
+
+
+def extras_init(ctx, sd, pos, tr, o: dict, i: int, p) -> None:
+    """Silver Bullet / Ma Deuce: give the position dict the fields `exits` / `be_modes` / `init_pos` read (side space),
+    from the order `o`: zone_bottom / zone_top / zone_ce (the entry FVG / inverted FVG), ext / ext_i (the sweep or leg
+    extreme), leg_hi, level_kinds, draw (side space), session. [our interpretation] The SB's "sweep" is the leg
+    extreme before its MSS; Ma Deuce's is the inverted FVG."""
+    pos.setdefault("basis", pos["entry"] * pos["n"])
+    pos.update(fvg_bottom=o["zone_bottom"], fvg_ce=o["zone_ce"], zone_top=o["zone_top"], ext=o["ext"],
+               ext_i=o["ext_i"], kind="fvg", level_kinds=o.get("level_kinds") or [], draw=o.get("draw"),
+               last_partial_i=-1, leg=(o["ext"], o["leg_hi"]), stall_n=0)
+    init_pos(ctx, sd, pos, tr, dict(o, session=o["session"]), i, p, None)
 
 
 # --- time stop (X9 / X9a / X9d) -------------------------------------------------------------------------------
@@ -279,10 +336,14 @@ def time_stop_frac(p, st: dict, *, nbars: int, elapsed: float, best: float, basi
 
 # --- the mid-trade exits ----------------------------------------------------------------------------------------
 
-def exits(ctx, sd, pos, tr, i: int, ts, p, state) -> None:
+def exits(ctx, sd, pos, tr, i: int, ts, p, state, extras: bool = False) -> None:
     """All new mid-trade exits for bar i (after the bar's stop / ladder / legacy exit tests). Each is a market-on-close
     exit at bar i's close unless noted. Order: first-FVG fail, abort, three arrays, half off, leg MT, IR EQ, offside,
-    meander, far edge, time stop, SMT hold / AM bulk, PM consolidation, objective, re-entry target / lock, up-close take profit."""
+    meander, far edge, time stop, SMT hold / AM bulk, PM consolidation, objective, re-entry target / lock, up-close take profit.
+    extras=True (Silver Bullet / Ma Deuce, `invalidations_extras`): only the invalidation exits (first-FVG fail, abort,
+    three arrays, half off, leg MT, IR EQ, offside, meander, far edge) and the PM consolidation exit - the time stop,
+    the AM bulk and the AM close run inline in those engines (same helpers), the draw is their last rung and there is
+    no re-entry / up-close add there."""
     if not pos["left"]:
         return
     o, h, l, c = sd.o[i], sd.h[i], sd.l[i], sd.c[i]
@@ -290,7 +351,7 @@ def exits(ctx, sd, pos, tr, i: int, ts, p, state) -> None:
     fi = pos["fill_i"]
     basis = pos["basis"] / pos["n"]
     tk = p.tick
-    later = i > fi
+    later = i > fi and (not extras or p.invalidations_extras)      # the invalidation exits (X6-X9c) below need `later`
     held = False
     if p.smt_hold_until and tr.session != "PM" and pos.get("smt_tag") and pos["fill_t"] < p.smt_hold_until:
         held = t + tf < p.smt_hold_until                        # X10c: no soft exits while an AM SMT trade is held
@@ -385,7 +446,7 @@ def exits(ctx, sd, pos, tr, i: int, ts, p, state) -> None:
                 if not pos["left"]:
                     return
     # --- X9 time stop
-    if (p.time_stop_min or p.time_stop_bars) and not pos["t1_done"] and not held:
+    if (p.time_stop_min or p.time_stop_bars) and not pos["t1_done"] and not held and not extras:
         frac = time_stop_frac(p, pos.setdefault("ts", {}), nbars=i - fi + 1, elapsed=(t + tf) - pos["fill_t"],
                               best=pos["best"], basis=basis,
                               leg_hi=pos["leg"][1] if pos.get("leg") else None, zone_top=pos["fvg_top"])
@@ -395,7 +456,7 @@ def exits(ctx, sd, pos, tr, i: int, ts, p, state) -> None:
             if not pos["left"]:
                 return
     # --- X10b AM bulk
-    if (p.am_bulk_t and tr.session != "PM" and not held and not pos.get("bulk_done")
+    if (p.am_bulk_t and tr.session != "PM" and not held and not pos.get("bulk_done") and not extras
             and pos["fill_t"] < p.am_bulk_t and t + tf >= p.am_bulk_t):
         pos["bulk_done"] = True
         _exit(tr, sd, ts, c, cut_qty(pos["left"], p.am_bulk_frac, p), "am_bulk", pos)
@@ -404,6 +465,8 @@ def exits(ctx, sd, pos, tr, i: int, ts, p, state) -> None:
     # --- X11c PM consolidation exit
     if p.pm_consol_exit and tr.session == "PM" and t + tf >= p.pm_consol_exit and consol_day(ctx, i, p):
         _exit(tr, sd, ts, c, pos["left"], "pm_consol", pos)
+        return
+    if extras:
         return
     xt = p.exit_fill_through * tk
     # --- X12 objective
@@ -422,8 +485,8 @@ def exits(ctx, sd, pos, tr, i: int, ts, p, state) -> None:
             if p.reentry_lock_r and not pos.get("re_locked") and pos["best"] >= basis + p.reentry_lock_r * R:
                 done_ = sum((sd.sign * e[1] - basis) * e[2] for e in tr.exits)
                 s_ = basis + (pos.get("re_loss", 0.0) - done_) / max(pos["left"], 1)
-                s_ = min(s_, pos["best"] - tk)
-                pos["stop"] = max(pos["stop"], s_)
+                s_ = min(s_, pos["best"] - tk, c - tk)          # under the price: never a stop above the market
+                raise_stop(pos, s_)
                 pos["re_locked"] = True                                           # the prior loss stays repaid
     # --- Ep07.5 up-close take profit on the add units
     if p.tp_upclose:
@@ -483,7 +546,10 @@ def objective(pos, p):
 
 def consol_day(ctx, i: int, p) -> bool:
     """X11c: the PM is a consolidation-profile day (setups.cc_profile, read from bars closed by 13:30)."""
-    r = S._SM.cc_profile(ctx, i, p)
+    k = S._idx_at(ctx, 810)                # the explicit 13:30 index (the first bar at or after 13:30, even when 13:30 is
+    if k >= len(ctx.t) or i < k:           # missing) - the same for the main engine and the Silver Bullet; None before it
+        return False
+    r = S._SM.cc_profile(ctx, k, p)
     return bool(r) and str(r[0]).startswith("cons")
 
 
@@ -570,6 +636,7 @@ def extras_blocked(ctx, p, session: str, ts, extra=()) -> bool:
         return False
     view = getattr(ctx, "risk_view", None)
     base = list(view["trades"]) if view else []
+    extra = list(extra)
     seen = {id(t) for t in base}
     day, sess = stops_from(p, base + [t for t in extra if id(t) not in seen], ts)
     return bool(day) or fam(session) in sess
@@ -580,12 +647,20 @@ def key_fam(k: str) -> str:
     return "PM" if k in ("PM", "LH", "PMR", "SB_PM") else "AM"
 
 
-def apply_stops(trades, p, done: dict, state: dict) -> None:
-    """After a close in the main loop: recompute the stops from the closed trades and enforce them on the done flags
-    (idempotent: a re-entry that re-opened a flag cannot re-open a stopped session or day)."""
+def apply_stops(trades, p, done: dict, state: dict, ts=None) -> None:
+    """After a close in the main loop (and, with `state["ext"]`, once per bar): recompute the stops from the closed trades
+    and enforce them on the done flags (idempotent: a re-entry that re-opened a flag cannot re-open a stopped session or
+    day). `state["ext"]` = the Silver Bullet / Ma Deuce trades of the previous pass of run_day's fixed point
+    (strategy.run_day): they count as of their exit time `ts`, so the stops are two-way (an SB win ends the main
+    engine's day, an SB fail counts toward the session fails) without the main loop ever seeing a later trade."""
     if not any_stop_switch(p):
         return
-    day, sess = stops_from(p, trades)
+    ext = state.get("ext") or []
+    if ext and ts is None:
+        ts = max((t.exits[-1][0] for t in trades if t.exits), default=None)
+        if ts is None:
+            return
+    day, sess = stops_from(p, list(trades) + list(ext), ts if ext else None)
     st = state.setdefault("stops", {"day": None})
     if day and not st.get("day"):
         st["day"] = day
@@ -595,6 +670,13 @@ def apply_stops(trades, p, done: dict, state: dict) -> None:
     for k in list(done):
         if st.get("day") or key_fam(k) in st:
             done[k] = True
+
+
+def sync_ext(trades, p, done: dict, state: dict, ts) -> None:
+    """Bar start in the main loop: the extras' trades closed at or before `ts` (previous pass) may have stopped the
+    session / the day (X7c / X12 / X13a / X14b / X14d)."""
+    if state.get("ext") and any_stop_switch(p):
+        apply_stops(trades, p, done, state, ts=ts)
 
 
 def blocked_now(state: dict, session: str) -> bool:
@@ -611,6 +693,8 @@ def reentry_open(ctx, pos, tr, i: int, p, state, lost_net: float) -> dict | None
     reentry_gate: not on an FOMC day (reentry_fomc_ok), the locked draw not delivered and the original trade's last
     level not traded since its fill ("the idea is intact") [our interpretation]; the new order has to be on the same
     side with a restored sweep and an FVG made after the stop (reentry_order_ok)."""
+    if p.reentry_stop_only and not (tr.exits and tr.exits[-1][3].split("+")[0] in ("stop", "stop_gap")):
+        return None                              # D18 "re-entry after a stop-out": a time stop / abort / eod loss is not one
     if p.reentry_gate:
         if "fomc" in events(ctx.day) and not p.reentry_fomc_ok:
             return None
@@ -640,7 +724,7 @@ def reentry_order_ok(o_: dict, sd, rc: dict, p) -> bool:
         return False
     if o_["ext_i"] <= rc["stop_i"]:
         return False
-    return o_.get("fvg_i", o_["i"]) > rc["stop_i"]
+    return o_.get("fvg_i", o_["i"]) > rc["stop_i"]      # the order's FVG bar (`fvg_i`, FVG entries), else its arming bar
 
 
 # --- fades (T11) ------------------------------------------------------------------------------------------------------
