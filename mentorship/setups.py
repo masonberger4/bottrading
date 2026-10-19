@@ -1288,6 +1288,10 @@ def add_ok(sd, pos, px, i, p) -> bool:
         lg = hi - ext
         if px > ext + 0.5 * lg or sd.h[pos["fill_i"]:i + 1].max() > ext + 0.75 * lg:
             return False
+    if p.add_in_pd and pos.get("leg"):                  # M2.6 (022 ~49:26; 058 ~43:12): pyramid only on the entry side of the EQ
+        ext, hi = pos["leg"]
+        if px > ext + p.add_pd_level * (hi - ext) + 1e-9:
+            return False
     if p.adds_in_breaker and pos.get("bz_side"):
         top, bot = pos["bz_side"]
         if not (bot - 1e-12 <= px <= top + 1e-12):

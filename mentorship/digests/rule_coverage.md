@@ -850,6 +850,8 @@ Low:
 
 ### management_exits (46 items)
 
+**[built 2026-10-18: every item below; see section 6 and `build_log.md` "Package management_exits"]**
+
 Owns: the run_day management loop, `_after_close` and done flags.
 
 High:
@@ -1140,3 +1142,30 @@ switches, default off unless the owner directive makes it the default):
 | L4 | PARTIAL | `pool_rank`, `draw_below_eq` act under the lock; `lrlr_max`, `rel_tfs`, `clean_eq_pref` only with `draw_lock="off"`; NOT built: hrlr_time_k, clear_path, hrlr_news_only, resist_def, session_pool_first, eq_beyond_imb |
 | Ep04.11, Ep07.1 | FULL (clean_eq only without the #9 lock) | `pool_rank`, `rel_tfs`, `draw_below_eq`, `lrlr_max`, `clean_eq_pref`, `pool_runner_pts`, `close_draw` |
 | X3b | PARTIAL | SB uses `_split` (`sb_split`) and a slow_frac study; MISSING: JOLTS release dates before 2026 (no verifiable source, none invented) |
+
+
+## 6. management_exits build (2026-10-18)
+
+Mid-trade management, session / day stops and the add rules (`mentorship/manage.py` + hooks; `build_log.md` "Package management_exits" lists every
+item with its switches and notes). All new switches are off except T11 `late_cutoff=945` (spec: default on) and the bug-fix switches
+`add_leg_at_fill` / `ep07_body_fixes` (act only when the rule they fix is on). With `late_cutoff=0` the trades of the commit before are identical.
+Status changes against section 2:
+
+| Id | New status | Note |
+|---|---|---|
+| M2.6 | FULL (add_cutoff itself stays 0: two readings of the "25% line") | `add_in_pd`, `add_leg_at_fill`, `pool_size_rank` (+ `add_cutoff`, `add_cutoff_read`, `add_cut_ref`) |
+| X4 | FULL | `be_pad_pts`, `be_cost_pad`; the Silver Bullet follows `be_on` |
+| X5, X5a, Ep03.10, Ep03.15, Ep03.20, D14 | FULL | `ladder_trail` fvg / hit / prior / measuring / breakaway / off, `trail_after`, `trail_first_fvg`, `first_fvg_fail`, `trail_pad_pts`, `be_on` after_mss / stall / pool / off |
+| X5c | FULL | `trade_type="day"`, `day_stop` (08:30 open / wick CE; futures only) |
+| X6 | FULL | `fvg_abort_mode="rule"` (5m close arms, only the next 5m candle confirms, the arm is cleared), `fvg_abort_tf`, `fvg_abort_body`; "legacy" = first build |
+| X7, X7a, X7b, X7c | FULL | `pd3_exit` + `pd3_n` / `pd3_list` / `pd3_dynamic` (fixed list at the fill, `pd3_warn` tag), `pd3_half`, `session_stop_after_fails` (+ `session_fail_mode`; SB / Ma Deuce share it) |
+| X8, X8b, X8c, X8d, X8e, X8g | FULL | `leg_mt_exit`, `ir_eq_exit`, `prop_exit`, `offside_exit` (X8e is [our interpretation]), `meander_bars` |
+| X9, X9a, X9c, X9d | FULL | `time_stop_ref` / `time_stop_bars` / `time_stop_frac` (also SB and Ma Deuce), `far_edge_min` / `far_edge_frac` |
+| X10, X10b, X10c | FULL | `am_bulk_t` / `am_bulk_frac`, `smt_hold_until` / `smt_hold_exit` (X10d = day_week_context) |
+| X11, X11c | FULL | `pm_consol_exit` (13:30 cc_profile classifier, no entries after it) |
+| X12 | FULL | `obj_stop`, `obj_source` (draw / htf_ce), day stop for every setup |
+| X13, X13a, X13b, D18 | FULL | `reverse_in_session`, `lost_side_session`, `loss_ends_morning`, `reentry_gate`, `reentry_fomc_ok`, `reentry_risk`, `reentry_lock_r`, `reentry_target_r` |
+| X14, X14b, X14d, Ep04.13 | FULL | `chop_one_win`, `no_trade_after_win`, `done_if_target` |
+| Ep07.5, Ep07.7, T11 | FULL | `add_mode="downclose"`, `tp_upclose`; `ep07_body_fixes`; `late_cutoff` |
+| B18.3 | PARTIAL | `smt_bias` (the previous-day high / low SMT in the overnight range, [our interpretation]), `smt_exit_against`; the partials are X3g, the instrument pick is `smt_pick`; `smt_exit` stays the M16.1 time exit |
+| A13.3 | FULL | built earlier (owner #6: `breaker_zone="leg"`, `breaker_mt_*`) |

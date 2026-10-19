@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 
 from . import levels as L
+from . import manage as MG
 
 
 def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
@@ -64,6 +65,10 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
         idx = [k for k in range(ctx.start, len(ctx.t)) if leg_from <= ctx.t[k] < flat]
         if not idx:
             continue
+        if session == "PM" and p.pm_consol_exit and a >= p.pm_consol_exit:
+            k810 = ctx.start + int(np.searchsorted(ctx.t[ctx.start:], 810))
+            if k810 < len(ctx.t) and MG.consol_day(ctx, k810, p):
+                continue                              # X11c: a consolidation PM starts nothing after the exit time
         k0 = idx[0]
         pending = pos = None
         for i in idx:
@@ -97,7 +102,10 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                         pos["k"] += 1
                         if not pos["t1_done"]:
                             pos["t1_done"] = True
-                            pos["stop"] = max(pos["stop"], pos["entry"])
+                            pos["t1_i"] = i
+                            if p.be_on == "t1":                 # X4: the SB follows be_on (default: after expansion)
+                                pos["stop"] = max(pos["stop"], MG.be_stop(pos["entry"], p))
+                                pos["be_done"] = True
                         pos["away"] = lv_[k]
                     if pos["left"] and pos["away"] is not None and c >= pos["away"] + p.away_pts * p.es_pt:
                         pos["stop"] = max(pos["stop"], pos["away"] - p.trail_pad)
@@ -108,14 +116,33 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                         q = min(q, pos["left"])
                         tr.exits.append((ts, sd.x(pos["t1"]), q, "t1")); pos["left"] -= q
                         pos["t1_done"] = True
-                        pos["stop"] = max(pos["stop"], pos["entry"])
+                        pos["t1_i"] = i
+                        if p.be_on == "t1":                     # X4: the SB follows be_on
+                            pos["stop"] = max(pos["stop"], MG.be_stop(pos["entry"], p))
+                            pos["be_done"] = True
                     if pos["left"] and pos["t2"] is not None and pos["t1_done"] and h >= pos["t2"] + p.exit_fill_through * p.tick:
                         tr.exits.append((ts, sd.x(pos["t2"]), pos["left"], "t2")); pos["left"] = 0
+                if (pos["left"] and pos["t1_done"] and not pos.get("be_done") and p.be_on in ("expansion", "after_mss", "stall", "pool")
+                        and pos["t1_i"] < i and c > (pos["levels"][0] if pos["levels"] else pos["t1"])):
+                    pos["stop"] = max(pos["stop"], MG.be_stop(pos["entry"], p))      # X4: BE after expansion (after_mss /
+                    pos["be_done"] = True                                           # stall / pool read as expansion in the SB)
+                pos["best"] = max(pos["best"], h)
+                if pos["left"] and p.time_stop_extras and (p.time_stop_min or p.time_stop_bars) and not pos["t1_done"]:
+                    frac = MG.time_stop_frac(p, pos.setdefault("ts", {}), nbars=i - pos["fill_i"] + 1,
+                                             elapsed=(t + ctx.tf) - pos["fill_t"], best=pos["best"], basis=pos["entry"])
+                    if frac > 0:                                                    # X9 / X9d: the same time stop as the engine
+                        q_ = MG.cut_qty(pos["left"], frac, p)
+                        tr.exits.append((ts, sd.x(c), q_, "time" if q_ >= pos["left"] else "time_cut")); pos["left"] -= q_
                 if pos["left"] and pos["lvx"] and i > pos["fill_i"]:
                     for nm_, (lvl_, pre_t1) in pos["lvx"].items():       # A4 mohawk: a body close beyond the raw
                         if (not pre_t1 or not pos["t1_done"]) and c < lvl_:   # level exits (as in run_day)
                             tr.exits.append((ts, sd.x(c), pos["left"], nm_)); pos["left"] = 0
                             break
+                if (pos["left"] and session == "AM" and p.am_bulk_t and not pos.get("bulk_done")
+                        and pos["fill_t"] < p.am_bulk_t and t + ctx.tf >= p.am_bulk_t):
+                    pos["bulk_done"] = True                                         # X10b: the bulk off at am_bulk_t
+                    q_ = MG.cut_qty(pos["left"], p.am_bulk_frac, p)
+                    tr.exits.append((ts, sd.x(c), q_, "am_bulk")); pos["left"] -= q_
                 if (pos["left"] and session == "AM" and p.am_exit and p.am_exit_extras
                         and t + ctx.tf >= p.am_exit):  # owner #8: close (not tighten) at 12:00
                     if p.am_exit_mode == "close":
@@ -133,12 +160,17 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                     r_now = max(0.0, (pos["entry"] - pos["stop"]) * pos["left"]) / ctx.equity
                     tr.peak_risk_pct = round(max(tr.peak_risk_pct or 0.0, r_now), 5)
                 if not pos["left"]:
+                    last_ = tr.exits[-1][3]           # X12 / Ep04.13: the draw / the last rung ended the day
+                    tr.final_hit = last_ == (f"t{len(pos['levels'])}" if p.sb_mgmt == "ladder" else
+                                             ("t1" if pos["t2"] is None else "t2"))
+                    MG.mark_day_stop(tr, p)
                     out.append(tr)
                     pos = None
                     break                             # one Silver Bullet per window
                 continue
             chopped = stand and chop is not None and chop.active_before(i)
-            if pending is not None and (chopped or i < made):
+            blk = MG.extras_blocked(ctx, p, session, ts, out)       # X7c / X12 / X13a / X14b / X14d: stopped session / day
+            if pending is not None and (chopped or i < made or blk):
                 pending = None
             if pending is not None and session == "AM" and p.am_exit and p.am_exit_extras and t + ctx.tf >= p.am_exit:
                 pending = None                        # #8 guard
@@ -168,7 +200,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                     _stamp_frame(ctx, tr, i)
                     pos = dict(trade=tr, side=sd, stop=o_["stop"], t1=o_["t1"], t2=o_["t2"],
                                left=o_["shares"], entry=fill, t1_done=False, n=o_["shares"],
-                               levels=o_["levels"], k=0, away=None, fill_i=i, lvx=o_.get("lvx") or {},
+                               levels=o_["levels"], k=0, away=None, fill_i=i, fill_t=t, best=fill, lvx=o_.get("lvx") or {},
                                fracs=(1.0,) if o_["scalp"] else _bump_fr(o_, p, _split(p, ctx, getattr(ctx, "hist", []), day, i, t) if p.sb_split else p.ladder_fracs))
                     pending = None
                     if sd.l[i] <= pos["stop"]:
@@ -183,7 +215,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                 if pending is None:
                     break
                 continue
-            if i < made or chopped:
+            if i < made or chopped or blk:
                 continue
             lk = lock if isinstance(lock, dict) else None
             if lk is not None and lk.get("delivered_i") is not None and i >= lk["delivered_i"]:

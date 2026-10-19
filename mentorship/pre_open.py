@@ -69,6 +69,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
                            mark_levels, CF_SRC, blocked, _arm_add, _lots, _f, _htf_tag)
     from . import entries as _EN
     from . import targets as _TP
+    from . import manage as _MG
     from types import SimpleNamespace
     # the funnel keys md_* (strategy.FUNNEL) show which gate stops Ma Deuce (setups_models review)
     if len(hist) < 3:
@@ -225,6 +226,9 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
             if p.sloppy_mode == "stand_aside" and chop is not None and chop.active_before(i):
                 _f("md_x_chop")
                 return []                              # #10: chop known before this bar
+            if _MG.extras_blocked(ctx, p, "AM", ctx.idx[i]):
+                _f("md_x_day_stop")
+                return []                              # X12 / X13a / X14d: the morning / day is stopped
             if sl[i] <= entry - p.fill_through * p.tick - (0.0 if p.fill_through else 1e-9):
                                                      # retest fills the limit - E3: it must print THROUGH it
                                                      # (the first build filled on a touch, `<=`)
@@ -251,6 +255,9 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
                     tr.exits.append((ctx.idx[i], x(stop), left, "stop"))
                     return [tr]
                 fill_i = i
+                best = fill
+                ts_st = {}
+                bulk_done = False
                 continue
             if sh[i] >= target:
                 return []
@@ -276,11 +283,16 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
                 q = left if kl == len(levels) - 1 else min(left, max(p.lot, _lots(n_units * fr[min(kl, len(fr) - 1)], p.lot)))
                 tr.exits.append((ctx.idx[i], x(levels[kl]), q, f"t{kl + 1}")); left -= q
                 kl += 1
-                stop = max(stop, basis / n_units)
+                stop = max(stop, _MG.be_stop(basis / n_units, p))        # X4: the pad
             if not left:
+                tr.final_hit = tr.exits[-1][3] == f"t{len(levels)}"          # X12 / Ep04.13
+                _MG.mark_day_stop(tr, p)
                 return [tr]
         elif sh[i] >= target + p.exit_fill_through * p.tick:
-            tr.exits.append((ctx.idx[i], x(target), left, "t1")); return [tr]
+            tr.exits.append((ctx.idx[i], x(target), left, "t1"))
+            tr.final_hit = True
+            _MG.mark_day_stop(tr, p)
+            return [tr]
         if p.md_second and not tr.adds and add is None and not kl and i < k830 and p.adds:
             # 2nd entry before 08:30: a new small SIBI (side space: a bullish gap after the fill) or
             # a 2nd rejection of the inverted FVG (a touch of the entry after a close away from it)
@@ -297,6 +309,21 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
                 q2 = _EN.cap_add(q2, n_units, p)           # E11 max_contracts_total
                 if q2 >= max(p.lot, 1):
                     add = (px2, q2)
+        best = max(best, sh[i])
+        if (p.am_bulk_t and not bulk_done and left and t[fill_i] < p.am_bulk_t and t[i] + ctx.tf >= p.am_bulk_t):
+            bulk_done = True                                       # X10b: the bulk off at am_bulk_t
+            q_ = _MG.cut_qty(left, p.am_bulk_frac, p)
+            tr.exits.append((ctx.idx[i], x(sc[i]), q_, "am_bulk")); left -= q_
+            if not left:
+                return [tr]
+        if p.time_stop_extras and (p.time_stop_min or p.time_stop_bars) and not kl and left:    # X9 / X9d
+            frac = _MG.time_stop_frac(p, ts_st, nbars=i - fill_i + 1, elapsed=(t[i] + ctx.tf) - t[fill_i],
+                                      best=best, basis=basis / n_units)
+            if frac > 0:
+                q_ = _MG.cut_qty(left, frac, p)
+                tr.exits.append((ctx.idx[i], x(sc[i]), q_, "time" if q_ >= left else "time_cut")); left -= q_
+                if not left:
+                    return [tr]
         if p.am_exit and p.am_exit_extras and t[i] + ctx.tf >= p.am_exit:   # owner #8
             if p.am_exit_mode == "close":
                 tr.exits.append((ctx.idx[i], x(sc[i]), left, "am_exit")); return [tr]

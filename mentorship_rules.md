@@ -890,8 +890,11 @@ and to the notes for context, charts and trade examples. This file states each r
 **Breakeven and trailing**
 - **X4 Breakeven** only after the first partial and after price has expanded (032 ~58:19; 036
   ~42:40; 046 ~1:22:00; 105 ~10:41 BE + commissions; cc06_008 ~16:20; cc02_001 after 2R) [both].
-  Earlier BE in some 2023 charts (003 right after the MSS; 009 when stalling; 042) [chart]. Bot: BE
-  at T1. D14.
+  Earlier BE in some 2023 charts (003 right after the MSS; 009 when stalling; 042) [chart]. Bot:
+  `be_on="expansion"` (default: after the first partial and a later close beyond the first target; "t1",
+  "after_mss", "stall", "pool" (Ep03.15: the first pool taken) and "off" are switches); the BE level carries
+  `be_pad_pts` / `be_cost_pad` (105 ~10:41); a day trade has none; the Silver Bullet and Ma Deuce follow it
+  (SB: after_mss / stall / pool read as expansion). D14, X4.
 - **X5 Trailing** [2023]:
   - Trail under the first breakaway (protected) FVG after the shift, under the measuring gap after
     two rounds of partials, or under each newer FVG after each partial (003 ~42:40, ~1:05:00; 002
@@ -901,28 +904,41 @@ and to the notes for context, charts and trade examples. This file states each r
     stops get run at lunch (064 ~1:45:41).
   - A day trade keeps its initial stop (below the 08:30 open / 08:30 wick CE) and pays itself with
     partials; session trades trail (064 ~1:38:44).
-  - Bot: `trail=False`; when on, trails under every new FVG after the fill. D14.
+  - Bot: `trail=False` (the old trail under every new FVG after the fill, off). Default `ladder_trail="fvg"`: under the
+    newest FVG formed since a partial, from `trail_after` rounds of partials (1). Switches: "measuring" (Ep03.20:
+    under the measuring gap after two rounds, `trail_after=2`), "hit", "prior", "off"; `trail_first_fvg` (Ep03.10:
+    under the first FVG after the shift), `trail_breakaway`, `trail_pad_pts` (X5a); `trade_type="day"` (X5c) =
+    initial stop at the 08:30 open / wick CE, no trail, no BE. D14, X5.
 
 **Invalidation and aborts**
 - **X6 FVG abort**: a candle body closes beyond the FVG against you AND the next candle trades
-  beyond that candle's extreme -> close at once for a small loss (045 ~1:19:58) [2023].
+  beyond that candle's extreme -> close at once for a small loss (045 ~1:19:58) [2023]. Bot: `fvg_abort` (off),
+  `fvg_abort_mode="rule"`: a 5m candle CLOSE beyond the entry FVG's far edge arms it and only the NEXT 5m candle
+  trading beyond the armed candle's extreme confirms it (else the arm is cleared); "legacy" = the first build
+  (whole-body arm, any later bar confirms). X6.
 - **X7 Three-PD-array rule**: list three arrays against the trade; through the first is tolerated,
   the second is a warning, body closes through all three = exit before the stop (026 ~28:02; 027
   ~38:26; 078 ~1:02:38; 098 ~47:00; 105 ~1:21:06) [2023]. Body close below the nearest VI + FVG +
   OB MT -> take half off (045 ~1:49:28). Three arrays in a row failing -> stop for the session (044
-  ~1:52:49). Which arrays count is discretionary.
+  ~1:52:49). Which arrays count is discretionary. Bot: `pd3_exit` (off) lists the nearest `pd3_n` arrays (`pd3_list`:
+  FVG / VI / OB MT / breaker) at the fill (`pd3_dynamic` re-reads each bar), tags `pd3_warn` at the second break and
+  exits at the third; `pd3_half` (X7b); `session_stop_after_fails` (X7c; main engine, SB and Ma Deuce share it).
 - **X8 Other invalidations** [both]: bodies close through a bullish FVG's CE -> close early (030
   ~15:46); retrace through the MT of the candle that started the leg (026 ~28:28); immediate-
   rebalance trade back above range EQ (100 ~1:37:18); propulsion-block MT lost (cc04_008 ~5:15); a
   short should smash through the down-close candle below, if bodies respect its open and trade back
   above, close (085 ~11:18); after the trigger, price must not trade below the lowest open/close of
   the swing low (Ep 07; 009 ~15:36); meandering inside the SIBI instead of rejecting -> close (092
-  ~1:04:38).
+  ~1:04:38). Bot (all off): `leg_mt_exit` (X8b), `ir_eq_exit` (X8c), `prop_exit` (X8d = prop_mt_exit), `offside_exit` with
+  `offside_level` open / wick_ce (X8e), `meander_bars` (X8g); the CE close-through is `ce_hold`, the swing-low bodies
+  `ep07_body_exit` (also on the fill bar, `ep07_body_fixes`).
 - **X9 Time stops** [2023]: once price touches the entry array it should deliver on that candle or
   the next, or within 2-3 one-minute candles (022 ~1:43:27; 031 ~24:29; 071 ~32:41; 092 ~1:41:14);
   a 1m trade should show movement within ~10 min (025 ~17:17); after touching the SIBI's far edge,
   2 minutes to move back, else half or all off (092 ~1:11:05). Lethargic delivery -> cut half (CC:
-  cc03_003 ~13:18). Bot: none (P1).
+  cc03_003 ~13:18). Bot (off): `time_stop_min` / `time_stop_bars` + `time_stop_ref` pts / leg_high / array_far +
+  `time_stop_frac` (0.5 = cut half, once; a remainder at minimum size is closed), also in the Silver Bullet and Ma
+  Deuce; `far_edge_min` / `far_edge_frac` (092 ~1:11:05). X9.
 
 **Time exits**
 - **X10 AM exits**: CLOSE (not tighten) the last AM unit before noon - "should have peeled the last
@@ -930,23 +946,28 @@ and to the notes for context, charts and trade examples. This file states each r
   CC: close the bulk 10:00-11:00 and hold AM SMT trades to 10:30-11:00 (cc12_004 ~8:25; cc10_014
   ~3:01); AM delivered the day's range -> flat before lunch and skip the PM (cc10_007 ~9:05). Bot:
   `am_exit=720` closes all AM, PRE/NEWS, SB-AM, London-SB and Ma Deuce units at the close of the bar
-  ending 12:00 (`am_exit_mode="tighten"` = test only). D16.
+  ending 12:00 (`am_exit_mode="tighten"` = test only). `am_bulk_t` / `am_bulk_frac` (bulk off 10:00-11:00) and `smt_hold_until` /
+  `smt_hold_exit` (hold AM SMT trades to 10:30-11:00) are switches (off). D16.
 - **X11 PM exits**: target hit by 15:00 -> be done, the last hour retraces (Ep 04; 006 ~41:45); CC:
   hold PM trend trades to the 15:00 bond close, ideally 16:00; consolidation-profile PM trades exit
-  ~14:00 (cc10_014 ~3:01, ~13:17); flat before 16:00 (T11). D16.
+  ~14:00 (cc10_014 ~3:01, ~13:17); flat before 16:00 (T11). Bot: `pm_done_by`; `pm_consol_exit=840` (off; the 13:30 cc_profile classifier, no entries after
+  it); `late_cutoff=945` (DEFAULT: no adds and no fades from 15:45). D16.
 - **X12 Session objective hit** -> close everything and stop for the day (029 ~1:03:57; 040 ~0:39)
-  [2023].
+  [2023]. Bot: `obj_stop` (off), `obj_source` draw / htf_ce: exits at the objective and ends the day for every setup.
 
 **Session, day and week stops**
 - **X13 After a loss**: lose in the AM -> do not reverse; stop for the morning and wait for the PM
   (Ep 01; 001 ~46:57-48:43). Same-direction re-entry of an idea that has not unraveled is allowed at
   half the previous risk (070 ~38:41; 060 ~1:22:30; 085 ~27:21; cc02_005; cc06_003 ~23:24) [both].
   Not on FOMC (021 ~43:56). Bot: one trade per session and no opposite side after a loss
-  (`lost_side`). D18.
+  (`lost_side`); switches: `reverse_in_session`, `lost_side_session`, `loss_ends_morning` (X13a), `reentry_half` +
+  `reentry_gate` (X13b: same side, draw not delivered, a restored sweep and an FVG made after the stop, not FOMC),
+  `reentry_risk` budget / loss, `reentry_lock_r` / `reentry_target_r` (D18). D18.
 - **X14 After a win** [2023]: bread-and-butter 5 handles then stop (044 ~57:16; 046 ~4:41) - test
   switch `day_target_pts`, default off (owner #2: 5 = minimum room, not the goal); in
   chop, one win and stop (031 ~9:20); if the AM wins, skip the PM (065B ~4:12); no re-entry after a
-  winner on the day (095 ~47:08). Bot: one AM + one PM trade.
+  winner on the day (095 ~47:08). Bot: one AM + one PM trade; switches `chop_one_win` (X14b), `no_trade_after_win`
+  (X14d), `done_if_target` (Ep04.13), `day_target_pts` (X14a, off).
 - **X15 Frequency**: one good setup per week (Ep 03; 003 ~1:05:10; cc02_003 ~12:03); ~3 trades per
   week (099 ~47:36); one AM SB trade a day (047 ~8:00); CC day-trade model ~2 setups a day
   (cc08_001 ~1:30) [both]. Weekly objective delivered -> done for the week (038 ~6:33; 101
