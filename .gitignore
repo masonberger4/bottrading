@@ -23,3 +23,6 @@ data/
 paper_log.txt
 *_trades_summary.json
 *.tmp
+
+# temporary git worktrees for parallel builds
+.worktrees/
