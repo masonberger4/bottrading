@@ -1035,7 +1035,8 @@ class Params:
     # --- silver_bullet package (sb_model.py; the Silver Bullet stays OFF: sb_model=False) ----------------------------
     # Every switch cites its rule id and source (rule_coverage.md section 3 silver_bullet; rulebook_gaps/silver_bullet.md;
     # silver_bullet.md); "[our interpretation]" marks a judgment call. Defaults keep the previous Silver Bullet behaviour
-    # except sb_pw_pools (spec "sb_pw_pools=True": PWH / PWL are in the 054 draw list).
+    # except sb_pw_pools (spec "sb_pw_pools=True": PWH / PWL are in the 054 draw list) and sb_cancel_sticky (a cancelled
+    # draw is not re-armed on the same bar); False/False reproduces the old build trade for trade (build_log.md).
     # windows (T6, M3.1; 054 ~08:51, 092 ~20:04, 099 ~53:30)
     sb_last_hour: bool = False           # T6: the 15:00-16:00 window (092 ~20:04; 099 ~53:30), entries 15:00-15:50 (owner #1)
     sb_lh_window: tuple = (900, 950)
@@ -1062,7 +1063,8 @@ class Params:
     sb_ote_draw: bool = False            # L14g (054 ~04:02): a classic OTE of the prior day's leg is a draw [our interpretation]
     sb_htf_fallback: bool = False        # L14g / M3.2 (054 ~06:50): the draw was raided -> an HTF pool or array
     sb_htf_targets: bool = False         # L14g: merge the HTF conf arrays / opposing FVGs into the SB draw list
-    sb_use_bias: bool = False            # M3.3: the main engine's want (htf_bias) and weekly_bias also bind the SB
+    sb_use_bias: bool = False            # M3.3: the main engine's want (htf_bias), weekly_bias and use_bias (entry in the discount of the
+                                         # reference open, T2 / D22) also bind the SB
     sb_day_dir: str = "off"              # one direction per day: "lock" (the first window's locked side) / "first_trade"
     sb_day_dir_delivered: str = "hold"   # ... "hold" keeps the side after its draw printed, "free" releases it
     sb_weekly: str = "off"               # weekly-profile alignment (048 ~2:02): "tag" / "require" [our interpretation]
@@ -1110,7 +1112,7 @@ class Params:
     sb_cancel_sticky: bool = True        # M3.5 / 057 ~3:35: once the draw traded and the order was cancelled the same draw is not re-armed
     sb_simple: bool = False              # gap 20 (069 ~15:05): EQ of the leg, target the first array beyond it, one exit
     # stop (M3.8, gap 19)
-    sb_stop: str = "fvg_ob"              # "fvg_ob" (090) / "fvg2" (057) / "entry_candle" (086) / "swing" / "fvg_ce" (069)
+    sb_stop: str = "fvg_ob"              # "fvg_ob" = "090" (090) / "fvg2" (057) / "entry_candle" (086) / "swing" / "fvg_ce" (069)
     sb_stop_pts: float = 2.0             # sb_stop="fvg2": 2 ES pts beyond the entry (057 ~6:41)
     sb_max_stop_pts: float = 0.0         # gap 19 (057 ~2:54; 092 ~55:30): a stop wider than this is cut or skipped (0 = off)
     sb_wide: str = "skip"                # "skip" / "size"

@@ -57,7 +57,7 @@ _CHOICES = {
     "sb_ifvg": ("", "add", "prefer"),
     "sb_ifvg_stop": ("candle", "breaker"),
     "sb_conf_mode": ("tag", "entry"),
-    "sb_stop": ("fvg_ob", "fvg2", "entry_candle", "swing", "fvg_ce"),
+    "sb_stop": ("fvg_ob", "090", "fvg2", "entry_candle", "swing", "fvg_ce"),   # "090" = "fvg_ob" (the rule_coverage name)
     "sb_wide": ("skip", "size"),
     "sb_room_mode": ("exit", "draw"),
     "sb_fail_mode": ("skip", "scalp"),
@@ -123,7 +123,7 @@ def windows(p) -> list:
                  max_n=max(mx, 2) if "pm2" in p.sb_extra else mx))
     if p.sb_last_hour:
         w.append(Win("lh", "PM", "sb_lh", p.sb_lh_window[0], p.sb_lh_window[1], 870, max_n=mx, classic=False))
-    if p.sb_moc_extra:
+    if p.sb_moc_extra and not p.sb_last_hour:          # (the 15:00-15:50 window already covers 15:15-15:45)
         w.append(Win("moc", "PM", "sb_moc", p.sb_moc_window[0], p.sb_moc_window[1], 870, max_n=1, classic=False))
     return sorted(w, key=lambda x: (x.a, x.b))
 
@@ -163,11 +163,19 @@ def weekly_profile(ctx, p, day) -> dict:
     return out
 
 
-def daily_ranging(ctx, p) -> bool:
+def window_row(ctx, win):
+    """The htf table row a window may read: its own lock-time cut (bias_by_cut), else the 09:30 row for windows that start
+    the leg at or after 09:30; a pre-open window without a cut table reads nothing (the 09:30 row holds the overnight)."""
+    row = getattr(ctx, "bias_by_cut", {}).get(win.leg_from)
+    if row is None and win.leg_from >= 570:
+        row = getattr(ctx, "bias_row", None)
+    return row
+
+
+def daily_ranging(ctx, p, row=None) -> bool:
     """Gap 8 [our interpretation]: the daily is ranging when the htf table's bias column is flat (0) or the last 3
     daily bodies all sit inside the 5-day range that preceded them."""
     hist = getattr(ctx, "hist", [])
-    row = getattr(ctx, "bias_row", None)
     col = p.htf_bias if p.htf_bias != "off" else "combo"
     flat = True
     if row is not None:
@@ -185,11 +193,10 @@ def daily_ranging(ctx, p) -> bool:
     return flat or inside
 
 
-def want_side(ctx, p) -> int | None:
-    """M3.3: the main engine's `want` (htf_bias column of the day's htf row); None = no bias filter."""
+def want_side(ctx, p, row=None) -> int | None:
+    """M3.3: the main engine's `want` (htf_bias column of the window's htf row); None = no bias filter."""
     if p.htf_bias == "off":
         return None
-    row = getattr(ctx, "bias_row", None)
     return 0 if row is None else int(row[p.htf_bias])
 
 
@@ -345,14 +352,27 @@ def _resample(ctx, sd, lo: int, hi: int, m: int):
 
 def _sweep_levels(ctx, sd, i, p, session) -> dict:
     """Side-space sell-side levels a leg low may have swept: the prior day / overnight lows and the session pools."""
-    from .strategy import _sell_side
     out = {}
+    pre = ctx.t[i] < 570                               # the overnight range / London pool are incomplete before 09:30 / 05:00
     for nm, v in ctx.pd.items():
+        if pre and nm.startswith("pm"):
+            continue
         if nm.startswith(("pdl", "pml")) and sd.sign > 0:
             out[nm] = sd.x(v)
         elif nm.startswith(("pdh", "pmh")) and sd.sign < 0:
             out[nm] = sd.x(v)
-    out.update(_sell_side(ctx, sd, session, i, True, p))
+    out.update(_sell_side_known(ctx, sd, session, i, p))
+    return out
+
+
+def _sell_side_known(ctx, sd, session, i, p) -> dict:
+    """strategy._sell_side without the levels a pre-09:30 bar cannot know (the premarket range, today's ORG, London before 05:00)."""
+    from .strategy import _sell_side
+    out = dict(_sell_side(ctx, sd, session, i, True, p))
+    if ctx.t[i] < 570:
+        out.pop("premarket", None)
+    if ctx.t[i] < 300:
+        out.pop("london", None)
     return out
 
 
@@ -386,9 +406,8 @@ def _premise(ctx, sd, li, i, p, session) -> str:
     if mode in ("smt", "either"):
         ps = getattr(ctx, "pside", None)
         if ps and ps[0] is not None:
-            from .strategy import _sell_side
             pctx, psides, ppos = ps
-            for key, v in _sell_side(ctx, sd, session, i, True, p).items():
+            for key, v in _sell_side_known(ctx, sd, session, i, p).items():
                 if _thru(float(sd.l[li]), v, _tick(p)) and _smt(ctx, sd, i, key, v, session, pctx, psides, ppos, p) is True:
                     return "smt"
     return ""
@@ -400,10 +419,11 @@ def _discount_array(ctx, sd, k0, li, kb, g, p) -> bool:
     low sits inside a bullish breaker, or inside an earlier bullish FVG of the frame (the week's initial FVG proxy);
     (3) it is in the discount half of the range from the overnight start to the high so far; (4) the opposing FVG the
     leg left (leg_sibi) was broken (close above its top) and the entry FVG sits above it."""
-    from .strategy import _thru, _tick
     h, l, o, c = sd.h, sd.l, sd.o, sd.c
-    pools = [sd.x(v) for nm, v in ctx.pd.items() if nm.startswith(("pdh", "pmh")) and sd.sign > 0
-             or nm.startswith(("pdl", "pml")) and sd.sign < 0]
+    pre = ctx.t[min(li, len(ctx.t) - 1)] < 570
+    pools = [sd.x(v) for nm, v in ctx.pd.items() if (nm.startswith(("pdh", "pmh")) and sd.sign > 0
+                                                     or nm.startswith(("pdl", "pml")) and sd.sign < 0)
+             and not (pre and nm.startswith("pm"))]
     if not pools or not any(h[ctx.start:li].max(initial=-np.inf) >= v - 1e-12 for v in pools):
         return False
     lo_i = float(l[li])
@@ -545,7 +565,8 @@ def _gap424(ctx, sd, i, entry, p) -> list | None:
     for a, b in _nwogs(ctx, i):
         x1, x2 = sd.x(a), sd.x(b)
         zs.append((min(x1, x2), max(x1, x2)))
-    for a, b in ctx.org[-max(p.org_days, 1):] if p.org_days else ():
+    orgs = ctx.org[:-1] if (ctx.org_today and ctx.t[i] < 570) else ctx.org
+    for a, b in orgs[-max(p.org_days, 1):] if p.org_days else ():
         x1, x2 = sd.x(a), sd.x(b)
         zs.append((min(x1, x2), max(x1, x2)))
     cf = getattr(ctx, "conf", None)
@@ -713,7 +734,7 @@ def _arm_all(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=
                     continue
                 tg.append("sb_lrc")
             cands.append(dict(kind="fvg", top=g.top, bottom=g.bottom, i=g.i, g=g, first_low=float(l[g.i - 2]), tags=tg))
-    if p.sb_ifvg and not mss_fail:
+    if (p.sb_ifvg or p.sb_ifvg_reaper) and not mss_fail:
         ifs = _ifvg_cands(ctx, sd, k0, li, i, p, kb)
         ifs = [x for x in ifs if x["i"] >= k_fvg]
         if p.sb_ifvg == "prefer" and ifs:
@@ -759,6 +780,15 @@ def _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, pr
     conf = None
     from .entries import entry_px                      # E2 / D11: the SB's own entry price mode
     entry = entry_px(sd, g, cd["top"], cd["bottom"], p, p.sb_entry)
+    if p.sb_use_bias and p.use_bias:                    # M3.3: use_bias (T2 / D22 PO3) - discount of the AM / PM reference open
+        from .strategy import _open_known
+        ref_open = _open_known(ctx, "1330" if session == "PM" else p.bias_open, i)
+        if ref_open is None and session != "PM":
+            ref_open = _open_known(ctx, "midnight", i)
+        if ref_open is not None and not (entry <= sd.x(ref_open) + p.eq_tol_pts * p.es_pt if p.po3_inclusive
+                                         else entry < sd.x(ref_open) + p.mo_tol_pts * p.es_pt):
+            _f("sb_x_wrong_side_of_open")
+            return None
     fi = g.i - 2 if g is not None else i
     ob = L.order_block_blend(o, h, l, c, li - 3, fi, "bull")
     mt_ob = None if (ob is None or ob.mt != ob.mt) else float(ob.mt if p.mt_mode == "body" else ob.mid)
@@ -844,7 +874,7 @@ def _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, pr
             if not dr2 or dr2 != dr:
                 scalp_fail = "sb_room_untaken"
             dr = dr2
-    if p.sb_org_chop and ctx.org_today and ctx.org and i >= a_idx:   # gap 3: consolidating inside today's ORG
+    if p.sb_org_chop and ctx.org_today and ctx.org and i >= a_idx and ctx.t[i] >= 570:   # gap 3: consolidating inside today's ORG
         pc_, op_ = ctx.org[-1]
         lo_o, hi_o = sd.x(pc_), sd.x(op_)
         lo_o, hi_o = min(lo_o, hi_o), max(lo_o, hi_o)
@@ -1004,6 +1034,8 @@ def _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, pr
     lo_seg = l[k0:li + 1].min()
     swept = "none"
     for name, v in ctx.pd.items():                      # tag a sweep of a prior level
+        if ctx.t[i] < 570 and name.startswith("pm"):
+            continue                                    # (the overnight range is not complete before 09:30)
         lv_ = sd.x(v)
         if name.startswith(("pdl", "pml")) and sd.sign > 0 and _thru(lo_seg, lv_, _tick(p)):   # A2 tick
             swept = name
@@ -1126,33 +1158,38 @@ _Real = _RealSide()
 
 def _day_state(ctx, p, day) -> SimpleNamespace:
     """Per-day reads shared by the windows (all from data known before the first window)."""
-    ds = SimpleNamespace(want=want_side(ctx, p), day_side=0, delivered=False, spot={}, week=None, ranging=True)
+    ds = SimpleNamespace(want=None, day_side=0, delivered=False, spot={}, week=None, ranging=True)
     if p.sb_weekly != "off" or p.sb_runner_if_weekly or p.sb_supercharge:
         ds.week = weekly_profile(ctx, p, day)
-    if p.sb_supercharge:
-        ds.ranging = daily_ranging(ctx, p)
     return ds
 
 
-def _hit_target(tr) -> bool:
-    """The trade reached a target rung (t1, t2, ...), not just a stop / exit."""
+def _hit_target(tr, before=None) -> bool:
+    """The trade reached a target rung (t1, t2, ...), not just a stop / exit; `before` (a timestamp) = by then."""
     import re
-    return any(re.fullmatch(r"t\d+", e[3]) for e in tr.exits)
+    return any(re.fullmatch(r"t\d+", e[3]) and (before is None or e[0] < before) for e in tr.exits)
 
 
-def _moc_ok(ctx, out) -> bool:
+def _moc_ok(ctx, out, a_idx: int) -> bool:
     """Gap 14 (056 ~15:00 "the final market on close macro"): the extra 15:15-15:45 entry only while the PM draw is
-    not delivered and no PM Silver Bullet has hit its target."""
+    not delivered (before the window opens) and no PM Silver Bullet has hit its target (by then)."""
     pm = getattr(ctx, "lock", {}).get("PM")
-    if pm is not None and pm.get("delivered"):
+    if pm is not None and pm.get("delivered_i") is not None and pm["delivered_i"] < a_idx:
         return False
-    return not any(t.setup in ("sb_pm", "sb_lh") and _hit_target(t) for t in out)
+    t0 = ctx.idx[a_idx] if a_idx < len(ctx.idx) else None
+    return not any(t.setup in ("sb_pm", "sb_lh") and _hit_target(t, t0) for t in out)
+
+
+def _entered_before(ctx, out, a_idx: int, setups=None) -> bool:
+    """A Silver Bullet (of `setups`) was filled before the bar `a_idx` - what a later window may know."""
+    t0 = ctx.idx[a_idx] if a_idx < len(ctx.idx) else None
+    return any((setups is None or t.setup in setups) and (t0 is None or t.entry_time < t0) for t in out)
 
 
 # --- the window loop -------------------------------------------------------------------------------------------------
 
 def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
-    from .strategy import _news_gate, _eff_flat
+    from .strategy import _news_gate, _eff_flat, _idx_at
     out = []
     ds = _day_state(ctx, p, day)
     stand = p.sloppy_mode == "stand_aside"
@@ -1161,11 +1198,11 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
             continue
         if stand and win.session == "PM" and "nfp_week:PM" in getattr(ctx, "sl_day", ()):
             continue                                  # #10 stand aside (off by default)
-        if p.sb_one_per_day and out:
+        if p.sb_one_per_day and _entered_before(ctx, out, _idx_at(ctx, win.a)):
             continue                                  # M3 / 047 ~08:00: one Silver Bullet a day
-        if p.sb_cascade and win.classic and any(t.setup in ("sb_london", "sb_am", "sb_pm") for t in out):
+        if p.sb_cascade and win.classic and _entered_before(ctx, out, _idx_at(ctx, win.a), ("sb_london", "sb_am", "sb_pm")):
             continue                                  # M3.9 / 054 ~18:01: London, else AM, else PM
-        if win.name == "moc" and not _moc_ok(ctx, out):
+        if win.name == "moc" and not _moc_ok(ctx, out, _idx_at(ctx, win.a)):
             continue
         drv = _news_gate(ctx, p, win.a, win.b)        # #4: wait for the news dealing range
         made = 0
@@ -1213,6 +1250,10 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
         return
     k0 = idx[0]
     a_idx = _idx_at(ctx, a)
+    row_w = window_row(ctx, win)                      # the window's own bias row (no overnight look-ahead before 09:30)
+    ds.want = want_side(ctx, p, row_w)
+    if p.sb_supercharge:
+        ds.ranging = daily_ranging(ctx, p, row_w)
     if isinstance(lock, dict) and p.sb_day_dir == "lock" and ds.day_side == 0 and lock["side"]:
         ds.day_side = lock["side"]
     pend: dict = {}
@@ -1232,6 +1273,7 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
             else:
                 lock = mark_levels(ctx, getattr(ctx, "bias_by_cut", {}).get(leg_from), leg_from,
                                    "LON" if win.name == "london" else "AM", p, ())
+            lock["window"] = win.name
             ctx.lock[lazy_key] = lock
             if p.sb_day_dir == "lock" and ds.day_side == 0 and lock["side"]:
                 ds.day_side = lock["side"]
@@ -1242,8 +1284,8 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
             if (ctx.h[i] >= lock["target"]) if lock["side"] > 0 else (ctx.l[i] <= lock["target"]):
                 lock.update(delivered=True, delivered_t=ts, delivered_i=i)
                 delivered_now = True
-        if isinstance(lock, dict) and lock.get("delivered"):
-            ds.delivered = True
+        if isinstance(lock, dict) and lock.get("delivered_i") is not None and lock["delivered_i"] <= i:
+            ds.delivered = True                       # (the run_day locks carry the whole day's flag: only bars up to i)
         if pos is not None:                           # manage the open trade
             sd = pos["side"]
             o, h, l, c = sd.o[i], sd.h[i], sd.l[i], sd.c[i]
@@ -1258,6 +1300,7 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
                 out.append(tr)
                 n_done += 1
                 hit = _hit_target(tr)
+                was_rev = bool(pos.get("rev"))
                 if hit:
                     ds.delivered = True
                 if p.sb_reverse_after_target and hit and not rev_used and rev_state is None \
@@ -1268,7 +1311,7 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
                 pend = {}
                 if rev_state is not None and not rev_used:
                     continue
-                if hit or n_done >= win.max_n:
+                if hit or was_rev or n_done >= win.max_n:
                     break                              # one Silver Bullet per window (sb_max_per_window); target traded
                 continue
             continue
@@ -1361,6 +1404,8 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
                            super=o_["super"], draw_raw_kind=o_["draw_raw_kind"], n0=shares, moved=False,
                            add_pend=None, adds_done=0)
                 pend = {}
+                if o_["rev"]:
+                    rev_used, rev_state = True, None       # gap 15: ONE opposite Silver Bullet per window
                 if p.sb_day_dir == "first_trade" and ds.day_side == 0:
                     ds.day_side = sd.sign
                 if sd.l[i] <= pos["stop"]:
@@ -1407,8 +1452,9 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat):
                 continue
             if lk is not None and lk["side"] and sd.sign != lk["side"]:
                 continue
-            if ds.day_side and sd.sign != ds.day_side and not (p.sb_day_dir_delivered == "free" and ds.delivered):
-                continue                              # one direction per day
+            if (ds.day_side and sd.sign != ds.day_side and rev_state is None
+                    and not (p.sb_day_dir_delivered == "free" and ds.delivered)):
+                continue                              # one direction per day (gap 15's counter trade is the exception)
             if p.sb_use_bias:                         # M3.3: the engine's bias filters
                 if (ds.want and ds.want != sd.sign) or (p.weekly_bias and ctx.wbias == -sd.sign):
                     continue

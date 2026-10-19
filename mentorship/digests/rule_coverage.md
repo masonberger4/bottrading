@@ -193,7 +193,7 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | T3 | Kill zones | FULL | London pool | (none) | no |
 | T4 | Opening range | SIMPLIFIED | or_minutes; OR pools | No or_no_entry. No deep exception. No OR bias. No wide-OR draw. | no |
 | T5 | NY AM session | SIMPLIFIED | am, pre windows | No 08:20/08:30-09:00 window. | no |
-| T6 | Silver Bullet windows | SIMPLIFIED | SB.run_sb | No 15:00-16:00 or 07:00-08:30 window. | no |
+| T6 | Silver Bullet windows | FULL | SB.windows | Built (section 6): `sb_last_hour`, `sb_0700` (flat 08:29), `sb_moc_extra`. | no |
 | T7 | Macros | SIMPLIFIED | MACROS tags | Tags only. No 2:00 macro, no gate, no done/MOC rules. | no |
 | T8 | Lunch | SIMPLIFIED | am/pm windows; lunch pool | No lunch session. No carried draw. No objective skip. | no |
 | T9 | PM session | SIMPLIFIED | pm; tags | No 14:30 skip, no 13:45 restart, no continue-AM filter, no AM-OB entry. | no |
@@ -222,7 +222,7 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | L14d | Untraded targets only | SIMPLIFIED | `seen` filter (pools) | Arrays never retired. | no |
 | L14e | Conditional draws | MISSING | (none) | No session draw state. | no |
 | L14f | Sorted level list | FULL | ladder | (none) | no |
-| L14g | SB draw list | SIMPLIFIED | SB._arm -> _targets | No PWH/PWL by default, no OTE, no HTF, no fallback. | no |
+| L14g | SB draw list | FULL | SB._order -> _targets | Built (section 6): `sb_pw_pools`, `sb_ote_draw`, `sb_htf_targets`, `sb_htf_fallback`. | no |
 | L15 | Room (10-handle framework) | FULL | min_draw_pts=5 | (none) | no |
 | L16 | ADR5 targets | MISSING | _split only | Not implemented. | no |
 | L17 | Rounding | MISSING | (none) | No switch. Now built: see section 4. | no |
@@ -248,18 +248,18 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | M2.5 | Stop variants | SIMPLIFIED | stop_mode | Not a pure MT+2pt stop. No candle or CE2 stop. | no |
 | M2.6 | Premium pyramid; 25% cutoff; larger pool | SIMPLIFIED | adds; t1_done gate | No P/D check on adds. No 25% cutoff. No pool size rank. | yes (was MISSING) |
 | M2.7 | Three drives | MISSING | (none) | No detector. | no |
-| M3 | Silver Bullet | SIMPLIFIED | SB | Several sub-rules simplified. | no |
-| M3.1 | SB windows | SIMPLIFIED | SB wins | Missing windows. | no |
+| M3 | Silver Bullet | FULL | SB | Built (section 6); gap switches `sb_*`. | no |
+| M3.1 | SB windows | FULL | SB.windows | Built: `sb_extra` pm2 / early [our interpretation]. | no |
 | M3.2 | SB draw first | SIMPLIFIED | SB._arm draws[0] | Draw not chosen first. Now built: see section 4. | no |
-| M3.3 | First FVG in the bias direction | SIMPLIFIED | SB | No bias filter. MSS forced. | no |
+| M3.3 | First FVG in the bias direction | FULL | SB | Built: `sb_use_bias`, `sb_need_mss`, `sb_mss_required`. | no |
 | M3.4 | Evolving SB | FULL | SB re-arm | (none) | no |
-| M3.5 | Cancel on target; shallow run | SIMPLIFIED | SB cancel | No depth tag. | no |
+| M3.5 | Cancel on target; shallow run | FULL | SB cancel | Built: `sb_cancel_ticks`, `sb_cancel_sticky`, sweep depth tag, `sb_need_sweep`, `sb_sweep_max_pts`. | no |
 | M3.6 | SB room | FULL | sb_room_pts | (none) | no |
 | M3.7 | SB entry price | FULL | g.top | (none) | no |
-| M3.8 | SB stop variants | SIMPLIFIED | SB 090 stop | No 057 or 086 stop. | no |
-| M3.9 | Session order, one market | SIMPLIFIED | SB per window | No cascade. combine switches markets. | no |
+| M3.8 | SB stop variants | FULL | SB stop | Built: `sb_stop` 090 / fvg2 / entry_candle / swing / fvg_ce. | no |
+| M3.9 | Session order, one market | FULL | SB per window | Built: `sb_cascade`, `sb_one_market`, combine session key. | no |
 | M3.10 | Immediate rebalance -> more than 5 handles | MISSING | (none) | Not implemented. Now built: see section 4. | no |
-| M3.11 | SB layered exits | SIMPLIFIED | sb_mgmt | No 4/2/4 split. No weekly condition. | no |
+| M3.11 | SB layered exits | FULL | sb_mgmt | Built: `sb_mgmt` gap424 / layered057, `sb_runner_if_weekly`, `sb_supercharge`. | no |
 | M4 | Breaker and unicorn entries | SIMPLIFIED | uni pref | Classic, advanced, pyramid and CC versions absent. | no |
 | M4.1 | Classic breaker entry | MISSING | (none) | No entry. | no |
 | M4.2 | Unicorn conditions | SIMPLIFIED | uni; adds | No 09:30 gate, no MT floor. | no |
@@ -389,7 +389,7 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | X16c | Weekly H/L weekday and session | MISSING | (none) | Not built. | no |
 | X16d | Entry-array timeframe | SIMPLIFIED | entry_kind | No per-trade timeframe. | no |
 | D1 | AM from 09:30 vs 10:00; or_no_entry | SIMPLIFIED | am | No or_no_entry. The 10:00 test drops OR sweeps. | no |
-| D2 | SB as its own setup | SIMPLIFIED | SB | No fvg_in_window. No first-FVG switch. | no |
+| D2 | SB as its own setup | FULL | SB | Built: `sb_fvg_in_window`, `sb_fvg_from`, `sb_evolve`, `sb_fvg_pick`. | no |
 | D3 | MSS close vs wick | FULL | mss_mode | (none) | no |
 | D4 | MT body vs range | FULL | mt_mode | (none) | no |
 | D5 | Exit buffer by type | FULL | exit_mode | (none) | no |
@@ -1140,3 +1140,16 @@ switches, default off unless the owner directive makes it the default):
 | L4 | PARTIAL | `pool_rank`, `draw_below_eq` act under the lock; `lrlr_max`, `rel_tfs`, `clean_eq_pref` only with `draw_lock="off"`; NOT built: hrlr_time_k, clear_path, hrlr_news_only, resist_def, session_pool_first, eq_beyond_imb |
 | Ep04.11, Ep07.1 | FULL (clean_eq only without the #9 lock) | `pool_rank`, `rel_tfs`, `draw_below_eq`, `lrlr_max`, `clean_eq_pref`, `pool_runner_pts`, `close_draw` |
 | X3b | PARTIAL | SB uses `_split` (`sb_split`) and a slow_frac study; MISSING: JOLTS release dates before 2026 (no verifiable source, none invented) |
+
+
+## 6. silver_bullet build (2026-10-19, branch sb-build)
+
+The `silver_bullet` package (`sb_model.py` plus the `# --- silver_bullet package` Params block) is built behind switches; the Silver Bullet stays off by default (`sb_model=False`). `build_log.md` ("Package silver_bullet") lists every item with its switches, defaults and the two default changes (`sb_pw_pools=True`, `sb_cancel_sticky=True`).
+
+| Id | New status | Note |
+|---|---|---|
+| M3, M3.1, M3.2, M3.3, M3.4, M3.5, M3.6, M3.7, M3.8, M3.9, M3.10, M3.11, D2, T6, L14g | FULL | the 12 rule_coverage items; `sb_*` switches |
+| gaps 1-3, 5-10, 13-22 (rulebook_gaps/silver_bullet.md) | FULL | IFVG, room overshoot / untaken / ORG chop, discount-array stand-in, BPR, immediate rebalance, supercharge, OB entry, confluence, premise, several entries, reverse, FVG pick, cancel ticks, large-range candle, stop width, simple EQ rule, consolidation wait, NWOG expansion |
+| gaps 4, 11, 12 | no build | FX room (fx_only), entry timeframe (needs sub-minute data), FVG from the 09:30 leg (already how the SB arms); rulebook text only |
+| direction filters | FULL [our interpretation] | `sb_draw_first` + `sb_day_dir`, `sb_disp_*`, `sb_sync`, `sb_spotty`, `sb_weekly` |
+| B23 seasonal agreement (gap 8) | NOT built | `sb_supercharge_seasonal` is reserved; the seasonal column belongs to bias_htf |

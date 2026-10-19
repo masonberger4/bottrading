@@ -180,9 +180,11 @@ def test_params_reject_bad_silver_bullet_values(kw):
 
 
 def test_windows_list_t6_and_m31():
-    p = Params(sb_london=True, sb_0700=True, sb_last_hour=True, sb_moc_extra=True)
+    p = Params(sb_london=True, sb_0700=True, sb_last_hour=True)
     w = {x.name: x for x in sb_model.windows(p)}
-    assert [x.name for x in sb_model.windows(p)] == ["london", "0700", "am", "pm", "lh", "moc"]
+    assert [x.name for x in sb_model.windows(p)] == ["london", "0700", "am", "pm", "lh"]
+    w["moc"] = {x.name: x for x in sb_model.windows(Params(sb_moc_extra=True))}["moc"]
+    assert [x.name for x in sb_model.windows(Params(sb_last_hour=True, sb_moc_extra=True))] == ["am", "pm", "lh"]   # lh covers moc
     assert (w["london"].a, w["london"].b) == (180, 240)
     assert (w["0700"].a, w["0700"].b, w["0700"].flat) == (420, 510, 509)          # T6: flat 08:29
     assert (w["lh"].a, w["lh"].b) == (900, 950)                                    # owner #1: entries to 15:50
@@ -190,6 +192,9 @@ def test_windows_list_t6_and_m31():
     assert [x.name for x in sb_model.windows(Params())] == ["am", "pm"]
     q = {x.name: x for x in sb_model.windows(Params(sb_extra=("pm2", "early"), sb_max_per_window=1))}
     assert q["pm"].max_n == 2 and q["am"].a == 590 and q["am"].max_n == 1
+    q = {x.name: x for x in sb_model.windows(Params(sb_extra=("early",), sb_early_start=585, sb_0700=True, sb_0700_window=(430, 500),
+                                                   sb_moc_extra=True, sb_moc_window=(920, 940)))}
+    assert q["am"].a == 585 and (q["0700"].a, q["0700"].b) == (430, 500) and (q["moc"].a, q["moc"].b) == (920, 940)
 
 
 # --- the base setup (M3) ---------------------------------------------------------------------------------------------
@@ -564,8 +569,8 @@ def test_sync_es_nq_ym_in_sync_filter():
 
 
 # a choppy 09:30-10:00 (no displacement, no FVG, direction flips) before the structure at 10:00
-SPOTTY = [(100.0, 100.4, 99.8, 100.2), (100.2, 100.5, 99.9, 100.0), (100.0, 100.4, 99.6, 100.3), (100.3, 100.5, 99.7, 99.8),
-          (99.8, 100.3, 99.5, 100.2), (100.2, 100.4, 99.9, 100.1), (100.1, 101.2, 100.0, 101.1), (101.1, 101.6, 101.0, 101.5),
+SPOTTY = [(100.0, 100.4, 99.8, 100.2), (100.2, 100.5, 99.9, 100.0), (100.0, 100.4, 99.7, 100.3), (100.3, 100.5, 99.8, 99.8),
+          (99.8, 100.2, 99.5, 100.2), (100.2, 100.4, 99.9, 100.1), (100.1, 101.2, 100.0, 101.1), (101.1, 101.6, 101.0, 101.5),
           (101.5, 102.2, 101.5, 102.1), (102.1, 102.2, 101.3, 101.4), (101.4, 108.6, 101.3, 108.5)]
 
 
@@ -605,6 +610,7 @@ def test_gap17_cancel_threshold_ticks_beyond_the_draw_057():
     assert t[0].sb_pre_run_ticks == pytest.approx(1.6)                               # 0.4 pt beyond / 0.25
     t = one([("09:30", CANCEL)], P(sb_cancel_ticks=2))
     assert len(t) == 1                                                               # 108.4 < 108.5
+    assert len(one([("09:30", CANCEL)], P(sb_cancel_sticky=False))) == 1             # (the old build re-armed the same draw)
     rows = CANCEL[:9] + [(102.5, 109.0, 102.4, 108.9)] + CANCEL[10:]                 # 109.0 >= 108.75: cancelled
     assert one([("09:30", rows)], P(sb_cancel_ticks=3)) == []
 
@@ -932,3 +938,268 @@ def test_l14g_htf_targets_merge_into_the_sb_draw_list():
     assert base.t1 == 108.25
     t = run(df, history(), P(sb_htf_targets=True, **q), conf=StubConf((), (105.0,)))[0][0]
     assert t.t1 == pytest.approx(104.5)                                                 # an HTF array 105 is the nearer draw
+
+
+# --- knobs and the remaining switches ----------------------------------------------------------------------------------------
+
+# a Reaper (076): a bullish FVG [100.2, 100.8] in the discount of the L1 -> H leg that price cut through on the way to the low
+REAPER = [(100.0, 100.2, 99.0, 99.9), (99.9, 101.0, 99.8, 100.9), (100.9, 102.5, 100.8, 102.4), (102.4, 102.4, 100.0, 100.1),
+          (100.1, 100.2, 98.5, 98.6), (98.6, 103.0, 98.55, 102.9), (102.9, 103.6, 102.8, 103.5), (103.5, 104.2, 103.3, 104.1),
+          (104.1, 104.2, 100.5, 101.0), (101.0, 108.6, 100.9, 108.5)]
+
+
+def test_gap1_ifvg_reaper_is_an_entry_candidate():
+    q = dict(or_minutes=0, sb_room_pts=4.5)
+    assert arm([("09:30", REAPER)], P(sb_ifvg="prefer", **q), at="10:05")[0]["kind"] == "fvg"        # no inverted gap: the FVG
+    o = arm([("09:30", REAPER)], P(sb_ifvg="prefer", sb_ifvg_reaper=True, **q), at="10:05")[0]
+    assert o["kind"] == "ifvg_breaker" and o["entry"] == 100.8
+    o = arm([("09:30", REAPER)], P(sb_ifvg_reaper=True, **q), at="10:05")                            # the reaper alone arms it too
+    assert any(x["kind"] == "ifvg_breaker" for x in o) or o[0]["kind"] == "fvg"
+
+
+def test_knobs_windows_spotty_cons_ob_conf():
+    assert [(w.a, w.b) for w in sb_model.windows(P(sb_london=True, sb_london_window=(190, 230)))][0] == (190, 230)
+    assert one([("14:30", ROWS)], P(sb_last_hour=True, sb_lh_window=(900, 910))) == []                 # the 15:15 fill is outside
+    assert len(one([("14:30", ROWS)], P(sb_last_hour=True, sb_lh_window=(900, 960)))) == 1
+    t = one([("06:30", ROWS[:10])], P(sb_0700=True, sb_0700_flat=480))
+    assert str(t[0].exits[-1][0])[11:16] == "07:55"
+    # spotty: a 10-minute look-back sees too few bars to call the day spotty
+    ctx_s, _ = actx([("09:30", SPOTTY)], P())
+    win_s = sb_model.Win("am", "AM", "sb_am", 600, 660, 570)
+    k0_s = S._idx_at(ctx_s, 570)
+    assert not sb_model.spotty_day(ctx_s, P(), win_s, k0_s + 2, k0_s, 5)[0]                 # fewer than 3 bars: nothing to read
+    assert sb_model.spotty_day(ctx_s, P(sb_spotty_bars=15), win_s, k0_s + 6, k0_s, 5)[0]       # the last 3 bars are choppy too
+    assert one([("09:30", SPOTTY)], P(sb_spotty="skip", sb_spotty_bars=60)) == []
+    # consolidation: a looser box (range 1.0 > 0.5) is no box, a stricter body test drops the displacement
+    p = dict(sb_cons_bars=4, sb_mss_required=False, sb_room_pts=0.5, min_risk_pts=0.5, sb_cons_wait=True)
+    assert arm([("09:30", CONS)], P(sb_cons_pts=0.5, **p), at="10:15") != []
+    assert arm([("09:30", CONS)], P(sb_cons_pts=2.0, **p), at="10:15") == []
+    assert arm([("09:30", CONS)], P(sb_cons_body_mult=10.0, **p), at="10:30") == []
+    # order block / confluence thresholds
+    ob = dict(sb_entry_arrays=("ob",), sb_draw_first=True)
+    assert len(one([("09:30", OBR)], P(sb_ob_min_pts=2.0, **ob))) == 1
+    assert one([("09:30", OBR)], P(sb_ob_min_pts=10.0, **ob)) == []
+    cf = dict(sb_entry_arrays=("fvg", "confluence"))
+    assert "sb_conf" in arm([("09:30", ROWS)], P(**cf))[0]["lv_tags"]
+    assert "sb_conf" not in arm([("09:30", ROWS)], P(sb_conf_min=3, **cf))[0]["lv_tags"]
+    assert "sb_conf" not in arm([("09:30", ROWS)], P(sb_conf_tol_pts=0.01, **cf))[0]["lv_tags"]
+    # the ORG look-back and the reserved seasonal switch change nothing here
+    assert len(one([("09:30", ORG)], P(sb_org_chop_bars=2))) == 1
+    assert one([("09:30", ROWS)], P(sb_supercharge_seasonal=True))[0].entry == one([("09:30", ROWS)])[0].entry
+    # the 4 / 2 / 4 split is a switch
+    h = history(n=24, over={date(2026, 6, 18): (100.0, 108.0, 91.0, 108.0), date(2026, 6, 22): (111.0, 111.0, 100.0, 100.5)})
+    rows = ROWS[:11] + [(103.9, 109.6, 103.8, 109.5)]
+    t = one([("09:30", rows)], P(sb_mgmt="gap424", sb_draw_first=True, sb_gap424_fracs=(0.5, 0.25, 0.25)), hist=h)[0]
+    assert t.exits[0][2] / t.shares == pytest.approx(0.5, abs=0.01)
+
+
+# --- the new switches never fire by themselves --------------------------------------------------------------------------------
+
+NEW_FIELDS = (
+    "sb_last_hour", "sb_lh_window", "sb_0700", "sb_0700_window", "sb_0700_flat", "sb_london_window", "sb_extra", "sb_early_start",
+    "sb_moc_extra", "sb_moc_window", "sb_one_per_day", "sb_cascade", "sb_one_market", "sb_max_per_window", "sb_adds",
+    "sb_am_done", "sb_draw_first", "sb_pw_pools", "sb_ote_draw", "sb_htf_fallback", "sb_htf_targets", "sb_use_bias",
+    "sb_day_dir", "sb_day_dir_delivered", "sb_weekly", "sb_weekly_neutral", "sb_sync", "sb_sync_mode", "sb_sync_min",
+    "sb_spotty", "sb_spotty_tests", "sb_spotty_min", "sb_spotty_bars", "sb_disp_pts", "sb_disp_leg_pts",
+    "sb_disp_range_mult", "sb_mss_required", "sb_need_mss", "sb_fvg_in_window", "sb_fvg_from", "sb_evolve", "sb_fvg_pick",
+    "sb_need_sweep", "sb_sweep_max_pts", "sb_sweep_alt", "sb_bpr_exclude", "sb_cons_wait", "sb_cons_bars", "sb_cons_pts",
+    "sb_cons_body_mult", "sb_lrc_mult", "sb_lrc_mode", "sb_premise", "sb_nwog_expansion", "sb_entry_arrays", "sb_ifvg",
+    "sb_ifvg_reaper", "sb_ifvg_stop", "sb_ifvg_market", "sb_ob_min_pts", "sb_conf_min", "sb_conf_tol_pts", "sb_conf_mode",
+    "sb_reverse_after_target", "sb_cancel_ticks", "sb_cancel_sticky", "sb_simple", "sb_stop", "sb_stop_pts", "sb_max_stop_pts",
+    "sb_wide", "sb_abort", "sb_room_mode", "sb_room_overshoot_pts", "sb_room_untaken", "sb_org_chop", "sb_org_chop_bars",
+    "sb_fail_mode", "sb_imm_tag", "sb_runner_if_weekly", "sb_supercharge", "sb_supercharge_seasonal", "sb_gap424_fracs")
+
+
+def test_every_new_switch_is_a_params_field_and_has_a_test_that_names_it():
+    import dataclasses
+    fields = {f.name for f in dataclasses.fields(Params)}
+    assert set(NEW_FIELDS) <= fields
+    src = Path(__file__).read_text(encoding="utf-8")
+    cut = src.index("NEW_FIELDS = (")
+    body = src[:cut] + src[src.index("def test_every_new_switch"):]
+    missing = [f for f in NEW_FIELDS if f not in body]
+    assert not missing, f"no test names {missing}"
+
+
+# --- no look-ahead: a run on the full data and on data cut just after each fill must agree on every trade up to that fill ---
+
+def _no_look_ahead(df, tf, sym, p, cols, every=1, meta=None, lag=2, min_trades=1, **kw):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        full = B.run(df, tf, sym, p, meta=meta, **kw)
+        assert len(full) >= min_trades, "no trades - the test window must produce some"
+        for cut_t in full.entry_time.iloc[::every]:
+            c = cut_t + pd.Timedelta(minutes=lag)
+            pk = {k: (v[v.index <= c] if isinstance(v, pd.DataFrame) else v) for k, v in kw.items()}
+            part = B.run(df[df.index <= c], tf, sym, p, partial_last=True, meta=meta, **pk)
+            a = full[full.entry_time <= cut_t][cols].reset_index(drop=True)
+            b = part[part.entry_time <= cut_t][cols].reset_index(drop=True)
+            pd.testing.assert_frame_equal(a, b)
+    return full
+
+
+SBCOLS = ["entry_time", "entry", "stop", "t1", "t2", "shares", "setup", "entry_kind", "swept", "draw_px", "lv_tags", "sb_win", "sb_n"]
+SYN = dict(es_pt=0.09, use_bias=False, min_draw_pts=0, leg_pd=0, sb_model=True, am=(0, 0), pm=(0, 0), draw_lock="off",
+           htf_resist_cap=False, sloppy_mode="off", sb_room_pts=1.0)
+MIN_TRADES = {"windows_draw": 3, "count_pick": 5, "filters": 1, "entries_exits": 5, "runner_simple": 5}
+SYN_GROUPS = {
+    "windows_draw": dict(sb_london=True, sb_0700=True, sb_last_hour=True, sb_moc_extra=True, sb_draw_first=True,
+                         sb_ote_draw=True, sb_htf_fallback=True, sb_day_dir="first_trade", sb_day_dir_delivered="free"),
+    "count_pick": dict(sb_max_per_window=2, sb_extra=("pm2", "early"), sb_fvg_pick="any_in_leg", sb_adds=True,
+                       sb_cancel_ticks=2, sb_one_per_day=False),
+    "filters": dict(sb_sync="require", sb_spotty="skip", sb_weekly="require", sb_weekly_neutral="allow", sb_disp_pts=0.2,
+                    sb_cons_wait=True, sb_cons_bars=3, sb_need_sweep=True, sb_sweep_alt="discount_array",
+                    sb_nwog_expansion="tag", sb_bpr_exclude=True, sb_lrc_mult=1.5, sb_lrc_mode="wait"),
+    "entries_exits": dict(sb_ifvg="add", sb_ifvg_reaper=True, sb_ifvg_market=True, sb_entry_arrays=("fvg", "ob", "confluence"),
+                          sb_conf_mode="entry", sb_stop="entry_candle", sb_abort=True, sb_mgmt="gap424", sb_room_untaken=True,
+                          sb_org_chop=True, sb_fail_mode="scalp", sb_room_overshoot_pts=3.0, sb_imm_tag=True),
+    "runner_simple": dict(sb_runner=True, sb_runner_if_weekly=True, sb_supercharge=True, sb_reverse_after_target=True,
+                          sb_ote_draw=True, sb_htf_targets=True, sb_use_bias=True, sb_simple=False, sb_stop="fvg2"),
+}
+
+
+@pytest.mark.parametrize("group", list(SYN_GROUPS))
+def test_look_ahead_synthetic_silver_bullet_switch_groups(group):
+    x, y = B.synthetic(start="2026-06-01", end="2026-08-15", tf=5, seed=3)
+    p = Params(**SYN, **SYN_GROUPS[group])
+    full = _no_look_ahead(x, 5, "RW", p, SBCOLS, every=3, partner=y, min_trades=MIN_TRADES[group])
+    assert set(full.sb_win) <= {"london", "0700", "am", "pm", "lh", "moc"}
+
+
+@pytest.mark.skipif(not ES, reason="no ES data")
+def test_look_ahead_es_5m_silver_bullet_switches():
+    df = B.load("ES", 5, source="databento")
+    df = df[(df.index >= "2023-04-03") & (df.index < "2023-06-02")]
+    p = Params(**FUT, am=(0, 0), pm=(0, 0), sb_model=True, draw_lock="off", htf_resist_cap=False, sloppy_mode="off",
+               sb_last_hour=True, sb_max_per_window=2, sb_fvg_pick="any_in_leg", sb_adds=True, sb_draw_first=True,
+               sb_day_dir="first_trade", sb_day_dir_delivered="free", sb_disp_pts=0.5, sb_ote_draw=True, sb_weekly="tag",
+               sb_stop="fvg2", sb_cancel_ticks=3, sb_ifvg="add", sb_mgmt="gap424")
+    full = _no_look_ahead(df, 5, "ES", p, SBCOLS, every=1, min_trades=3)
+    assert set(full.sb_win) <= {"am", "pm", "lh"}
+
+
+@pytest.mark.skipif(not ES, reason="no ES data")
+def test_look_ahead_es_5m_locked_silver_bullet_with_sync_and_spotty():
+    df = B.load("ES", 5, source="databento")
+    nq = B.load("NQ", 5, source="databento") if Path("data/mentorship/NQ_5min_db.csv").exists() else None
+    df = df[(df.index >= "2023-04-03") & (df.index < "2023-06-02")]
+    kw = {}
+    if nq is not None:
+        kw["partner"] = nq[(nq.index >= "2023-04-03") & (nq.index < "2023-06-02")]
+    p = Params(**FUT, am=(0, 0), pm=(0, 0), sb_model=True, sloppy_mode="off", sb_sync="tag", sb_spotty="tag",
+               sb_premise="either", sb_nwog_expansion="tag", sb_need_sweep=False, sb_use_bias=False, sb_stop="entry_candle",
+               sb_room_mode="draw", sb_room_overshoot_pts=2.0)
+    _no_look_ahead(df, 5, "ES", p, SBCOLS, every=1, min_trades=1, **kw)
+
+
+@pytest.mark.skipif(not ES1, reason="no ES 1m data")
+def test_look_ahead_es_1m_silver_bullet_london_0700_and_last_hour():
+    es = B.load("ES", 1, source="databento")
+    es = es[(es.index >= "2024-01-02") & (es.index < "2024-02-02")]
+    p = Params(**FUT, am=(0, 0), pm=(0, 0), sb_model=True, sloppy_mode="off", sb_london=True, sb_0700=True, sb_last_hour=True,
+               sb_moc_extra=True, sb_draw_first=True, sb_max_per_window=2, sb_ifvg="add", sb_entry_arrays=("fvg", "ob", "confluence"),
+               sb_conf_mode="tag", sb_stop="swing", sb_abort=True, sb_cons_wait=True)
+    full = _no_look_ahead(es, 1, "ES", p, SBCOLS, every=2, lag=1, min_trades=2)
+    assert set(full.sb_win) & {"london", "0700", "am", "pm", "lh", "moc"}
+
+
+# --- the previous build is reproduced when the two behaviour changes are switched back ----------------------------------------
+
+def _sig(t):
+    import hashlib
+    rows = [(str(r.entry_time), round(float(r.entry), 4), round(float(r.stop), 4), round(float(r.t1), 4), r.setup)
+            for r in t.itertuples()]
+    return hashlib.sha1(repr(rows).encode()).hexdigest()[:16], len(rows)
+
+
+def test_defaults_reproduce_the_pre_package_build_when_pw_pools_and_cancel_sticky_are_off():
+    """Signatures recorded from the build before this package (synthetic seed 3, 2026-06-01..08-15): sb_pw_pools (PWH / PWL are
+    draws) and sb_cancel_sticky (a cancelled draw is not re-armed) are the only two default changes; with both off the
+    Silver Bullet trades are the same."""
+    x, y = B.synthetic(start="2026-06-01", end="2026-08-15", tf=5, seed=3)
+    old = dict(es_pt=0.09, use_bias=False, min_draw_pts=0, leg_pd=0, sb_model=True, am=(0, 0), pm=(0, 0),
+               sb_pw_pools=False, sb_cancel_sticky=False)
+    cases = {"def": (dict(draw_lock="off", htf_resist_cap=False), ("743d211d83708eb2", 10)),
+             "lock": ({}, ("8855c2c14eb38adf", 3)),
+             "fixed": (dict(sb_target_mode="fixed", sb_runner=True, draw_lock="off"), ("eef1d92e092f06d5", 10)),
+             "dp": (dict(sb_draw_pools_only=True, draw_lock="off", sb_entry="edge_1tick", sb_room_pts=2.0), ("069ae00e9a56ee52", 12))}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for name, (kw, want) in cases.items():
+            t = B.run(x, 5, "RW", Params(**old, **kw), partner=y)
+            assert _sig(t) == want, name
+
+
+def test_study_silver_bullet_variants_build():
+    from mentorship import study
+    names = [k for k, v in study.DECISIONS.items() if set(v) & set(NEW_FIELDS)]
+    assert len(names) >= 70
+    for k in names:
+        replace(Params(**study.DEC_BASE), **study.DECISIONS[k])
+    used = set()
+    for k in names:
+        used |= {a for a in study.DECISIONS[k] if a.startswith("sb_")}
+    assert set(NEW_FIELDS) - used - {"sb_pw_pools"} <= {"sb_lh_window", "sb_0700_window", "sb_0700_flat", "sb_london_window",
+        "sb_early_start", "sb_moc_window", "sb_conf_min", "sb_conf_tol_pts", "sb_cons_bars", "sb_cons_pts", "sb_cons_body_mult",
+        "sb_org_chop_bars", "sb_spotty_bars", "sb_spotty_min", "sb_spotty_tests", "sb_sync_min", "sb_ob_min_pts",
+        "sb_stop_pts", "sb_gap424_fracs", "sb_supercharge_seasonal"}
+
+
+def test_m33_use_bias_po3_entry_must_be_in_the_discount_of_the_reference_open():
+    # the reference open is the midnight open 100.0: a long entry at 101.7 is in the premium, one at 98.7 in the discount
+    down = [(o - 3.0, h - 3.0, l - 3.0, c - 3.0) for o, h, l, c in ROWS]
+    p = dict(sb_use_bias=True, use_bias=True, sb_room_pts=1.0)
+    assert one([("09:30", ROWS)], P(**p)) == []                                     # 101.7 > the open: wrong side
+    assert len(one([("09:30", ROWS)], P(sb_use_bias=True, use_bias=False, sb_room_pts=1.0))) == 1     # the engine switch off: no test
+    assert len(one([("09:30", ROWS)], P(use_bias=True))) == 1                       # the SB ignores it unless sb_use_bias
+    t = one([("09:30", down)], P(**p))
+    assert len(t) == 1 and t[0].entry == pytest.approx(98.7)
+    assert one([("09:30", ROWS)], P(sb_use_bias=True, use_bias=True, mo_tol_pts=2.0)) != []      # Ep04.6 tolerance
+
+
+def test_m38_sb_stop_090_is_the_default_alias():
+    assert one(p=P(sb_stop="090"))[0].stop == one()[0].stop == pytest.approx(98.95)
+
+
+# --- side-space mirroring: every long rule gives the short by mirroring ---------------------------------------------------
+
+MIRROR_CASES = {
+    "base": (ROWS, {}),
+    "stop_swing": (ROWS, dict(sb_stop="swing")),
+    "stop_fvg2": (ROWS, dict(sb_stop="fvg2")),
+    "entry_ce": (ROWS, dict(sb_entry="ce")),
+    "entry_candle": (ROWS[:9] + [(102.5, 102.6, 100.2, 101.6), (101.6, 104.0, 101.5, 103.9), (103.9, 108.6, 103.8, 108.5)],
+                     dict(sb_stop="entry_candle")),
+    "wide_size": (ROWS, dict(sb_max_stop_pts=2.0, sb_wide="size")),
+    "pick_any": (THREE, dict(sb_fvg_pick="any_in_leg")),
+    "bpr_exclude": (THREE, dict(sb_bpr_exclude=True)),
+    "early": (EARLY, {}),
+    "cancel_ticks": (CANCEL, dict(sb_cancel_ticks=3)),
+    "adds": (ROWS[:10] + [(101.6, 104.0, 101.5, 103.9), (103.9, 104.0, 101.6, 102.0), (102.0, 108.6, 101.9, 108.5)],
+             dict(sb_adds=True)),
+    "abort": (ROWS[:10] + [(101.6, 101.7, 101.0, 101.2), (101.2, 101.3, 100.6, 100.8), (100.8, 108.6, 100.7, 108.5)],
+              dict(sb_abort=True)),
+    "two_entries": (ROWS2, dict(sb_max_per_window=2)),
+    "ifvg_prefer": (IFVG, dict(sb_ifvg="prefer", or_minutes=0)),
+    "ifvg_market": (IFVG, dict(sb_ifvg="prefer", sb_ifvg_market=True, or_minutes=0)),
+    "cons": (CONS, dict(sb_cons_wait=True, sb_cons_bars=4)),
+    "spotty_tag": (SPOTTY, dict(sb_spotty="tag")),
+    "sweep_depth": (ROWS, dict(sb_need_sweep=True)),
+    "ob": (OBR, dict(sb_entry_arrays=("ob",), sb_draw_first=True)),
+    "untaken": (None, None),
+}
+
+
+@pytest.mark.parametrize("name", [k for k, v in MIRROR_CASES.items() if v[0] is not None])
+def test_mirror_invariance_of_the_new_behaviours(name):
+    rows, kw = MIRROR_CASES[name]
+    long_t = one([("09:30", rows)], P(**kw))
+    short_t = one([("09:30", mirror(rows))], P(**kw), hist=history(close=200.0, hi=210.0, lo=192.0), base=200.0)
+    assert len(long_t) == len(short_t) >= 1, name
+    for a, b in zip(long_t, short_t):
+        assert (a.side, b.side) == ("long", "short")
+        for f in ("entry", "stop", "t1"):
+            assert getattr(a, f) + getattr(b, f) == pytest.approx(300.0, abs=1e-6), (name, f)
+        assert a.shares == b.shares and a.entry_kind == b.entry_kind and a.lv_tags == b.lv_tags, name
+        assert [e[3] for e in a.exits] == [e[3] for e in b.exits], name
+        assert len(a.adds) == len(b.adds)
