@@ -1032,7 +1032,105 @@ class Params:
                                          # was reached ends the rest; a close beyond it = continuation
     sb_split: bool = False               # X3b: the Silver Bullet scales out with the day's _split (slow / news-ahead)
 
+    # --- silver_bullet package (sb_model.py; the Silver Bullet stays OFF: sb_model=False) ----------------------------
+    # Every switch cites its rule id and source (rule_coverage.md section 3 silver_bullet; rulebook_gaps/silver_bullet.md;
+    # silver_bullet.md); "[our interpretation]" marks a judgment call. Defaults keep the previous Silver Bullet behaviour
+    # except sb_pw_pools (spec "sb_pw_pools=True": PWH / PWL are in the 054 draw list).
+    # windows (T6, M3.1; 054 ~08:51, 092 ~20:04, 099 ~53:30)
+    sb_last_hour: bool = False           # T6: the 15:00-16:00 window (092 ~20:04; 099 ~53:30), entries 15:00-15:50 (owner #1)
+    sb_lh_window: tuple = (900, 950)
+    sb_0700: bool = False                # T6: the optional 07:00-08:30 window (099), futures only; flat at sb_0700_flat
+    sb_0700_window: tuple = (420, 510)
+    sb_0700_flat: int = 509              # T6: 08:29 flat (no position through the 08:30 release)
+    sb_london_window: tuple = (180, 240) # T6: London 03:00-04:00 (needs sb_london)
+    sb_extra: tuple = ()                 # M3.1: "pm2" = a second PM entry (056 ~15:00 "you get two chances"); "early" = fills
+                                         # from sb_early_start (the 09:50 macro, test only) [our interpretation]
+    sb_early_start: int = 590
+    sb_moc_extra: bool = False           # gap 14 (056): a third PM window 15:15-15:45 when no PM SB hit its target
+    sb_moc_window: tuple = (915, 945)
+    # count / sessions (M3 umbrella, M3.9, gap 14)
+    sb_one_per_day: bool = False         # M3 / 047 ~08:00 "if I was only going to trade one time a day": one SB per day
+    sb_cascade: bool = False             # M3.9 / 054 ~18:01: London, else AM, else PM - a later window only if the earlier
+                                         # windows produced no SB trade
+    sb_one_market: bool = False          # M3.9 / 046 ~55:21: don't switch markets - backtest.combine keeps the first SB market
+    sb_max_per_window: int = 1           # gap 14: SB entries per window (1 = old)
+    sb_adds: bool = False                # gap 14 (080 ~17:20): a return into the filled FVG / a new FVG adds (half size)
+    sb_am_done: bool = False             # gap 7 (048 ~1:35): done for the AM after an SB win (backtest.combine pass)
+    # direction: draw first, one way (M3.2, M3.3, L14g; 054 ~09:52)
+    sb_draw_first: bool = False          # M3.2: mark the 054 draw list and lock ONE draw before the window; trade only toward it
+    sb_pw_pools: bool = True             # L14g: PWH / PWL are draws of the SB list (054 ~04:02)
+    sb_ote_draw: bool = False            # L14g (054 ~04:02): a classic OTE of the prior day's leg is a draw [our interpretation]
+    sb_htf_fallback: bool = False        # L14g / M3.2 (054 ~06:50): the draw was raided -> an HTF pool or array
+    sb_htf_targets: bool = False         # L14g: merge the HTF conf arrays / opposing FVGs into the SB draw list
+    sb_use_bias: bool = False            # M3.3: the main engine's want (htf_bias) and weekly_bias also bind the SB
+    sb_day_dir: str = "off"              # one direction per day: "lock" (the first window's locked side) / "first_trade"
+    sb_day_dir_delivered: str = "hold"   # ... "hold" keeps the side after its draw printed, "free" releases it
+    sb_weekly: str = "off"               # weekly-profile alignment (048 ~2:02): "tag" / "require" [our interpretation]
+    sb_weekly_neutral: str = "allow"     # a profile with no side: "allow" / "skip"
+    sb_sync: str = "off"                 # ES/NQ/YM in sync (045 ~1:01; 048 ~11:38): "tag" / "require" [our interpretation]
+    sb_sync_mode: str = "mss"            # "dir" = the sisters moved the same way over the leg, "mss" = they also broke
+    sb_sync_min: int = 1                 # sisters that must be in sync (of those present)
+    sb_spotty: str = "off"               # 045 ~31:22-36:27 spotty day: "tag" / "skip" [our interpretation]
+    sb_spotty_tests: tuple = ("no_disp", "no_fvg", "whipsaw")
+    sb_spotty_min: int = 2
+    sb_spotty_bars: int = 30
+    sb_disp_pts: float = 0.0             # displacement size: the MSS candle's body >= N ES pts
+    sb_disp_leg_pts: float = 0.0         # ... the run from the leg low to the MSS close >= N ES pts
+    sb_disp_range_mult: float = 0.0      # ... the MSS candle's range >= N x the mean range of the 20 bars before the leg low
+    # trigger / FVG pick (M3, M3.3, M3.5, D2; 044 ~0:50, 048 ~57:36, 058 ~44:37, 065B ~5:15)
+    sb_mss_required: bool = True         # M3 / 044: False = displacement + FVG only (the MSS is then only tagged)
+    sb_need_mss: bool = True             # M3.3 alias of sb_mss_required (both must be True for the MSS to bind)
+    sb_fvg_in_window: bool = False       # D2: True = the FVG must form inside the window (the early 044 / 047 / 054 wording)
+    sb_fvg_from: int = 0                 # D2: minute from which an FVG counts (0 = the leg start 09:30 / 13:30)
+    sb_evolve: bool = True               # D2 / M3.4 (057 ~2:16): move the limit to a newer FVG
+    sb_fvg_pick: str = "evolving"        # gap 16 (093 ~9:15): "evolving" / "first" / "any_in_leg"
+    sb_need_sweep: bool = False          # M3.5: require a sweep of a prior level before the MSS (tag in swept)
+    sb_sweep_max_pts: float = 0.0        # M3.5: the sweep may not run deeper than N ES pts beyond the level (0 = any)
+    sb_sweep_alt: str = ""               # gap 5 (048 ~1:36): "discount_array" stands in for the raid
+    sb_bpr_exclude: bool = False         # gap 6 (048 ~1:34:40): an FVG below the break / offset by an opposing FVG is no entry
+    sb_cons_wait: bool = False           # gap 21 (072 ~35:41): consolidating -> wait for the displacement out of the range
+    sb_cons_bars: int = 10
+    sb_cons_pts: float = 2.0
+    sb_cons_body_mult: float = 2.0
+    sb_lrc_mult: float = 0.0             # gap 18 (057 ~2:16): large-range candle before the leg (x mean range of 20 bars)
+    sb_lrc_mode: str = "tag"             # "tag" / "wait" (arm a flagged first FVG only after a later one) / "skip"
+    sb_premise: str = ""                 # gap 13 (054 PM; 093): "htf_array" / "smt" / "either" before the MSS
+    sb_nwog_expansion: str = ""          # gap 22 (054 ~5:17): "tag" / "require" a reaction at an NWOG
+    sb_entry_arrays: tuple = ("fvg",)    # gaps 9 / 10: "ob" (5m order block, 049), "confluence" (wick CE + VI + MT, 090)
+    sb_ifvg: str = ""                    # gap 1 (076; 092): "add" / "prefer" an IFVG near edge as an entry
+    sb_ifvg_reaper: bool = False
+    sb_ifvg_stop: str = "candle"         # "candle" / "breaker"
+    sb_ifvg_market: bool = False         # 076: market buy on a down-close candle trading into the IFVG
+    sb_ob_min_pts: float = 2.0
+    sb_conf_min: int = 2
+    sb_conf_tol_pts: float = 1.0
+    sb_conf_mode: str = "tag"            # "tag" / "entry"
+    sb_reverse_after_target: bool = False  # gap 15 (058 ~44-47): ONE opposite SB after an HTF-array target
+    sb_cancel_ticks: int = 0             # gap 17 (057 ~4:18): cancel after a run N ticks beyond the draw (0 = at the exit)
+    sb_simple: bool = False              # gap 20 (069 ~15:05): EQ of the leg, target the first array beyond it, one exit
+    # stop (M3.8, gap 19)
+    sb_stop: str = "fvg_ob"              # "fvg_ob" (090) / "fvg2" (057) / "entry_candle" (086) / "swing" / "fvg_ce" (069)
+    sb_stop_pts: float = 2.0             # sb_stop="fvg2": 2 ES pts beyond the entry (057 ~6:41)
+    sb_max_stop_pts: float = 0.0         # gap 19 (057 ~2:54; 092 ~55:30): a stop wider than this is cut or skipped (0 = off)
+    sb_wide: str = "skip"                # "skip" / "size"
+    sb_abort: bool = False               # 045 ~1:19:58: a body closes outside the FVG and the next candle exceeds it -> out
+    # room / draw (L15, gaps 2, 3, 7)
+    sb_room_mode: str = "exit"           # L15: room measured to the "exit" price (owner #2) / the raw "draw" level
+    sb_room_overshoot_pts: float = 0.0   # gap 2 (059): room counts this far beyond a pool (best case)
+    sb_room_untaken: bool = False        # gap 3 (058 ~54:20): room never counts past a low already swept today
+    sb_org_chop: bool = False            # gap 3: consolidating inside today's ORG is not a classic SB
+    sb_org_chop_bars: int = 6
+    sb_fail_mode: str = "skip"           # gap 3: "scalp" = half size to the nearer untaken pool
+    sb_imm_tag: bool = False             # gap 7 (048 ~1:31): tag imm_rebal on the SB trade, count runaways
+    # exits (M3.11, gap 8)
+    sb_runner_if_weekly: bool = False    # M3.11 (048 ~2:02:12): the runner only when the weekly profile is aligned
+    sb_supercharge: bool = False         # gap 8: Mon-Wed, daily not ranging, week extreme not yet in -> 1 lot runner
+    sb_supercharge_seasonal: bool = False  # needs the B23 seasonal column (not built): reserved, no effect
+    sb_gap424_fracs: tuple = (0.4, 0.2, 0.4)   # M3.11 / 057: 4 / 2 / 4 of 10 at the NWOG high / 75% / CE
+
     def __post_init__(self):
+        from .sb_model import check_params as _sb_check   # SB package
+        _sb_check(self)
         if self.unicorn_sides not in ("both", "long", "short"):
             raise ValueError(f"unicorn_sides {self.unicorn_sides!r}")
         if self.breaker_zone not in L.BREAKER_MODES:
@@ -1389,6 +1487,11 @@ class Trade:
     leg_hi_px: float | None = None
     capture: float | None = None   # targets_partials X3h: (avg exit - avg entry) / (best high - avg entry)
     rungs: str = ""                # targets_partials: the ladder at the fill, "level:kind:share|..." (engine frame)
+    # SB package (sb_model.py): the Silver Bullet trade tags (entry_kind carries the entry array: fvg / ifvg / ifvg_breaker / ob / conf)
+    sb_win: str = ""               # window: london / am / pm / lh / moc / 0700
+    sb_n: int = 0                  # nth Silver Bullet entry of its window (1 = first)
+    sb_sweep_depth: float | None = None   # M3.5: ES pts the leg low ran beyond the swept level (None: no sweep)
+    sb_pre_run_ticks: float | None = None  # gap 17: ticks the market ran beyond the draw before the fill
 
     REAL_FIELDS = ("entry", "stop", "t1", "t2", "draw_px", "bz_top", "bz_bottom", "bz_mt",
                    "resist_lo", "resist_hi", "ext_px", "leg_hi_px")
