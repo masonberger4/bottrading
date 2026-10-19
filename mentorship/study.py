@@ -212,7 +212,8 @@ CURRENT = dict(mt_mode="range", exit_mode="before", min_draw_pts=0.0, leg_pd=0.0
                seen_from_created=False, sweep_ticks=0.0, fvg_c2_dir=False, nwog_trading_days=False,
                breaker_ll=False, breaker_cand_to="ext",   # review fix: Ep01.6 defaults pinned back
                stop_tick_pts=0.0, nfp_no_adds=False,      # entries_stops_sizing: the old 0.01 pad, adds on NFP days,
-               add_arrays=())                              # no HTF-FVG add zone (owner #7 revised)
+               add_arrays=(),                              # no HTF-FVG add zone (owner #7 revised)
+               sb_pw_pools=False, sb_cancel_sticky=False)   # SB package: the Silver Bullet draw list / cancel of the old build
 # the defaults just before the owner directives of 2026-10-18 (A/B baseline for the new defaults).
 # Bug fixes it can NOT undo (no switch, by design): the London-pool look-ahead (London 02:00-05:00
 # pools hidden before 05:00), the _split news-ahead holiday skip (N3.4), the M1.2 swing-low intact
@@ -232,7 +233,9 @@ PRE_OWNER = dict(ob_entry="post_mss", draw_lock="off", htf_resist_cap=False, new
                  # came after the golden numbers were recorded
                  year_end="off", sloppy_mode="off",
                  # entries_stops_sizing defaults (Ep08.17 one-tick pad; E12f no adds on NFP days)
-                 stop_tick_pts=0.0, nfp_no_adds=False, add_arrays=())
+                 stop_tick_pts=0.0, nfp_no_adds=False, add_arrays=(),
+                 # silver_bullet package: the Silver Bullet draw list (PWH / PWL) and the cancel stay as they were
+                 sb_pw_pools=False, sb_cancel_sticky=False)
 LEGACY_1PCT_2PCT = dict(risk_dollars=1000.0, max_total_risk=2000.0)   # E8 / owner #12 preset
 # setups_models review: the FVG-path variants need the FVG path to trade at all - post_mss with the
 # owner #9 lock and #7 cap produced 0 trades on ES 5m 2023H2, so those variants drop both too

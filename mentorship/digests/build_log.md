@@ -620,3 +620,78 @@ Probe (ES 5m 2024-01..02, default lock): speed bump default 10 trades, cap 2, ht
 - Tests (tests/test_targets_partials.py, new section "review fixes"): old fractions, bump share and majority, SD kind + close rule (unit and ES run_day), target_order draw, low_full yields, capture clipping, X3g 80% (unit + look-ahead), SB / Ma Deuce ES look-ahead (default bump path).
 - Still NOT built (kept on the list): X3b JOLTS dates before 2026 (no source, none invented); L12 sd_align "time" (clock) alignment; L4 lrlr_max / rel_tfs / clean_eq_pref under the #9 lock (the lock names the draw; documented) and the gap-note extras hrlr_time_k, clear_path, hrlr_news_only, resist_def, session_pool_first, eq_beyond_imb; Ep03.22 final_htf under a locked draw (documented); the gap-note BUILD SPEC items outside the 36 (old_high_ladder / speed_frac, htf_gap_final, sd_arm / sd_ref_roll / sd_multi_tiers / sd_cap_htf and the other sd_* extras, mm_anchor reanchor/impulse, proj_breaker_k, ladder presets 004/037/041/096, partial_mode, energy_split, fixed_partials, void_ladder, eq60_rung, weekly_hl_rung, nwog_ladder, adr_conv_target / adr_ext and others); `mgmt="unit"` stays equal fractions over at most the rung cap (not a literal one-contract-at-a-time exit) and is not applied in SB / Ma Deuce.
 - Left as documented limits (minor findings): `mitigation` matrix target is not checked for being traded through unless `mit_body_respect`; `targets.breakaway_gap` stays separate from the entry-gap `breakaway` tag (different definitions: a post-extreme gap that stays open vs the entry's gap); `plan_active` sends every bump trade through the planner by design.
+
+
+## Package silver_bullet (2026-10-19, branch sb-build)
+
+Sources: `rule_coverage.md` section 3 `silver_bullet` (12 items), `rulebook_gaps/silver_bullet.md` (22 gaps, 19 build specs), `silver_bullet.md`, `owner_directives.md` (#2 5 = minimum room, #8 close at 12:00, #9 one draw per session, #7 speed bump, #10 sloppy days).
+Code: `mentorship/sb_model.py` (rewritten; the window loop, the arming and the day reads), the `# --- silver_bullet package` block at the end of `Params` (strategy.py, 83 switches), four Trade fields (`sb_win`, `sb_n`, `sb_sweep_depth`, `sb_pre_run_ticks`; `entry_kind` carries fvg / ifvg / ifvg_breaker / ob / conf), `backtest.lock_cuts` (two cuts) and `backtest.combine` (session key, `sb_one_market`, `sb_am_done`), `study.py` (78 variants in `DECISIONS`, `SB_ONLY` base; the two `B.combine` call sites pass `sb_one_market` / `sb_am_done`), `tests/test_silver_bullet.py`. Every shared edit is commented "SB package". The Silver Bullet stays OFF (`sb_model=False`).
+Defaults: all new switches reproduce the previous build except two, both listed under "Default changes" below. With `sb_pw_pools=False` and `sb_cancel_sticky=False` the ES 5m / 1m and synthetic runs of the old build match trade for trade (test `test_defaults_reproduce_the_pre_package_build_...`).
+
+Conventions: a long rule is written once in side space and mirrored; bars are used only after they close; an order armed on bar i fills from i+1; the window loop sorts the windows by start time, and a later window reads only what an earlier one had printed before it opened.
+
+### The 12 rule_coverage items
+
+- M3 umbrella | done | `sb_mss_required` / `sb_need_mss`, `sb_fvg_pick`, `sb_one_per_day`, `sb_entry` (E2, existing, honoured), `sb_room_mode`, `sb_rebalance_ext` (existing), `sb_mgmt` "gap424"/"layered057", `sb_stop` | True, "evolving", False, "edge", "exit", 0, "fixed", "fvg_ob" | MSS off = displacement + FVG only (tagged `sb_no_mss`; both sides can then arm, fix the side with a lock or bias); room measured to the exit price or the raw draw
+- M3.2 | done | `sb_draw_first`, `sb_pw_pools`, `sb_ote_draw`, `sb_htf_fallback`, `sb_use_bias` | False, True, False, False, False | the 054 list (PDH/PDL, London and prior PM H/L for the AM, AM and lunch for the PM, PWH/PWL, NWOG/ORG arrays, the htf-table draws, a classic OTE) is marked at the leg start and ONE draw is locked (nearest at least `draw_lock_min_pts` away, owner #9); only that side trades; the locked target is always in the draw list; stored in `ctx.lock["SB_<window>"]` (`window` field)
+- D2 | done | `sb_fvg_in_window`, `sb_fvg_from`, `sb_evolve`; `mss_mode` ("wick" = a wick through the swing is the break), `mt_mode` (body / range OB mean threshold) and `sb_entry` honoured | False, 0, True | `mss_ref` (the A1 tiers) is NOT used: the SB keeps its short-term pivot reference (documented limit)
+- T6 | done | `sb_last_hour` (+`sb_lh_window` 900-950, owner #1), `sb_0700` (+`sb_0700_window` 420-510, flat `sb_0700_flat`=509), `sb_london_window`, `sb_moc_extra` (+`sb_moc_window` 915-945) | False | windows sort by start; London 02:00 / 07:00 06:00 / last hour 14:30 leg starts [our interpretation]; moc is dropped when `sb_last_hour` is on (the hour covers it)
+- L14g | done | `sb_htf_targets`, `sb_pw_pools`, `sb_ote_draw`, `sb_htf_fallback` | False, True, False, False | `sb_htf_targets` merges the main scan's conf targets, `fvg_targets` and `_lv_finish_targets` into the SB draw list
+- M3.1 | done [our interpretation] | `sb_extra` ("pm2", "early"), `sb_early_start` | (), 590 | pm2 = a second PM entry (056 "two chances"); early = fills from 09:50 (the macro; test only)
+- M3.3 | done | `sb_use_bias`, `sb_need_mss` | False, True | `sb_use_bias` applies the engine's `want` (htf_bias column of the WINDOW's own cut row), `weekly_bias` and `use_bias` (the T2 / D22 entry-in-the-discount-of-the-reference-open test) to the SB
+- M3.5 | done | `sb_need_sweep`, `sb_sweep_max_pts`; Trade.`sb_sweep_depth` | False, 0 | depth = ES pts the leg low ran beyond the nearest level it swept [our interpretation]
+- M3.8 | done | `sb_stop` ("fvg_ob" = "090", "fvg2", "entry_candle", "swing", "fvg_ce"), `sb_stop_pts` | "fvg_ob", 2.0 | fvg2 = 2 pts beyond the entry but not inside the FVG (057); entry_candle is set and sized at the fill (086 / 076); fvg_ce = beyond the CE of the deeper of the last two FVGs (069)
+- M3.9 | done | `sb_cascade`, `sb_one_market`; `backtest.combine` session key | False | the combine key was (date, session): an SB window now owns its own slot (key = setup for sb_*); `sb_one_market` keeps the first SB market of the day; cascade = a classic window (London / AM / PM) only when no earlier classic window FILLED [our interpretation]
+- M3.10 | done earlier | `sb_rebalance_ext` | 0 | unchanged
+- M3.11 | done | `sb_mgmt` "gap424"/"layered057" (+`sb_gap424_fracs`), `sb_runner_if_weekly` | "fixed", (0.4, 0.2, 0.4), False | 4/2/4 at the near edge / 25% in / CE of the nearest opposing NWOG, ORG or HTF gap ahead of the entry (falls back to the normal ladder when the gap is not 5 pts away)
+
+### Gaps (rulebook_gaps/silver_bullet.md)
+
+- 1 IFVG entry | done | `sb_ifvg` ("add"/"prefer"), `sb_ifvg_reaper`, `sb_ifvg_stop` ("candle"/"breaker"), `sb_ifvg_market` | "" | base-tf + 5m bearish gaps closed through by the displacement; entry_kind ifvg / ifvg_breaker; market = buy the open after a down-close candle that traded into the zone (stop under that candle)
+- 2 room overshoot | done | `sb_room_overshoot_pts` | 0 | counts beyond a pool in the room test only; the exit stays at the pool
+- 3 room untaken / ORG chop | done | `sb_room_untaken`, `sb_org_chop`, `sb_org_chop_bars`, `sb_fail_mode` ("skip"/"scalp") | False, 6, "skip" | scalp = half size, one exit at the nearer pool, tag `sb_scalp`
+- 4 FX room | none (fx_only, rulebook text only)
+- 5 no-sweep discount array | done | `sb_sweep_alt` ("discount_array") | "" | four conditions of the spec (the week's initial FVG is proxied by any earlier bullish FVG of the frame holding the low)
+- 6 BPR below the break | done | `sb_bpr_exclude` | False
+- 7 immediate rebalance | done | `sb_imm_tag`, `sb_am_done` (combine) | False | Trade.imm_rebal on the SB trade; funnel counter `sb_runaway` when the window ends with none
+- 8 supercharge | done | `sb_supercharge` (`sb_supercharge_seasonal` is reserved: B23 is not built) | False | Mon-Wed, week extreme not yet in (within 0.5 ADR5), weekly profile aligned, daily not ranging -> all but one lot at the SB target, stop NOT moved to breakeven, runner to the HTF draw; otherwise the full exit at the SB target
+- 9 OB entry (049) | done | `sb_entry_arrays` "ob", `sb_ob_min_pts` | ("fvg",) | needs a locked draw or the htf bias on that side; scalp to the next short-term high; no MSS needed
+- 10 three-array confluence (090) | done | `sb_entry_arrays` "confluence", `sb_conf_mode` ("tag"/"entry"), `sb_conf_min`, `sb_conf_tol_pts` | "tag", 2, 1.0 | the group must agree with the OB mean threshold; entry mode puts the limit at the group's mean but not under the MT; a 1m close under the MT exits (wicks allowed)
+- 11 entry timeframe | none (needs sub-minute data; the bot stops at 1m)
+- 12 FVG from the 09:30 leg | none needed (already how the SB arms); rulebook text only
+- 13 premise | done | `sb_premise` ("htf_array"/"smt"/"either") | "" | htf_array needs `ctx.conf` (none = not provable = no trade); smt uses strategy._smt on the sister (True = the sister did NOT take its twin level)
+- 14 several entries | done | `sb_max_per_window`, `sb_adds`, `sb_extra` pm2, `sb_moc_extra` | 1, False | a target hit ends the window; a stop-out allows the next FVG; adds = half size at the FVG top on a return into the filled FVG / at a new same-side FVG, inside the 1.3% cap
+- 15 reverse after an HTF-array target | done | `sb_reverse_after_target` | False | ONE counter trade: a close beyond the first run's origin, its own FVG and room; the lock side is ignored for it
+- 16 which FVG | done | `sb_fvg_pick` ("evolving"/"first"/"any_in_leg") | "evolving" | any_in_leg holds one limit per FVG, the nearest hit fills first
+- 17 cancel threshold | done | `sb_cancel_ticks`, `sb_cancel_sticky`; Trade.`sb_pre_run_ticks` | 0, True | see Default changes
+- 18 large-range candle | done | `sb_lrc_mult`, `sb_lrc_mode` ("tag"/"wait"/"skip") | 0, "tag"
+- 19 stop width | done | `sb_stop` "swing", `sb_max_stop_pts`, `sb_wide` ("skip"/"size") | 0, "skip"
+- 20 simple EQ rule | done | `sb_simple` | False | entry must be in the discount of the leg (premium for shorts), one exit at the first non-pool level beyond EQ
+- 21 consolidation | done | `sb_cons_wait`, `sb_cons_bars`, `sb_cons_pts`, `sb_cons_body_mult` | False, 10, 2.0, 2.0
+- 22 NWOG expansion | done | `sb_nwog_expansion` ("tag"/"require") | ""
+- 045 abort (silver_bullet.md 2.5) | done | `sb_abort` | False
+
+### Direction filters
+
+- draw first, ONE direction per day | done | `sb_draw_first` + `sb_day_dir` ("lock" = the first window's locked side, "first_trade" = the first fill's side), `sb_day_dir_delivered` ("hold"/"free") | "off", "hold" | later windows trade only that side; "free" releases it once a target printed
+- displacement size | done | `sb_disp_pts` (the MSS candle's body), `sb_disp_leg_pts` (low -> MSS close), `sb_disp_range_mult` (range vs the 20 bars before the low) | 0 | the A20 `disp_*` switches also act in the SB (setups_models)
+- ES/NQ/YM sync | done [our interpretation] | `sb_sync` ("tag"/"require"), `sb_sync_mode` ("dir"/"mss"), `sb_sync_min` | "off", "mss", 1 | each sister closed higher at the arming bar than at our low's bar and (mss) broke its own last swing high; no sister present = no data (tag `sb_sync_na`, passes)
+- spotty-day skip | done [our interpretation] | `sb_spotty` ("tag"/"skip"), `sb_spotty_tests`, `sb_spotty_min`, `sb_spotty_bars` | "off", (no_disp, no_fvg, whipsaw), 2, 30 | read once from the bars before the window (filters.md: ICT gives no measurable definition)
+- weekly-profile alignment | done [our interpretation] | `sb_weekly` ("tag"/"require"), `sb_weekly_neutral` | "off", "allow" | side +1 when the week's low is in on Mon/Tue and the last close is above the week open (mirror -1); Mondays are neutral
+
+### Default changes (the only two) - OWNER QUESTIONS
+
+1. `sb_pw_pools=True` (the spec says "sb_pw_pools=True"; ICT's 054 draw list has PWH/PWL): the previous SB did not offer them. Set False for the old draw list.
+2. `sb_cancel_sticky=True`: in the previous build a pending order whose target had traded was cancelled and re-armed on the very same bar (the FVG was still untouched), so "cancel if the target trades first" never held. A cancelled draw is not re-armed any more. False = old behaviour.
+3. Judgment calls to confirm: `sb_one_per_day` = one SB per day (all windows), `sb_cascade` = classic windows only; `sb_day_dir_delivered` default "hold"; `sb_extra` "early"; the sync / spotty / weekly definitions above; the IFVG market-entry reading; `sb_moc_extra` dropped when `sb_last_hour` is on.
+
+### Look-ahead audit (found and fixed while building)
+
+- the rebuilt window loop reads the run_day locks' whole-day `delivered` flag only up to the current bar (`delivered_i <= i`); the 15:15 window looks at the PM draw and PM targets as of its own open (`_moc_ok`); cascade / one-per-day count only fills before the later window opens.
+- pre-09:30 windows (London, 07:00) no longer read the overnight range (`pml`, premarket), the London pool before 05:00 or today's ORG in the new sweep / discount-array / gap424 / ORG-chop reads, and use their own htf-table cut for the bias (the old `swept` tag read `pml` in the London window: guarded).
+- `cancel_below` (confluence) reads the previous bar's close, not the bar that may have filled.
+- Not mine, noted: `DayCtx` builds the NWOG list with `zip(hist[-21:], hist[-20:] + [df])`, which is misaligned (no NWOG at all) when the history has fewer than 21 sessions; real runs have 21+.
+
+### Tests
+
+`tests/test_silver_bullet.py` (104 tests, 22 min with the ES look-ahead runs): unit and run_day scenarios for every rule item, gap and filter; mirror invariance (19 behaviours, long = short); the synthetic-data look-ahead loop (full vs truncated) for five switch groups; ES 5m x2 and ES 1m look-ahead (skip without data); the old-build signature test (`sb_pw_pools=False`, `sb_cancel_sticky=False` -> the recorded trades); the study-variant build test; and a meta test that every new switch is named by a test. Also checked by hand: ES 5m 2023-04..06 and ES 1m 2024-01..02 plus synthetic runs of the old build reproduce trade for trade with the two defaults switched back.
