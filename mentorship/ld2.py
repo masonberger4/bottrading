@@ -104,18 +104,27 @@ def consol_pool(ctx, sd, i: int, buy: bool):
 
 # --- L8 vacuum-block context ----------------------------------------------------------------------------------------
 
-def vb_valid(ctx, p, near: float, far: float) -> bool:
+def vb_valid(ctx, p, near: float, far: float, i: int | None = None) -> bool:
     """X3-l8-vb-exhaustion-gap: True when the vacuum block (open `near`, last close `far`; real prices) is in context
-    (levels.vb_context). `ctx.want0` is the 09:30 bias reading (None when htf_bias is off: the bias clause is skipped)."""
+    (levels.vb_context). The bias clause reads the htf-table row known at closed bar `i` (bias_day.row_for: before 09:30 the table
+    cut at the session's lock, never the 09:30 one); no row known / htf_bias off = the bias clause is skipped. The exhaustion
+    clause compares the last close with the 20 sessions BEFORE it (the last close's own session is not in that range)."""
+    from . import bias_day as BD
+    want = None
+    if p.htf_bias != "off" and i is not None:
+        row = BD.row_for(ctx, "", i)
+        want = None if row is None else BD.bias_value(row, p)
     cache = ctx.__dict__.setdefault("_vb_ctx", {})
-    key = (round(float(near), 6), round(float(far), 6))
+    key = (round(float(near), 6), round(float(far), 6), want)
     if key not in cache:
         hist = getattr(ctx, "hist", [])
         closes = [float(x.close.iloc[-1]) for x in hist[-21:]]
-        days = list(getattr(ctx, "ipda_days", []))[-20:]
+        alld = list(getattr(ctx, "ipda_days", []))
+        days = alld[-20:]
+        prior = alld[-21:-1]
         kind = "bull" if near > far else "bear"
-        cache[key] = L.vb_context(kind, near, far, closes, [d[0] for d in days], [d[1] for d in days],
-                                  getattr(ctx, "want0", None))
+        cache[key] = L.vb_context(kind, near, far, closes, [d[0] for d in days], [d[1] for d in days], want,
+                                  ex_highs=[d[0] for d in prior], ex_lows=[d[1] for d in prior])
     return cache[key] == "valid"
 
 
@@ -494,17 +503,16 @@ def build_vi_flip(ctx, hist: list, df: pd.DataFrame, p) -> list:
     out = []
     for z in L.volume_imbalances(o, h, l, c, 0.0, wick_overlap=False):
         end = sess[z.i].index[-1] + pd.Timedelta(minutes=ctx.tf)
-        role = "support" if c[z.i] < z.bottom else "resistance" if c[z.i] > z.top else None
-        if role is None:
-            continue
+        role = "support" if z.kind == "bear" else "resistance"       # from the VI's own direction: a bearish VI (price below it)
         out.append(dict(top=float(z.top), bottom=float(z.bottom), mid=float((z.top + z.bottom) / 2), role=role,
                         known=end, until=fri, frame=pd.concat(sess[z.i + 1:] + [df]) if z.i + 1 < len(sess) else df))
     return out
 
 
-def vi_flip_levels(ctx, i: int, p) -> list:
-    """(level, name) of the daily VIs price REACHED (a base bar since the VI was known overlapped it) and not invalidated: a 60-minute body
-    close beyond its far edge (below the low of a support, above the high of a resistance) [our interpretation] retires it."""
+def _vi_flip_live(ctx, i: int) -> list:
+    """The daily-VI dicts price REACHED (a base bar since the VI was known overlapped it) and not invalidated at closed bar i: a
+    60-minute body close beyond its far edge (below the low of a support, above the high of a resistance) [our interpretation] retires
+    it. Each dict gets "reached_i" (the first base bar that overlapped it)."""
     out = []
     now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
     for z in getattr(ctx, "vi_flip", []):
@@ -512,16 +520,47 @@ def vi_flip_levels(ctx, i: int, p) -> list:
             continue
         fr = z["frame"]
         seg = fr[(fr.index >= z["known"]) & (fr.index + pd.Timedelta(minutes=ctx.tf) <= now)]
-        if not len(seg) or not ((seg.low.values <= z["top"]) & (seg.high.values >= z["bottom"])).any():
+        hit = (seg.low.values <= z["top"]) & (seg.high.values >= z["bottom"]) if len(seg) else np.zeros(0, bool)
+        if not hit.any():
             continue
-        k = int(np.argmax((seg.low.values <= z["top"]) & (seg.high.values >= z["bottom"])))
+        k = int(np.argmax(hit))
         after = _S().htf_bars(seg.iloc[k:], 60)
         after = after[after.end <= now]
         cl = after.close.values
         if len(cl) and ((z["role"] == "support" and (cl < z["bottom"]).any())
                         or (z["role"] == "resistance" and (cl > z["top"]).any())):
             continue
-        out += [(z["top"], "vi_" + z["role"]), (z["mid"], "vi_" + z["role"]), (z["bottom"], "vi_" + z["role"])]
+        out.append(dict(z, reached_i=int(ctx.idx.searchsorted(seg.index[k]))))
+    return out
+
+
+def vi_flip_levels(ctx, i: int, p) -> list:
+    """(level, name) of the reached, still valid daily VIs (edges + midpoint, real prices), all roles; `vi_flip_target_levels` is the
+    target use."""
+    return [(v, "vi_" + z["role"]) for z in _vi_flip_live(ctx, i) for v in (z["top"], z["mid"], z["bottom"])]
+
+
+def vi_flip_target_levels(ctx, sd, i: int, p) -> list:
+    """A9-daily-vi-forward-levels, target use (side space): only the OPPOSING role - a long meets a reached VI that turned resistance
+    above price; the support role is the entry array (vi_flip_entry_zones), never the long's own target."""
+    want = "resistance" if sd.sign > 0 else "support"
+    return [sd.x(v) for z in _vi_flip_live(ctx, i) if z["role"] == want for v in (z["top"], z["mid"], z["bottom"])]
+
+
+def vi_flip_entry_zones(ctx, sd, sw, i: int, p) -> list:
+    """A9-daily-vi-forward-levels, entry use (025 ~23:19: on a retrace from above the reached VI is the support array): the support-role
+    daily VIs (a short: the resistance role, mirrored) as fixed entry zones between the sweep extreme and the last close, known from
+    the bar that reached them. [our interpretation: the "ideally with an hourly FVG" pairing is not required]"""
+    role = "support" if sd.sign > 0 else "resistance"
+    out = []
+    for z in _vi_flip_live(ctx, i):
+        if z["role"] != role:
+            continue
+        top, bot, mt = (z["top"], z["bottom"], z["mid"]) if sd.sign > 0 else (-z["bottom"], -z["top"], -z["mid"])
+        if not sw["ext"] < top < sd.c[i]:
+            continue
+        zi = min(i, max(z["reached_i"], sw["ext_i"] + 1))
+        out.append(L.Zone("bull", float(top), float(bot), zi, zi, float(mt), tag="vi_flip"))
     return out
 
 
@@ -579,7 +618,7 @@ def drop_efficient(ctx, sd, i: int, p, lv: list) -> list:
     cap = min(shield) if shield else None
     out = []
     for v, k in lv:
-        if any(abs(v - d) <= tk for d in drop):
+        if k == "array" and any(abs(v - d) <= tk for d in drop):       # only array-kind levels: a pool / wick on a band edge stays
             continue
         if cap is not None and k == "array" and v > cap + tk:
             continue
@@ -607,7 +646,12 @@ def manage(ctx, sd, pos, tr, i: int, p) -> None:
         e = pos["ext_i"]
         if 0 <= e < len(ctx.idx):
             b0 = ctx.idx[e].floor("60min")
-            m = (ctx.idx >= b0) & (ctx.idx < b0 + pd.Timedelta(minutes=60))
+            b1 = b0 + pd.Timedelta(minutes=60)
+            # the 1h candle is used only once it has CLOSED (bar i starts at or after its end): a mid-hour bar would read the hour's
+            # later low and final close (look-ahead)
+            if ctx.idx[i] < b1:
+                return
+            m = (ctx.idx >= b0) & (ctx.idx < b1)
             lo, bb = float(sd.l[m].min()), float(min(sd.o[m][0], sd.c[m][-1]))
             ce = (lo + bb) / 2
             if bb > lo and sd.c[i] <= ce and i > pos["fill_i"]:
@@ -672,10 +716,7 @@ def _judas_cap_tag(ctx, sd, sw, i: int) -> str:
     if not ws:
         return ""
     w = ws[0]
-    ce = sd.x(w["upper"] if sd.sign < 0 else w["lower"])
-    seg = sd.c[sw["ext_i"]:i + 1]
-    if not len(seg):
+    if not len(sd.c[sw["ext_i"]:i + 1]):
         return ""
-    ok = (seg < ce).all() if sd.sign < 0 else (seg > ce).all()
     ok = (np.array(ctx.c[sw["ext_i"]:i + 1]) < w["upper"]).all() if sd.sign < 0 else (np.array(ctx.c[sw["ext_i"]:i + 1]) > w["lower"]).all()
     return "judas_cap_held" if ok else "judas_cap_lost"

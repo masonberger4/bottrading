@@ -834,7 +834,7 @@ NEW_SWITCHES = ("vb_context", "ipda_anchor", "ipda_arrays_first20", "pool_tf", "
                 "bpr2_two_candle", "bpr2_trail", "bpr2_cont_trigger", "two_pass_state", "shield_passes", "ob_pick",
                 "ob_skip_encapsulated", "cons_ob_open", "inversions", "mit_mt_invalid", "breaker_candle", "breaker_body_swing",
                 "breakaway_def", "breakaway_ctx_pts", "single_bar_fvg_strict", "fvg_reclaim", "htf_entry_arrays", "initial_fvg",
-                "vi_wick_overlap", "vi_multi", "vi_dead_rule", "vi_two_sided_draw", "vi_flip_support", "pb_def", "rb_level",
+                "vi_wick_overlap", "vi_multi", "vi_dead_rule", "vi_two_sided_draw", "vi_flip_support", "vi_flip_entries", "pb_def", "rb_level",
                 "rb_ce_level", "leg_anchor", "wick_quarters", "wick_bias_line", "judas_wick_cap", "converge_rank", "diag_pools",
                 "diag_min_swings")
 
@@ -887,10 +887,7 @@ def test_study_variants_for_the_caption_gap_pass():
         assert s in used, s
 
 
-def test_every_new_switch_is_named_by_a_test():
-    src = Path(__file__).read_text(encoding="utf8")
-    for s in NEW_SWITCHES:
-        assert src.count(s) >= 2, s
+# (the stricter every-switch-is-named test lives in test_caption_gap_ld1_review.py)
 
 
 # --- no look-ahead: full run vs truncated runs --------------------------------------------------------------------------------

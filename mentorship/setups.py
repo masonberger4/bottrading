@@ -407,14 +407,15 @@ def ote_adjust(sd, sw, i, p, entry, stop, kind, lvt):
     or None (rejected)."""
     e = sw["ext_i"]
     leg_hi = float(sd.h[e:i + 1].max())
-    lo, hi, sweet = L.ote_band(sw["ext"], leg_hi)
+    base = S._LD.leg_low(sd, sw, i, p, leg_hi)       # caption-gap A21 leg_anchor: the dealing range's low ("mss_leg" = the sweep extreme)
+    lo, hi, sweet = L.ote_band(base, leg_hi)
     if p.ote == "limit":
         if sweet < sd.c[i]:
             entry = sweet
     elif p.ote == "filter" and not (lo - 1e-12 <= entry <= hi + 1e-12):
         S._f("x_ote")
         return None
-    if p.leg_pd_strict and not entry < sw["ext"] + 0.5 * (leg_hi - sw["ext"]) - 0.25 * p.es_pt + 1e-12:
+    if p.leg_pd_strict and not entry < base + 0.5 * (leg_hi - base) - 0.25 * p.es_pt + 1e-12:
         S._f("x_leg_pd_strict")
         return None
     if p.ote_leg_stop:

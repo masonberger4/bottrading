@@ -1703,7 +1703,8 @@ class Params:
     vi_dead_rule: str = "full_span"      # A9: "full_span" (a body lays over the whole VI = vi_body_death, 046 / 090) / "overlap" (any overlapping body, 035)
     vi_two_sided_draw: bool = False      # A9: an open daily / weekly VI stays a draw from either side until dead (reached / target_hit do not retire it)
     # A9-daily-vi-forward-levels (025 ~23:19; 007 ~3:40/~8:59)
-    vi_flip_support: bool = False        # A9: a daily VI price reached becomes a support / resistance level (edges + midpoint) for the rest of its week
+    vi_flip_support: bool = False        # A9: a daily VI price reached becomes a support / resistance level (edges + midpoint) for the rest of its week (the opposing role = targets)
+    vi_flip_entries: bool = False        # A9 (025 ~23:19): the support-role reached daily VI (a short: resistance) is also an entry array on the retrace
     # A16-propulsion-context-sequence (cc04_008 ~3:58; cc09_008 ~14:45)
     pb_def: str = "a16"                  # A16: "a16" (as built) / "cc04_008" (context, OB, confirmation, move, then the PB) / "cc09_008" (looser)
     # A17-rejection-block-levels (015 ~2:18; 038 ~4:15; 059 ~10:11; 080 ~5:41; 090 ~34:21; cc04_006 ~9:23/~12:47)
@@ -2368,7 +2369,7 @@ class Side:
     def __init__(self, sign, o, h, l, c, n, min_gap: float = 0.0, c2_dir: bool = False,
                  vi_min_gap: float = 0.0, mit_legacy: bool = False, single_bar: float = 0.0,
                  vi_wick_overlap: bool = True, vi_multi: bool = False, bpr_def: str = "overlap",
-                 bpr2_two_candle: bool = False, pb_def: str = "a16", mit_mt: bool = False):
+                 bpr2_two_candle: bool = False, pb_def: str = "a16", mit_mt: bool = False, vi_dead_rule: str = "full_span"):
         self.sign = sign
         if sign > 0:
             self.o, self.h, self.l, self.c = o, h, l, c
@@ -2382,6 +2383,7 @@ class Side:
         self.vi_wick_overlap, self.vi_multi = vi_wick_overlap, vi_multi        # A9 vi_wick_overlap / vi_multi
         self.bpr_def, self.bpr2_two_candle = bpr_def, bpr2_two_candle         # A11 Type 1 / Type 2
         self.pb_def = pb_def                                                   # A16
+        self.vi_dead_rule = vi_dead_rule                                       # A9 vi_dead_rule (intraday Side VIs)
         self.mit_mt = mit_mt                                                   # A12 mit_mt_invalid: mitigation blocks carry their MT
         self.gaps = [z for z in L.fvgs(self.h, self.l, self.o, self.c, c2_dir, single_bar)
                      if z.kind == "bull" and z.top - z.bottom >= min_gap]
@@ -2485,6 +2487,10 @@ class Side:
         return out
 
     def propulsions(self):
+        """The propulsion blocks. pb_def "cc04_008" step (1), the bullish context: dropped while the current bias is AGAINST this side
+        [our interpretation: an unknown / neutral bias does not test the context]."""
+        if self.pb_def == "cc04_008" and getattr(self, "ctx_bias", 0) == -self.sign:
+            return []
         if self._prop is None:
             obs = []
             for g in self.gaps:
@@ -3016,7 +3022,7 @@ def _extra_levels(ctx, df: pd.DataFrame, hist: list, p: "Params", eth: dict | No
                 ctx.vac.append((k, near, (near + far) / 2, far, R))
     # caption-gap pass (levels_detectors #1/3): reference FVGs, daily VI flips, 1h consolidation OB opens
     ctx.initfvg = _LD.build_init_fvg(ctx, df, hist, p) if p.initial_fvg else []
-    ctx.vi_flip = _LD.build_vi_flip(ctx, hist, df, p) if p.vi_flip_support else []
+    ctx.vi_flip = _LD.build_vi_flip(ctx, hist, df, p) if (p.vi_flip_support or p.vi_flip_entries) else []
     ctx.cons_ob = _LD.build_cons_ob(ctx, hist, df, p) if p.cons_ob_open else []
 
 
@@ -3057,7 +3063,7 @@ def _lv_target_arrays(ctx, sd, i: int, p) -> list:
     for k, near, mt, far, R in getattr(ctx, "vac", []):
         if k > i:
             continue
-        if p.vb_context and not _LD.vb_valid(ctx, p, near, far):      # caption-gap L8: exhaustion / out of context
+        if p.vb_context and not _LD.vb_valid(ctx, p, near, far, i):      # caption-gap L8: exhaustion / out of context
             continue
         out += [(sd.x(near), "array"), (sd.x(mt), "array")]
         if R == 510:                   # review fix: the spec gives the far edge at 08:30 only
@@ -3069,7 +3075,7 @@ def _lv_target_arrays(ctx, sd, i: int, p) -> list:
     if p.cons_ob_open:                                     # caption-gap A12: the 1h consolidation OB opens
         out += [(v, "array") for v, _ in _LD.cons_ob_levels(ctx, sd, i, p)]
     if p.vi_flip_support:                                  # caption-gap A9: reached daily VIs flipped to support / resistance
-        out += [(sd.x(v), "array") for v, _ in _LD.vi_flip_levels(ctx, i, p)]
+        out += [(v, "array") for v in _LD.vi_flip_target_levels(ctx, sd, i, p)]
     return out
 
 
@@ -4142,7 +4148,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
               mit_legacy=p.mit_legacy_order,                                  # A15 (review fix)
               single_bar=2.0 if p.single_bar_fvg_strict else 0.0,             # caption-gap pass (levels_detectors #1/3)
               vi_wick_overlap=p.vi_wick_overlap, vi_multi=p.vi_multi, bpr_def=p.bpr_def,
-              bpr2_two_candle=p.bpr2_two_candle, pb_def=p.pb_def, mit_mt=p.mit_mt_invalid)
+              bpr2_two_candle=p.bpr2_two_candle, pb_def=p.pb_def, mit_mt=p.mit_mt_invalid,
+              vi_dead_rule=p.vi_dead_rule)
     sides = [Side(1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, mg, **sk), Side(-1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, mg, **sk)]
     psides = ppos = None
     if pctx is not None:
@@ -4234,7 +4241,6 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         want = _BD.bias_value(bias, p)                    # the 09:30 reading (reporting + the legacy day-level skip)
         if want == 0 and p.bias_neutral == "skip" and not p.want_all_engines:
             return []                                     # (want_all_engines: the skip is per session, from the row known at its bar)
-    ctx.want0 = want                                      # caption-gap L8 vb_context: the 09:30 bias reading (None = htf_bias off)
     lock_t = _lock_times(p, day, pre_windows) if p.draw_lock == "session" else {}
     ctx.lock_t = lock_t                                   # bias_htf: the session start minutes (judas, row cuts)
     ctx.lock, all_locks, spent = {}, [], []
@@ -4762,6 +4768,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 continue                              # B18.3: against the SMT bias
             ctx.cur_lock = lk if (lk is not None and lk["side"] == sd.sign) else None
             ctx.cur_bias = lk["side"] if (lk is not None and lk["side"]) else (w_ or 0)
+            sd.ctx_bias = ctx.cur_bias                # A16 pb_def cc04_008 step (1): the bullish context of the propulsion block
             o_ = _scan(ctx, sd, i, p, session, w0, pctx, psides, ppos, _risk_mult(state, session, p))
             if o_ is not None and rc_ is not None and rc_.get("pending") and not _MG.reentry_order_ok(o_, sd, rc_, p):
                 _f("x_reentry_gate")
@@ -5439,6 +5446,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         ldz += _LD.htf_entry_zones(ctx, sd, sw, i, p)
     if p.inversions:
         ldz += _LD.inv_entry_zones(ctx, sd, sw, i, p)
+    if p.vi_flip_entries:
+        ldz += _LD.vi_flip_entry_zones(ctx, sd, sw, i, p)
     if ldz:
         ldz = [z for z in ldz if sw.get("ev_g") is None or z.i > sw["ev_g"]]
         xz = list(xz) + ldz
@@ -5701,7 +5710,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
 def _vi_alive(sd, z, i: int) -> bool:
     """A9 / Ep03.3 body death rule for the intraday Side VIs (review fix, vi_body_death): alive until
     a later body spans it (L.vi_body_dead over bars z.i+1 .. i)."""
-    return L.vi_body_dead(sd.o, sd.c, z, end=i) is None
+    return L.vi_body_dead(sd.o, sd.c, z, end=i, rule=getattr(sd, "vi_dead_rule", "full_span")) is None
 
 
 def _lv_finish_targets(ctx, sd, i: int, above: float, p, htf_t: tuple) -> list:

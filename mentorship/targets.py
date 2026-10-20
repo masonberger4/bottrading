@@ -31,6 +31,12 @@ ALL_SRC = (0, 1, 2, 3, 4)
 
 # --- small helpers ----------------------------------------------------------------------------
 
+def _ph(sd):
+    """The swing highs the pools are made of (caption-gap B5 pool_tf: the pool_tf bars' pivots when set, else the base bars')."""
+    pp = getattr(sd, "pool_piv", None)
+    return sd.ph if pp is None else pp[0]
+
+
 def now_ts(ctx, i: int) -> pd.Timestamp:
     """The close time of bar i (what a confluence array must be known by)."""
     return ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
@@ -320,7 +326,7 @@ def resistance_count(ctx, sd, i: int, p, entry: float, level: float) -> int:
     for z in sd.opposing():
         if z.i <= i and entry < z.bottom < level and h[z.i + 1:i + 1].max(initial=-np.inf) < z.bottom:
             n += 1
-    for q in sd.ph:
+    for q in _ph(sd):
         if q.known <= i and q.i >= ctx.start - 1 and entry < q.price < level \
                 and h[q.i + 1:i + 1].max(initial=-np.inf) < q.price:
             n += 1
@@ -335,7 +341,7 @@ def resistance_count(ctx, sd, i: int, p, entry: float, level: float) -> int:
 def smoothness(sd, i: int, v: float, tol: float) -> float:
     """Ep04.11: how clean an equal-high level is = the spread of the swing highs forming it (0 = to
     the tick) plus a penalty per bar between the touches that poked above it. Smaller = cleaner."""
-    qs = [q for q in sd.ph if q.known <= i and abs(q.price - v) <= tol]
+    qs = [q for q in _ph(sd) if q.known <= i and abs(q.price - v) <= tol]
     if len(qs) < 2:
         return 1e9
     spread = max(q.price for q in qs) - min(q.price for q in qs)
@@ -390,7 +396,7 @@ def draw_pref(ctx, sd, i: int, p, entry: float, risk: float, keep: list, leg_hi:
             for hl, w in ((getattr(ctx, "pw", None), 7200.0), (getattr(ctx, "pm_", None), 43200.0)):
                 if hl is not None and abs(sd.x(hl[0] if sd.sign > 0 else hl[1]) - (v - p.pool_beyond_pts * p.es_pt)) <= tol:
                     tfm = max(tfm, w)
-            touches = sum(1 for q in sd.ph if q.known <= i and abs(q.price - (v - p.pool_beyond_pts * p.es_pt)) <= tol)
+            touches = sum(1 for q in _ph(sd) if q.known <= i and abs(q.price - (v - p.pool_beyond_pts * p.es_pt)) <= tol)
             return (-tfm, -touches, v)
 
         best = sorted(near, key=score)[0]
@@ -733,7 +739,7 @@ def extra_sources(ctx, sd, i: int, p, sw: dict, entry: float, risk: float, leg_h
                 if z.i <= i and z.bottom > above and after(z) < z.bottom:
                     out.append((float(z.bottom), "rb"))
     if p.inter_swing_target:
-        qs = [q for q in sd.ph if q.known <= i and q.i >= ctx.start - 1 and q.price > above
+        qs = [q for q in _ph(sd) if q.known <= i and q.i >= ctx.start - 1 and q.price > above
               and h[q.i + 1:i + 1].max(initial=-np.inf) < q.price]
         if qs:
             out.append((float(min(q.price for q in qs)), "swing"))       # the nearest untaken short-term high

@@ -1258,13 +1258,15 @@ def diagonal_lows(lows: list, tol: float, i: int | None = None, min_swings: int 
 
 
 def dealing_range(h, l, o, c, i: int, mode: str = "energetic", n_disp: int = 5, atr_n: int = 14,
-                  impulse_frac: float = 0.6, atr_mult: float = 1.0, close_tol_atr: float = 0.25, lookback: int = 600):
+                  impulse_frac: float = 0.6, atr_mult: float = 1.0, close_tol_atr: float = 0.25, lookback: int = 600,
+                  consol_atr: float = 3.0):
     """Caption-gap A21 / M13 dealing range anchor (028 ~1:07:33, 044 ~40:26, cc01_005 ~2:20/~9:40/~19:23, cc04_002 ~18:44:
     "obvious price swings are the ones we look at"), bullish terms, closed bars up to `i`. Among the candidate swing
     lows (3-candle pivots, confirmed by bar i) pick the most recent one FOLLOWED BY DISPLACEMENT - consecutive
     same-direction candles leaving >= 1 bullish FVG within `n_disp` bars of the low - whose leg (the low to the highest
-    high after it) is IMPULSIVE [our thresholds]: >= `impulse_frac` of its bars close up, or a displacement FVG, or a
-    size >= `atr_mult` x ATR(`atr_n`) (a leg that passes none of the three is not a candidate). If the two latest
+    high after it) is IMPULSIVE [our thresholds]: >= `impulse_frac` of its bars close up, or an FVG inside the leg, or a
+    size >= `atr_mult` x ATR(`atr_n`) (a leg that passes none of the three is not a candidate); a low that is an inner swing low of
+    a consolidation (window of 8 bars tighter than `consol_atr` x ATR, an earlier lower low in it) is skipped. If the two latest
     candidates are close (lows within `close_tol_atr` x ATR) take the one with more bars clustered around it (bars whose
     low is within that band). Older rounded lows (no pivot, no displacement) and pivots inside a consolidation never
     qualify: the anchor is where the impulse departs. Range = that low .. the leg high (wicks); EQ = 50%. Returns
@@ -1285,13 +1287,22 @@ def dealing_range(h, l, o, c, i: int, mode: str = "energetic", n_disp: int = 5, 
         if hk <= q.i or not hh[hk] > q.price:
             continue
         disp = [g for g in gaps if q.i <= g.i - 1 <= q.i + n_disp]
-        if not disp:
+        if not disp:                                      # not followed by displacement (an older rounded low)
             continue
         seg = slice(q.i, hk + 1)
+        # impulsive leg, the three tests of the spec (any one): >= impulse_frac of its bars close up / a bullish FVG inside the leg
+        # (its third candle at or before the leg high) / a size >= atr_mult x ATR
         frac = float((cc[seg] > oo[seg]).mean())
         big = (hh[hk] - q.price) >= atr_mult * atr
-        if frac >= impulse_frac or big or bool(disp):
-            cands.append((q, hk))
+        fvg_in = any(g.i <= hk for g in disp)
+        if not (frac >= impulse_frac or big or fvg_in):
+            continue
+        # a pivot INSIDE a consolidation: an earlier low in the 8 bars before it lies lower while that whole window is tighter than
+        # `consol_atr` x ATR (an inner swing low of a chop, not where the impulse departs) [our interpretation]
+        w0 = max(0, q.i - 8)
+        if q.i > w0 and (hh[w0:q.i + 1].max() - ll[w0:q.i + 1].min()) < consol_atr * atr and ll[w0:q.i].min() < q.price:
+            continue
+        cands.append((q, hk))
     if not cands:
         return None
     cands.sort(key=lambda x: x[0].i)
@@ -1304,14 +1315,16 @@ def dealing_range(h, l, o, c, i: int, mode: str = "energetic", n_disp: int = 5, 
 
 
 def vb_context(kind: str, near: float, far: float, closes, highs, lows, want: int | None = None,
-               n_days: int = 5) -> str:
+               n_days: int = 5, ex_highs=None, ex_lows=None) -> str:
     """Caption-gap L8 (cc04_009 ~00:02:48: "this could potentially be an exhaustion gap"): validity of a vacuum block
     (a gap between two sessions' prices). `kind` "bull" = the gap opens UP (the open `near` above the last close
     `far`), "bear" = down. `closes` = the prior daily closes (oldest first, at least `n_days` + 1); `highs` / `lows` =
     the prior 20 daily highs / lows (the 20-day range, EQ = its midpoint).
       "exhaustion"   a gap up after `n_days` consecutive up-close days (each close above the one before) or a last close
                      above the 20-day high: tagged exhaustion and NOT used (bearish mirror: gap down after down days or
-                     below the 20-day low)
+                     below the 20-day low). `ex_highs` / `ex_lows` = the 20 sessions BEFORE the last close's session
+                     (the range that close can break out of; default = highs / lows, which is only right when the
+                     last close is not itself part of them)
       "invalid"      a bullish VB is valid only when the bias is bullish (`want` == +1, when given) and the gap's lower
                      edge lies BELOW the 20-day EQ (discount); the bearish VB needs the mirror
       "valid"        otherwise"""
@@ -1324,16 +1337,18 @@ def vb_context(kind: str, near: float, far: float, closes, highs, lows, want: in
         ups = dns = False
     hi20 = max(highs) if len(highs) else None
     lo20 = min(lows) if len(lows) else None
+    xh = hi20 if ex_highs is None else (max(ex_highs) if len(ex_highs) else None)
+    xl = lo20 if ex_lows is None else (min(ex_lows) if len(ex_lows) else None)
     last = closes[-1] if closes else None
     if kind == "bull":
-        if ups or (hi20 is not None and last is not None and last > hi20):
+        if ups or (xh is not None and last is not None and last > xh):
             return "exhaustion"
         if want is not None and want != 1:
             return "invalid"
         if hi20 is not None and lo20 is not None and not min(near, far) < (hi20 + lo20) / 2:
             return "invalid"
         return "valid"
-    if dns or (lo20 is not None and last is not None and last < lo20):
+    if dns or (xl is not None and last is not None and last < xl):
         return "exhaustion"
     if want is not None and want != -1:
         return "invalid"
