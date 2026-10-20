@@ -126,3 +126,5 @@ Update (targets_partials): the revised #7 is built as the DEFAULT - `htf_resist_
 of the position stays for the draw. `htf_resist_mode="cap"` is the first build (exit before it, nothing beyond, no trade if the room
 is short), `"split"` caps on `htf_resist_cap_tfs` (1h, 4h, D, W) and bumps on 15m / 30m. `htf_resist_cap=False` switches both off.
 The Silver Bullet and Ma Deuce follow the same mode. Effect: far more trades than the cap (ES 5m 2024-01..02: 10 vs 2).
+
+Update (silver_bullet): #2 (5 handles = minimum room) now covers the Silver Bullet in full: the exit is the draw (`sb_target_mode="draw"`), `sb_room_mode` measures the room to the exit price or the raw draw, `sb_room_overshoot_pts` counts the run through a pool. #9: `sb_draw_first` locks one draw before each SB window (also with `draw_lock="off"`), `sb_day_dir` keeps one direction for the day. Two defaults changed in the SB only: `sb_pw_pools=True` (PWH/PWL are draws) and `sb_cancel_sticky=True` (a cancelled draw is not re-armed); both are open owner questions in `build_log.md`.

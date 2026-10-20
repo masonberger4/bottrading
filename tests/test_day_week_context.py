@@ -539,7 +539,7 @@ def test_final_hit_is_set_by_every_engine_for_the_week_state():
     """N10.4 friday_week_done="trades" needs final_hit on Silver Bullet and Ma Deuce trades too."""
     import inspect
     from mentorship import sb_model, pre_open
-    assert "final_hit" in inspect.getsource(sb_model.run_sb) and "final_hit" in inspect.getsource(pre_open.run_ma_deuce)
+    assert "final_hit" in inspect.getsource(sb_model) and "final_hit" in inspect.getsource(pre_open.run_ma_deuce)
 
 
 # (the no-look-ahead runs of every switch - one variant per run, 5m and 1m with Silver Bullet / Ma Deuce - are in

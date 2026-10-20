@@ -31,7 +31,7 @@ LA_COLS = ["entry_time", "entry", "stop", "t1", "side", "day_tags", "dw_tags"]
 
 def _variants():
     names = list(study.DECISIONS)
-    return names[names.index("X16_journal_tags_off") + 1:]
+    return [n for n in names[names.index("X16_journal_tags_off") + 1:] if n not in study.SB_VARIANTS]   # (merge: the SB variants are tested in test_silver_bullet.py)
 
 
 def _params(name, **extra):

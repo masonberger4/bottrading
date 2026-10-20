@@ -37,7 +37,8 @@ def _real(job):
     p = replace(Params(), **VARIANTS[name])
     a = B.run(spy, tf, "SPY", p, qqq)
     b = B.run(qqq, tf, "QQQ", replace(p, es_pt=q_pt), spy)
-    out = {"SPY": a, "QQQ": b, "combined": B.combine(a, b, pick=p.smt_pick, one_market=p.one_market)}
+    out = {"SPY": a, "QQQ": b, "combined": B.combine(a, b, pick=p.smt_pick, one_market=p.one_market,
+                                                     sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done)}
     for k, v in out.items():
         if len(v):
             v["variant"], v["tf"], v["book"] = name, tf, k
@@ -124,7 +125,9 @@ def main_index(out="runs/mentorship", variants=None, tfs=(5, 1), workers=6):
     for (tf, v), g in t.groupby(["tf", "variant"]):
         books.append(B.combine(g[g.symbol == "SPX"], g[g.symbol == "NDX"],
                                pick=IVARIANTS.get(v, {}).get("smt_pick", "first"),
-                               one_market=bool(IVARIANTS.get(v, {}).get("one_market", False))).assign(book="combined"))
+                               one_market=bool(IVARIANTS.get(v, {}).get("one_market", False)),
+                               sb_one_market=IVARIANTS.get(v, {}).get("sb_one_market", False),     # SB package
+                               sb_am_done=IVARIANTS.get(v, {}).get("sb_am_done", False)).assign(book="combined"))
     t = pd.concat([t.assign(book=t.symbol)] + books, ignore_index=True)
     t.to_csv(f"{out}/index_trades.csv", index=False)
     rep = {"all": {f"{tf}m/{b}/{v}": B.stats(g) for (tf, b, v), g in t.groupby(["tf", "book", "variant"])}}
@@ -216,7 +219,8 @@ CURRENT = dict(mt_mode="range", exit_mode="before", min_draw_pts=0.0, leg_pd=0.0
                add_arrays=(),                              # no HTF-FVG add zone (owner #7 revised)
                fomc_no_reentry=False, nfp_first_hour=False, fed_chair_skip_am=False, fomc_flat=0,   # news_calendar_times defaults
                flat_0830_extras=False,
-               skip_post_holiday_am=False, london_adr_skip=0.0, friday_slow_split=False)   # day_week_context defaults
+               skip_post_holiday_am=False, london_adr_skip=0.0, friday_slow_split=False,   # day_week_context defaults
+               sb_pw_pools=False, sb_cancel_sticky=False)   # SB package: the Silver Bullet draw list / cancel of the old build
 # the defaults just before the owner directives of 2026-10-18 (A/B baseline for the new defaults).
 # Bug fixes it can NOT undo (no switch, by design): the London-pool look-ahead (London 02:00-05:00
 # pools hidden before 05:00), the _split news-ahead holiday skip (N3.4), the M1.2 swing-low intact
@@ -240,7 +244,9 @@ PRE_OWNER = dict(ob_entry="post_mss", draw_lock="off", htf_resist_cap=False, new
                  # news_calendar_times defaults (N3.5 no re-entry on FOMC, N1 no first hour on NFP, N5.5 chair days)
                  fomc_no_reentry=False, nfp_first_hour=False, fed_chair_skip_am=False, fomc_flat=0, flat_0830_extras=False,
                  # day_week_context defaults (N7.2 no AM after a holiday, N9.6 London 80% of ADR5, N10.4 Friday 80/20)
-                 skip_post_holiday_am=False, london_adr_skip=0.0, friday_slow_split=False)
+                 skip_post_holiday_am=False, london_adr_skip=0.0, friday_slow_split=False,
+                 # silver_bullet package: the Silver Bullet draw list (PWH / PWL) and the cancel stay as they were
+                 sb_pw_pools=False, sb_cancel_sticky=False)
 LEGACY_1PCT_2PCT = dict(risk_dollars=1000.0, max_total_risk=2000.0)   # E8 / owner #12 preset
 # setups_models review: the FVG-path variants need the FVG path to trade at all - post_mss with the
 # owner #9 lock and #7 cap produced 0 trades on ES 5m 2023H2, so those variants drop both too
@@ -1316,6 +1322,111 @@ DECISIONS = {
     "B14.3_nwog_bias_tag": dict(nwog_bias="tag"),
     "B14.2_nwog_converge_shrink": dict(nwog_regime="tag", nwog_converge_mode="shrink"),
 }
+# --- package silver_bullet (sb_model.py): one variant per switch, the Silver Bullet alone (name prefix = rule id) ---------
+SB_ONLY = dict(sb_model=True, am=(0, 0), pm=(0, 0))
+_SB_DECISIONS = {
+    "M3_sb_only": dict(SB_ONLY),
+    "M3_sb_mss_not_required": dict(SB_ONLY, sb_mss_required=False),
+    "M3.3_sb_need_mss_off": dict(SB_ONLY, sb_need_mss=False),
+    "D2_sb_fvg_in_window": dict(SB_ONLY, sb_fvg_in_window=True),
+    "D2_sb_fvg_from_0945": dict(SB_ONLY, sb_fvg_from=585),
+    "D2_sb_evolve_off": dict(SB_ONLY, sb_evolve=False),
+    "D2_sb_mss_mode_wick": dict(SB_ONLY, mss_mode="wick"),
+    "D2_sb_mt_mode_range": dict(SB_ONLY, mt_mode="range"),
+    "E2_sb_entry_ce": dict(SB_ONLY, sb_entry="ce"),
+    "gap16_sb_fvg_pick_first": dict(SB_ONLY, sb_fvg_pick="first"),
+    "gap16_sb_fvg_pick_any_in_leg": dict(SB_ONLY, sb_fvg_pick="any_in_leg"),
+    "gap17_sb_cancel_ticks3": dict(SB_ONLY, sb_cancel_ticks=3),
+    "gap17_sb_cancel_sticky_off": dict(SB_ONLY, sb_cancel_sticky=False),
+    # windows (T6, M3.1, gap 14)
+    "T6_sb_london": dict(SB_ONLY, sb_london=True),
+    "T6_sb_0700": dict(SB_ONLY, sb_0700=True),
+    "T6_sb_last_hour": dict(SB_ONLY, sb_last_hour=True),
+    "T6_sb_all_windows": dict(SB_ONLY, sb_london=True, sb_0700=True, sb_last_hour=True),
+    "gap14_sb_moc_extra": dict(SB_ONLY, sb_moc_extra=True),
+    "M3.1_sb_extra_pm2": dict(SB_ONLY, sb_extra=("pm2",)),
+    "M3.1_sb_extra_early": dict(SB_ONLY, sb_extra=("early",)),
+    # count (M3, M3.9, gap 14, gap 7)
+    "M3_sb_one_per_day": dict(SB_ONLY, sb_london=True, sb_one_per_day=True),
+    "M3.9_sb_cascade": dict(SB_ONLY, sb_london=True, sb_cascade=True),
+    "M3.9_sb_one_market": dict(SB_ONLY, sb_one_market=True),
+    "gap14_sb_max_per_window2": dict(SB_ONLY, sb_max_per_window=2),
+    "gap14_sb_adds": dict(SB_ONLY, sb_adds=True),
+    "gap7_sb_am_done": dict(SB_ONLY, sb_am_done=True),
+    "gap7_sb_imm_tag": dict(SB_ONLY, sb_imm_tag=True),
+    # direction filters
+    "M3.2_sb_draw_first": dict(SB_ONLY, sb_draw_first=True),
+    "SBdir_draw_first_day_dir_lock": dict(SB_ONLY, sb_draw_first=True, sb_day_dir="lock"),
+    "SBdir_draw_first_day_dir_free": dict(SB_ONLY, sb_draw_first=True, sb_day_dir="lock", sb_day_dir_delivered="free"),
+    "SBdir_day_dir_first_trade": dict(SB_ONLY, sb_day_dir="first_trade"),
+    "L14g_sb_pw_pools_off": dict(SB_ONLY, sb_pw_pools=False),
+    "L14g_sb_ote_draw": dict(SB_ONLY, sb_ote_draw=True),
+    "L14g_sb_htf_fallback": dict(SB_ONLY, sb_draw_first=True, sb_htf_fallback=True),
+    "L14g_sb_htf_targets": dict(SB_ONLY, sb_htf_targets=True),
+    "M3.3_sb_use_bias_combo": dict(SB_ONLY, htf_bias="combo", bias_neutral="both", sb_use_bias=True),
+    "SBdir_sb_weekly_require": dict(SB_ONLY, sb_weekly="require"),
+    "SBdir_sb_weekly_tag": dict(SB_ONLY, sb_weekly="tag"),
+    "SBdir_sb_weekly_skip_neutral": dict(SB_ONLY, sb_weekly="require", sb_weekly_neutral="skip"),
+    "SBdir_sb_sync_require": dict(SB_ONLY, sb_sync="require"),
+    "SBdir_sb_sync_dir": dict(SB_ONLY, sb_sync="require", sb_sync_mode="dir"),
+    "SBdir_sb_spotty_skip": dict(SB_ONLY, sb_spotty="skip"),
+    "SBdir_sb_spotty_tag": dict(SB_ONLY, sb_spotty="tag"),
+    "SBdir_sb_disp_pts_1": dict(SB_ONLY, sb_disp_pts=1.0),
+    "SBdir_sb_disp_leg_3": dict(SB_ONLY, sb_disp_leg_pts=3.0),
+    "SBdir_sb_disp_range_2": dict(SB_ONLY, sb_disp_range_mult=2.0),
+    # trigger / entry arrays
+    "M3.5_sb_need_sweep": dict(SB_ONLY, sb_need_sweep=True),
+    "M3.5_sb_sweep_max_2": dict(SB_ONLY, sb_sweep_max_pts=2.0),
+    "gap5_sb_sweep_alt_discount": dict(SB_ONLY, sb_need_sweep=True, sb_sweep_alt="discount_array"),
+    "gap6_sb_bpr_exclude": dict(SB_ONLY, sb_bpr_exclude=True),
+    "gap21_sb_cons_wait": dict(SB_ONLY, sb_cons_wait=True),
+    "gap18_sb_lrc_tag": dict(SB_ONLY, sb_lrc_mult=2.0, sb_lrc_mode="tag"),
+    "gap18_sb_lrc_wait": dict(SB_ONLY, sb_lrc_mult=2.0, sb_lrc_mode="wait"),
+    "gap18_sb_lrc_skip": dict(SB_ONLY, sb_lrc_mult=2.0, sb_lrc_mode="skip"),
+    "gap13_sb_premise_htf_array": dict(SB_ONLY, sb_premise="htf_array"),
+    "gap13_sb_premise_smt": dict(SB_ONLY, sb_premise="smt"),
+    "gap13_sb_premise_either": dict(SB_ONLY, sb_premise="either"),
+    "gap22_sb_nwog_tag": dict(SB_ONLY, sb_nwog_expansion="tag"),
+    "gap22_sb_nwog_require": dict(SB_ONLY, sb_nwog_expansion="require"),
+    "gap1_sb_ifvg_add": dict(SB_ONLY, sb_ifvg="add"),
+    "gap1_sb_ifvg_prefer": dict(SB_ONLY, sb_ifvg="prefer"),
+    "gap1_sb_ifvg_market": dict(SB_ONLY, sb_ifvg="prefer", sb_ifvg_market=True),
+    "gap1_sb_ifvg_reaper": dict(SB_ONLY, sb_ifvg="add", sb_ifvg_reaper=True),
+    "gap1_sb_ifvg_breaker_stop": dict(SB_ONLY, sb_ifvg="prefer", sb_ifvg_stop="breaker"),
+    "gap9_sb_ob_entry": dict(SB_ONLY, sb_draw_first=True, sb_entry_arrays=("fvg", "ob")),
+    "gap10_sb_confluence_tag": dict(SB_ONLY, sb_entry_arrays=("fvg", "confluence")),
+    "gap10_sb_confluence_entry": dict(SB_ONLY, sb_entry_arrays=("fvg", "confluence"), sb_conf_mode="entry"),
+    "gap15_sb_reverse_after_target": dict(SB_ONLY, sb_ote_draw=True, sb_reverse_after_target=True),
+    "gap20_sb_simple": dict(SB_ONLY, sb_simple=True, sb_ote_draw=True),
+    # stop (M3.8, gap 19, 045)
+    "M3.8_sb_stop_fvg2": dict(SB_ONLY, sb_stop="fvg2"),
+    "M3.8_sb_stop_entry_candle": dict(SB_ONLY, sb_stop="entry_candle"),
+    "M3.8_sb_stop_fvg_ce": dict(SB_ONLY, sb_stop="fvg_ce"),
+    "gap19_sb_stop_swing": dict(SB_ONLY, sb_stop="swing"),
+    "gap19_sb_max_stop4_skip": dict(SB_ONLY, sb_max_stop_pts=4.0, sb_wide="skip"),
+    "gap19_sb_max_stop4_size": dict(SB_ONLY, sb_max_stop_pts=4.0, sb_wide="size"),
+    "E5_sb_abort_045": dict(SB_ONLY, sb_abort=True),
+    # room (L15, gaps 2, 3) and exits (M3.11, gap 8)
+    "L15_sb_room_mode_draw": dict(SB_ONLY, sb_room_mode="draw"),
+    "gap2_sb_room10_overshoot3": dict(SB_ONLY, sb_room_pts=10.0, sb_room_overshoot_pts=3.0),
+    "gap3_sb_room_untaken": dict(SB_ONLY, sb_room_untaken=True),
+    "gap3_sb_org_chop": dict(SB_ONLY, sb_org_chop=True),
+    "gap3_sb_org_chop_scalp": dict(SB_ONLY, sb_org_chop=True, sb_fail_mode="scalp"),
+    "M3.11_sb_gap424": dict(SB_ONLY, sb_mgmt="gap424"),
+    "M3.11_sb_ladder": dict(SB_ONLY, sb_mgmt="ladder"),                          # SB package review: the ladder exits
+    "M3.11_sb_layered057": dict(SB_ONLY, sb_mgmt="layered057"),                  # (= gap424: an alias, kept for the record)
+    "M3.3_sb_use_bias_po3": dict(SB_ONLY, htf_bias="combo", bias_neutral="both", sb_use_bias=True, use_bias=True),   # the PO3 test
+    "review_sb_no_overlap_off": dict(SB_ONLY, sb_last_hour=True, sb_no_overlap=False),   # two SB positions at once (double risk)
+    "review_sb_stop_entry_candle": dict(SB_ONLY, sb_stop="entry_candle"),        # 086 stop from the last closed bar (no look-ahead)
+    "review_sb_conf_tol": dict(SB_ONLY, sb_entry_arrays=("fvg", "ob", "confluence"), sb_conf_mode="entry", sb_conf_min=3, sb_conf_tol_pts=2.0),
+    "review_sb_cons_bars": dict(SB_ONLY, sb_cons_wait=True, sb_cons_bars=4),
+    "review_sb_windows_shifted": dict(SB_ONLY, sb_windows=((600, 650), (840, 890))),
+    "M3.11_sb_runner_if_weekly": dict(SB_ONLY, sb_runner=True, sb_runner_if_weekly=True),
+    "gap8_sb_supercharge": dict(SB_ONLY, sb_runner=True, sb_supercharge=True),
+}
+DECISIONS.update(_SB_DECISIONS)
+SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): their look-ahead tests are in test_silver_bullet.py
+
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
 
 
@@ -1379,13 +1490,13 @@ def _dec_job(job):
               partner2=p2, ref_df=ref,
               bias_table=_bias_cache(tf, 570, p.vi_arrays, p.flip_triggers, B.table_kw(p)), meta=B.load_meta(SYMS[0], tf, SRC),
               lock_cuts=_lock_cache(tf, p))
-    if p.smt_pick != "first" or p.one_market:
+    if p.smt_pick != "first" or p.one_market or p.sb_one_market or p.sb_am_done:    # SB package: M3.9 / gap 7 need the second market too
         # Ep03.11 (review fix): smt_pick only acts when two instruments are combined - run the
         # partner as its own book (es_pt scaled by the price ratio, as main_index) and combine
         q = replace(p, es_pt=round(p.es_pt * float(pa.close.median() / df.close.median()), 2))
         tb = B.run(pa[(pa.index >= lo) & (pa.index < b)], tf, SYMS[1], q, df[(df.index >= lo) & (df.index < b)],
                    meta=B.load_meta(SYMS[1], tf, SRC) if SRC == "databento" else None, lock_cuts={} if p.draw_lock == "off" else None)
-        t = B.combine(t, tb, pick=p.smt_pick, one_market=p.one_market)
+        t = B.combine(t, tb, pick=p.smt_pick, one_market=p.one_market, sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done)   # SB package
     if len(t):
         t = t[pd.to_datetime(t.entry_time.astype(str).str[:10]) >= f"{year}-01-01"].copy()
         t["tf"], t["year"], t["variant"] = tf, year, name

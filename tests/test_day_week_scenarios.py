@@ -748,7 +748,7 @@ def test_silver_bullet_and_ma_deuce_call_the_day_week_gate(monkeypatch):
     import inspect
     from mentorship import pre_open, sb_model
     assert "_DW.gate(ctx, p, \"PRE8\"" in inspect.getsource(pre_open.run_ma_deuce)
-    assert "_DW.gate(ctx, p, dws" in inspect.getsource(sb_model.run_sb)
+    assert "_DW.gate(ctx, p, dws" in inspect.getsource(sb_model)
 
 
 def test_new_study_variants_build():

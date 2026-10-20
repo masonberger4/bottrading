@@ -165,6 +165,10 @@ def lock_cuts(p: Params) -> set:
         cuts.add(480)
     if p.sb_model and p.sb_london:
         cuts.add(120)
+    if p.sb_model and p.sb_0700:
+        cuts.add(360)                             # SB package: the 07:00 window's own lock (leg start 06:00)
+    if p.sb_model and p.sb_draw_first and (p.sb_last_hour or p.sb_moc_extra):
+        cuts.add(870)                             # SB package: the 15:00 / 15:15 windows' own draw lock
     if (p.last_hour_own_slot or p.last_hour_setup) and not p.lh_no_lock:
         cuts.add(p.last_hour[0])                  # setups_models: the own last-hour slot's 15:00 lock
     from . import newscal as _NC
@@ -487,7 +491,8 @@ def consolidation_day(row) -> bool:
     return any(m in s for m in marks)
 
 
-def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False) -> pd.DataFrame:
+def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, sb_one_market: bool = False,
+            sb_am_done: bool = False) -> pd.DataFrame:
     """Trade one instrument per session (watch one market, rules Ep 05): of the setups the
     instruments produced, keep the first to fill. On a tie, keep the one whose SMT check
     didn't show its partner holding stronger. Uses only what was known at the fill.
@@ -505,6 +510,23 @@ def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False) 
     if pick not in ("first", "leader", "laggard", "trend"):
         raise ValueError(f"pick {pick!r}")
     out = None
+    # SB package (M3.9): a Silver Bullet window is its own slot - the key was (date, session), so an SB trade of the
+    # London / AM window (session "AM") shut the main engine's AM trade of the other market out and vice versa.
+    # sb_one_market (046 ~55:21: don't switch markets): later SB windows keep only the first SB trade's market.
+    # sb_am_done (048 ~1:35): done for the AM once an SB AM trade reached its target: later AM trades of the day go.
+    if "setup" not in t.columns:
+        t = t.assign(setup="")                        # (hand-made books without the setup column: one slot per session)
+    t = t.assign(_sk=t.setup.where(t.setup.astype(str).str.startswith("sb_"), t.session))
+    if sb_one_market and t.setup.astype(str).str.startswith("sb_").any():
+        sbm = t[t.setup.astype(str).str.startswith("sb_")].sort_values("entry_time").groupby("date").symbol.first()
+        keep = ~t.setup.astype(str).str.startswith("sb_") | (t.symbol == t.date.map(sbm))
+        t = t[keep]
+    if sb_am_done and "exit_time" in t.columns:
+        won = t[(t.setup == "sb_am") & t.exit_reason.astype(str).str.contains(r"(?:^|\+)t\d+(?:\+|$)", regex=True)]
+        if len(won):
+            done = won.groupby("date").exit_time.min()
+            later = (t.session == "AM") & (t.setup != "sb_am") & (t.entry_time > t.date.map(done))
+            t = t[~later]
     if pick != "first":
         lag = t.smt.eq(True)
         if pick == "trend":
@@ -517,14 +539,14 @@ def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False) 
         t = t[keep]
         lead_row = lead_row[keep]
         if not len(t):
-            return t
+            return t.drop(columns="_sk")
         if {"ext_px", "leg_hi_px"} <= set(t.columns):
             rel = ((t.leg_hi_px - t.ext_px).abs() / t.ext_px.abs()).fillna(0.0)
             t = t.assign(_rel=rel.where(~lead_row, -rel)).sort_values(["entry_time", "_rel"], kind="stable")
-            out = t.groupby(["date", "session"], sort=False).head(1).drop(columns="_rel").sort_values("entry_time")
+            out = t.groupby(["date", "_sk"], sort=False).head(1).drop(columns=["_rel", "_sk"]).sort_values("entry_time")
     if out is None:
         t = t.assign(_weak=t.smt.eq(True)).sort_values(["entry_time", "_weak"])
-        out = t.groupby(["date", "session"], sort=False).head(1).drop(columns="_weak").sort_values("entry_time")
+        out = t.groupby(["date", "_sk"], sort=False).head(1).drop(columns=["_weak", "_sk"]).sort_values("entry_time")
     if one_market and len(out):
         first = out.sort_values("entry_time", kind="stable").groupby("date").symbol.first()
         out = out[out.symbol == out.date.map(first)]
