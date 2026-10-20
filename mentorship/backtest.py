@@ -319,11 +319,13 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
         partner: pd.DataFrame | None = None, warmup: int = 3, partial_last: bool = False,
         bias_table: pd.DataFrame | None = None, confluence: bool = True,
         partner2: pd.DataFrame | None = None, intermarket: dict | None = None,
-        meta: pd.DataFrame | None = None, lock_cuts: dict | None = None) -> pd.DataFrame:
+        meta: pd.DataFrame | None = None, lock_cuts: dict | None = None,
+        ref_df: pd.DataFrame | None = None) -> pd.DataFrame:
     """Backtest one instrument. `meta` (#13): databento meta (load_meta) for the front-month
-    price frame; `lock_cuts` (#9): {minute: htf table cut there} (built here when None).
+    price frame; `lock_cuts` (#9): {minute: htf table cut there} (built here when None);
+    `ref_df` (D22 bias_open_src="es_map"): the futures / CFD frame whose midnight open is mapped to this instrument.
     The result's attrs carry "days", "locks" (one row per session lock) and "skips"."""
-    pr = prepare(df, tf, symbol, p, partial_last, bias_table, confluence, meta, lock_cuts)
+    pr = prepare(df, tf, symbol, p, partial_last, bias_table, confluence, meta, lock_cuts, ref_df)
     p, ds = pr.p, pr.ds
     pmap = {g.index[0].date(): g for g in days(partner, tf, partial_last, p.session_close)} if partner is not None else {}
     pmap2 = {g.index[0].date(): g for g in days(partner2, tf, partial_last, p.session_close)} if partner2 is not None else {}
@@ -476,7 +478,13 @@ def consolidation_day(row) -> bool:
     """D15: a trade's day is a consolidation day when its day tags (strategy.day_context: inside_day, big_prev ...) or the DayPlan
     tags (dw_tags: consol_*, daily_range, inside_week, bias_htf nwog_cons / bond_range / chop ...) name one."""
     s = f"{row.get('day_tags', '')}|{row.get('dw_tags', '')}"
-    return any(m in s for m in CONSOL_MARKS)
+    et = pd.Timestamp(row.get("entry_time")) if row.get("entry_time") is not None else None
+    marks = CONSOL_MARKS
+    if et is not None and et == et and et.hour * 60 + et.minute < 570:
+        # (review fix) the bias_htf day tags are put on the DayPlan from the 09:30 row (overnight range, 09:30 price): a fill before
+        # 09:30 must not be classified with information through 09:30
+        marks = tuple(m for m in marks if m not in ("bh_nwog_cons", "bh_bond_range", "bh_chop"))
+    return any(m in s for m in marks)
 
 
 def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False) -> pd.DataFrame:

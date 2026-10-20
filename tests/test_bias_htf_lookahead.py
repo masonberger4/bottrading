@@ -110,3 +110,24 @@ def test_no_look_ahead_grouped_switches_with_silver_bullet_and_ma_deuce_1m(group
                sb_model=True, ma_deuce=True, pre_0700=True, pre_0900=True, **GROUPS[group])
     extra = lambda r: str(r.get("setup", "")).startswith(("sb_", "ma_deuce", "pre"))
     _check(group, 1, [("2024-01-22", "2024-02-02")] + WIN["def"], p, need=extra)
+
+
+@pytest.mark.skipif(not ES5, reason="ES 5m data missing")
+@pytest.mark.parametrize("tf", [5])
+def test_no_look_ahead_es_map_midnight_through_backtest_run(tf):
+    """D22 bias_open_src="es_map" through B.run(ref_df=...): the futures midnight open (00:00, +2 pts on every day so it differs from the frame's
+    own) is mapped with the PRIOR session's close ratio; truncating both frames just after an entry leaves the entries unchanged."""
+    from test_entries_stops import _no_look_ahead as nla
+    p = _params("D22_bias_open_src_es_map")
+    for a, b in WIN["def"] + WIN["wide"]:
+        df = _bars(tf, a, b)
+        ref = df.copy()
+        mid = (ref.index.hour == 0) & (ref.index.minute == 0)
+        ref.loc[mid, "open"] = ref.loc[mid, "open"] + 2.0
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            plain = B.run(df, tf, "ES", p, ref_df=ref)
+        if len(plain):
+            nla(df, tf, "ES", p, LA_COLS, every=max(1, len(plain) // 3), min_trades=1, lag=2, ref_df=ref)
+            return
+    pytest.fail("no window gave a trade")

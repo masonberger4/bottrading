@@ -142,6 +142,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     g = pre.groupby(plab)
     on = pd.DataFrame({"high": g.high.max(), "low": g.low.min(), "last": g.close.last()})
 
+    mid_open = BH.week_open_mon(df, d) if X.get("bc") == "midnight" else None     # M0.1 bias_candle_open="midnight": the 00:00 opens
     rows = []
     wk_first = {}                                    # W-FRI period -> first session position (bias_htf: the week's open)
     for k_, t_ in enumerate(d.index):
@@ -255,7 +256,14 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
                    vi_up=vu[2] if vu else np.nan, vi_dn=vd[2] if vd else np.nan)
         if X:
             wk0 = wk_first.get(wk)
-            row.update(BH.row_extras(X, px, oh, ol, float(o[k]), float(o[wk0]) if wk0 is not None else float(o[k]),
+            d_open_ = float(o[k])
+            w_open_ = float(o[wk0]) if wk0 is not None else float(o[k])
+            if mid_open is not None:                  # the 00:00 open of the day / of the week's first session (the Sunday 18:00 open is the default)
+                m_ = mid_open.get(day, float("nan"))
+                d_open_ = m_ if m_ == m_ else d_open_
+                m_ = mid_open.get(d.index[wk0], float("nan")) if wk0 is not None else float("nan")
+                w_open_ = m_ if m_ == m_ else w_open_
+            row.update(BH.row_extras(X, px, oh, ol, d_open_, w_open_,
                                      draws_up, draws_dn, pdb, ru, rd, rw_up, rw_dn, live, es_pt))
         rows.append(row)
     cols = ["date", "px", "react", "react_score", "draw", "pd", "combo", "draw_up", "draw_up_name",

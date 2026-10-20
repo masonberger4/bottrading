@@ -13,8 +13,8 @@ Columns (all per trading day, known at the table's cut):
   B6    iof / iof_score           institutional order flow on the daily (candle respect + pivot raids)
   A21   pd20 / pd20_pos           premium / discount of the N-session range (bodies or wicks, half / third / ote / deep)
   B5    wk_bias                   the weekly reading (reaction from weekly arrays, else the weekly close flip)
-  B7    ob_mt / ob_mt_lvl / how_in      daily OB mean-threshold state; "high of the week in" (close below 50% of the last
-                                        down-close candle)
+  B7    ob_mt / ob_mt_lvl / how_in / low_in   daily OB mean-threshold state; "high of the week in" (close below 50% of the last
+                                        down-close candle) and its mirror "low of the week in" (close above 50% of the last up-close)
   B9    obj_day / obj_week        the previous day's / this week's draw already delivered
   B10   mwd / mwd_case / mwd_zones    month-week-day sequence
   B13   wo_sun / wo_mon / wk_dir / wo_expired     weekly opens, the week's direction, expired at an opposing daily array
@@ -70,10 +70,11 @@ def bx_string(p) -> str:
         x["mwd"] = p.mwd_disp_mult
     if p.weekly_open != "off":
         x["wo"] = p.weekly_open_early_days
+        x["woa"] = p.weekly_open_array_days
     if hb == "nwog" or p.nwog_regime != "off" or p.nwog_bias != "off":
-        x["nwog"] = [p.nwog_leave_adr, p.nwog_returns_cons, p.nwog_converge_pts, p.nwog_bias_reclaim]
+        x["nwog"] = [p.nwog_leave_adr, p.nwog_returns_cons, p.nwog_converge_pts, p.nwog_bias_reclaim, p.nwog_converge_mode]
     if hb == "candle" or p.bias_candle_tag:
-        x["bc"] = 1
+        x["bc"] = "midnight" if p.bias_candle_open == "midnight" else 1
     if hb == "draw_pd":
         x["dpd"] = 1
     if p.qshift_tag or p.qshift_size != 1.0:
@@ -268,24 +269,24 @@ def tf_states(o, h, l, c, disp_mult: float = 1.0):
 
 def mwd_case(sm: int, sw: int, sd: int, cd: int, cw: int) -> tuple:
     """B10 cases from the three states (+ their `corr` flags): returns (direction, case). The highest timeframe with a state
-    gives the direction (the monthly drives); case A all three agree and the day is not correcting (buy every daily / 4h
-    discount array), B month + week agree and the day corrects (daily arrays only inside weekly arrays), C only the month
-    (arrays of the month only). With no monthly state the weekly stands in for it (cases A / B), then the daily alone ("D")."""
+    gives the direction (the monthly drives); case A all three agree and neither week nor day is correcting (buy every daily / 4h
+    discount array), B month + week agree (the week clean) and the day corrects or has no state (daily arrays only inside weekly
+    arrays), C only the month: the week disagrees, has no state, or is itself correcting (arrays of the month only). With no monthly state the weekly stands in for it (cases A / B), then the daily alone ("D")."""
     top = sm or sw or sd
     if not top:
         return 0, ""
     g = 1 if top > 0 else -1
     wm, ww, dd = sm * g, sw * g, sd * g
     d_ok = dd > 0 and not cd
-    w_ok = ww > 0 and not cw
+    w_ok = ww > 0 and not cw                                         # a correcting week is not a clean week (week + day correcting: C)
     if sm:
-        if ww > 0 and d_ok:
+        if w_ok and d_ok:
             return g, "A"
-        if ww > 0:
+        if w_ok:
             return g, "B"
         return g, "C"
     if sw:
-        return g, "A" if d_ok else "B"
+        return (g, "A" if d_ok else "B") if not cw else (g, "C")
     return g, "D"
 
 
@@ -382,6 +383,28 @@ def add_columns(out: pd.DataFrame, X: dict, d: pd.DataFrame, w: pd.DataFrame, ar
         if repl:
             out["pd"] = st
             out["combo"] = [int(r) if r else int(p_) for r, p_ in zip(out.react, out.pd)]
+            if "draw_ord" in out:                         # (review fix) the B2 liquidity pick follows the replaced P/D too
+                for r_ in np.flatnonzero((out.draw_ord_kind.values == "liq") | (out.draw_ord_kind.values == "")):
+                    pdv = int(out.pd.values[r_])
+                    du, dd_ = out.draw_up.values[r_], out.draw_dn.values[r_]
+                    nu, nd_ = out.draw_up_name.values[r_], out.draw_dn_name.values[r_]
+                    if out.draw_ord_kind.values[r_] == "" and not (du == du or dd_ == dd_):
+                        continue
+                    if _is_ineff(str(nu)) or _is_ineff(str(nd_)):
+                        continue                          # an inefficiency decides, P/D is not consulted
+                    px_ = out.px.values[r_]
+                    if pdv > 0 and du == du:
+                        sd_ = 1
+                    elif pdv < 0 and dd_ == dd_:
+                        sd_ = -1
+                    elif du == du and dd_ == dd_:
+                        sd_ = 0 if abs(du - px_) == abs(px_ - dd_) else (1 if abs(du - px_) < abs(px_ - dd_) else -1)
+                    else:
+                        sd_ = 1 if du == du else (-1 if dd_ == dd_ else 0)
+                    out.iloc[r_, out.columns.get_loc("draw_ord")] = sd_
+                    out.iloc[r_, out.columns.get_loc("draw_ord_lvl")] = (du if sd_ > 0 else dd_) if sd_ else nan
+                    out.iloc[r_, out.columns.get_loc("draw_ord_name")] = (nu if sd_ > 0 else nd_) if sd_ else ""
+                    out.iloc[r_, out.columns.get_loc("draw_ord_kind")] = "liq" if sd_ else ""
     # --- B6 IOF
     if "iof" in X:
         n, mn = X["iof"]
@@ -410,19 +433,28 @@ def add_columns(out: pd.DataFrame, X: dict, d: pd.DataFrame, w: pd.DataFrame, ar
             lv.append(float(cand[-1].ce) if cand else nan)
         out["ob_mt_lvl"] = lv
         wk_of = d.index.to_period("W-FRI")
-        how = []
+        how, low = [], []
         for k in ks:
-            hit = False
+            hit = lo_hit = False
             k0 = next(q for q in range(k, -1, -1) if q == 0 or wk_of[q - 1] != wk_of[k])      # the week's first session
             prior_hi = h[max(0, k0 - 5):k0].max() if k0 > 0 else np.inf
+            prior_lo = l[max(0, k0 - 5):k0].min() if k0 > 0 else -np.inf
             for j in range(k - 1, k0 - 1, -1):
                 m = next((q for q in range(j - 1, -1, -1) if c[q] < o[q]), None)
-                # a rally week (its high so far above the last five sessions' highs), then a close below 50% of the last down-close candle
+                # [our interpretation] the "rally week" precondition (the week's high so far above the last five sessions' highs; not in the
+                # rule's words), then a close below 50% of the last down-close candle
                 if m is not None and h[k0:j + 1].max() > prior_hi and c[j] < (h[m] + l[m]) / 2:
                     hit = True
                     break
+            for j in range(k - 1, k0 - 1, -1):                    # the mirror: low of the week in (a decline week, then a close above 50% of the last up-close)
+                m = next((q for q in range(j - 1, -1, -1) if c[q] > o[q]), None)
+                if m is not None and l[k0:j + 1].min() < prior_lo and c[j] > (h[m] + l[m]) / 2:
+                    lo_hit = True
+                    break
             how.append(int(hit))
+            low.append(int(lo_hit))
         out["how_in"] = how
+        out["low_in"] = low
     # --- B9 objective met
     if "obj" in X:
         dr = out.draw.values
@@ -470,7 +502,7 @@ def add_columns(out: pd.DataFrame, X: dict, d: pd.DataFrame, w: pd.DataFrame, ar
         out = _mwd(out, X["mwd"], d, w, arrs, ks, px)
     # --- B13 weekly open
     if "wo" in X:
-        out = _weekly_open(out, X["wo"], d, w, arrs, ks, df)
+        out = _weekly_open(out, X["wo"], d, w, arrs, ks, df, on, X.get("woa", 60))
     # --- B14 NWOG
     if "nwog" in X:
         out = _nwog(out, X["nwog"], d, og, ks, px, es_pt)
@@ -585,11 +617,14 @@ def _mwd(out, disp, d, w, arrs, ks, px):
     return out
 
 
-def _weekly_open(out, early_days, d, w, arrs, ks, df):
+def _weekly_open(out, early_days, d, w, arrs, ks, df, on=None, max_age: int = 60):
     """B13 (048 ~1:00:10; cc08_001 ~22:58-29:03; cc12_003 ~19:03): the week's opens and direction. wo_sun = the Sunday 18:00 open
     (the first bar of the week's first session), wo_mon = the 00:00 open of that session's calendar day. wk_dir = the weekly bias
     (else the daily combo bias at the week's first row). wo_expired: the week so far reached a daily array opposing wk_dir
-    (a bearish FVG / OB / VI above the week's open for a bullish week) - the filter is valid only until then."""
+    (a bearish FVG / OB / VI above the week's open for a bullish week) - the filter is valid only until then. The row's own overnight
+    range (the bars closed by the table's cut) counts too, so the expiry is seen on the morning the array is hit, not a session later;
+    arrays older than `max_age` sessions at the week's open are ignored [our interpretation: the table's 60-session lookback, Param
+    weekly_open_array_days]."""
     mon = week_open_mon(df, d)
     o, h, l, c = (d[k].values.astype(float) for k in ("open", "high", "low", "close"))
     wk_of = d.index.to_period("W-FRI")
@@ -612,10 +647,13 @@ def _weekly_open(out, early_days, d, w, arrs, ks, df):
         exp = 0
         if wdir and k > k0:
             seg_h, seg_l = h[k0:k].max(), l[k0:k].min()
+            day_ = pd.Timestamp(out.index[r])
+            if on is not None and day_ in on.index:
+                seg_h, seg_l = max(seg_h, float(on.at[day_, "high"])), min(seg_l, float(on.at[day_, "low"]))
             for a in arrs:
                 if a.tf != "D" or a.typ not in ("fvg", "ob", "vi") or a.known > k0 or a.kind != ("bear" if wdir > 0 else "bull"):
                     continue
-                if not _valid(a, c, k0) or k0 - a.known > 60:
+                if not _valid(a, c, k0) or k0 - a.known > max_age:
                     continue
                 if wdir > 0 and a.bottom > o[k0] and seg_h >= a.bottom:
                     exp = 1
@@ -630,7 +668,8 @@ def _weekly_open(out, early_days, d, w, arrs, ks, df):
 
 def _nwog(out, cfg, d, og, ks, px, es_pt):
     """B14 / B14.1-3 from the NWOGs of the opening-gap table `og` (kind "nwog": high, low, ce, up, known, week)."""
-    leave_adr, ret_cons, conv_pts, reclaim = cfg
+    leave_adr, ret_cons, conv_pts, reclaim = cfg[:4]
+    conv_mode = cfg[4] if len(cfg) > 4 else "near"
     nan = float("nan")
     o, h, l, c = (d[k].values.astype(float) for k in ("open", "high", "low", "close"))
     wk_of = d.index.to_period("W-FRI")
@@ -666,12 +705,12 @@ def _nwog(out, cfg, d, og, ks, px, es_pt):
         cv = 0
         if j >= 1:
             d1 = abs(g.ce - nw.iloc[j - 1].ce)
-            if conv_pts and d1 <= conv_pts * es_pt:
+            if conv_mode == "near" and conv_pts and d1 <= conv_pts * es_pt:
                 cv = 1
             if j >= 2:
                 d2 = abs(nw.iloc[j - 1].ce - nw.iloc[j - 2].ce)
-                if d1 < d2 and conv_pts and d1 <= 2 * conv_pts * es_pt:
-                    cv = 1
+                if d1 < d2 and (conv_mode == "shrink" or (conv_pts and d1 <= 2 * conv_pts * es_pt)):
+                    cv = 1                    # "shrink": the distance falls across three gaps in a row, whatever its size
         a5 = adr5[k0] if adr5[k0] == adr5[k0] else nan
         if cv or n_ret >= ret_cons:
             rg = "cons"
@@ -773,6 +812,8 @@ def _next_array(out, days, d, arrs, ks, px, on, o, h, l, c):
                 break
     out["react"] = rc
     out["combo"] = [int(r_) if r_ else int(p_) for r_, p_ in zip(rc, out.pd.values)]
+    if "combo2" in out:                                   # (review fix) combo2 follows the new react too
+        out["combo2"] = [int(r) if r else (int(i) if i else int(p_)) for r, i, p_ in zip(rc, out.iof, out.pd)]
     return out
 
 
@@ -793,6 +834,7 @@ def _persist(out, n, ks, d, w, arrs):
         res, stand, cnt = raw.copy(), 0, 0
         for i, v in enumerate(raw):
             if v == 0:
+                cnt = 0                                   # (review fix) "in a row": a neutral reading breaks the run
                 continue
             if stand == 0 or v == stand:
                 stand, cnt = v, 0
@@ -803,6 +845,14 @@ def _persist(out, n, ks, d, w, arrs):
             else:
                 res[i] = stand
         out[col] = res
+        if col == "draw_ord" and "draw_ord_lvl" in out:   # (review fix) the held side's level, so the sign and the level agree
+            for i in np.flatnonzero(res != raw):
+                up_ = res[i] > 0
+                src_l = out["draw_up"] if up_ else out["draw_dn"]
+                src_n = out["draw_up_name"] if up_ else out["draw_dn_name"]
+                out.iloc[i, out.columns.get_loc("draw_ord_lvl")] = src_l.iloc[i]
+                out.iloc[i, out.columns.get_loc("draw_ord_name")] = src_n.iloc[i]
+                out.iloc[i, out.columns.get_loc("draw_ord_kind")] = "held"
     return out
 
 

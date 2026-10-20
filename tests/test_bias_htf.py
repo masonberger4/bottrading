@@ -42,7 +42,7 @@ def test_validation_and_umbrellas():
         with pytest.raises(ValueError):
             Params(**kw)
     p = Params(draw_first="session")                                   # L14 / L14a umbrella
-    assert (p.draw_lock, p.draw_lock_pick, p.draw_ext_target, p.cond_draw) == ("session", "ordered", True, True)
+    assert (p.draw_lock, p.draw_lock_pick, p.draw_ext_target, p.cond_draw) == ("session", "ordered", True, False)           # cond_draw is not in the umbrella (owner has not confirmed L14e)
     assert "htf" in p.target_hygiene
     q = Params(draw_first="session", draw_first_skip=("pick", "cond", "hygiene"))
     assert q.draw_lock_pick == "nearest" and not q.cond_draw and "htf" not in q.target_hygiene and q.draw_ext_target
@@ -74,13 +74,28 @@ def test_every_new_switch_has_a_study_variant():
               "mmbm_zone", "intermarket_model", "dxy_gate", "bond_range", "bond_dir", "cot_oi_model", "cot_tag", "oi_tag",
               "wpr_tag", "qshift_tag", "qshift_size", "midnight_target", "midnight_confirm", "midnight_below_ok", "one_market",
               "bias_open_src")
-    used = set()
+    used = {}
     for n in new:
-        used |= set(study.DECISIONS[n])
+        for k, v in study.DECISIONS[n].items():
+            used.setdefault(k, []).append(v)
     for f in fields:
         if f == "want_all_engines":
             continue
-        assert f in used or f in ("iof_days", "ote_band", "bias_candle", "day_pd") or f in str(used), f
+        assert f in used or f in ("iof_days", "ote_band", "bias_candle", "day_pd"), f
+    # exact switch-value coverage (no substring matching): every mode of the multi-valued switches has its own variant
+    modes = {"draw_lock_pick": ("ordered", "largest"), "bias_neutral": ("both", "scalp"), "news_topdown": ("side", "tag"),
+             "weekly_gate": ("filter", "tag"), "how_rule": ("tag", "no_long", "no_short", "both"), "objective_neutral": ("day", "week", "both"),
+             "objective_met_stop": ("day", "week", "both"), "neutral_gate_mode": ("tag", "skip", "scalp"),
+             "bond_range": ("scalp", "skip"), "decoupled_mode": ("scalp", "skip"), "bias_open_src": ("spy", "es_map"),
+             "bias_candle_open": ("midnight",), "nwog_converge_mode": ("shrink",), "midnight_confirm": ("tag", "filter"),
+             "chop_mode": ("skip", "scalp"), "nwog_regime": ("tag", "skip", "scalp"), "neutral_5050": ("armed", "react"),
+             "cot_tag": ("tag", "filter"), "wpr_tag": ("tag", "filter"), "judas_required": ("tag", "filter"), "mwd_nest": ("tag", "filter"),
+             "smt_both": ("tag", "skip"), "weekly_open": ("sun18", "mon00", "either")}
+    for f, vals in modes.items():
+        for v in vals:
+            assert v in used.get(f, []), (f, v)
+    gates = {t for v in used.get("neutral_gate", []) for t in v}
+    assert gates >= {"fifty_fifty", "premium_chop", "draw_delivered", "range_market", "decoupled"}
 
 
 # --- B2 the ordered draw -----------------------------------------------------------------------------------------------------
@@ -181,6 +196,67 @@ def test_mwd_case_logic():
     assert BH.mwd_case(-1, 1, 1, 0, 0) == (-1, "C")
     assert BH.mwd_case(0, 1, 1, 0, 0) == (1, "A") and BH.mwd_case(0, 1, 0, 0, 0) == (1, "B")
     assert BH.mwd_case(0, 0, -1, 0, 0) == (-1, "D") and BH.mwd_case(0, 0, 0, 0, 0) == (0, "")
+    # the week's correcting flag: month + week bullish but the week correcting (and the day correcting) = case C, arrays of the month only
+    assert BH.mwd_case(1, 1, 1, 0, 1) == (1, "C") and BH.mwd_case(1, 1, 1, 1, 1) == (1, "C") and BH.mwd_case(1, 1, -1, 0, 1) == (1, "C")
+    assert BH.mwd_case(-1, -1, -1, 0, 1) == (-1, "C") and BH.mwd_case(-1, -1, -1, 1, 1) == (-1, "C")      # the mirror
+    assert BH.mwd_case(1, 1, 0, 0, 0) == (1, "B")                      # a clean week, the day has no state: B
+    assert BH.mwd_case(0, 1, 1, 0, 1) == (1, "C")                      # the weekly stands in for the month: still corrects -> C
+
+
+# --- value-level tests on synthetic daily frames ----------------------------------------------------------------------------------
+
+def _daily(rows, start="2024-03-04"):
+    idx = pd.bdate_range(start, periods=len(rows))
+    a = np.array(rows, float)
+    return pd.DataFrame(dict(open=a[:, 0], high=a[:, 1], low=a[:, 2], close=a[:, 3]), index=idx)
+
+
+def _table_for(d, X, k0=5):
+    w = htf.weeks(d)
+    ks = list(range(k0, len(d)))
+    out = pd.DataFrame(dict(px=d.close.values[[k - 1 for k in ks]]), index=[d.index[k].date() for k in ks])
+    on = pd.DataFrame(dict(high=d.high.values, low=d.low.values, last=d.close.values), index=d.index)
+    return BH.add_columns(out, X, d, w, [], pd.DataFrame(), on, None, 1.0, False)
+
+
+def test_how_in_and_its_mirror_low_in_on_a_synthetic_week():
+    base = [(100, 101, 99, 100)] * 5
+    up_week = [(100, 104, 100, 103), (103, 109, 102, 108), (108, 109, 105, 106), (106, 107, 103, 104), (104, 105, 100, 101)]
+    t = _table_for(_daily(base + up_week + [(101, 102, 99, 100)]), {"obmt": 1})
+    h = t.how_in.to_dict()
+    assert h[date(2024, 3, 14)] == 0 and h[date(2024, 3, 15)] == 1                       # Thursday's close (104) is under 50% (107) of Wednesday's down candle
+    assert t.low_in.sum() == 0
+    dn_week = [(100, 100, 96, 97), (97, 98, 91, 92), (92, 95, 91, 94), (94, 97, 93, 96), (96, 97, 94, 95)]      # the mirror: a decline week, then a close above 50% (93) of the last up candle
+    t2 = _table_for(_daily(base + dn_week + [(95, 96, 94, 95)]), {"obmt": 1})
+    lo = t2.low_in.to_dict()
+    assert lo[date(2024, 3, 14)] == 0 and lo[date(2024, 3, 15)] == 1 and t2.how_in.sum() == 0
+
+
+def test_how_rule_blocks_longs_shorts_or_both():
+    i = I(600)
+    for rule in ("no_long", "no_short", "both", "tag"):
+        h = Params(**BASE, how_rule=rule)
+        hi = bctx(row=dict(how_in=1), p=h)
+        lo = bctx(row=dict(low_in=1), p=h)
+        # a "high of the week in" row never blocks shorts; a "low of the week in" row never blocks longs
+        assert BD.side_ok(hi, h, -1, "AM", i) is None and BD.side_ok(lo, h, 1, "AM", i) is None
+        assert (BD.side_ok(hi, h, 1, "AM", i) is None) == (rule in ("tag", "no_short"))
+        assert (BD.side_ok(lo, h, -1, "AM", i) is None) == (rule in ("tag", "no_long"))
+
+
+def test_persist_needs_a_run_of_contrary_readings_and_keeps_the_level_with_the_sign(monkeypatch):
+    monkeypatch.setattr("mentorship.htf._flip", lambda d, w, arrs, trig: {})
+    d = SimpleNamespace(index=list(range(8)))
+    out = pd.DataFrame(dict(react=[1, -1, 0, -1, -1, -1, 0, 0], draw_ord=[1, -1, 0, -1, -1, 1, 0, 0],
+                            draw_ord_lvl=[110.0, 90.0, np.nan, 90.0, 90.0, 110.0, np.nan, np.nan], draw_ord_name=["a", "b", "", "b", "b", "a", "", ""],
+                            draw_ord_kind=["ineff"] * 8, draw_up=[110.0] * 8, draw_dn=[90.0] * 8,
+                            draw_up_name=["up"] * 8, draw_dn_name=["dn"] * 8))
+    r = BH._persist(out.copy(), 2, list(range(8)), d, None, [])
+    assert list(r.react0) == [1, -1, 0, -1, -1, -1, 0, 0]                              # the plain readings are kept
+    assert list(r.react) == [1, 1, 0, 1, -1, -1, 0, 0]                                 # the 0 in between resets the run: [1, -1, 0, -1] does not flip; two -1 in a row do
+    assert list(r.draw_ord) == [1, 1, 0, 1, -1, -1, 0, 0]
+    assert r.draw_ord_lvl.iloc[1] == 110.0 and r.draw_ord_name.iloc[1] == "up"          # the held side's level and name follow the held sign
+    assert r.draw_ord_lvl.iloc[4] == 90.0
 
 
 def test_tf_states_displacement_structure_break_and_correction():
@@ -275,7 +351,7 @@ def test_persistence_keeps_the_standing_sign_until_confirmed(monkeypatch):
     raw = [1, 1, -1, 1, -1, -1, -1, 0, 1, -1]
     out = pd.DataFrame({"react": raw, "draw": raw, "pd": raw, "combo": raw}, index=idx.date)
     got = BH._persist(out.copy(), 2, ks, d, None, [])
-    assert list(got.react) == [1, 1, 1, 1, 1, -1, -1, 0, -1, -1] or list(got.react)[:3] == [1, 1, 1]
+    assert list(got.react) == [1, 1, 1, 1, 1, -1, -1, 0, -1, -1]
     assert list(got.react0) == raw                            # the plain reading is kept
     # a single contrary day inside the trend is a retracement; two in a row flip it
     assert got.react.iloc[2] == 1 and got.react.iloc[5] == -1
@@ -599,6 +675,9 @@ def test_order_ok_mwd_nest_mmbm_zone_and_tags(sgn):
     f = Params(**BASE, neutral_5050="armed")
     c = bctx(row={}, p=f)
     assert BD.order_ok(c, sd, dict(entry=1, ext=0, lv_tags=""), "AM", I(600), f) is None
+    assert BD.gate(c, f, "AM", I(605), 605) is None                                    # one side framed: nothing blocked
+    BD.register_armed(c, f, "AM", sgn)                                                 # (the engine registers a side once its order is armed)
+    assert BD.order_ok(c, sd, dict(entry=1, ext=0, lv_tags=""), "AM", I(600), f) is None   # the same side again is fine
     assert BD.order_ok(c, SimpleNamespace(sign=-sgn, x=X), dict(entry=1, ext=0, lv_tags=""), "AM", I(600), f) == "x_bh_fifty_fifty"
     assert BD.gate(c, f, "AM", I(605), 605) == "x_bh_fifty_fifty" and BD.gate(c, f, "PM", I(840), 840) is None
 
@@ -704,22 +783,29 @@ def test_tf_lower_pref_and_cond_relock_and_untraded_arrays():
     assert BD.tf_lower_pref(ctx, dict(react=1, react_tf="W"), 100.0, now, 0) == (103.0, "array", "tf_lower_D", 0, 0)
     assert BD.tf_lower_pref(ctx, dict(react=-1, react_tf="D"), 100.0, now, 0) == (97.0, "array", "tf_lower_4h", 0, 0)
     assert BD.tf_lower_pref(ctx, dict(react=0, react_tf=""), 100.0, now, 0) is None and BD.tf_lower_pref(ctx, None, 100.0, now, 0) is None
-    # cond_draw: a close 0.25 x ADR5 (18) = 4.5 under the lock price fails an upper draw; the other side's nearest marked level is the new draw
+    # cond_draw (L14e): failed = the OTHER side's nearest marked level (88) is taken before the draw (108) is reached; a retrace alone
+    # (a close 5 under the lock price, the Judas) is no failure. The new draw is the next level beyond the taken one (84); the taken one is spent
     p = Params(**BASE, cond_draw=True)
     lk = dict(side=1, px=100.0, target=108.0, delivered=False, kind="pool", name="pdh1",
               marked=[(108.0, "pool", "pdh1", 1), (88.0, "pool", "pdl1", -1), (84.0, "pool", "pdl2", -1)])
     ctx.c = np.full(len(ctx.c), 100.0)
+    ctx.l = np.full(len(ctx.l), 99.0)
+    ctx.h = np.full(len(ctx.h), 101.0)
     ctx.c[ctx.start + 40] = 95.0
+    ctx.l[ctx.start + 40] = 94.0
     spent = []
-    assert BD.cond_relock(ctx, p, lk, ctx.start + 30, spent) is None                                       # not failed yet
-    nl = BD.cond_relock(ctx, p, lk, ctx.start + 40, spent)
-    assert nl["side"] == -1 and nl["target"] == 88.0 and nl["cond_used"] and spent == [108.0] and lk["side"] == 1
-    assert BD.cond_relock(ctx, p, nl, ctx.start + 40, spent) is None                                      # once
-    lk2 = dict(lk, side=-1, target=92.0, marked=[(112.0, "pool", "pdh1", 1), (92.0, "pool", "pdl1", -1)])
-    ctx.c[ctx.start + 41] = 105.0
-    nl2 = BD.cond_relock(ctx, p, lk2, ctx.start + 41, [])
-    assert nl2["side"] == 1 and nl2["target"] == 112.0                                         # the mirror
-    assert BD.cond_relock(ctx, p, dict(lk, delivered=True), ctx.start + 40, []) is None
+    assert BD.cond_relock(ctx, p, lk, ctx.start + 40, spent) is None                                       # a deep retrace is not a failure
+    ctx.l[ctx.start + 45] = 87.0
+    nl = BD.cond_relock(ctx, p, lk, ctx.start + 45, spent)
+    assert nl["side"] == -1 and nl["target"] == 84.0 and nl["cond_used"] and spent == [108.0, 88.0] and lk["side"] == 1
+    assert BD.cond_relock(ctx, p, nl, ctx.start + 45, spent) is None                                      # once
+    lk2 = dict(lk, side=-1, target=92.0, marked=[(112.0, "pool", "pdh1", 1), (116.0, "pool", "pdh2", 1), (92.0, "pool", "pdl1", -1)])
+    ctx.h[ctx.start + 46] = 113.0
+    nl2 = BD.cond_relock(ctx, p, lk2, ctx.start + 46, [])
+    assert nl2["side"] == 1 and nl2["target"] == 116.0                                         # the mirror
+    assert BD.cond_relock(ctx, p, dict(lk, delivered=True), ctx.start + 45, []) is None
+    lk3 = dict(lk, marked=[(108.0, "pool", "pdh1", 1), (88.0, "pool", "pdl1", -1)])
+    assert BD.cond_relock(ctx, p, lk3, ctx.start + 45, []) is None                                      # nothing beyond the taken level: no relock
     # untraded arrays: an array price already traded into since it formed is not a draw
     rows = [dict(top=108.0, bottom=106.0, tf="D", src=0, known=0.0, dead=1e30), dict(top=112.0, bottom=110.0, tf="D", src=2, known=0.0, dead=1e30)]
     ctx.conf = SimpleNamespace(opposing_ext=lambda now, px, sgn, tfs, src: rows)
@@ -769,7 +855,43 @@ def test_ordered_lock_picks_the_inefficiency_first_and_the_mirror_picks_the_down
     assert _go(bias_by_cut=cut2, draw_lock_pick="nearest")[1][0]["side"] == 1
     assert _go(bias_by_cut=cut2, draw_lock_pick="ordered")[1][0]["side"] == -1        # the mirror
     ext = _go(bias_by_cut=cut, draw_lock_pick="ordered", draw_ext_target=True)[1]
-    assert "ext_from" in ext[0] and ext[0]["side"] == 1
+    assert ext[0]["ext_from"] is None and ext[0]["side"] == 1 and ext[0]["name"] == "htf_D_fvg"      # the pick is already an array: nothing to extend
+
+
+def _conf_stub(rows_up=(), rows_dn=()):
+    """A confluence stand-in with only untraded HTF arrays (the rows opposing_ext hands back, per side)."""
+    return SimpleNamespace(opposing_ext=lambda now, px, sgn, tfs, src, **k: list(rows_up if sgn > 0 else rows_dn),
+                           opposing=lambda *a, **k: [], at=lambda *a, **k: [], trend=lambda *a, **k: 0,
+                           resistance=lambda *a, **k: None, support=lambda *a, **k: None, targets=lambda *a, **k: [])
+
+
+def _lock_with_conf(conf, **kw):
+    p = Params(**{**BASE, **kw})
+    locks = []
+    tr = S.run_day(day(A_ROWS, d=NORMAL, spike=True), history(NORMAL), "ES", p, 5, locks=locks, log=[], skips=[],
+                   bias_by_cut={570: dict(draw_up=103.0, draw_up_name="D_swing_high", draw_dn=94.0, draw_dn_name="D_swing_low", pd=1)},
+                   conf=conf)
+    return tr, locks
+
+
+def test_draw_ext_target_extends_a_pool_to_the_htf_array_beyond_it_and_the_pool_is_a_rung():
+    arr = [dict(top=113.0, bottom=112.0, tf="D", src=0, known=0.0, dead=1e30)]
+    tr0, l0 = _lock_with_conf(_conf_stub(arr), draw_lock_pick="ordered")
+    assert l0[0]["name"] == "pdh1" and l0[0]["target"] == 108.0 and l0[0]["ext_from"] is None      # without the switch the pool is the draw
+    tr, lk = _lock_with_conf(_conf_stub(arr), draw_lock_pick="ordered", draw_ext_target=True)
+    assert lk[0]["side"] == 1 and lk[0]["name"] == "ext_htf_D" and lk[0]["target"] == 112.5       # the array's CE is the target ...
+    assert lk[0]["ext_from"] == 108.0 and lk[0]["kind"] == "array"                                   # ... and the pool it runs through the rung
+    assert len(tr) == 1 and tr[0].draw_px == 112.5
+    near = [dict(top=107.0, bottom=106.0, tf="D", src=0, known=0.0, dead=1e30)]                      # an array BEFORE the pool is no extension
+    _, lk2 = _lock_with_conf(_conf_stub(near), draw_lock_pick="ordered", draw_ext_target=True)
+    assert lk2[0]["ext_from"] is None
+    # the helper: pools only, arrays beyond only; the mirror is the same distance logic on the other side
+    up = [(5.0, 105.0, "pool", "pdh1", 1), (9.0, 109.0, "array", "fvg", 0)]
+    assert BD.ext_target(up, up)[3] == "fvg"
+    assert BD.ext_target(up[::-1], up) is None                                       # the pick is an array already
+    dn = [(5.0, 95.0, "pool", "pdl1", -1)]
+    assert BD.ext_target(dn, dn, [(11.0, 89.0, "array", "ext_htf_D", 0)])[1] == 89.0
+    assert BD.ext_target(dn, dn, [(3.0, 97.0, "array", "ext_htf_D", 0)]) is None     # nearer than the pool
 
 
 def test_htf_bias_ordered_end_to_end_gates_the_bar_loop():
@@ -813,3 +935,95 @@ def test_study_variants_build():
     for nm in names[names.index("X16_journal_tags_off") + 1:]:
         q = replace(Params(), **study.DECISIONS[nm])
         assert isinstance(q.bx, str)
+
+
+def test_midnight_below_ok_waives_only_the_midnight_open_and_keeps_checking_the_others(monkeypatch):
+    """Ep06.6 x Ep08.3: with several reference opens (bias_open="all") the confirmed-bias waiver covers the MIDNIGHT open only."""
+    def go(mid, extra, below):
+        def refs(ctx, p, session, i):
+            ctx.opens["midnight"] = mid
+            return [mid, *extra]
+        monkeypatch.setattr(BD, "reference_opens", refs)
+        monkeypatch.setattr(BD, "below_ok", lambda *a, **k: below)
+        p = Params(**{**BASE, "use_bias": True, "midnight_below_ok": True})
+        return S.run_day(day(A_ROWS, d=NORMAL, spike=True), history(NORMAL), "ES", p, 5, locks=[], log=[], skips=[], bias_by_cut=A_LOCK)
+    assert len(go(-1e9, (), False)) == 0                 # the entry is on the wrong side of the midnight open, the bias is not confirmed
+    assert len(go(-1e9, (), True)) == 1                  # confirmed: waived
+    assert len(go(1e9, (-1e9,), True)) == 0              # the midnight open passes, ANOTHER open fails: not waived
+    assert len(go(-1e9, (1e9,), True)) == 1              # the midnight open fails and is waived, the other passes
+    assert len(go(-1e9, (-2e9,), True)) == 0             # the waiver does not cover the failing second open
+
+
+@pytest.mark.parametrize("sgn", [1, -1])
+def test_bias_candle_nearest_unreached_draw_from_the_candles_open(sgn):
+    m = (lambda v: v) if sgn > 0 else (lambda v: 200.0 - v)
+    # long frame: the daily candle opened at 100, price 100; PDH 105 (5 up) vs PDL 97 (3 down): the nearer draw is DOWN; the weekly class reads PWH / PWL
+    up = [(5.0, "PDH", 105.0), (9.0, "PWH", 109.0)]
+    dn = [(3.0, "PDL", 97.0), (4.0, "PWL", 96.0)]
+    if sgn < 0:
+        up, dn = [(d_, n.replace("PDL", "PDH").replace("PWL", "PWH"), m(v)) for d_, n, v in dn], \
+                 [(d_, n.replace("PDH", "PDL").replace("PWH", "PWL"), m(v)) for d_, n, v in up]
+    ex = BH.row_extras({"bc": 1}, m(100.0), m(101.0) if sgn > 0 else m(99.0), m(99.0) if sgn > 0 else m(101.0), m(100.0), m(100.0), up, dn,
+                       0, 0, 0, 0, 0, [], 1.0)
+    assert ex["bc_D"] == -sgn and ex["bc_D_lvl"] == m(97.0)                         # the nearer unreached draw from the open (D class: all draws)
+    assert ex["bc_W"] == -sgn and ex["bc_W_lvl"] == m(96.0)                          # the weekly class: only PWH / PWL (the nearest weekly pool)
+
+
+def test_weekly_percent_r_and_objective_met_values():
+    wk1 = [(104, 106, 102, 104), (104, 110, 103, 108), (108, 109, 100, 101), (101, 104, 100, 103), (103, 106, 102, 105)]     # H 110, L 100, C 105
+    wk2 = [(105, 112, 104, 111), (111, 120, 110, 119), (119, 119, 115, 116), (116, 118, 112, 117), (117, 119, 114, 118)]     # H 120, L 104, C 118
+    d = _daily(wk1 + wk2 + [(118, 119, 117, 118)] * 3)
+    t = _table_for(d, {"wpr": 2})
+    assert t.wpr.loc[d.index[10].date()] == pytest.approx(-100.0 * (120 - 118) / (120 - 100))      # two completed weeks: %R of the last close in their range
+    assert np.isnan(t.wpr.loc[d.index[9].date()])                                                      # only one completed week before it
+    # objective met: the prior row's draw level (110 up) was reached by that session's high (111), not by the next one's (opens 105 range)
+    dd = _daily([(100, 101, 99, 100)] * 5 + [(100, 111, 99, 105), (105, 106, 104, 105), (105, 106, 104, 105)])
+    w = htf.weeks(dd)
+    ks = [5, 6, 7]
+    out = pd.DataFrame(dict(px=[100.0, 105.0, 105.0], draw=[1, 1, -1], draw_up=[110.0, 130.0, 130.0], draw_dn=[90.0, 90.0, 99.0]), index=[dd.index[k].date() for k in ks])
+    on = pd.DataFrame(dict(high=dd.high.values, low=dd.low.values, last=dd.close.values), index=dd.index)
+    r = BH.add_columns(out, {"obj": 1}, dd, w, [], pd.DataFrame(), on, None, 1.0, False)
+    assert list(r.obj_day) == [0, 1, 0]                       # row 2: yesterday's draw 110 was hit by yesterday's 111; row 3: 130 was not reached (high 106)
+
+
+def test_weekly_open_expiry_sees_the_overnight_range_and_the_array_age_limit(monkeypatch):
+    monkeypatch.setattr(BH, "week_open_mon", lambda df, d: {})
+    d = _daily([(100, 101, 99, 100)] * 5 + [(100, 104, 99, 103), (103, 104, 100, 102), (102, 104, 100, 103), (103, 104, 100, 102), (102, 104, 100, 101)])
+    w = htf.weeks(d)
+    ks = [6]                                                    # Tuesday of the second week
+    out = pd.DataFrame(dict(px=[103.0], wk_bias=[1], combo=[1]), index=[d.index[6].date()])
+    bear = htf.Arr("bear", "fvg", "D", 110.0, 108.0, 109.0, 0)  # a bearish daily FVG above the week's open, known from the first session
+    on = lambda hi: pd.DataFrame(dict(high=[hi] * len(d), low=[99.0] * len(d), last=[103.0] * len(d)), index=d.index)
+    quiet = BH._weekly_open(out.copy(), 2, d, w, [bear], ks, None, on(104.0), 60)
+    assert int(quiet.wo_expired.iloc[0]) == 0                  # the week so far reached 104 only
+    hit = BH._weekly_open(out.copy(), 2, d, w, [bear], ks, None, on(109.0), 60)
+    assert int(hit.wo_expired.iloc[0]) == 1                    # tonight's overnight high touched the array: expired this morning, not a session later
+    old = BH._weekly_open(out.copy(), 2, d, w, [bear], ks, None, on(109.0), 3)
+    assert int(old.wo_expired.iloc[0]) == 0                    # an array older than max_age sessions at the week's open is ignored
+
+
+def test_paper_snapshot_fetches_the_futures_frame_only_for_es_map(monkeypatch):
+    """D22 live path (mock feed): snapshot passes the futures bars to evaluate as ref_df for bias_open_src="es_map", falls back with a
+    warning when the feed has none, and never asks for them otherwise."""
+    from mentorship import paper
+    import silver_bullet.data as SBD
+    asked = []
+    frame = pd.DataFrame({"open": [1.0]}, index=pd.DatetimeIndex(["2024-03-05 09:30"], tz="America/New_York"))
+
+    def feed(c, sym, days, minutes):
+        asked.append(sym)
+        if sym == "BROKEN":
+            raise RuntimeError("no such symbol")
+        return frame
+    got = {}
+    monkeypatch.setattr(SBD, "schwab_history", feed)
+    monkeypatch.setattr(paper, "evaluate", lambda df, sym, minutes, p, now, q, **kw: (got.update(ref=kw.get("ref_df")), ([], [], []))[1])
+    paper.snapshot(None, "SPY", None, 5, Params(**BASE, bias_open_src="es_map", es_symbol="/ES"))
+    assert asked == ["SPY", "/ES"] and got["ref"] is frame
+    asked.clear()
+    with pytest.warns(UserWarning, match="no BROKEN bars"):
+        paper.snapshot(None, "SPY", None, 5, Params(**BASE, bias_open_src="es_map", es_symbol="BROKEN"))
+    assert got["ref"] is None
+    asked.clear()
+    paper.snapshot(None, "SPY", None, 5, Params(**BASE))
+    assert asked == ["SPY"] and got["ref"] is None

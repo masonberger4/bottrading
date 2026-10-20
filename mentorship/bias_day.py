@@ -161,7 +161,7 @@ def im_state(ctx, p) -> State:
             _warn_once("oi", "oi_tag is on but there is no open-interest file (data/mentorship/ES_oi.csv): the tag is inert (B20.2)")
         ch = BH.oi_change(oi, day, p.oi_days)
         if ch is not None and abs(ch) >= p.oi_pct:
-            S.tags.add("oi_up" if ch > 0 else "oi_dn")
+            S.tags.add("oi_rise" if ch > 0 else "oi_drop")      # a plain change tag (the rule's "drop into HTF support" needs the array state: not built)
     c["im"] = S
     return S
 
@@ -246,10 +246,19 @@ def row_state(ctx, p, session: str, i: int) -> State:
         if p.weekly_gate == "filter":
             S.sides["weekly_gate"] = (-wk,)                   # intraday dips in a bullish week are buys (064 ~1:44:34)
     # B7 high of the week in
-    if p.how_rule != "off" and _i(row.get("how_in")):
-        S.tags.add("how_in")
-        if p.how_rule == "no_long":
-            S.sides["how"] = (1,)                             # a close below 50% of the last down-close candle: high of the week
+    if p.how_rule != "off" and (_i(row.get("how_in")) or _i(row.get("low_in"))):
+        hi_, lo_ = _i(row.get("how_in")), _i(row.get("low_in"))
+        if hi_:
+            S.tags.add("how_in")
+        if lo_:
+            S.tags.add("low_in")
+        blocked = []
+        if hi_ and p.how_rule in ("no_long", "both"):
+            blocked.append(1)                                 # a close below 50% of the last down-close candle: high of the week
+        if lo_ and p.how_rule in ("no_short", "both"):
+            blocked.append(-1)                                # the mirror: a close above 50% of the last up-close candle: low of the week
+        if blocked:
+            S.sides["how"] = tuple(blocked)
     # B14 NWOG regime and bias
     rg = row.get("nwog_regime") or ""
     if p.nwog_regime != "off" and rg:
@@ -489,27 +498,33 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p):
         b = sd.sign
         tags.append("midnight_confirmed" if midnight_confirmed(ctx, b, i) else "midnight_unconfirmed")
     if p.neutral_5050 == "armed":
-        # B17.1: both sides armed in the same window = 50/50: the other side's order within the window cancels both
-        st = ctx.__dict__.setdefault("_bh_armed", {})
-        s_set = st.setdefault(session, set())
-        s_set.add(sd.sign)
-        if len(s_set) > 1:
+        # B17.1: both sides can be framed in the same window = 50/50 = no trade. The first side is registered only once its order
+        # is really armed (register_armed, called by the engine); the other side's order then cancels the pending first one and
+        # blocks the rest of the window (strategy cancels `pending`; fifty_blocked gates later bars)
+        if -sd.sign in (getattr(ctx, "_bh_armed", None) or {}).get(session, ()):
+            ctx.__dict__.setdefault("_bh_fifty", set()).add(session)
             return "x_bh_fifty_fifty"
     if tags:
         o["lv_tags"] = "|".join(x for x in (o.get("lv_tags", ""), *tags) if x)
     return None
 
 
+def register_armed(ctx, p, session: str, sign: int) -> None:
+    """B17.1 neutral_5050="armed": remember that an order of `sign` was armed in this window (called when the engine arms it)."""
+    if p.neutral_5050 == "armed":
+        ctx.__dict__.setdefault("_bh_armed", {}).setdefault(session, set()).add(sign)
+
+
 def fifty_blocked(ctx, session: str) -> bool:
-    """B17.1 neutral_5050="armed": both sides were armed in this window - stand aside for the rest of it."""
-    return len((getattr(ctx, "_bh_armed", None) or {}).get(session, ())) > 1
+    """B17.1 neutral_5050="armed": both sides were framed in this window - stand aside for the rest of it."""
+    return session in (getattr(ctx, "_bh_fifty", None) or ())
 
 
 def size_mult(ctx, sd, i: int, p, lvt) -> float:
     """B22 qshift_size: the risk multiplier against the 252-session trend while a quarterly shift is due [our interpretation]."""
-    if p.qshift_size == 1.0 or not getattr(ctx, "bias_row", None):
+    if p.qshift_size == 1.0:
         return 1.0
-    row = ctx.bias_row if ctx.t[i] >= PRE_END else None
+    row = row_for(ctx, "", i)                        # (review fix) the cut row before 09:30 too: the quarterly columns are daily
     if row is None or not _i(row.get("qs_due")):
         return 1.0
     tr = _i(row.get("qs_trend"))
@@ -564,7 +579,6 @@ def bellwether(ctx, i: int) -> int:
         c["g"] = g
         c["last"] = np.r_[g[1:] != g[:-1], True]            # the last base bar of each 15-minute bucket (the bucket is complete after it)
     g, last = c["g"], c["last"]
-    k = i if (last[i] and (ctx.t[i] + ctx.tf) % 15 == 0) else None
     # complete buckets up to i: bucket b is complete if its last bar index <= i and the bar ends on a 15-minute boundary
     ends = np.flatnonzero(last[:i + 1] & (((ctx.t[:i + 1] + ctx.tf) % 15) == 0))
     ends = ends[ends >= ctx.start]
@@ -656,14 +670,16 @@ def ordered_side(up: list, dn: list, row, p) -> tuple:
     return side, up, dn
 
 
-def ext_target(pick: list, mk_side: list):
+def ext_target(pick: list, mk_side: list, extra: list = ()):
     """B2 (104 ~16:18) draw_ext_target: when the locked draw is a liquidity pool, the nearest inefficiency (array) beyond it on the
-    same side sets how far the run goes - it becomes the target and the pool a rung. `pick` = the chosen first candidate list,
-    `mk_side` = all candidates that side, nearest first. Returns the extended candidate or None."""
+    same side sets how far the run goes - it becomes the target and the pool a rung (lock["ext_from"], which _targets adds to
+    the ladder). `pick` = the chosen candidate list (first = the pool), `mk_side` = ALL marked candidates that side, nearest
+    first, `extra` = further arrays that side that are not marked draws (the untraded HTF arrays beyond the pool, built by
+    mark_levels). Items are (distance, level, kind, name, dir). Returns the extended candidate or None."""
     c0 = pick[0]
     if c0[2] != "pool":
         return None
-    beyond = [x for x in mk_side if x[2] == "array" and abs(x[1] - c0[1]) > 0 and ((x[0] > c0[0]))]
+    beyond = [x for x in list(mk_side) + list(extra) if x[2] == "array" and x[0] > c0[0] + 1e-9]
     return min(beyond, key=lambda x: x[0]) if beyond else None
 
 
@@ -685,31 +701,31 @@ def tf_lower_pref(ctx, row, px: float, now, S: int):
 
 def cond_relock(ctx, p, lk: dict, i: int, spent: list):
     """L14e (080 ~16:58) cond_draw: "if price fails to reach the upper pool, switch to the lower; once taken the low draw is spent".
-    Failure [our interpretation] = a bar closes cond_draw_adr x ADR5 beyond the lock-time price on the far side from the draw (it
-    turned away from it). The failed target is spent (never re-locked) and the lock switches ONCE to the nearest marked level on
-    the other side of the current price at least draw_lock_min_pts away. Returns the new lock dict or None."""
+    Failure [our interpretation] = the draw has NOT been reached and the OTHER side's nearest marked level (at least
+    draw_lock_min_pts from the lock price) has been taken first, by a bar of this session after the lock: the market delivered
+    the opposite side, the first move went against the bias (a retrace alone is NOT a failure - that is the Judas swing, B3). The
+    taken level is spent and the lock switches ONCE to the next marked level beyond it on that side (none: no relock). Returns the
+    new lock dict or None."""
     if lk.get("cond_used") or not lk["side"] or lk["delivered"]:
         return None
-    a = _adr5(ctx, p)
-    if not a:
-        return None
-    thr = p.cond_draw_adr * a
-    c = float(ctx.c[i])
-    away = (lk["px"] - c >= thr) if lk["side"] > 0 else (c - lk["px"] >= thr)
-    if not away:
-        return None
     mn = p.draw_lock_min_pts * p.es_pt
-    side = -lk["side"]
-    cand = [(abs(v - c), v, kd, nm, dr) for v, kd, nm, dr in lk["marked"]
-            if ((v < c - mn) if side < 0 else (v > c + mn)) and abs(v - lk["target"]) > 1e-9]
-    if not cand:
+    other = -lk["side"]
+    lv = sorted((abs(v - lk["px"]), v, kd, nm, dr) for v, kd, nm, dr in lk["marked"]
+                if ((v < lk["px"] - mn) if other < 0 else (v > lk["px"] + mn)) and abs(v - lk["target"]) > 1e-9)
+    if not lv:
         return None
-    cand.sort()
-    d, v, kd, nm, dr = cand[0]
+    first = lv[0]
+    taken = ctx.l[i] <= first[1] if other < 0 else ctx.h[i] >= first[1]
+    if not taken:
+        return None
+    nxt = [x for x in lv[1:] if (x[1] < first[1] if other < 0 else x[1] > first[1])]
+    if not nxt:
+        return None
+    d, v, kd, nm, dr = nxt[0]
     nl = dict(lk)
-    nl.update(side=side, target=v, kind=kd, name=nm, cond_used=True, cond_failed=lk["target"], delivered=False,
+    nl.update(side=other, target=v, kind=kd, name=nm, cond_used=True, cond_failed=lk["target"], delivered=False,
               delivered_t=None, delivered_i=None)
-    spent.append(lk["target"])
+    spent += [lk["target"], first[1]]
     return nl
 
 

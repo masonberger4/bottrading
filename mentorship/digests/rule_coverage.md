@@ -1235,26 +1235,26 @@ against section 2:
 
 | Id | New status | Note |
 |---|---|---|
-| B2 | FULL | `draw_lock_pick="ordered"`, `htf_bias="ordered"`, table columns draw_ord / draw_ord_lvl / draw_ext_lvl, `draw_ext_target` |
+| B2 | FULL | `draw_lock_pick="ordered"`, `htf_bias="ordered"`, table columns draw_ord / draw_ord_lvl, `draw_ext_target` (the live extent is the lock: the array beyond the pool among the marked and the untraded HTF arrays, the pool a rung via `lock["ext_from"]`; the table's draw_ext_* columns are empty by construction) |
 | B3, L14a | FULL | owner #9 lock + the ordered / largest pick, `want_all_engines` (Silver Bullet and Ma Deuce read `htf_bias`), per-bar pre-09:30 bias read, `judas_required` |
-| L14 | FULL | `draw_first` umbrella, `matrix_tf_lower` (L14c), `cond_draw` (L14e), lock hygiene through `target_hygiene` "htf" |
+| L14 | FULL | `draw_first` umbrella, `matrix_tf_lower` (L14c), `cond_draw` (L14e; separate switch, failed = the other side's nearest level taken first; owner question 9b), lock hygiene through `target_hygiene` "htf" |
 | B6 | FULL | `iof` column, `htf_bias` "iof" / "combo2" |
 | A21, A21.2, A21.4 | FULL | `day_pd="20d"`, `pd_day_range`, `pd_zone`, `ote_band`, `pd_body_multiday`; pd20 column |
 | B5 | FULL | `weekly_gate`, `news_topdown`, `bellwether_15m` ([our interpretation] of the 15m read) |
 | B7, B8, B8a-B8f | FULL | `ob_mt` column / bias, `how_rule`; the flip column and `stop_flip` were built earlier (new variant B8_flip_all_triggers) |
 | B9 | FULL | `objective_neutral`, `bias_persist`, `next_array_on_fail` |
-| B10 | FULL | `htf_bias="mwd"`, `mwd_nest` (the state machine is [our interpretation]) |
+| B10 | FULL | `htf_bias="mwd"`, `mwd_nest` (the state machine is [our interpretation]; a correcting week gives case C) |
 | B13 | FULL | `weekly_open` sun18 / mon00 / either |
 | B14.1, B14.2, B14.3 | FULL | `nwog_regime`, `nwog_converge_pts`, `nwog_bias` (hold until reclaim) |
 | B17, B17.1, B17.3 | FULL | `neutral_gate` tests + mode, `neutral_5050`, `objective_met_stop` |
 | B17.5 | FULL | `decoupled_mode`, `smt_both` |
 | B19, B19.1, B19.3 | FULL | `intermarket_model` umbrella, `dxy_gate`, `bond_range`, `bond_dir` (daily Yahoo files, prior sessions) |
 | B20, B20.3 | FULL | `cot_oi_model` umbrella, `wpr_tag` |
-| B20.1, B20.2 | SIMPLIFIED | loaders and tags built and unit-tested; no COT / open-interest file is shipped, so the tags are inert until data/mentorship/cot and data/mentorship/ES_oi.csv exist |
+| B20.1, B20.2 | SIMPLIFIED | loaders and tags built and unit-tested (COT: legacy columns only; OI: a plain change tag oi_rise / oi_drop, no "into HTF support" test); no COT / open-interest file is shipped, so the tags are inert until data/mentorship/cot and data/mentorship/ES_oi.csv exist |
 | B22 | FULL | `qshift_tag`, `qshift_size` |
 | M0.1 | FULL | `htf_bias="candle"`, `bias_candle` D / W |
 | D15 | FULL | `smt_pick="trend"`, `one_market` |
-| D22 | SIMPLIFIED | `bias_open_src` "spy" / "es_map", `levels.map_midnight`, `prepare(ref_df)`, `paper.snapshot` fetches the `es_symbol` bars through Schwab when the switch is on (not exercised against the live feed) |
+| D22 | SIMPLIFIED | `bias_open_src` "spy" / "es_map", `levels.map_midnight`, `prepare(ref_df)`, `backtest.run(ref_df=)`, `paper.snapshot` fetches the `es_symbol` bars through Schwab when the switch is on (mock-feed test; not exercised against the live feed) |
 | Ep02.6 | FULL | `no_narrative_scalp`, `bias_neutral="scalp"` |
 | Ep03.12 | FULL | `htf_bias="draw_pd"`, `mmbm_zone` |
 | Ep06.6 | FULL | `midnight_target`, `midnight_confirm`, `midnight_below_ok` |

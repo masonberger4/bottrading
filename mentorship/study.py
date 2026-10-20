@@ -123,7 +123,8 @@ def main_index(out="runs/mentorship", variants=None, tfs=(5, 1), workers=6):
     books = []
     for (tf, v), g in t.groupby(["tf", "variant"]):
         books.append(B.combine(g[g.symbol == "SPX"], g[g.symbol == "NDX"],
-                               pick=IVARIANTS.get(v, {}).get("smt_pick", "first")).assign(book="combined"))
+                               pick=IVARIANTS.get(v, {}).get("smt_pick", "first"),
+                               one_market=bool(IVARIANTS.get(v, {}).get("one_market", False))).assign(book="combined"))
     t = pd.concat([t.assign(book=t.symbol)] + books, ignore_index=True)
     t.to_csv(f"{out}/index_trades.csv", index=False)
     rep = {"all": {f"{tf}m/{b}/{v}": B.stats(g) for (tf, b, v), g in t.groupby(["tf", "book", "variant"])}}
@@ -1222,6 +1223,24 @@ DECISIONS = {
     "L14_conf_hygiene": dict(target_hygiene=("htf",), htf_ce_draw=True, vi_htf_draw=True, vi_arrays=True),
     "L14c_matrix_tf_lower": dict(matrix_tf_lower=True),
     "L14e_cond_draw": dict(cond_draw=True),
+    "B7_how_rule_tag": dict(how_rule="tag"),
+    "B20.1_cot_tag_tag": dict(cot_tag="tag"),
+    "B20.3_wpr_tag_tag": dict(wpr_tag="tag"),
+    "B10_mwd_nest_tag": dict(mwd_nest="tag"),
+    "B17.5_smt_both_tag": dict(smt_both="tag"),
+    "L14e_cond_draw_umbrella": dict(draw_first="session", cond_draw=True),
+    "B2_draw_ext_target_nearest": dict(draw_ext_target=True),
+    "B3_bias_neutral_scalp": dict(htf_bias="combo2", bias_neutral="scalp"),
+    "B3_bias_neutral_both": dict(htf_bias="combo2", bias_neutral="both"),
+    "B5_news_topdown_tag": dict(news_topdown="tag", vi_arrays=True),
+    "B5_weekly_gate_tag": dict(weekly_gate="tag"),
+    "B9_objective_neutral_both": dict(htf_bias="combo", objective_neutral="both"),
+    "B17.3_objective_met_stop_both": dict(objective_met_stop="both"),
+    "B17_neutral_gate_range_market_tag": dict(neutral_gate=("range_market",), neutral_gate_mode="tag"),
+    "B17_neutral_gate_range_market_skip": dict(neutral_gate=("range_market",), neutral_gate_mode="skip"),
+    "B19.3_bond_range_skip": dict(bond_range="skip"),
+    "B17.5_decoupled_skip": dict(decoupled_mode="skip", decouple_corr=0.97),
+
     "A21_pd_zone_third": dict(htf_bias="pd", pd_zone="third"),
     "A21_pd_zone_ote": dict(htf_bias="pd", pd_zone="ote"),
     "A21_pd_zone_deep": dict(htf_bias="pd", pd_zone="deep"),
@@ -1235,6 +1254,8 @@ DECISIONS = {
     "B5_bellwether_tag": dict(bellwether_15m="tag"),
     "B7_ob_mt_bias": dict(htf_bias="ob_mt"),
     "B7_how_rule_no_long": dict(how_rule="no_long"),
+    "B7_how_rule_no_short": dict(how_rule="no_short"),
+    "B7_how_rule_both": dict(how_rule="both"),
     "B8_flip_all_triggers": dict(htf_bias="flip", flip_triggers=("ob_mt", "wk_dc", "flip_pd3", "flip_close_above", "flip_thu_wopen")),
     "B9_objective_neutral_day": dict(htf_bias="combo", objective_neutral="day"),
     "B9_objective_neutral_week": dict(htf_bias="combo", objective_neutral="week"),
@@ -1273,9 +1294,12 @@ DECISIONS = {
     "B22_qshift_size_half": dict(qshift_size=0.5),
     "M0.1_bias_candle_D": dict(htf_bias="candle", bias_candle="D"),
     "M0.1_bias_candle_W": dict(htf_bias="candle", bias_candle="W"),
+    "M0.1_bias_candle_D_midnight": dict(htf_bias="candle", bias_candle="D", bias_candle_open="midnight"),
+    "M0.1_bias_candle_W_midnight": dict(htf_bias="candle", bias_candle="W", bias_candle_open="midnight"),
     "D15_smt_pick_trend": dict(smt_pick="trend"),
     "D15_one_market": dict(one_market=True),
     "D22_bias_open_src_spy": dict(bias_open_src="spy"),
+    "D22_bias_open_src_es_map": dict(bias_open_src="es_map"),
     "Ep02.6_no_narrative_scalp": dict(no_narrative_scalp=True),
     "Ep03.12_draw_pd": dict(htf_bias="draw_pd", vi_arrays=True),
     "Ep03.12_mmbm_zone_filter": dict(mmbm_zone="filter"),
@@ -1290,6 +1314,7 @@ DECISIONS = {
     "A21_pd20_column_only": dict(cond_pd_tags=True),
     "Ep08.2_chop_skip_day": dict(chop_mode="skip_day"),
     "B14.3_nwog_bias_tag": dict(nwog_bias="tag"),
+    "B14.2_nwog_converge_shrink": dict(nwog_regime="tag", nwog_converge_mode="shrink"),
 }
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
 
@@ -1346,8 +1371,12 @@ def _dec_job(job):
     if len(SYMS) > 2:
         p2 = B.load(SYMS[2], tf, source=SRC)
         p2 = p2[(p2.index >= lo) & (p2.index < b)]
+    ref = None
+    if p.bias_open_src == "es_map":                 # D22: the futures midnight open mapped to the traded frame
+        ref = B.load("ES", tf, source="databento")
+        ref = ref[(ref.index >= lo) & (ref.index < b)]
     t = B.run(df[(df.index >= lo) & (df.index < b)], tf, SYMS[0], p, pa[(pa.index >= lo) & (pa.index < b)],
-              partner2=p2,
+              partner2=p2, ref_df=ref,
               bias_table=_bias_cache(tf, 570, p.vi_arrays, p.flip_triggers, B.table_kw(p)), meta=B.load_meta(SYMS[0], tf, SRC),
               lock_cuts=_lock_cache(tf, p))
     if p.smt_pick != "first" or p.one_market:

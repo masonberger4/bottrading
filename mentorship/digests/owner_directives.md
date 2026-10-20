@@ -108,6 +108,19 @@ Built as switches; the defaults stay as they are until the owner answers.
    AM low below (nearest), while ICT's draw was the buy side above - so the Ep 01 last-hour long is
    blocked by the default lock. Confirm the 15:00 lock, or tie the LH slot to the PM lock.
 
+9. **bias_htf review: three open questions (2026-10-19).**
+   (a) **`draw_lock_pick` default.** Directive #9 reads `"nearest"` ("`ordered` once the B2 columns exist"). The B2 columns exist now,
+   but the default stays `"nearest"` - flipping it changes every baseline. Choose: (a) flip the default to `"ordered"` (inefficiency
+   first, then liquidity by premium / discount; `draw_first="session"` already sets it), or (b) keep `"nearest"`. Study variants:
+   `B2_ordered_pick`, `B3_largest_pick`.
+   (b) **L14e `cond_draw`.** The first build failed a draw on any pullback of 0.25 x ADR5 (the Judas swing B3 expects), which flipped
+   the session about as often as it traded. Rebuilt: a draw FAILS only when the other side's nearest marked level is taken before the
+   draw is reached; the lock then moves to the next level beyond it. It is no longer part of the `draw_first` umbrella. Confirm this
+   reading of "if we failed to get to these levels" (080 ~16:58) or give the end condition you mean (time window / macro end).
+   (c) **COT / open-interest data.** `cot_tag` (B20.1, legacy "Commercial Positions" columns only) and `oi_tag` (B20.2, a plain 10-day
+   change tag - the "drop into HTF support" test is not built) are inert without `data/mentorship/cot/*` and `data/mentorship/ES_oi.csv`.
+   Downloading the CFTC files and the Databento statistics needs your go-ahead.
+
 Update (targets_partials): the revised #7 is built as the DEFAULT - `htf_resist_mode="bump"`. An opposing FVG (15m, 30m, 1h, 4h, D;
 `htf_resist_tfs`) between price and the draw gets a protected "bump" rung at its near edge (minus `htf_resist_buffer_pts`); the rest
 of the position stays for the draw. `htf_resist_mode="cap"` is the first build (exit before it, nothing beyond, no trade if the room
