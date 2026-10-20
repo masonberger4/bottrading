@@ -27,7 +27,7 @@ WIN = {
     "roll": [("2024-03-04", "2024-03-22")],                                       # the March roll week (Mar 11-15) and FOMC Mar 20
     "hol": [("2023-12-15", "2024-01-19")],                                        # Christmas eve / day, last day, Jan 2 first day, NFP Jan 5, MLK
     "sd": [("2023-07-10", "2023-07-28")],                                         # July: the seek-and-destroy months
-    "rare": [("2024-08-05", "2024-08-23")],                                       # trend_recipe="only": the one trade of 2024 (Aug 13)
+    "rare": [("2024-07-01", "2024-08-23")],                                       # trend_recipe="only": the one trade of 2024 (Aug 13); needs weeks of daily history for the array
     "wide": [("2023-09-05", "2023-11-10")],                                       # last resort for the "only" / very selective switches
 }
 LA_COLS = ["entry_time", "entry", "stop", "t1", "side", "day_tags"]
