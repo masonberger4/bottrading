@@ -1486,8 +1486,9 @@ _LD2_DECISIONS = {
     "L3-midnight-session-opening-ranges": dict(session_ors=((0, 30), (0, 60), (120, 30), (810, 30))),
     "L5-partial-redelivery": dict(nwog_rebalanced=True),
     "L5-cfd-nwog-mapping_monday_0930": dict(nwog_cfd_src="monday_0930"),
+    "L5-cfd-nwog-mapping_sunday_else_monday": dict(nwog_cfd_src="sunday_else_monday"),
     "A2-open-float": dict(open_float_pools=True),
-    "A11-htf-gap-own-tf_own": dict(balance_tf="own"),
+    "A11-htf-gap-own-tf_legacy": dict(balance_tf="legacy"),
     "A11-htf-gap-own-tf_next_lower": dict(balance_tf="next_lower"),
     "A7-immediate-rebalance-definition_open_space": dict(ir_def="open_space", ir_entries=True, htf_bias="combo"),
     "A7-immediate-rebalance-definition_zero_width": dict(ir_def="zero_width", ir_entries=True, htf_bias="combo"),
@@ -1590,7 +1591,7 @@ def _dec_job(job):
 def main_decisions(out="runs/mentorship", workers=6, tfs=(5, 1), variants=None, tag="dec"):
     variants = variants or list(DECISIONS)
     for tf in tfs:
-        _bias_cache(tf, kw=B.htf_kw(Params()))
+        _bias_cache(tf, kw=B.table_kw(Params()))
     jobs = [(tf, y, v) for tf in tfs for v in variants for y in range(2019, 2027)]
     jobs.sort(key=lambda j: (j[0] == 1, j[2] not in ("current", "defaults")))
     cache = Path(out) / f"{tag}_jobs"

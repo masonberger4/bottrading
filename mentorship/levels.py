@@ -214,13 +214,14 @@ def swing_tiers(h, l, n: int = 1) -> dict:
 IR_DEFS = ("a7", "open_space", "zero_width")
 
 
-def immediate_rebalances(o, h, l, c, tick: float, mode: str = "a7", overshoot_ticks: float = 2.0, body_mult: float = 1.5,
-                         avg_n: int = 20, max_back: int = 60) -> list[tuple[int, str]]:
+def immediate_rebalances_ex(o, h, l, c, tick: float, mode: str = "a7", overshoot_ticks: float = 2.0, body_mult: float = 1.5,
+                            avg_n: int = 20, max_back: int = 60) -> list[tuple]:
     """A7 immediate rebalance (048 ~39:02; 060 ~7:20; 092 ~1:41:14) [our interpretation of the bar
     test, the same as sb_model.immediate_rebalance]: an up-close displacement candle k-1 whose NEXT
     candle k trades straight back to the high of the candle before it, h[k-2], within one tick and
     leaves no gap (an FVG is the deferred rebalance) -> (k, "bull"); bearish mirror (down-close
-    k-1, h[k] back up to l[k-2]) -> (k, "bear"). Known at candle k's close.
+    k-1, h[k] back up to l[k-2]) -> (k, "bear"). Known at candle k's close. `immediate_rebalances_ex` returns (k, kind, bound, d): the level that was rebalanced to (the bounding candle's high / low) and the
+    displacement candle d (review fix #85: the entry's level and EQ come from them, not from the a7 geometry); `immediate_rebalances` keeps (k, kind).
     Caption-gap A7-immediate-rebalance-definition (`mode` = Params.ir_def; 059 ~4:16, 060 ~7:29, 061 ~1:23:38, 078 ~1:15:05,
     100 ~44:46, 099 ~1:04:01):
       "a7"          as above (yesterday's high, the next candle, within a tick)
@@ -242,9 +243,9 @@ def immediate_rebalances(o, h, l, c, tick: float, mode: str = "a7", overshoot_ti
     if mode == "a7":
         for k in range(2, n):
             if c[k - 1] > o[k - 1] and abs(l[k] - h[k - 2]) <= tick and l[k] <= h[k - 2] + 1e-12:
-                out.append((k, "bull"))
+                out.append((k, "bull", float(h[k - 2]), k - 1))
             elif c[k - 1] < o[k - 1] and abs(h[k] - l[k - 2]) <= tick and h[k] >= l[k - 2] - 1e-12:
-                out.append((k, "bear"))
+                out.append((k, "bear", float(l[k - 2]), k - 1))
         return out
     if mode == "zero_width":
         half = 0.5 * tick + 1e-12
@@ -255,9 +256,9 @@ def immediate_rebalances(o, h, l, c, tick: float, mode: str = "a7", overshoot_ti
                 continue
             big = abs(c[k - 1] - o[k - 1]) >= body_mult * prior.mean()
             if big and c[k - 1] > o[k - 1] and abs(l[k] - h[k - 2]) <= half:
-                out.append((k, "bull"))
+                out.append((k, "bull", float(h[k - 2]), k - 1))
             elif big and c[k - 1] < o[k - 1] and abs(h[k] - l[k - 2]) <= half:
-                out.append((k, "bear"))
+                out.append((k, "bear", float(l[k - 2]), k - 1))
         return out
     os_ = overshoot_ticks * tick
     for d in range(1, n - 1):
@@ -282,12 +283,22 @@ def immediate_rebalances(o, h, l, c, tick: float, mode: str = "a7", overshoot_ti
             if k == d + 2 and not ((l[d + 1] > bound + tick) if up else (h[d + 1] < bound - tick)):
                 break                                    # candle d+1 already reached it (or crossed): d+2 is not the first retrace
             if up and o[k] > bound + tick and bound - os_ <= l[k] <= bound + tick and c[k] > bound:
-                out.append((k, "bull"))
+                out.append((k, "bull", float(bound), d))
                 break
             if dn and o[k] < bound - tick and bound - tick <= h[k] <= bound + os_ and c[k] < bound:
-                out.append((k, "bear"))
+                out.append((k, "bear", float(bound), d))
                 break
-    return sorted(set(out))
+    best = {}
+    for k, kd, b_, d_ in out:                   # one answer per (k, kind): the NEAREST displacement candle (largest d) [our interpretation]
+        if (k, kd) not in best or d_ > best[(k, kd)][3]:
+            best[(k, kd)] = (k, kd, b_, d_)
+    return sorted(best.values())
+
+
+def immediate_rebalances(o, h, l, c, tick: float, mode: str = "a7", overshoot_ticks: float = 2.0, body_mult: float = 1.5,
+                         avg_n: int = 20, max_back: int = 60) -> list[tuple[int, str]]:
+    """(k, kind) of immediate_rebalances_ex - see there for the three definitions."""
+    return [(k, kd) for k, kd, *_ in immediate_rebalances_ex(o, h, l, c, tick, mode, overshoot_ticks, body_mult, avg_n, max_back)]
 
 
 def vacuum_block(o, c, k: int, min_gap: float = 0.0) -> Zone | None:
@@ -793,6 +804,7 @@ def voids(h, l) -> list[Zone]:
 
 
 MIT_DEFS = ("a15", "stoprun")
+STOPRUN_X_MAX = 6
 
 
 def mitigation_blocks(o, h, l, c, n: int = 1, legacy: bool = False, with_mt: bool = False, variant: str = "a15") -> list[Zone]:
@@ -817,27 +829,32 @@ def mitigation_blocks(o, h, l, c, n: int = 1, legacy: bool = False, with_mt: boo
     for i in range(len(c)):
         for kind, hs, ls, sign in (("bull", ph, pl, 1), ("bear", pl, ph, -1)):
             hk = [p for p in hs if p.known <= i]
+            if variant == "stoprun":
+                # review fix: every confirmed swing high X (the last `STOPRUN_X_MAX` of them [our interpretation]) can be the failed high U,
+                # not only the newest one - an intermediate pivot formed during the rally back to U must not hide it
+                for H in hk[-STOPRUN_X_MAX:]:
+                    if (kind, H.i) in used:
+                        continue
+                    before = [p for p in ls if p.i < H.i]
+                    later = [p for p in ls if p.i > H.i and p.known <= i]
+                    if not before or not later:
+                        continue
+                    A, B = before[-1], (min if sign > 0 else max)(later, key=lambda p: p.price)
+                    stopped = B.price < A.price if sign > 0 else B.price > A.price
+                    blk = order_block(o, h, l, c, H.i - n, H.i, "bear" if sign > 0 else "bull")
+                    if not stopped or blk is None:
+                        continue
+                    broke = (c[i] > blk.top if sign > 0 else c[i] < blk.bottom) and i > B.i
+                    if broke:
+                        body = max(o[blk.src], c[blk.src]) if sign > 0 else min(o[blk.src], c[blk.src])
+                        top, bot = (blk.top, float(body)) if sign > 0 else (float(body), blk.bottom)
+                        out.append(Zone(kind, float(top), float(bot), i, blk.src,
+                                        float((o[blk.src] + c[blk.src]) / 2) if with_mt else float("nan")))
+                        used.add((kind, H.i))
+                continue
             if not hk or (kind, hk[-1].i) in used:
                 continue
             H = hk[-1]                                 # X: the swing high the close breaks
-            if variant == "stoprun":
-                before = [p for p in ls if p.i < H.i]
-                later = [p for p in ls if p.i > H.i and p.known <= i]
-                if not before or not later:
-                    continue
-                A, B = before[-1], (min if sign > 0 else max)(later, key=lambda p: p.price)
-                stopped = B.price < A.price if sign > 0 else B.price > A.price
-                blk = order_block(o, h, l, c, H.i - n, H.i, "bear" if sign > 0 else "bull")
-                if not stopped or blk is None:
-                    continue
-                broke = (c[i] > blk.top if sign > 0 else c[i] < blk.bottom) and i > B.i
-                if broke and (kind, H.i) not in used:
-                    body = max(o[blk.src], c[blk.src]) if sign > 0 else min(o[blk.src], c[blk.src])
-                    top, bot = (blk.top, float(body)) if sign > 0 else (float(body), blk.bottom)
-                    out.append(Zone(kind, float(top), float(bot), i, blk.src,
-                                    float((o[blk.src] + c[blk.src]) / 2) if with_mt else float("nan")))
-                    used.add((kind, H.i))
-                continue
             if legacy:
                 later = [p for p in ls if p.i > H.i and p.known <= i]
                 if len(later) < 2:
@@ -1558,7 +1575,8 @@ def engineered_pools(highs: list, lows: list, i: int, short_pts: float, h=None, 
     return out
 
 
-def nwog_redelivery(o, h, l, c, start: int, near: float, far: float, tick: float, pts: float = 1.0, end: int | None = None):
+def nwog_redelivery(o, h, l, c, start: int, near: float, far: float, tick: float, pts: float = 1.0, end: int | None = None,
+                    until_end: int | None = None):
     """Caption-gap L5-partial-redelivery (019 ~16:36: "it does not need to come back to Friday's close"): the both-way redelivery
     state machine of one NWOG over the bars from `start` (the Sunday open bar), causal - each step completes at a bar's close.
     `near` = the Sunday open (the gap edge price starts at), `far` = Friday's close. s = +1 when the far edge is above the open.
@@ -1566,14 +1584,23 @@ def nwog_redelivery(o, h, l, c, start: int, near: float, far: float, tick: float
       (b) back_through then trades back through the gap to the open side (to the near edge)
       (c) ce_fail      a later return reaches the CE (within a tick), stays short of the far edge and the bar closes back out of
                        the CE
-      (d) exit_fvg     the exit leg leaves a lone FVG whose near edge (the one facing the gap) is within `pts` of the gap edge `near`
-    Reaching the far edge again after (a)/(b)/(c) restarts at (b) (a full redelivery). Returns None, or (bar, exit_edge): the
-    bar at whose close all four are met and the price of the exit FVG's near edge."""
+      (d) exit_fvg     the exit leg leaves a LONE FVG whose near edge (the one facing the gap) is within `pts` of the gap edge `near`
+                       and the bar completing it closes outside the gap (at / beyond the near edge, within `pts`)
+    Reaching the far edge again after (a)/(b)/(c) restarts at (b) (a full redelivery). Review fixes (#18): the gap must be at least
+    2 x `pts` tall (below that every FVG is "at the edge" and the CE / far / near tolerances collapse); an FVG on the exit leg that
+    is NOT at the gap edge makes the leg not lone (that CE failure is abandoned, the machine waits for another); `end` bounds the
+    sequence in time (htf.nwog_rebalanced: the first trading week after the Sunday open [our interpretation of "the first
+    session(s)"]); a LATER full redelivery to the far edge un-rebalances the gap (`until`).
+    Returns None, or (bar, exit_edge, until): the bar at whose close the sequence is met, the price of the exit FVG's near edge and the
+    first bar (through `until_end`) at whose close the far edge was reached again - or None."""
     n = len(c) if end is None else min(end, len(c) - 1) + 1
     s = 1 if far > near else -1
+    if abs(far - near) < 2 * pts - 1e-9:
+        return None
     ce = (far + near) / 2
     stage = 0
     ce_i = -1
+    done = None
     for k in range(max(start, 0), n):
         hit_far = h[k] >= far - tick if s > 0 else l[k] <= far + tick
         if stage == 0:
@@ -1594,12 +1621,26 @@ def nwog_redelivery(o, h, l, c, start: int, near: float, far: float, tick: float
                 stage, ce_i = 3, k
             continue
         # stage 3: the exit leg - an FVG against the far edge formed after the CE failure
-        if k >= ce_i + 2 and k >= 2:
-            if s > 0 and h[k] < l[k - 2] and k - 2 >= ce_i and abs(l[k - 2] - near) <= pts:
-                return k, float(l[k - 2])
-            if s < 0 and l[k] > h[k - 2] and k - 2 >= ce_i and abs(h[k - 2] - near) <= pts:
-                return k, float(h[k - 2])
-    return None
+        if k >= ce_i + 2 and k >= 2 and k - 2 >= ce_i:
+            if s > 0 and h[k] < l[k - 2]:
+                if abs(l[k - 2] - near) <= pts and c[k] <= near + pts:
+                    done = (k, float(l[k - 2]))
+                    break
+                stage = 2                                  # an FVG elsewhere on the leg: not a lone exit FVG
+            elif s < 0 and l[k] > h[k - 2]:
+                if abs(h[k - 2] - near) <= pts and c[k] >= near - pts:
+                    done = (k, float(h[k - 2]))
+                    break
+                stage = 2
+    if done is None:
+        return None
+    k, edge = done
+    until = None
+    for q in range(k + 1, (len(c) if until_end is None else min(until_end, len(c) - 1) + 1)):
+        if h[q] >= far - tick if s > 0 else l[q] <= far + tick:
+            until = q
+            break
+    return k, edge, until
 
 
 def ob_anchor_state(o, h, l, c, j: int, k: int, i: int, passes: int = 2, lead: int = 3) -> str:
@@ -1651,7 +1692,7 @@ def bk_state(h, l, z: Zone, i: int, depth: str = "ce", bprs=(), bpr_ce: bool = F
             state, ev = "retraced", k
             hh0 = float(np.max(np.asarray(h[z.i:k], float)))
         elif state == "retraced" and h[k] > hh0:
-            return "qualified", k
+            state, ev = "qualified", k              # review fix: keep scanning - a qualified gap that is LATER fully filled is dead
     return state, ev
 
 
@@ -1681,7 +1722,8 @@ def vi_breakaway(o, h, l, c, z: Zone, cons_n: int = 6, cons_k: float = 2.5, brok
 
 def common_gaps_cc(o, h, l, c) -> list[Zone]:
     """Caption-gap A6-gap-hierarchy-common (cc04_010 ~12:25), the CC "common gap": a BODY gap with no range closing the space. Bearish:
-    open[i] < close[i-1] and the whole candle i sits below that close (high[i] < close[i-1]); zone [open[i], close[i-1]], expected to be
+    open[i] < close[i-1] and the whole candle i sits below that close (high[i] < close[i-1]) [our interpretation of "no range closing the
+    space": the entire candle, wicks included, stays on the far side of the prior close]; zone [open[i], close[i-1]], expected to be
     closed by bodies; bullish mirror (open[i] > close[i-1], low[i] > close[i-1]). Zone.tag "cc_common"; known at candle i. (The 062
     "common gap" = an ordinary FVG is a different thing, tagged by ld3.gap_class.)"""
     out = []
@@ -1850,24 +1892,27 @@ def impulse_legs(h, l, o, c, n: int = 1, atr_n: int = 14, impulse_frac: float = 
     """Caption-gap A1-impulse-swing-unit (cc01_008 ~1:52): the impulse swings = the clear one-directional legs between ALTERNATING swing
     extremes (`pivots(n)`, same-type neighbours collapsed to the more extreme), kept only when impulsive (leg_is_impulsive: item 54's
     test). Returns [(i0, i1, p0, p1, up, known)] oldest first, known = the bar at which the leg's end swing is confirmed. A
-    drifting, overlapping leg is excluded. (Shared by the fib / dealing-range code; the active PARENT leg - item 130 - is chosen by the
-    caller.)"""
+    drifting, overlapping leg is excluded. A leg starts at the most extreme swing of the opposite-type run before it and ends at the
+    FIRST swing of the other type [our interpretation, review fix #134: causal - the answer at a bar never changes with later bars].
+    NOT wired into ote / leg_pd (they keep their own leg search, build_log #134); the active PARENT leg - item 130 - is not built.)"""
     ph, pl = pivots(h, l, n)
     seq = sorted([(q.i, q.price, 1, q.known) for q in ph] + [(q.i, q.price, -1, q.known) for q in pl])
-    alt = []
-    for q in seq:
-        if alt and alt[-1][2] == q[2]:
-            if (q[2] > 0 and q[1] >= alt[-1][1]) or (q[2] < 0 and q[1] <= alt[-1][1]):
-                alt[-1] = q
-            continue
-        alt.append(q)
     out = []
-    for p0, p1 in zip(alt[:-1], alt[1:]):
-        up = p1[2] > 0
-        a_ = max(0, p1[0] - atr_n)
-        atr = float((np.asarray(h[a_:p1[0] + 1], float) - np.asarray(l[a_:p1[0] + 1], float)).mean())
-        if leg_is_impulsive(o, h, l, c, p0[0], p1[0], up, atr, impulse_frac, atr_mult):
-            out.append((p0[0], p1[0], float(p0[1]), float(p1[1]), up, int(max(p1[3], p0[3]))))
+    run: list = []                       # the run of same-type swings just before the current one
+    for m, q in enumerate(seq):
+        if m and seq[m - 1][2] != q[2]:
+            # q is the FIRST swing of its type after a run of the opposite type: it ends a leg that starts at the run's extreme
+            # (review fix #134: the end is the first-confirmed swing, never replaced by a later, more extreme one, so the answer
+            # at a bar does not depend on later bars)
+            p0 = (max if q[2] < 0 else min)(run, key=lambda x: x[1])
+            up = q[2] > 0
+            a_ = max(0, q[0] - atr_n)
+            atr = float((np.asarray(h[a_:q[0] + 1], float) - np.asarray(l[a_:q[0] + 1], float)).mean())
+            if leg_is_impulsive(o, h, l, c, p0[0], q[0], up, atr, impulse_frac, atr_mult):
+                out.append((p0[0], q[0], float(p0[1]), float(q[1]), up, int(q[3])))
+            run = [q]
+        else:
+            run.append(q)
     return out
 
 

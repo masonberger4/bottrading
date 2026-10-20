@@ -241,8 +241,7 @@ def table_kw(p: Params) -> dict:
         kw["single_pass_draw"] = True
     if p.htf_ob_ltf_drill:
         kw["htf_ob_ltf_drill"] = True
-    if p.balance_tf != "legacy":
-        kw["balance_tf"] = p.balance_tf
+    kw["balance_tf"] = p.balance_tf     # always explicit (review fix #75: the default is now "own", so the cache file of the old default must not be reused)
     return kw
 
 

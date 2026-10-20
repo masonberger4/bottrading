@@ -273,7 +273,7 @@ def _nwog_bars():
 def test_nwog_redelivery_state_machine():
     o, h, l, c = _nwog_bars()
     r = L.nwog_redelivery(o, h, l, c, 0, 98.0, 100.0, 0.25)
-    assert r == (6, 98.4)                                                               # rebalanced at bar 6's close, the exit FVG's near edge 98.4
+    assert r == (6, 98.4, None)                                                               # rebalanced at bar 6's close, the exit FVG's near edge 98.4
     assert L.nwog_redelivery(o, h, l, c, 0, 98.0, 100.0, 0.25, end=5) is None            # causal: not before the FVG formed
     # the far edge never reached: not rebalanced
     h2 = h.copy(); h2[1] = 99.0; h2[2] = 99.2
@@ -284,7 +284,7 @@ def test_nwog_redelivery_state_machine():
     # an exit FVG far from the gap edge (> 1 pt) does not count
     assert L.nwog_redelivery(o, h, l, c, 0, 98.0, 100.0, 0.25, pts=0.2) is None
     # mirror: a gap with the far edge below the open
-    assert L.nwog_redelivery(-o, -l, -h, -c, 0, -98.0, -100.0, 0.25) == (6, -98.4)
+    assert L.nwog_redelivery(-o, -l, -h, -c, 0, -98.0, -100.0, 0.25) == (6, -98.4, None)
 
 
 def test_nwog_rebalanced_drops_far_edge():
@@ -324,8 +324,8 @@ def test_htf_nwog_rebalanced_table():
     assert len(og) == 1 and og.high.iloc[0] == 100.0 and og.low.iloc[0] == 98.0
     reb = htf.nwog_rebalanced(df, og, 0.25)
     assert list(reb) == [(100.0, 98.0)]
-    when, near, exit_ = reb[(100.0, 98.0)]
-    assert near == 98.0 and exit_ == 98.4 and when == idx[-1] + pd.Timedelta(minutes=5)           # the close of the FVG-completing bar
+    when, near, exit_, until = reb[(100.0, 98.0)]
+    assert near == 98.0 and exit_ == 98.4 and until is None and when == idx[-1] + pd.Timedelta(minutes=5)           # the close of the FVG-completing bar
     g = htf.gaps_for_day(og, date(2026, 6, 22), reb=reb)
     assert g == [("nwog", 100.0, 98.0, 99.0)] and g.reb == reb
     assert htf.nwog_rebalanced(df, None, 0.25) == {}
@@ -422,11 +422,11 @@ def test_balance_tf_own_vs_lower():
     lcl[5] = np.array([99.5, 101.0])                                                    # 4h bodies dip under the gap bottom inside day 5
     assert htf._arr_alive(d, 14, o, h, l, c2, wo, wc, wl, False, bal="own")             # a daily FVG with 4h bodies inside stays open under "own"
     assert not htf._arr_alive(d, 14, o, h, l, c2, wo, wc, wl, False, bal="next_lower", lcl=lcl)
-    # the table runs with each mode; legacy is the unchanged default
+    # the table runs with each mode; "own" is the default (review fix #75: the spec default), "legacy" the earlier behaviour
     x, _ = B.synthetic(start="2026-04-06", end="2026-05-15", tf=5, seed=3)
     base = htf.table(x, 1.0)
-    pd.testing.assert_frame_equal(base, htf.table(x, 1.0, balance_tf="legacy"))
-    for mode in ("own", "next_lower"):
+    pd.testing.assert_frame_equal(base, htf.table(x, 1.0, balance_tf="own"))
+    for mode in ("legacy", "next_lower"):
         assert len(htf.table(x, 1.0, balance_tf=mode)) == len(base)
 
 
@@ -546,10 +546,10 @@ def test_breakaway_state_machine_and_depth():
     sd = S.Side(1, o, h, l, c, 1)
     p = Params(**BASE)
     assert TP.breakaway_gap(sd, 0, 4) is None and TP.breakaway_gap(sd, 0, 4, p) is None             # past the CE
-    assert TP.breakaway_gap(sd, 0, 4, replace(p, bk_depth="any_open")) is not None                    # any portion left open
-    assert TP.breakaway_gap(sd, 0, 4, replace(p, bk_depth="any_open", bk_state=True)) is not None      # qualified
-    assert TP.breakaway_gap(sd, 0, 3, replace(p, bk_depth="any_open", bk_state=True)) is None          # retraced only: not yet a trail level
-    assert TP.breakaway_gap(sd, 0, 3, replace(p, bk_depth="any_open")) is not None
+    assert TP.breakaway_gap(sd, 0, 4, replace(p, bk_depth="any_open", breakaway="tag")) is not None                    # any portion left open
+    assert TP.breakaway_gap(sd, 0, 4, replace(p, bk_depth="any_open", bk_state=True, breakaway="tag")) is not None      # qualified
+    assert TP.breakaway_gap(sd, 0, 3, replace(p, bk_depth="any_open", bk_state=True, breakaway="tag")) is None          # retraced only: not yet a trail level
+    assert TP.breakaway_gap(sd, 0, 3, replace(p, bk_depth="any_open", breakaway="tag")) is not None
 
 
 # --- A9-vi-breakaway (95) ---------------------------------------------------------------------------------------------------
@@ -611,7 +611,7 @@ def test_gap_classes_and_cc_common():
     assert L3.gap_class(sd, 1, 95.0, g2, 30, p, leg_hi=115.0) == "measuring"
     assert L3.gap_class(sd, 1, 95.0, g3, 30, p, leg_hi=115.0) == "common"
     # under bk_state an unqualified first gap is no breakaway
-    ps = replace(p, bk_state=True, bk_depth="any_open")
+    ps = replace(p, bk_state=True, bk_depth="any_open", breakaway="tag")
     assert L3.gap_class(sd, 1, 95.0, g1, 30, ps, leg_hi=115.0) == "common"
     # trail_skip_common
     pos = dict(ext_i=1, ext=95.0, leg=(95.0, 115.0))
@@ -807,7 +807,8 @@ def test_consolidation_box_bodies_and_eq_touches():
     assert L.consolidation_box(*mk(up_only), True, 2)["valid"] is False
     assert L.consolidation_box(*mk(up_only), True, 0)["valid"] is True
     # N8 consol_pools: the range high / low are the BODY edges of the bars up to the chop switching on
-    p = Params(**BASE, consol_pools=True)
+    p = Params(**BASE, consol_pools=True, consol_body_range=True)
+    assert Params().consol_body_range is False                                           # review fix #127: opt-in, N8 as built by default
     df = day(rows * 2, start="09:30")
     ctx = ctx_for(df, history(D0, n=8), p)
     sd = S.Side(1, ctx.o, ctx.h, ctx.l, ctx.c, 1)
@@ -1016,9 +1017,9 @@ def test_new_switch_defaults_and_validation():
     assert (d.active_old_pool, d.round_pool_mode, d.engineered_pools, d.rth_pool_spent, d.session_ors, d.nwog_rebalanced, d.nwog_cfd_src,
             d.open_float_pools) == (False, "pool", False, False, (), False, "auto", False)
     assert (d.balance_tf, d.ir_def, d.ob_anchor_rule, d.htf_ob_ltf_drill, d.bk_depth, d.bk_state, d.bk_bpr_ce, d.vi_breakaway,
-            d.gap_classes, d.trail_skip_common) == ("legacy", "a7", "wick_len", False, "ce", False, False, False, False, False)
+            d.gap_classes, d.trail_skip_common) == ("own", "a7", "wick_len", False, "ce", False, False, False, False, False)
     assert (d.single_pass_draw, d.fvg_vi_extend_ce, d.balanced_range, d.orig_consol, d.consol_body_range, d.eq_min_sep_bars, d.void_rt_ob,
-            d.mit_def, d.fs_def, d.ipda_fv, d.ipda_consol_eq) == (False, True, False, False, True, 0, False, "a15", "m4", False, False)
+            d.mit_def, d.fs_def, d.ipda_fv, d.ipda_consol_eq) == (False, True, False, False, False, 0, False, "a15", "m4", False, False)
     assert (d.orig_consol_touches, d.orig_consol_tol_pts, d.consol_eq_touches, d.float_denied_bars, d.eng_short_pts, d.round_conf_pts) == \
         (3, 0.5, 2, 20, 3.0, 1.0)
     assert d.sb_model is False and d.sb_use_bias is False and d.want_all_engines is True                   # untouched
@@ -1035,7 +1036,7 @@ def test_new_switch_defaults_and_validation():
 
 def test_htf_kw_carries_the_array_switches():
     assert B.htf_kw(Params()) == {"c2_dir": True}                                          # unchanged at the built values (cache keys!)
-    assert B.table_kw(Params()) == {"c2_dir": True}
+    assert B.table_kw(Params()) == {"c2_dir": True, "balance_tf": "own"}
     kw = B.htf_kw(Params(nwog_cfd_src="monday_0930", void_rt_ob=True))
     assert kw["nwog_cfd_src"] == "monday_0930" and kw["void_rt_ob"] is True
     tk = B.table_kw(Params(single_pass_draw=True, htf_ob_ltf_drill=True, balance_tf="own"))
@@ -1114,7 +1115,7 @@ def test_look_ahead_es_htf_switches():
                ob_entry="both", leg_pd=0, min_draw_pts=0, htf_resist_cap=False)
     full = _no_look_ahead_x(df, 5, "ES", p, ENTRY + ["draw_px", "draw_name"], every=5, meta=meta)
     assert len(full)
-    q = replace(p, balance_tf="next_lower", draw_lock="off", ob_entry="post_mss", rth_pool_spent=True, extra_pools=True, engineered_pools=True,
+    q = replace(p, balance_tf="next_lower", nwog_cfd_src="auto", draw_lock="off", ob_entry="post_mss", rth_pool_spent=True, extra_pools=True, engineered_pools=True,
                 open_float_pools=True, round_pool_mode="confluence", ir_def="zero_width", ir_entries=True, bk_state=True, bk_depth="any_open",
                 breakaway="hold")
     _no_look_ahead_x(df, 5, "ES", q, ENTRY, every=5, meta=meta)

@@ -726,12 +726,14 @@ def ir_entry(ctx, sd, i, p, session, risk_mult):
     htf_bias), an immediate rebalance (A7 detector) completed at bar i -> enter at once (market),
     stop below the rebalancing candle [our interpretation of "very tight"]; out on a close below
     the EQ of the displacement candle (the range)."""
-    if getattr(ctx, "cur_bias", 0) != sd.sign or i not in set(sd.irs(0.25 * p.es_pt)):
+    info = sd.ir_info(0.25 * p.es_pt).get(i)
+    if getattr(ctx, "cur_bias", 0) != sd.sign or info is None:
         return None
-    eq = (sd.l[i - 1] + sd.h[i - 1]) / 2
+    bound, d = info                       # review fix #85: the rebalanced level and the displacement candle of THIS definition (open_space: older / d+2)
+    eq = (sd.l[d] + sd.h[d]) / 2
     if not sd.c[i] > eq:
         return None
-    sw = dict(session=session, name="ir", level=float(sd.h[i - 2]), key="ir", ext=float(sd.l[i]), ext_i=i,
+    sw = dict(session=session, name="ir", level=float(bound), key="ir", ext=float(sd.l[i]), ext_i=i,
               broke=i, sweep_i=i, smt=None, smt2=None, **{SYNTH: True})
     tags = dict(unicorn=False, fvg_bottom=float(sd.l[i]), fvg_ce=eq, entry_kind="ir", mitigation=False,
                 propulsion=False, market=True, no_leg_wait=True, imm_rebal=True, lvx={"ir_eq": (eq, False)},

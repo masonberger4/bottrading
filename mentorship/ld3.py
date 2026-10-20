@@ -84,13 +84,16 @@ def eng_all(ctx, sd, p, buy: bool) -> list:
     H, Lw = (sd.h, sd.l) if buy else (-sd.l, -sd.h)
     res = []
     n = len(H)
+    # review fix #5: the "+1 when an opposing FVG sits just above H1" weight, causal - an FVG counts only if it formed (z.i) by the bar the pool is created
+    opp = [(z.i, float(z.bottom)) for z in L.fvgs(H, Lw) if z.kind == "bear"]
+    bonus = lambda price, created: 1.0 if any(zi <= created and 0 <= fb - price <= tol for zi, fb in opp) else 0.0
     for m in (15, 60):
         if m < ctx.tf or m % ctx.tf:
             continue
         hs, ls = L.tf_pivots(ctx.idx, H, Lw, ctx.tf, m, 1)
         for price, score, created, h2 in L.engineered_pools(hs, ls, n - 1, tol):
             after = np.flatnonzero(H[h2 + 1:] > price)
-            res.append(dict(price=price, score=score, created=int(created), h2=int(h2), taken=int(h2 + 1 + after[0]) if len(after) else None,
+            res.append(dict(price=price, score=score + bonus(price, int(created)), created=int(created), h2=int(h2), taken=int(h2 + 1 + after[0]) if len(after) else None,
                             name=f"eng{m}_{int(h2)}"))
     ph, pl = daily_piv(ctx, sd.sign)
     if len(ph) and len(pl):
@@ -104,7 +107,7 @@ def eng_all(ctx, sd, p, buy: bool) -> list:
             if len(H[ctx.start:]):
                 a = np.flatnonzero(H[ctx.start:] > price)
                 taken = int(ctx.start + a[0]) if len(a) else None
-            res.append(dict(price=price, score=score, created=0, h2=int(h2), taken=taken, name=f"engD_{int(h2)}"))
+            res.append(dict(price=price, score=score + bonus(price, 0), created=0, h2=int(h2), taken=taken, name=f"engD_{int(h2)}"))
     c[key] = res
     return res
 
@@ -192,6 +195,22 @@ def target_pools(ctx, sd, i: int, p) -> list:
     return out
 
 
+def confluence_refs(ctx, sd, i: int, p, buy: bool = True, out_pools: dict | None = None) -> list:
+    """Reference pools (side space) for the A2 round-handle confluence: an old high / low or a rel-eq pool - the daily old highs / lows
+    (+ prior week / month) and rel-eq pools among `out_pools` (the sell side's dict), the active old pool (active_old_pool) and the
+    engineered pools (engineered_pools) [review fix #2: not every other pool of the ladder]."""
+    out = []
+    if out_pools:
+        out += [float(v) for k, v in out_pools.items() if k.startswith(("pdh", "pdl", "pwl", "pml_month", "rel_eq"))]
+    if p.active_old_pool:
+        v = old_pool(ctx, sd, i, p, buy)
+        if v is not None:
+            out.append(float(v))
+    if p.engineered_pools:
+        out += [float(v) for v, *_ in eng_pools(ctx, sd, i, p, buy)]
+    return out
+
+
 def eng_levels(ctx, sd, i: int, p) -> set:
     """The rounded engineered buy-side levels (they rank like rel-eq pools with eq_pref != "off")."""
     return {round(float(v), 9) for v, *_ in eng_pools(ctx, sd, i, p, True)} if p.engineered_pools else set()
@@ -206,9 +225,11 @@ def sell_pools(ctx, sd, i: int, p, out: dict) -> None:
             out["old_lo"] = float(v)
             cr_map["old_lo"] = ctx.start
     if p.engineered_pools:
-        for v, cr, nm, _ in eng_pools(ctx, sd, i, p, False):
+        sc_map = _c(ctx).setdefault("eng_score", {})
+        for v, cr, nm, sc in eng_pools(ctx, sd, i, p, False):
             out[nm] = float(v)
             cr_map[nm] = cr
+            sc_map[nm] = sc
     for name, hi, lo, cr in (getattr(ctx, "sors", []) if p.session_ors else []):
         if cr <= i:
             out[name] = float(sd.x(lo if sd.sign > 0 else hi))
@@ -218,6 +239,11 @@ def sell_pools(ctx, sd, i: int, p, out: dict) -> None:
             nm = f"float_lo{int(round(v * 100))}"
             out[nm] = float(v)
             cr_map[nm] = cr
+
+
+def eng_score(ctx, k: str) -> float:
+    """Ranking score of the engineered sell-side pool `k` (bars between H1 and H2, +1 for an opposing FVG at H1); 0 for any other key."""
+    return float(_c(ctx).get("eng_score", {}).get(k, 0.0))
 
 
 def created(ctx, k: str):
@@ -303,6 +329,8 @@ def nwog_levels(ctx, sd, i: int, kind: str, hi: float, lo: float, ce: float, p):
         return None
     now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
     if r[0] > now:
+        return None
+    if len(r) > 3 and r[3] is not None and r[3] <= now:      # review fix #18: a later full redelivery to the far edge un-rebalances it
         return None
     return [sd.x(r[1]), sd.x(r[2])]
 

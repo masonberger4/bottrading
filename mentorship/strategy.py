@@ -1738,13 +1738,13 @@ class Params:
     # L5-partial-redelivery (019 ~16:36)
     nwog_rebalanced: bool = False        # L5: an NWOG whose Sunday open ran to the far edge, back through, failed at the CE and left a lone FVG is rebalanced: only its near edge and the exit FVG's near edge stay targets
     # L5-cfd-nwog-mapping (036 ~1:32:40)
-    nwog_cfd_src: str = "auto"           # L5: how an index CFD's NWOG is built - "auto" / "sunday_bars" (the bars at the futures' Friday close and at Sunday 18:00; a weekend without them is flagged unavailable) / "monday_0930" (Friday close -> Monday 09:30 open, 039) / "none"
+    nwog_cfd_src: str = "auto"           # L5: how an index CFD's NWOG is built - "auto" / "sunday_bars" (the bars at the futures' Friday close and at Sunday 18:00; a weekend without them is flagged unavailable) / "monday_0930" (Friday close -> Monday 09:30 open, 039; all weekends) / "sunday_else_monday" (per weekend: Sunday bars when present, else the Monday 09:30 variant) / "none"
     # A2-open-float (033 ~24:26; cc05_002 ~1:10; cc09_004 ~4:02)
     open_float_pools: bool = False       # A2: the resting stops of a denied-continuation range - the short-term highs formed during the decline (the lows of a rally) - are pools (kind float); a consolidation's internal highs / lows weigh more with its bar count
     float_denied_bars: int = 20          # A2 [our interpretation]: "denied continuation" = no new low (high) for this many bars ...
     float_denied_adr: float = 0.3        # ... with the range since the extreme under this fraction of ADR5
     # A11-htf-gap-own-tf (061 ~40:20; 078 ~1:13:50)
-    balance_tf: str = "legacy"           # A11: which closes balance / retire an HTF array - "legacy" (as built: a weekly array is judged on DAILY closes) / "own" (only closes of its own timeframe; spec default) / "next_lower" (4h for daily, daily for weekly). OWNER QUESTION: spec default "own"
+    balance_tf: str = "own"              # A11: which closes balance / retire an HTF array - "own" (only closes of its own timeframe; the spec default) / "legacy" (the earlier build: a weekly array is judged on DAILY closes) / "next_lower" (4h for daily, daily for weekly). Changes the bias table: the old behaviour is "legacy" (build_log owner questions)
     # A7-immediate-rebalance-definition (059 ~4:16; 060 ~7:29; 061 ~1:23:38; 078 ~1:15:05; 100 ~44:46; 099 ~1:04:01)
     ir_def: str = "a7"                   # A7: "a7" (yesterday's high, next candle) / "open_space" (the candle that bounds the open space, not necessarily yesterday's) / "zero_width" (c3 low == c1 high to the tick after a large c2)
     ir_overshoot_ticks: float = 2.0      # A7 [our interpretation]: open_space may overshoot the level by this many ticks (no body close through)
@@ -1774,7 +1774,7 @@ class Params:
     orig_consol_touches: int = 3         # M1 [our interpretation]: >= this many body tops / highs within the tolerance
     orig_consol_tol_pts: float = 0.5     # M1 [our interpretation]: ES points
     # A21-consolidation-range-def (cc01_001 ~11:50 / ~17:54)
-    consol_body_range: bool = True       # A21: a consolidation's high / low are its max / min BODY (impulse legs keep the wick rule); acts on the N8 consol_pools range and the daily consolidation EQs
+    consol_body_range: bool = False      # A21 (review fix #127: opt-in, N8 consol_pools keeps the built wick range): a consolidation's high / low are its max / min BODY (impulse legs keep the wick rule); acts on the N8 consol_pools range and the daily consolidation EQs
     consol_eq_touches: int = 2           # A21 [our interpretation]: the EQ is touched from each side at least this many times (0: no check)
     # A3-clean-high (cc01_003 ~15:33)
     eq_min_sep_bars: int = 0             # A3: relative equal highs / lows need their swings at least this many bars apart (0 = the old rule; test 3)
@@ -1813,7 +1813,7 @@ class Params:
         if any(int(m) < 1 for m in self.htf_entry_arrays):
             raise ValueError(f"htf_entry_arrays {self.htf_entry_arrays!r}: minutes >= 1")
         # caption-gap pass (levels_detectors #2/3)
-        for name, ok in (("round_pool_mode", ("pool", "confluence", "tag_only")), ("nwog_cfd_src", ("auto", "sunday_bars", "monday_0930", "none")),
+        for name, ok in (("round_pool_mode", ("pool", "confluence", "tag_only")), ("nwog_cfd_src", ("auto", "sunday_bars", "monday_0930", "sunday_else_monday", "none")),
                          ("balance_tf", ("legacy", "own", "next_lower")), ("ir_def", L.IR_DEFS),
                          ("ob_anchor_rule", ("wick_len", "gap_presence")), ("bk_depth", ("ce", "any_open")),
                          ("mit_def", L.MIT_DEFS), ("fs_def", L.FS_DEFS)):
@@ -2523,6 +2523,12 @@ class Side:
         return self._lazy(("ir", tick, cfg), lambda: [k for k, kd in L.immediate_rebalances(self.o, self.h, self.l, self.c, tick, *cfg)
                                                       if kd == "bull"])
 
+    def ir_info(self, tick: float) -> dict:
+        """A7 review fix #85: {k: (bound level, displacement candle d)} of the bull immediate rebalances (side space), same detector as irs()."""
+        cfg = getattr(self, "ir_cfg", ("a7", 2.0, 1.5))
+        return self._lazy(("irx", tick, cfg), lambda: {k: (b, d) for k, kd, b, d in L.immediate_rebalances_ex(
+            self.o, self.h, self.l, self.c, tick, *cfg) if kd == "bull"})
+
     def opp_mits(self):
         """A15 opposing (bearish, side space) mitigation blocks - targets above a long."""
         return self._lazy("opp_mit", lambda: [z for z in L.mitigation_blocks(self.o, self.h, self.l, self.c, self.n,
@@ -2862,7 +2868,10 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
         for R, d in getattr(ctx, "news_dr", {}).items():
             if d["made"] is not None and d["made"] <= i:
                 pools.append((sd.x(d["hi"] if sd.sign > 0 else d["lo"]), d["made"] + 1))
-    pools += [(v, None) for v in _LD3.round_filter(_round_levels(ctx, sd, i, True, 2), [v for v, _ in pools] + list(eq), p)]   # #13 round handles (A2 round_pool_mode)
+    # #13 round handles (A2 round_pool_mode); review fix #2: "confluence" = an old high / low or a rel-eq pool near the handle - the old-high pools
+    # (pdh/pdl), rel-eq pools, the active old pool (A2) and the engineered pools (A3), not every other pool (PM, London, news...)
+    refs = [sd.x(ctx.pd[k]) for k in pdk if k in ctx.pd] + list(eq) + _LD3.confluence_refs(ctx, sd, i, p, True)
+    pools += [(v, None) for v in _LD3.round_filter(_round_levels(ctx, sd, i, True, 2), refs, p)]
     pools += _lv_target_pools(ctx, sd, i, p)                           # levels_detectors pools
     if p.close_draw:                        # Ep07.1: unrealized prior closes + last week's close as pools
         pools += _TP.close_pools(ctx, sd, i, p, above)
@@ -5176,7 +5185,7 @@ def _sell_side(ctx: DayCtx, sd: Side, session: str, i: int | None = None,
                 and (i is None or getattr(ctx, "news_made", 0) <= i - 1 or p is None or p.news_wait == "off")):
             out["news_range"] = sd.x(ctx.news_hl[1] if sd.sign > 0 else ctx.news_hl[0])
         if i is not None:
-            for k, v in enumerate(_LD3.round_filter(_round_levels(ctx, sd, i, False), list(out.values()), p) if p is not None else _round_levels(ctx, sd, i, False)):
+            for k, v in enumerate(_LD3.round_filter(_round_levels(ctx, sd, i, False), _LD3.confluence_refs(ctx, sd, i, p, False, out), p) if p is not None else _round_levels(ctx, sd, i, False)):
                 out["round"] = v
         return out
     if p is not None:
@@ -5191,7 +5200,7 @@ def _sell_side(ctx: DayCtx, sd: Side, session: str, i: int | None = None,
         for R, d in getattr(ctx, "news_dr", {}).items():
             if d["made"] is not None and d["made"] <= i - 1:
                 out["news_range" if R == 510 else f"news_range_{R}"] = sd.x(d["lo"] if sd.sign > 0 else d["hi"])
-        for v in (_LD3.round_filter(_round_levels(ctx, sd, i, False), list(out.values()), p) if p is not None
+        for v in (_LD3.round_filter(_round_levels(ctx, sd, i, False), _LD3.confluence_refs(ctx, sd, i, p, False, out), p) if p is not None
                   else _round_levels(ctx, sd, i, False)):   # #13: the nearest untaken round handle (A2 round_pool_mode)
             out["round"] = v
     if session in ("AM", "LUNCH"):
@@ -5406,12 +5415,13 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     intact = lambda k, v: _level_intact(ctx, l, i, k, v, session, tk)
     lo_i = min(sd.o[i], c[i]) if p.sweep_body else l[i]       # A4 sweep_body: a BODY must trade through
     hit = [(k, v) for k, v in lv.items() if _thru(lo_i, v, tk) and intact(k, v)]
+    releq = ("rel_eq", "eng") if p.engineered_pools else ("rel_eq",)     # caption-gap A3 (review fix #5): engineered pools count as rel-eq pools in the sweep pick
     if p.eq_pref == "require":                   # Ep06.7: only relative equal lows are liquidity
-        hit = [kv for kv in hit if kv[0].startswith("rel_eq")]
+        hit = [kv for kv in hit if kv[0].startswith(releq)]
     if sw is None and hit:
-        eqh = [kv for kv in hit if kv[0].startswith("rel_eq")]
+        eqh = [kv for kv in hit if kv[0].startswith(releq)]
         if p.eq_pref == "rank" and eqh:          # Ep06.7: rel-eq pools win (best-ranked with eq_rank)
-            k, v = eqh[0] if p.eq_rank else min(eqh, key=lambda kv: kv[1])
+            k, v = eqh[0] if p.eq_rank else min(eqh, key=lambda kv: (kv[1], -_LD3.eng_score(ctx, kv[0])))
         else:
             k, v = min(hit, key=lambda kv: kv[1])
         sw = sd.sweep = dict(session=session, name=("rel_eq_lows" if sd.sign > 0 else "rel_eq_highs") if k.startswith("rel_eq") else k,
@@ -5818,6 +5828,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     if p.fvg_q_hold:
         lvx["q_close"] = (top - 0.25 * (top - bottom), True)   # the upper quarter must hold
     ir = _ir_in_leg(sd, sw, i, p)
+    if ir and p.ir_def != "a7" and p.imm_rebalance_disp != "off":
+        lvt.append("ir_fast_" + p.ir_def)              # review fix #85: the "fast delivery expected" tag on the displacement-gate path too
     tags = dict(unicorn=bool(uni) and g in uni if not p.unicorn_pref else bool(uni), fvg_bottom=bottom,
                 fvg_ce=(top + bottom) / 2, zone_top=float(top), fvg_i=int(g.i),
                 entry_kind="ifvg" if is_ifvg else "implied_fvg" if is_imp else
@@ -6304,6 +6316,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         return None
     ld_tags, ld_init = _LD.order_tags(ctx, sd, sw, i, p, entry)    # caption-gap pass tags (vb exhaustion, init FVG, wick tier, ...)
     lvt += ld_tags
+    if p.engineered_pools and str(sw.get("key", "")).startswith("eng"):
+        lvt.append("engineered")                       # caption-gap A3-engineered-liquidity (035 ~49:54): the sweep took an engineered pool
     rt_ = _LD3.round_tag(ctx, sd, sw, p)               # caption-gap A2-round-number-pool: a sweep at a round handle is tagged
     if rt_:
         lvt.append(rt_)

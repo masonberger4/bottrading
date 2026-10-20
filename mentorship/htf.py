@@ -243,7 +243,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
           vi_body_death: bool = False, bx: str = "", vi_wick_overlap: bool = True, vi_multi: bool = False,
           vi_dead_rule: str = "full_span", vi_two_sided: bool = False, ipda_first20: bool = False,
           nwog_cfd_src: str = "auto", single_pass_draw: bool = False, void_rt_ob: bool = False, htf_ob_ltf_drill: bool = False,
-          balance_tf: str = "legacy") -> pd.DataFrame:
+          balance_tf: str = "own") -> pd.DataFrame:
     """One row per trading day: react / draw / pd / combo bias and the draw levels.
     `cut_min`: the row describes the market as known at that minute of the day - the overnight
     high/low/last use only bars that have CLOSED by cut_min (bar start + bar length <= cut_min).
@@ -567,7 +567,7 @@ def has_overnight(df: pd.DataFrame) -> bool:
     return bool(((t >= 18) | (t < 4)).mean() > 0.1)
 
 
-NWOG_SRCS = ("auto", "sunday_bars", "monday_0930", "none")
+NWOG_SRCS = ("auto", "sunday_bars", "monday_0930", "sunday_else_monday", "none")
 
 
 def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0, nwog_src: str = "auto") -> pd.DataFrame:
@@ -583,7 +583,9 @@ def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0
     preferred). "sunday_bars" = exactly that: a weekend whose first bar is NOT a Sunday-evening bar is left out and FLAGGED unavailable
     (`result.attrs["nwog_unavailable"]` = the dates of the first bar after each such weekend; the NWOG is NaN / missing, never guessed);
     "monday_0930" = the L5 variant of video 039: Friday's last close -> the open of the Monday 09:30 bar (known when that bar closes);
-    "none" = no NWOG rows; "auto" = the built behaviour = "sunday_bars" (the fall-back to the Monday variant is an explicit choice, never
+    "sunday_else_monday" = the PER-WEEKEND fall-back (review fix #68): a weekend that has a Sunday-evening reopen bar uses it, one that
+    does not uses the Monday 09:30 variant (the Monday is the first date after the break that is not the Sunday; no bar at 09:30-12:00 that
+    day = unavailable, flagged); "none" = no NWOG rows; "auto" = the built behaviour = "sunday_bars" (the fall-back to the Monday variant is an explicit choice, never
     silent: a frame without Sunday bars - SPY extended hours - would otherwise grow NWOGs it never had)."""
     if nwog_src not in NWOG_SRCS:
         raise ValueError(f"nwog_cfd_src {nwog_src!r}: expected one of {NWOG_SRCS}")
@@ -594,6 +596,7 @@ def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0
     weekend_brk = np.flatnonzero((t[1:] - t[:-1]) > pd.Timedelta(hours=30)) + 1 if len(t) > 1 else np.array([], int)
     sunday = {int(k) for k in weekend_brk if t[k].weekday() == 6 and 17 * 60 <= m[k] < 19 * 60}
     src = "sunday_bars" if nwog_src == "auto" else nwog_src
+    mon_wk = {int(k) for k in weekend_brk if int(k) not in sunday} if src == "sunday_else_monday" else None
     rows = []
     unavailable = []
     for k in np.flatnonzero(reopen):
@@ -601,7 +604,7 @@ def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0
             continue
         a, b = float(df.close.iloc[k - 1]), float(df.open.iloc[k])
         weekend = (t[k] - t[k - 1]) > pd.Timedelta(hours=30)
-        if weekend and src != "sunday_bars":
+        if weekend and src not in ("sunday_bars", "sunday_else_monday"):
             continue
         if not weekend and abs(b - a) <= ndog_min_pts * es_pt:
             continue
@@ -616,15 +619,18 @@ def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0
                          dir="down" if a > b else "up", close_before=a, open_after=b))
     if src == "sunday_bars":
         unavailable = [t[int(k)] for k in weekend_brk if int(k) not in sunday]
-    elif src == "monday_0930":
+    if src in ("monday_0930", "sunday_else_monday"):
         bm = bar_minutes(df)
-        for k in weekend_brk:
-            d0 = t[int(k)].normalize()
-            j = int(t.searchsorted(d0 + pd.Timedelta(hours=9, minutes=30)))
+        for k in (weekend_brk if src == "monday_0930" else sorted(mon_wk)):
+            k = int(k)
+            d0 = t[k].normalize()
+            if t[k].weekday() == 6:                    # review fix #68: skip the Sunday-evening bars - the 09:30 bar is the MONDAY's
+                d0 = d0 + pd.DateOffset(days=1)         # (calendar day: a Sunday DST change would shift an absolute 24 h)
+            j = int(t.searchsorted(d0.replace(hour=9, minute=30)))
             if j >= len(t) or t[j].normalize() != d0 or t[j].hour * 60 + t[j].minute >= 12 * 60:
-                unavailable.append(t[int(k)])
+                unavailable.append(t[k])
                 continue
-            a, b = float(df.close.iloc[int(k) - 1]), float(df.open.iloc[j])
+            a, b = float(df.close.iloc[k - 1]), float(df.open.iloc[j])
             day = (t[j] + pd.Timedelta(hours=7)).normalize().tz_localize(None)
             rows.append(dict(kind="nwog", high=max(a, b), low=min(a, b), ce=(a + b) / 2, up=b > a,
                              known=t[j] + pd.Timedelta(minutes=bm), week=day.to_period("W-FRI"),
@@ -635,12 +641,15 @@ def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0
     return out
 
 
-def nwog_rebalanced(df: pd.DataFrame, og: pd.DataFrame, tick: float, pts: float = 1.0, sessions_max: int = 60) -> dict:
+def nwog_rebalanced(df: pd.DataFrame, og: pd.DataFrame, tick: float, pts: float = 1.0, sessions_max: int = 5, life_sessions: int = 60) -> dict:
     """Caption-gap L5-partial-redelivery (019 ~16:36; Params.nwog_rebalanced): for each NWOG of `og` the time at which it became REBALANCED
     by the both-way redelivery sequence (levels.nwog_redelivery: far edge reached, back through the gap, a return that only reaches the CE
     and fails, an exit leg that leaves a lone FVG at the gap edge). The sequence is causal, so the state at time T needs only the bars up
-    to T. Returns {(round(high, 6), round(low, 6)): (known_time, near_edge, exit_edge)} - known_time = the close of the bar that
-    completes the sequence; near_edge = the gap edge on the Sunday-open side; exit_edge = the exit FVG's near edge."""
+    to T. Returns {(round(high, 6), round(low, 6)): (known_time, near_edge, exit_edge, until_time)} - known_time = the close of the bar that
+    completes the sequence; near_edge = the gap edge on the Sunday-open side; exit_edge = the exit FVG's near edge; until_time = the
+    close of the bar that later reached the far edge again (a full redelivery un-rebalances the gap), or None. Review fix #18: the
+    sequence must complete within `sessions_max` sessions (the first trading week) of the Sunday open [our interpretation]; the gap
+    must be taller than 2 x `pts`; the exit FVG must be the lone FVG of the leg (levels.nwog_redelivery)."""
     if og is None or not len(og):
         return {}
     o, h, l, c = (df[k].values.astype(float) for k in ("open", "high", "low", "close"))
@@ -650,15 +659,18 @@ def nwog_rebalanced(df: pd.DataFrame, og: pd.DataFrame, tick: float, pts: float 
     for r in og[og.kind == "nwog"].itertuples():
         k0 = int(df.index.searchsorted(r.known))
         end = min(len(df) - 1, k0 + sessions_max * per_day)
-        res = L.nwog_redelivery(o, h, l, c, k0, float(r.open_after), float(r.close_before), tick, pts, end)
+        res = L.nwog_redelivery(o, h, l, c, k0, float(r.open_after), float(r.close_before), tick, pts, end,
+                                min(len(df) - 1, k0 + life_sessions * per_day))
         if res is not None:
-            k, edge = res
-            out[(round(float(r.high), 6), round(float(r.low), 6))] = (df.index[k] + pd.Timedelta(minutes=bm), float(r.open_after), float(edge))
+            k, edge, u = res
+            out[(round(float(r.high), 6), round(float(r.low), 6))] = (
+                df.index[k] + pd.Timedelta(minutes=bm), float(r.open_after), float(edge),
+                None if u is None else df.index[u] + pd.Timedelta(minutes=bm))
     return out
 
 
 class GapList(list):
-    """gaps_for_day result that also carries `reb`: {(high, low): (known_time, near_edge, exit_edge)} of the rebalanced NWOGs (see nwog_rebalanced)."""
+    """gaps_for_day result that also carries `reb`: {(high, low): (known_time, near_edge, exit_edge, until_time)} of the rebalanced NWOGs (see nwog_rebalanced)."""
     reb = None
 
 
