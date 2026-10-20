@@ -1475,6 +1475,40 @@ _LD1_DECISIONS = {
     "A3-diagonal-support-is-liquidity_4": dict(diag_pools=True, diag_min_swings=4),
 }
 DECISIONS.update(_LD1_DECISIONS)
+# caption-gap pass, levels_detectors #2/3 (digests/rulebook_gaps/*.md): one variant per switch, name prefix = the gap id; look-ahead
+# tests: tests/test_caption_gap_ld2.py (+ the per-variant ES run of test_bias_htf_lookahead.py).
+_LD2_DECISIONS = {
+    "A2-which-old-high": dict(active_old_pool=True),
+    "A2-round-number-pool_confluence": dict(round_pool_mode="confluence"),
+    "A2-round-number-pool_tag_only": dict(round_pool_mode="tag_only"),
+    "A3-engineered-liquidity": dict(engineered_pools=True),
+    "L1-rth-session-pools": dict(rth_pool_spent=True, extra_pools=True),
+    "L3-midnight-session-opening-ranges": dict(session_ors=((0, 30), (0, 60), (120, 30), (810, 30))),
+    "L5-partial-redelivery": dict(nwog_rebalanced=True),
+    "L5-cfd-nwog-mapping_monday_0930": dict(nwog_cfd_src="monday_0930"),
+    "A2-open-float": dict(open_float_pools=True),
+    "A11-htf-gap-own-tf_own": dict(balance_tf="own"),
+    "A11-htf-gap-own-tf_next_lower": dict(balance_tf="next_lower"),
+    "A7-immediate-rebalance-definition_open_space": dict(ir_def="open_space", ir_entries=True, htf_bias="combo"),
+    "A7-immediate-rebalance-definition_zero_width": dict(ir_def="zero_width", ir_entries=True, htf_bias="combo"),
+    "A12-open-vs-wick-gap-criterion": dict(ob_anchor_rule="gap_presence", ob_entry="both", ob_entries="fallback"),
+    "A5-twice-traded-not-fvg": dict(ob_anchor_rule="gap_presence", ob_zone="sensitive", ob_entry="both"),
+    "A12-tf-relative-ob": dict(htf_ob_ltf_drill=True),
+    "A6-breakaway-depth-qualification": dict(bk_depth="any_open", bk_state=True, bk_bpr_ce=True, breakaway="tag", ladder_trail="breakaway", **SM_POST),
+    "A9-vi-breakaway": dict(vi_entries=True, vi_breakaway=True, **SM_POST),
+    "A6-gap-hierarchy-common": dict(gap_classes=True, trail_skip_common=True, trail_first_fvg=True, breakaway="tag", **SM_POST),
+    "new-single-candle-daily-inefficiency": dict(single_pass_draw=True),
+    "A5-vi-extended-ce": dict(fvg_vi_extend=True, fvg_vi_extend_ce=True, vi_arrays=True, **SM_POST),
+    "A11-balanced-range-body-filled": dict(balanced_range=True),
+    "M1-original-consolidation": dict(mmxm_ctx=True, orig_consol=True, **SM_POST),
+    "A21-consolidation-range-def": dict(consol_pools=True, consol_body_range=True, consol_eq_touches=2),
+    "A3-clean-high": dict(eq_min_sep_bars=3),
+    "A12-void-up-down-ob": dict(void_rt_ob=True),
+    "A15-stoprun-variant": dict(mit_def="stoprun", mit_targets=True),
+    "M4-failure-swing-no-new-extreme": dict(fs_def="no_new_extreme", cc_swings="failure", cc_fail_pts=5.0),
+    "B21-data-range-fv-eq": dict(ipda_pools=True, ipda_fv=True, ipda_consol_eq=True, ipda_eq_day="tag"),
+}
+DECISIONS.update(_LD2_DECISIONS)
 SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): their look-ahead tests are in test_silver_bullet.py
 
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)

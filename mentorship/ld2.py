@@ -90,14 +90,24 @@ def diag_level(ctx, sd, i: int, p) -> float | None:
 
 # --- N8 consolidation pools -----------------------------------------------------------------------------------------
 
-def consol_pool(ctx, sd, i: int, buy: bool):
+def consol_pool(ctx, sd, i: int, buy: bool, p=None):
     """N8-consolidation-builds-orders (cc01_002 ~17:28): once the chop test has RELEASED (a close beyond its range, known at
     that bar's close), the range's high / low are pools. (level, created_bar) in side space: buy=True the buy-side one (a
-    long's target), else the sell-side one (a sweep pool); None before the release."""
+    long's target), else the sell-side one (a sweep pool); None before the release.
+    Caption-gap A21-consolidation-range-def (levels_detectors #2/3; cc01_001 ~11:50 / ~17:54: "defined specifically by the bodies of the candles
+    not the wicks"): with Params.consol_body_range the range is the max / min BODY of the bars up to the moment the chop test switched on
+    (levels.consolidation_box) and it must pass ICT's check - the EQ touched from both sides consol_eq_touches times - else it is no
+    consolidation (None)."""
     ch = getattr(ctx, "chop", None)
     if ch is None or getattr(ch, "rel_i", None) is None or ch.rel_i >= i or ch.hi is None:
         return None
     hi, lo = ch.hi, ch.lo
+    if p is not None and p.consol_body_range and getattr(ch, "on_at", None) is not None:
+        a, b = ctx.start, int(ch.on_at)
+        box = L.consolidation_box(ctx.o[a:b + 1], ctx.h[a:b + 1], ctx.l[a:b + 1], ctx.c[a:b + 1], True, p.consol_eq_touches)
+        if not box["valid"]:
+            return None
+        hi, lo = box["high"], box["low"]
     real = (hi if sd.sign > 0 else lo) if buy else (lo if sd.sign > 0 else hi)
     return float(sd.x(real)), ch.rel_i + 1
 

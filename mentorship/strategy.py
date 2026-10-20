@@ -1722,6 +1722,72 @@ class Params:
     diag_pools: bool = False             # A3: a diagonal run of higher lows (lower highs) is a sweep pool (kind "diag") at the extrapolated line
     diag_min_swings: int = 3             # A3 [our interpretation]: swings within the tolerance of one line
 
+    # --- caption-gap pass, levels_detectors #2/3 (digests/rulebook_gaps/*.md; every switch cites its gap id + source video/time) ---
+    # A2-which-old-high (002 ~0:34)
+    active_old_pool: bool = False        # A2: the active buy-side pool = the first earlier daily swing high ABOVE today's high so far (walk back newest to oldest); the sell side mirrors
+    # A2-round-number-pool (002 ~2:37)
+    round_pool_mode: str = "pool"        # A2: round handles (round_pools): "pool" = standalone pools (as built) / "confluence" = kept only where an old high / low / rel-eq pool lies within round_conf_pts, tagged round_conf / "tag_only" = never a pool, tag only
+    round_conf_pts: float = 1.0          # A2 [our interpretation]: "near an old high" = within this many ES points
+    # A3-engineered-liquidity (035 ~49:54)
+    engineered_pools: bool = False       # A3: a lower high H2 that falls short of an older high H1 and then drops away builds buy stops above H1 - H1 is a pool (tag engineered), ranked by the time between them
+    eng_short_pts: float = 3.0           # A3 [our interpretation]: "falls short" = H2 within this many ES points below H1
+    # L1-rth-session-pools (067 ~15:00 / ~32:00 / ~55:50)
+    rth_pool_spent: bool = False         # L1: the previous PM / AM / lunch RTH ranges are spent only by RTH prints (>= 09:30 today), never by overnight trade
+    # L3-midnight-session-opening-ranges (050 ~18:13)
+    session_ors: tuple = ()              # L3: (start_minute, minutes) opening ranges, e.g. ((0, 30), (0, 60), (1200, 30), (120, 30), (810, 30)): their high / low are low-priority pools once complete (tag sor_<start>_<min>)
+    # L5-partial-redelivery (019 ~16:36)
+    nwog_rebalanced: bool = False        # L5: an NWOG whose Sunday open ran to the far edge, back through, failed at the CE and left a lone FVG is rebalanced: only its near edge and the exit FVG's near edge stay targets
+    # L5-cfd-nwog-mapping (036 ~1:32:40)
+    nwog_cfd_src: str = "auto"           # L5: how an index CFD's NWOG is built - "auto" / "sunday_bars" (the bars at the futures' Friday close and at Sunday 18:00; a weekend without them is flagged unavailable) / "monday_0930" (Friday close -> Monday 09:30 open, 039) / "none"
+    # A2-open-float (033 ~24:26; cc05_002 ~1:10; cc09_004 ~4:02)
+    open_float_pools: bool = False       # A2: the resting stops of a denied-continuation range - the short-term highs formed during the decline (the lows of a rally) - are pools (kind float); a consolidation's internal highs / lows weigh more with its bar count
+    float_denied_bars: int = 20          # A2 [our interpretation]: "denied continuation" = no new low (high) for this many bars ...
+    float_denied_adr: float = 0.3        # ... with the range since the extreme under this fraction of ADR5
+    # A11-htf-gap-own-tf (061 ~40:20; 078 ~1:13:50)
+    balance_tf: str = "legacy"           # A11: which closes balance / retire an HTF array - "legacy" (as built: a weekly array is judged on DAILY closes) / "own" (only closes of its own timeframe; spec default) / "next_lower" (4h for daily, daily for weekly). OWNER QUESTION: spec default "own"
+    # A7-immediate-rebalance-definition (059 ~4:16; 060 ~7:29; 061 ~1:23:38; 078 ~1:15:05; 100 ~44:46; 099 ~1:04:01)
+    ir_def: str = "a7"                   # A7: "a7" (yesterday's high, next candle) / "open_space" (the candle that bounds the open space, not necessarily yesterday's) / "zero_width" (c3 low == c1 high to the tick after a large c2)
+    ir_overshoot_ticks: float = 2.0      # A7 [our interpretation]: open_space may overshoot the level by this many ticks (no body close through)
+    ir_body_mult: float = 1.5            # A7 [our interpretation]: zero_width needs c2's body >= this x the mean body of the last 20 bars
+    # A12-open-vs-wick-gap-criterion / A5-twice-traded-not-fvg (cc05_015 ~11:32 / ~11:38; cc04_013 ~16:17)
+    ob_anchor_rule: str = "wick_len"     # A12: "wick_len" (the stubby / long wick rule) / "gap_presence" (a wick area traded through twice - no FVG - anchors on the open; an untraded gap keeps the wick extreme)
+    ob_anchor_passes: int = 2            # A12 [our interpretation]: the "twice" count - the block's own candle plus this many minus one other bars overlapping the wick area
+    # A12-tf-relative-ob (079 ~15:06)
+    htf_ob_ltf_drill: bool = False       # A12: a wrong-coloured HTF swing-extreme candle takes its OB from the last opposite-colour 1h bar inside it
+    # A6-breakaway-depth-qualification (062 ~37:12 / ~39:01; 065 ~4:39:02; 075 ~1:39:36; 084 ~29:16; cc04_009 ~13:37)
+    bk_depth: str = "ce"                 # A6: how deep a retrace may go and still be a breakaway gap - "ce" (A6: at most 50%) / "any_open" (062, cc04_009: any portion left open)
+    bk_state: bool = False               # A6: the candidate -> retraced -> QUALIFIED state machine; the breakaway trail (trail_breakaway / ladder_trail "breakaway") and the entry tag use only qualified gaps
+    bk_bpr_ce: bool = False              # A6 (065): a BPR directly beyond the gap's far edge limits the retrace to the near side of the CE even under any_open
+    # A9-vi-breakaway (079 ~14:20; 103 ~25:18)
+    vi_breakaway: bool = False           # A9: a VI on the candles leaving a consolidation / right after the MSS / inside the displacement leg beyond the retrace limit is a breakaway VI - not an entry zone
+    # A6-gap-hierarchy-common (062 ~39:41 / ~43:58; cc04_010 ~12:25)
+    gap_classes: bool = False            # A6: tag the entry gap breakaway / measuring / common (gap_<class>) and the CC body gaps (cc_common)
+    trail_skip_common: bool = False      # A6 [our interpretation, extrapolated]: never trail behind a COMMON gap (only breakaway / measuring gaps are trail references)
+    # new-single-candle-daily-inefficiency (091 ~25:37)
+    single_pass_draw: bool = False       # a large daily candle no other candle traded through is a draw: its CE, then the lower quadrant, until price trades back down through it
+    # A5-vi-extended-ce (098 ~1:09:26 / ~1:09:42)
+    fvg_vi_extend_ce: bool = True        # A5: with fvg_vi_extend the CE is the midpoint of the EXTENDED zone and a wick-linked VI extends it too (a fix, not a behaviour switch)
+    # A11-balanced-range-body-filled (098 ~34:57 / ~1:00:35; 099 ~11:14)
+    balanced_range: bool = False         # A11: a body-filled balanced range (>= 3 overlapping candles, both ways, left by displacement) has an EQ; the target ladder does not reach past its EQ
+    # M1-original-consolidation (104 ~27:53)
+    orig_consol: bool = False            # M1: mmxm_ctx draws to the smooth-edge level of the original consolidation (not the parent swing high)
+    orig_consol_touches: int = 3         # M1 [our interpretation]: >= this many body tops / highs within the tolerance
+    orig_consol_tol_pts: float = 0.5     # M1 [our interpretation]: ES points
+    # A21-consolidation-range-def (cc01_001 ~11:50 / ~17:54)
+    consol_body_range: bool = True       # A21: a consolidation's high / low are its max / min BODY (impulse legs keep the wick rule); acts on the N8 consol_pools range and the daily consolidation EQs
+    consol_eq_touches: int = 2           # A21 [our interpretation]: the EQ is touched from each side at least this many times (0: no check)
+    # A3-clean-high (cc01_003 ~15:33)
+    eq_min_sep_bars: int = 0             # A3: relative equal highs / lows need their swings at least this many bars apart (0 = the old rule; test 3)
+    # A12-void-up-down-ob (cc02_007 ~13:33)
+    void_rt_ob: bool = False             # A12: on 4h and higher, a one-sided rally then a one-sided drop through the same range = one bearish OB (MT 50%); bullish mirror
+    # A15-stoprun-variant (cc03_002 ~19:11)
+    mit_def: str = "a15"                 # A15: "a15" (failure swing, cc04_004) / "stoprun" (the up-close candle before a down leg that ran a low's stops: its upper wick is the block)
+    # M4-failure-swing-no-new-extreme (cc05_005 ~19:40)
+    fs_def: str = "m4"                   # M4: "m4" (the higher low B fails to reach the key level) / "no_new_extreme" (the earlier swing reached it; B simply makes no new extreme)
+    # B21-data-range-fv-eq (cc05_003 ~1:18:00)
+    ipda_fv: bool = False                # B21: the daily gaps (FVGs) inside the 20 / 40 / 60-day windows are array targets
+    ipda_consol_eq: bool = False         # B21: the EQ of each daily consolidation inside the windows is a target level, and ipda_eq_day tests price against those EQs (no news driver)
+
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
         _sb_check(self)
@@ -1746,6 +1812,21 @@ class Params:
             raise ValueError("pool_tf >= 1, shield_passes >= 1, diag_min_swings >= 3, breakaway_ctx_pts >= 0")
         if any(int(m) < 1 for m in self.htf_entry_arrays):
             raise ValueError(f"htf_entry_arrays {self.htf_entry_arrays!r}: minutes >= 1")
+        # caption-gap pass (levels_detectors #2/3)
+        for name, ok in (("round_pool_mode", ("pool", "confluence", "tag_only")), ("nwog_cfd_src", ("auto", "sunday_bars", "monday_0930", "none")),
+                         ("balance_tf", ("legacy", "own", "next_lower")), ("ir_def", L.IR_DEFS),
+                         ("ob_anchor_rule", ("wick_len", "gap_presence")), ("bk_depth", ("ce", "any_open")),
+                         ("mit_def", L.MIT_DEFS), ("fs_def", L.FS_DEFS)):
+            if getattr(self, name) not in ok:
+                raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
+        for t_ in self.session_ors:
+            if len(t_) != 2 or not (0 <= int(t_[0]) < 1440 and int(t_[1]) > 0):
+                raise ValueError(f"session_ors {self.session_ors!r}: expected (start_minute, minutes) pairs")
+        if (self.round_conf_pts < 0 or self.eng_short_pts < 0 or self.float_denied_bars < 1 or self.float_denied_adr < 0
+                or self.ob_anchor_passes < 1 or self.orig_consol_touches < 2 or self.orig_consol_tol_pts < 0
+                or self.consol_eq_touches < 0 or self.eq_min_sep_bars < 0 or self.ir_overshoot_ticks < 0 or self.ir_body_mult <= 0):
+            raise ValueError("round_conf_pts, eng_short_pts, float_denied_adr, orig_consol_tol_pts, ir_overshoot_ticks >= 0; float_denied_bars, "
+                             "ob_anchor_passes >= 1; orig_consol_touches >= 2; consol_eq_touches, eq_min_sep_bars >= 0; ir_body_mult > 0")
         if self.vi_dead_rule == "overlap" or self.vi_two_sided_draw:
             self.vi_body_death = True      # A9: the body death rules (full_span / overlap) and the two-sided draw both need it (replace() re-runs this)
         for name, ok in (("news_wait", ("range", "fixed", "off")), ("draw_lock", ("session", "off")),
@@ -2045,6 +2126,16 @@ class Params:
         if self.stop_tick_pts > 0 and self.stop_pad_ticks <= 0 and self.stop_buffer != 0.01:
             inert.append("stop_buffer is ignored while stop_tick_pts > 0 (the one-tick pad is the default): "
                          "set stop_tick_pts=0 to use stop_buffer, or stop_pad_ticks=N")
+        # caption-gap pass (levels_detectors #2/3)
+        if self.ir_def != "a7" and not (self.ir_entries or self.imm_rebalance_disp != "off"):
+            inert.append("ir_def acts through ir_entries (M11a) or imm_rebalance_disp")
+        if self.vi_breakaway and not (self.vi_entries or self.vi_targets or "vi" in self.entry_arrays):
+            inert.append("vi_breakaway acts on the VI entry zones / entry_arrays 'vi' / vi_targets")
+        if (self.bk_state or self.bk_depth != "ce" or self.bk_bpr_ce) and not (self.breakaway != "off" or self.trail_breakaway
+                                                                               or self.ladder_trail == "breakaway"):
+            inert.append("bk_depth / bk_state / bk_bpr_ce act on the breakaway tag, trail_breakaway and ladder_trail='breakaway'")
+        if self.nwog_rebalanced and self.gap_mode != "ict":
+            inert.append("nwog_rebalanced needs gap_mode='ict' (the NWOG table)")
         if inert:
             warnings.warn("inert switches: " + "; ".join(inert), stacklevel=3)
 
@@ -2298,6 +2389,7 @@ class Trade:
     roll_day: bool = False         # N7.5 hook: a contract roll from the prior 18:00 through the day
     # package levels_detectors
     init_fvg_respected: str = ""   # caption-gap N-initial-fvg-reference: "day:respected|week:untested|..." as of the entry
+    org_dir: str = ""              # caption-gap L7-org-close-and-direction: "discount" / "premium" - the opening range gap's direction at the entry (from 09:30)
     lv_tags: str = ""              # "|"-joined: breakaway, ipda_eq, org_draw / org_breakaway / org_half /
                                    # org_q_hold, wick_react, gap_stop, release_open, bpr_cap, no_draw,
                                    # open_to_pdh / open_to_pdl (A7 daily), draw_<override>
@@ -2369,7 +2461,8 @@ class Side:
     def __init__(self, sign, o, h, l, c, n, min_gap: float = 0.0, c2_dir: bool = False,
                  vi_min_gap: float = 0.0, mit_legacy: bool = False, single_bar: float = 0.0,
                  vi_wick_overlap: bool = True, vi_multi: bool = False, bpr_def: str = "overlap",
-                 bpr2_two_candle: bool = False, pb_def: str = "a16", mit_mt: bool = False, vi_dead_rule: str = "full_span"):
+                 bpr2_two_candle: bool = False, pb_def: str = "a16", mit_mt: bool = False, vi_dead_rule: str = "full_span",
+                 mit_def: str = "a15", ir_cfg: tuple = ("a7", 2.0, 1.5)):
         self.sign = sign
         if sign > 0:
             self.o, self.h, self.l, self.c = o, h, l, c
@@ -2385,6 +2478,8 @@ class Side:
         self.pb_def = pb_def                                                   # A16
         self.vi_dead_rule = vi_dead_rule                                       # A9 vi_dead_rule (intraday Side VIs)
         self.mit_mt = mit_mt                                                   # A12 mit_mt_invalid: mitigation blocks carry their MT
+        self.mit_def = mit_def                                                 # A15 mit_def (levels_detectors #2/3): "a15" / "stoprun"
+        self.ir_cfg = ir_cfg                                                   # A7 ir_def, overshoot ticks, body multiple
         self.gaps = [z for z in L.fvgs(self.h, self.l, self.o, self.c, c2_dir, single_bar)
                      if z.kind == "bull" and z.top - z.bottom >= min_gap]
         self.min_gap = min_gap
@@ -2424,13 +2519,15 @@ class Side:
 
     def irs(self, tick: float):
         """A7 immediate rebalances (bull kind, side space): candle indices."""
-        return self._lazy(("ir", tick), lambda: [k for k, kd in L.immediate_rebalances(self.o, self.h, self.l, self.c, tick)
-                                                 if kd == "bull"])
+        cfg = getattr(self, "ir_cfg", ("a7", 2.0, 1.5))        # caption-gap A7 ir_def (ld3.attach)
+        return self._lazy(("ir", tick, cfg), lambda: [k for k, kd in L.immediate_rebalances(self.o, self.h, self.l, self.c, tick, *cfg)
+                                                      if kd == "bull"])
 
     def opp_mits(self):
         """A15 opposing (bearish, side space) mitigation blocks - targets above a long."""
         return self._lazy("opp_mit", lambda: [z for z in L.mitigation_blocks(self.o, self.h, self.l, self.c, self.n,
-                                                                             self.mit_legacy, self.mit_mt) if z.kind == "bear"])
+                                                                             self.mit_legacy, self.mit_mt, getattr(self, "mit_def", "a15"))
+                                              if z.kind == "bear"])
 
     def implied(self):
         """A24.1 implied FVGs (bull kind, side space; setups_models implied_fvg)."""
@@ -2452,8 +2549,8 @@ class Side:
 
     def mitigations(self):
         if self._mit is None:
-            self._mit = [z for z in L.mitigation_blocks(self.o, self.h, self.l, self.c, self.n, self.mit_legacy, self.mit_mt)
-                         if z.kind == "bull"]
+            self._mit = [z for z in L.mitigation_blocks(self.o, self.h, self.l, self.c, self.n, self.mit_legacy, self.mit_mt,
+                                                        getattr(self, "mit_def", "a15")) if z.kind == "bull"]
         return self._mit
 
     def zones_tf(self, idx, base: int, m: int):
@@ -2738,10 +2835,14 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
         if m is not None:
             hi, lo = ctx.pre_at[m]
             pools.append((sd.x(hi if sd.sign > 0 else lo), at(m)))
+    rth_pools = []
     if p.extra_pools:
         for name, (hi, lo, ready) in ctx.sess.items():
             if ctx.t[i] >= ready:           # complete only from `ready` (London 05:00: a 03:00 London
                 created = ctx.start if name == "prev_pm" else at(ready)   # SB no longer sees it early)
+                if p.rth_pool_spent and name in _LD3.RTH_POOLS:           # caption-gap L1: spent by RTH prints only (judged below)
+                    rth_pools.append((sd.x(hi if sd.sign > 0 else lo), created))
+                    continue
                 pools.append((sd.x(hi if sd.sign > 0 else lo), created))
     if ctx.or_hl is not None and ctx.t[i] >= ctx.or_end:
         pools.append((sd.x(ctx.or_hl[0] if sd.sign > 0 else ctx.or_hl[1]), at(ctx.or_end)))
@@ -2761,11 +2862,13 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
         for R, d in getattr(ctx, "news_dr", {}).items():
             if d["made"] is not None and d["made"] <= i:
                 pools.append((sd.x(d["hi"] if sd.sign > 0 else d["lo"]), d["made"] + 1))
-    pools += [(v, None) for v in _round_levels(ctx, sd, i, True, 2)]   # #13 round handles
+    pools += [(v, None) for v in _LD3.round_filter(_round_levels(ctx, sd, i, True, 2), [v for v, _ in pools] + list(eq), p)]   # #13 round handles (A2 round_pool_mode)
     pools += _lv_target_pools(ctx, sd, i, p)                           # levels_detectors pools
     if p.close_draw:                        # Ep07.1: unrealized prior closes + last week's close as pools
         pools += _TP.close_pools(ctx, sd, i, p, above)
     eqs = {round(v, 9) for v in eq} if p.eq_pref != "off" else set()   # Ep06.7: kind "pool_eq"
+    if p.eq_pref != "off":
+        eqs |= _LD3.eng_levels(ctx, sd, i, p)                          # caption-gap A3: engineered pools rank like rel-eq pools
     pk = lambda v: "pool_eq" if round(v, 9) in eqs else "pool"
     tk = _tick(p)                           # A2: spent only once traded 1 tick through
     if p.seen_from_created:
@@ -2778,8 +2881,15 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
     else:                                   # the old rule: anything above today's high so far
         seen = sd.h[ctx.start:ext_i].max() if ext_i is not None and ext_i > ctx.start else -np.inf
         lv = [(v, pk(v)) for v, _ in pools if not _spent_up(seen, v, tk)]
+    for v, cr in rth_pools:                 # caption-gap L1 rth_pool_spent: a previous PM / AM / lunch range is spent by RTH prints only
+        if not _LD3.rth_spent_up(ctx, sd, v, cr, ext_i, tk):
+            lv.append((v, pk(v)))
     if getattr(ctx, "gaps", None) is not None:
         for kind, hi, lo, ce in ctx.gaps:
+            reb_ = _LD3.nwog_levels(ctx, sd, i, kind, hi, lo, ce, p)       # caption-gap L5 nwog_rebalanced: near edge + exit FVG edge only
+            if reb_ is not None:
+                lv += [(v, "array") for v in reb_]
+                continue
             if p.weekly_gap_ce_only and kind == "nwog":      # L9 (061 ~2:30:15): the CE is enough, the far edge a ringer
                 lv.append((sd.x(ce), "array"))
             else:
@@ -2820,6 +2930,7 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
             pool = min((v for v, kind in lv if kind == "pool" and v > above), default=None)
             sds = [min((x for x in sds if x > pool), default=None)] if pool is not None else []
         lv += [(x, "sd") for x in sds if x is not None]
+    lv = _LD3.balanced_filter(sd, i, above, lv, p)                    # caption-gap A11 balanced_range: nothing past a redelivered body-filled range's EQ
     out = []
     for v, kind in sorted(x for x in set(lv) if x[0] > above):   # merge levels within ~1 ES point
         if not out or v - out[-1][0] > p.es_pt:
@@ -2852,15 +2963,17 @@ def _eq_levels(sd: Side, i: int, tol: float, lows: bool, p: "Params | None" = No
                 bar.append(q.i)
             continue
         after = sd.l[q.i + 1:i + 1] if lows else sd.h[q.i + 1:i + 1]
-        if (len(after) == 0) or (after.min() > q.price if lows else after.max() < q.price):
+        slack = tol if (p is not None and p.eq_min_sep_bars) else 0.0     # A3-clean-high: H2 "slightly above" H1 leaves the pool standing
+        if (len(after) == 0) or (after.min() > q.price - slack if lows else after.max() < q.price + slack):
             out.append(-q.price if lows else q.price)
             wick.append(-q.price if lows else q.price)
             bar.append(q.i)
+    ms = p.eq_min_sep_bars if p is not None else 0         # caption-gap A3-clean-high: the swings must be separated in time
     if not bodies and not rank:
-        lv = L.equal_levels(out, tol)
+        lv = L.equal_levels(out, tol, bar, ms)
         return [-v for v in lv] if lows else lv
     cl = []
-    for idx in L.equal_clusters(out, tol):
+    for idx in L.equal_clusters(out, tol, bar, ms):
         lvl = max(wick[k] for k in idx)                   # the most extreme wick (side of the pool)
         last = max(bar[k] for k in idx)
         seg = (-sd.l[last + 1:i + 1]) if lows else sd.h[last + 1:i + 1]
@@ -3024,6 +3137,10 @@ def _extra_levels(ctx, df: pd.DataFrame, hist: list, p: "Params", eth: dict | No
     ctx.initfvg = _LD.build_init_fvg(ctx, df, hist, p) if p.initial_fvg else []
     ctx.vi_flip = _LD.build_vi_flip(ctx, hist, df, p) if (p.vi_flip_support or p.vi_flip_entries) else []
     ctx.cons_ob = _LD.build_cons_ob(ctx, hist, df, p) if p.cons_ob_open else []
+    # caption-gap pass (levels_detectors #2/3): L1 RTH pools spent by RTH prints only, L3 session opening ranges, B21 daily gaps / consolidation EQs
+    ctx.rth_spent = p.rth_pool_spent
+    ctx.sors = _LD3.build_sors(ctx, p) if p.session_ors else []
+    ctx.ipda_gaps, ctx.ipda_ceq = _LD3.build_ipda_x(ctx, hist, dates, eth, p) if (p.ipda_fv or p.ipda_consol_eq) else ([], [])
 
 
 def _lv_target_pools(ctx, sd, i: int, p) -> list:
@@ -3050,9 +3167,10 @@ def _lv_target_pools(ctx, sd, i: int, p) -> list:
         out.append((hi_(oa[1]), _idx_at(ctx, oa[0])))
     out += _DW.target_pools(ctx, sd, i, p)                 # day_week_context N10.3 pool_mon_wed
     if p.consol_pools:                                     # caption-gap N8: the released chop range's far edge
-        cp = _LD.consol_pool(ctx, sd, i, True)
+        cp = _LD.consol_pool(ctx, sd, i, True, p)
         if cp is not None:
             out.append(cp)
+    out += _LD3.target_pools(ctx, sd, i, p)                # caption-gap A2 / A3 / L3 pools (old high, engineered, session ORs, open float)
     return out
 
 
@@ -3076,6 +3194,8 @@ def _lv_target_arrays(ctx, sd, i: int, p) -> list:
         out += [(v, "array") for v, _ in _LD.cons_ob_levels(ctx, sd, i, p)]
     if p.vi_flip_support:                                  # caption-gap A9: reached daily VIs flipped to support / resistance
         out += [(v, "array") for v in _LD.vi_flip_target_levels(ctx, sd, i, p)]
+    if p.ipda_fv or p.ipda_consol_eq:                      # caption-gap B21: the data range's open daily gaps and consolidation EQs
+        out += _LD3.ipda_arrays(ctx, sd, p)
     return out
 
 
@@ -3149,9 +3269,10 @@ def _lv_sell_side(ctx, sd, session: str, i: int, p, out: dict, extra: bool) -> N
         if v is not None:
             out["diag"] = v
     if p.consol_pools:                                 # caption-gap N8: the released chop range's edge
-        cp = _LD.consol_pool(ctx, sd, i, False)
+        cp = _LD.consol_pool(ctx, sd, i, False, p)
         if cp is not None:
             out["consol_l" if sd.sign > 0 else "consol_h"] = cp[0]
+    _LD3.sell_pools(ctx, sd, i, p, out)                # caption-gap A2 / A3 / L3 pools (old low, engineered, session ORs, open float)
     if p.pool_gaps:                                    # M2.1: NWOG / NDOG as sweep pools
         gl = ctx.gaps if getattr(ctx, "gaps", None) is not None else \
             [("monday", max(a, b), min(a, b), (a + b) / 2) for a, b in _nwogs(ctx, i)]
@@ -3166,6 +3287,8 @@ def _ipda_eq(ctx, p, i: int) -> bool:
     within ipda_eq_frac of each range of its midpoint - with both sides run: an earlier 20-day high
     AND an earlier 20-day low were each taken within the last ipda_eq_days sessions. Price = the
     09:30 open (the last close before 09:30). Needs 60 + ipda_eq_days... at least 60 sessions."""
+    if p.ipda_consol_eq:                  # caption-gap B21: price against the daily consolidations' EQs, no news driver
+        return _LD3.consol_eq_day(ctx, p, i)
     hist = getattr(ctx, "hist", [])
     if len(ctx.ipda) < 3 or len(hist) < 21:
         return False
@@ -3814,7 +3937,9 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
                 cands += [(max([float(ctx.h[S:k0].max())] + [float(x.high.max()) for x in hs3]), "pool", "m3h", 1, k0),
                           (min([float(ctx.l[S:k0].min())] + [float(x.low.min()) for x in hs3]), "pool", "m3l", -1, k0)]
     if p.prev_am_pool and getattr(ctx, "prev_am", None) is not None:
-        cands += [(ctx.prev_am[0], "pool", "prev_am_high", 1, S), (ctx.prev_am[1], "pool", "prev_am_low", -1, S)]
+        cr_am = at(570) if p.rth_pool_spent else S          # caption-gap L1: only RTH prints spend the previous AM range
+        cands += [(ctx.prev_am[0], "pool", "prev_am_high", 1, cr_am), (ctx.prev_am[1], "pool", "prev_am_low", -1, cr_am)]
+    cands += _LD3.lock_cands(ctx, p, t_lock, kl)           # caption-gap A2 old_hi / old_lo, L3 session opening ranges
     mw_ = getattr(getattr(ctx, "dplan", None), "info", {}).get("mw")
     if p.pool_mon_wed and mw_ is not None:             # day_week_context N10.3: the Mon-Wed extremes on Thu / Fri
         cands += [(mw_[0], "pool", "mon_wed_high", 1, S), (mw_[1], "pool", "mon_wed_low", -1, S)]
@@ -3878,6 +4003,9 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
         r_ = _BD.tf_lower_pref(ctx, row, px, pd.Timestamp(ctx.day, tz=ctx.idx.tz) + pd.Timedelta(minutes=t_lock), S)
         if r_ is not None:
             prefs.append(r_)
+    if p.round_pool_mode != "pool":                # caption-gap A2-round-number-pool: a round handle is a lock candidate only with a pool at it
+        keep_ = set(_LD3.round_filter([c_[0] for c_ in cands if c_[2] == "round"], [c_[0] for c_ in cands if c_[2] != "round" and c_[1] == "pool"], p))
+        cands = [c_ for c_ in cands if c_[2] != "round" or c_[0] in keep_]
     cands = prefs + cands                          # review fix: a preferred draw keeps its own name
     pref_keys = {(round(v, 9), k) for v, k, *_ in prefs}
     near = lambda v: any(abs(v - s) <= p.es_pt for s in spent)
@@ -3997,7 +4125,7 @@ def _make_trade(ctx, day, symbol, o, sd, ts, fill, i, t, p, btag):
                draw_name=o.get("draw_name", ""), draw_kind=o.get("draw_kind", ""),
                lock_capped=o.get("lock_capped", False), sloppy=o.get("sloppy", ""), news_wait_min_actual=o.get("news_wait_min_actual"),
                news_pd=o.get("news_pd"), lv_tags=o.get("lv_tags", ""), fvg_state=o.get("fvg_state", ""),
-               init_fvg_respected=o.get("init_fvg", ""),
+               init_fvg_respected=o.get("init_fvg", ""), org_dir=_LD3.org_dir(ctx, i),
                imm_rebal=bool(o.get("imm_rebal", False)), macro_wins=o.get("macro_wins", ""),
                ext_px=None if o.get("ext") is None else float(sd.x(o["ext"])),
                leg_hi_px=None if not o.get("leg") else float(sd.x(o["leg"][1])), **btag)
@@ -4149,7 +4277,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
               single_bar=2.0 if p.single_bar_fvg_strict else 0.0,             # caption-gap pass (levels_detectors #1/3)
               vi_wick_overlap=p.vi_wick_overlap, vi_multi=p.vi_multi, bpr_def=p.bpr_def,
               bpr2_two_candle=p.bpr2_two_candle, pb_def=p.pb_def, mit_mt=p.mit_mt_invalid,
-              vi_dead_rule=p.vi_dead_rule)
+              vi_dead_rule=p.vi_dead_rule,
+              mit_def=p.mit_def, ir_cfg=(p.ir_def, p.ir_overshoot_ticks, p.ir_body_mult))     # caption-gap pass (levels_detectors #2/3)
     sides = [Side(1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, mg, **sk), Side(-1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, mg, **sk)]
     psides = ppos = None
     if pctx is not None:
@@ -4449,7 +4578,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     new, can_add = [], False
                 if new:
                     g = new[-1]
-                    if not pos.get("day_trade") and (          # X5c: a day trade keeps its initial stop
+                    if not pos.get("day_trade") and _LD3.trail_ok(sd, pos, g, i, p) and (    # X5c: a day trade keeps its initial stop (A6: never behind a common gap)
                             p.trail or (p.mgmt in ("ladder", "unit") and p.ladder_trail == "fvg" and pos["t1_done"]
                                         and pos["k"] >= p.trail_after            # Ep03.20: after N rounds of partials
                                         and g.i - 2 > pos["last_partial_i"])):   # formed since the partial
@@ -5047,7 +5176,7 @@ def _sell_side(ctx: DayCtx, sd: Side, session: str, i: int | None = None,
                 and (i is None or getattr(ctx, "news_made", 0) <= i - 1 or p is None or p.news_wait == "off")):
             out["news_range"] = sd.x(ctx.news_hl[1] if sd.sign > 0 else ctx.news_hl[0])
         if i is not None:
-            for k, v in enumerate(_round_levels(ctx, sd, i, False)):
+            for k, v in enumerate(_LD3.round_filter(_round_levels(ctx, sd, i, False), list(out.values()), p) if p is not None else _round_levels(ctx, sd, i, False)):
                 out["round"] = v
         return out
     if p is not None:
@@ -5062,7 +5191,8 @@ def _sell_side(ctx: DayCtx, sd: Side, session: str, i: int | None = None,
         for R, d in getattr(ctx, "news_dr", {}).items():
             if d["made"] is not None and d["made"] <= i - 1:
                 out["news_range" if R == 510 else f"news_range_{R}"] = sd.x(d["lo"] if sd.sign > 0 else d["hi"])
-        for v in _round_levels(ctx, sd, i, False):   # #13: the nearest untaken round handle
+        for v in (_LD3.round_filter(_round_levels(ctx, sd, i, False), list(out.values()), p) if p is not None
+                  else _round_levels(ctx, sd, i, False)):   # #13: the nearest untaken round handle (A2 round_pool_mode)
             out["round"] = v
     if session in ("AM", "LUNCH"):
         k = "pml" if sd.sign > 0 else "pmh"
@@ -5110,6 +5240,11 @@ def _level_intact(ctx, l, i, k, v, session, tk: float = 0.0) -> bool:
 def _level_created(ctx, k: str, session: str) -> int:
     """The bar from which sell-side pool `k` exists (shared by _level_intact and _smt)."""
     at = lambda m: ctx.start + int(np.searchsorted(ctx.t[ctx.start:], m))
+    cr_ = _LD3.created(ctx, k)
+    if cr_ is not None:                    # caption-gap pass (levels_detectors #2/3): old_lo, engineered, session OR, float pools
+        return cr_
+    if getattr(ctx, "rth_spent", False) and k in ("prev_pm", "prev_am"):     # L1 rth_pool_spent: only RTH prints (>= 09:30) spend them
+        return at(570)
     if k.startswith("swing_low"):          # M1.2 fix: from the bar after the swing low itself
         a = int(k[len("swing_low"):]) + 1
     elif k == "org_close" or k.startswith("org_t_"):
@@ -5565,11 +5700,12 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         for z in sd.vis("bull"):       # a VI inside the gap is the exact limit
             if not (g.i - 1 <= z.i <= min(g.i + 1, i)) or (p.vi_body_death and not _vi_alive(sd, z, i)):
                 continue
-            if z.bottom >= g.bottom - 1e-9 and z.top <= g.top + 1e-9:
+            lk_ = _LD3.vi_link(sd, g, z, tk, p)           # caption-gap A5-vi-extended-ce: body- or wick-linked VIs extend the zone (the CE below follows)
+            if lk_ == "inside":
                 vi_exact = z.top if vi_exact is None else max(vi_exact, z.top)
-            elif z.bottom <= g.top + tk + 1e-9 and z.top > g.top:
+            elif lk_ == "up":
                 top = max(top, z.top)
-            elif z.top >= g.bottom - tk - 1e-9 and z.bottom < g.bottom:
+            elif lk_ == "down":
                 bottom = min(bottom, z.bottom)
     entry = _EN.entry_px(sd, g, top, bottom, p)       # D11 / E2: edge, ce, edge_1tick, iofed, ladder
     if vi_exact is not None:
@@ -5671,8 +5807,14 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         lvt.append("on_side")
     if ba is not None and g is ba and p.breakaway in ("tag", "hold"):
         lvt.append("breakaway")
+        if p.bk_state:                                 # caption-gap A6 bk_state: candidate / retraced / qualified / dead
+            lvt.append("bk_" + L.bk_state(sd.h, sd.l, g, i, p.bk_depth, sd.bprs() if p.bk_bpr_ce else (), p.bk_bpr_ce)[0])
         if p.breakaway == "hold":
             lvx["breakaway_ce"] = (ba.mid, True)       # a body close beyond its CE: not breakaway
+    if p.gap_classes and g in sd.gaps:                 # caption-gap A6-gap-hierarchy-common: breakaway / measuring / common
+        lvt.append("gap_" + _LD3.gap_class(sd, sw["ext_i"], sw["ext"], g, i, p))
+        if _LD3.cc_common_tag(sd, entry, i):
+            lvt.append("cc_common")                    # cc04_010: the entry sits in a CC body gap
     if p.fvg_q_hold:
         lvx["q_close"] = (top - 0.25 * (top - bottom), True)   # the upper quarter must hold
     ir = _ir_in_leg(sd, sw, i, p)
@@ -5726,6 +5868,8 @@ def _lv_finish_targets(ctx, sd, i: int, above: float, p, htf_t: tuple) -> list:
     if p.vi_targets:                   # review fix: vi_body_death -> alive = no later body across it
         for z in sd.vis("bear"):
             if z.i <= i and z.bottom > above and (_vi_alive(sd, z, i) if p.vi_body_death else after(z) < z.bottom):
+                if p.vi_breakaway and _LD3.opp_vi_is_breakaway(sd, z, i):
+                    continue                   # caption-gap A9-vi-breakaway: no retrace target in a protected range
                 out += [(z.bottom, "array"), (z.mid, "array")]
     if p.bpr_targets:                  # review fix: only BPRs not traded into since they formed
         for z in sd.bprs(p.bpr_max_gap_bars):
@@ -5778,7 +5922,7 @@ def _ob_pre(ctx, sd, sw, i, p, session, risk_mult):
     if p.ob_arm == "leave" and not sd.c[i] > ob["body_top"]:
         return None
     sw["ob_sent"] = sw["ob_frozen"] = True
-    entry = _EN.ob_entry_price(ob, sd, p)          # Ep03.9 / A12: body_top, mt, range_top|high, open, ob_zone
+    entry = _EN.ob_entry_price(ob, sd, p, i)       # Ep03.9 / A12: body_top, mt, range_top|high, open, ob_zone (+ caption-gap ob_anchor_rule)
     if entry >= sd.c[i]:
         entry = ob["body_top"]                     # [our interpretation] never a limit above the market
     stop = ob["mt"] - p.pad if p.ob_stop == "mt" else sw["ext"] - p.pad
@@ -5811,6 +5955,8 @@ def _ob_anchor(ctx, sd, sw, i, p, session, risk_mult):
     if ob is None:
         return None
     entry = float(sd.o[ob.src])
+    if p.ob_anchor_rule == "gap_presence" and _LD3.ob_anchor_choice(sd, ob.src, _LD3.ob_run_end(sd, ob.src), i, p) == "gap":
+        entry = float(ob.top)                          # caption-gap A12: an untraded wick gap keeps the wick extreme as the anchor
     if entry >= sd.c[i]:
         _f("x_ob_anchor_above")
         return None
@@ -6158,6 +6304,9 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         return None
     ld_tags, ld_init = _LD.order_tags(ctx, sd, sw, i, p, entry)    # caption-gap pass tags (vb exhaustion, init FVG, wick tier, ...)
     lvt += ld_tags
+    rt_ = _LD3.round_tag(ctx, sd, sw, p)               # caption-gap A2-round-number-pool: a sweep at a round handle is tagged
+    if rt_:
+        lvt.append(rt_)
     cf = None
     if getattr(ctx, "conf", None) is not None:
         cf = ctx.conf.at(ctx.idx[i] + pd.Timedelta(minutes=ctx.tf), sd.x(sw["ext"]), sd.sign,
@@ -6628,3 +6777,4 @@ from . import entries as _EN  # noqa: E402  (entries_stops_sizing package; impor
 from . import targets as _TP  # noqa: E402  (targets_partials package: speed bump, rung plan, partials)
 from . import manage as _MG  # noqa: E402  (management_exits package: exits, stops, re-entry)
 from . import ld2 as _LD  # noqa: E402  (caption-gap pass, levels_detectors #1/3: engine glue)
+from . import ld3 as _LD3  # noqa: E402  (caption-gap pass, levels_detectors #2/3: engine glue)

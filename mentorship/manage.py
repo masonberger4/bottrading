@@ -143,10 +143,12 @@ def trail_extra(sd, pos, i: int, p) -> None:
     if p.trail_first_fvg:
         g = first_fvg(sd, pos["ext_i"], i)
         if g is not None and c > g.top and sd.c[g.i + 1:i + 1].min(initial=np.inf) >= g.bottom:
-            raise_stop(pos, g.bottom - p.trail_pad)
+            from . import ld3 as _L3                         # caption-gap A6 trail_skip_common
+            if _L3.trail_ok(sd, pos, g, i, p):
+                raise_stop(pos, g.bottom - p.trail_pad)
     if p.mgmt in ("ladder", "unit") and p.ladder_trail == "breakaway" and pos["k"] >= p.trail_after:
         from . import targets as _TP
-        g = _TP.breakaway_gap(sd, pos["ext_i"], i)          # A6: the shift's gap while price has not retraced past its half
+        g = _TP.breakaway_gap(sd, pos["ext_i"], i, p)       # A6: the shift's gap while price has not retraced past its half (bk_depth / bk_state)
         if g is not None and c > g.top:
             raise_stop(pos, g.bottom - p.trail_pad)
     if p.mgmt in ("ladder", "unit") and p.ladder_trail == "measuring" and pos["k"] >= p.trail_after:

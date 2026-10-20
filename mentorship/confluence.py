@@ -59,7 +59,7 @@ SRC = {"fvg": 0, "ob": 1, "gap": 2, "vi": 3, "breaker": 4}   # array source code
 
 
 def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=False, c2_dir=False,
-           vi_min_gap=0.0, vi_body_death=False, vi_wick_overlap=True, vi_multi=False, vi_dead_rule="full_span"):
+           vi_min_gap=0.0, vi_body_death=False, vi_wick_overlap=True, vi_multi=False, vi_dead_rule="full_span", void_rt=False):
     """Arrays as columns: kind (+1 bull / -1 bear), top, bottom, inv (invalidation level),
     known (time the array can first be used), src (SRC code: FVG 0, OB 1, opening gap 2,
     volume imbalance 3, breaker 4), plus the bar index the invalidation scan starts from.
@@ -68,7 +68,9 @@ def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=F
     levels_detectors: `c2_dir` (A5) keeps FVGs whose middle candle closes their way; `vi_min_gap`
     (A9) drops narrow VIs; `vi_body_death` (A9 / Ep03.3) kills a VI when a later body of its
     timeframe spans it (instead of a close beyond its far edge); caption-gap A9: `vi_wick_overlap` / `vi_multi` (the VI
-    definition) and `vi_dead_rule` ("full_span" / "overlap": which body kills a VI)."""
+    definition) and `vi_dead_rule` ("full_span" / "overlap": which body kills a VI).
+    Caption-gap A12-void-up-down-ob (cc02_007 ~13:33; `void_rt`, 4h and higher only - the caller decides): a one-sided rally followed at once by a
+    one-sided drop through the same range is ONE order block (levels.void_round_trip_obs), invalidated like any OB at its MT."""
     rows = []
     vi_dead = {}
     for z in L.fvgs(h, l, o, c, c2_dir):
@@ -79,6 +81,9 @@ def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=F
             disp = c[z.i - 1]
             if (s > 0 and disp > ob.top) or (s < 0 and disp < ob.bottom):
                 rows.append((s, ob.top, ob.bottom, ob.mt, z.i, 1))
+    if void_rt:
+        for z in L.void_round_trip_obs(o, h, l, c):
+            rows.append((1 if z.kind == "bull" else -1, z.top, z.bottom, z.mt, z.i, 1))
     if vi:
         for z in L.volume_imbalances(o, h, l, c, vi_min_gap, vi_wick_overlap, vi_multi):
             s = 1 if z.kind == "bull" else -1
@@ -118,7 +123,8 @@ class Confluence:
     def __init__(self, df: pd.DataFrame, base_minutes: int, es_pt: float = 1.0, vi: bool = False,
                  breakers: bool = False, c2_dir: bool = False, vi_min_gap: float = 0.0,
                  vi_body_death: bool = False, vi_wick_overlap: bool = True, vi_multi: bool = False,
-                 vi_dead_rule: str = "full_span", ipda_first20: bool = False):
+                 vi_dead_rule: str = "full_span", ipda_first20: bool = False, nwog_cfd_src: str = "auto",
+                 void_rt_ob: bool = False):
         zk = dict(c2_dir=c2_dir, vi_min_gap=vi_min_gap, vi_body_death=vi_body_death, vi_wick_overlap=vi_wick_overlap,
                   vi_multi=vi_multi, vi_dead_rule=vi_dead_rule)
         self.first20 = ipda_first20            # caption-gap B21: only the freshest IPDA window of daily arrays (see _ipda_mask)
@@ -138,7 +144,8 @@ class Confluence:
             end = (b.index + pd.Timedelta(minutes=m)).as_unit("ns").asi8
             life_bars = int(pd.Timedelta(LIFE[tf]).total_seconds() // 60 // m)
             z = _zones(*(b[k].values.astype(float) for k in ("open", "high", "low", "close")),
-                       end.astype(float), max_bars=life_bars, vi=vi, breakers=breakers, **zk)
+                       end.astype(float), max_bars=life_bars, vi=vi, breakers=breakers,
+                       void_rt=void_rt_ob and m >= 240, **zk)
             self.st[tf] = (end.astype(float), _structure(b.high.values, b.low.values, b.close.values))
             if z:
                 z["life"] = pd.Timedelta(LIFE[tf]).value
@@ -163,7 +170,7 @@ class Confluence:
                                   "close": g.close.last()})
                 ends = pd.Series(dend, index=d.index).groupby(grp).max().values
             z = _zones(*(b[k].values.astype(float) for k in ("open", "high", "low", "close")),
-                       np.asarray(ends, float), vi=vi, breakers=breakers, **zk)
+                       np.asarray(ends, float), vi=vi, breakers=breakers, void_rt=void_rt_ob, **zk)
             self.st[tf] = (np.asarray(ends, float), _structure(b.high.values, b.low.values, b.close.values))
             if z:
                 z["life"] = np.full(len(z["kind"]), float(pd.Timedelta(LIFE[tf]).value))
@@ -171,7 +178,7 @@ class Confluence:
         # opening gaps as ICT defines them (htf.opening_gaps): NDOGs count on the daily
         # timeframe through the end of their week; NWOGs on the weekly for 60 trading days.
         # Neither is retired by a fill.
-        og = htf.opening_gaps(df, es_pt)
+        og = htf.opening_gaps(df, es_pt, 1.0, nwog_cfd_src)
         if len(og):
             known = pd.DatetimeIndex(og.known).as_unit("ns").asi8.astype(float)
             nd = (og.kind == "ndog").values

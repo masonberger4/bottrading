@@ -165,12 +165,21 @@ def engage_ok(ctx, i: int, p) -> bool:
 
 # --- order blocks (A12 / Ep03.9 / Ep08.5) -----------------------------------------------------------
 
-def ob_entry_price(ob: dict, sd, p) -> float:
+def ob_entry_price(ob: dict, sd, p, i: int | None = None) -> float:
     """The limit price at a bullish OB dict from strategy._ob_at_low (body_top, body_low, mt, hi, lo, j, k).
     ob_entry_px: body_top (the highest open) / mt / range_top (= "high") / open (Ep03.9: the open of
     the FIRST candle of the series). ob_zone overrides it: "range" = the full range's high;
     "sensitive" (A12 012 ~5:13; 055 ~1:44; 061 ~26:10) = high down to the open - at the open when
-    the upper wick is stubby (<= ob_stub_frac of the series range), else at the upper wick's CE."""
+    the upper wick is stubby (<= ob_stub_frac of the series range), else at the upper wick's CE.
+    Caption-gap A12-open-vs-wick-gap-criterion (`ob_anchor_rule` "gap_presence", needs the bar `i`; cc05_015 ~11:32): a wick area traded through
+    twice ("closed in", no FVG left) anchors on the body - the series' highest open; an untraded wick gap keeps the wick extreme (the
+    series high); otherwise the rules below apply."""
+    if p.ob_anchor_rule == "gap_presence" and i is not None:
+        st = S._LD3.ob_anchor_choice(sd, ob["j"], ob["k"], i, p)
+        if st == "closed_in":
+            return float(ob["body_top"])
+        if st == "gap":
+            return float(ob["hi"])
     if p.ob_zone == "range":
         return float(ob["hi"])
     if p.ob_zone == "sensitive":
@@ -528,6 +537,8 @@ def extra_entry_zones(sd, sw, i, p) -> list:
     if p.vi_entries:
         for z in sd.vis("bull"):
             if z.i <= i and z.i - 1 > e and (not p.vi_body_death or S._vi_alive(sd, z, i)):
+                if p.vi_breakaway and S._LD3.vi_is_breakaway(sd, sw, z, i):
+                    continue                       # caption-gap A9-vi-breakaway: the range it leaves is protected - not an entry zone
                 out.append(z)
     if "void" in p.irl_entries:
         vz = sd._lazy("voids_bull", lambda: [z for z in L.voids(sd.h, sd.l) if z.kind == "bull"

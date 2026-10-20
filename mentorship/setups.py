@@ -453,7 +453,7 @@ def array_cands(ctx, sd, sw, i, p, bz) -> list:
     if "wick_ce" in ea:
         out.append((L.wick_ce(sd.o, sd.l, sd.c, e), ext, "wick_ce"))
     if "vi" in ea:
-        vs = [z for z in sd.vis("bull") if e <= z.i <= i]
+        vs = [z for z in sd.vis("bull") if e <= z.i <= i and not (p.vi_breakaway and S._LD3.vi_is_breakaway(sd, sw, z, i))]   # A9 vi_breakaway
         if vs:
             out.append((vs[-1].top, vs[-1].bottom, "vi"))
     if "reclaimed_ob" in ea:
@@ -587,10 +587,11 @@ def cc_failure_order(ctx, sd, i, p, session, risk_mult):
     tk = S._tick(p)
     lv = S._sell_side(ctx, sd, session, i, p.extra_pools, p)
     used = sd.__dict__.setdefault("_ccf", set())
+    nne = p.fs_def == "no_new_extreme"       # caption-gap M4: the earlier swing reached / traded through K, so K need not be intact
     for k, v in sorted(lv.items(), key=lambda kv: -kv[1]):
-        if v >= sd.c[i] or not S._level_intact(ctx, sd.l, i + 1, k, v, session, tk):
+        if v >= sd.c[i] or (not nne and not S._level_intact(ctx, sd.l, i + 1, k, v, session, tk)):
             continue
-        r = L.failure_swing(sd.ph, sd.pl, v, p.cc_fail_pts * p.es_pt, i, ss)
+        r = L.failure_swing(sd.ph, sd.pl, v, p.cc_fail_pts * p.es_pt, i, ss, p.fs_def)
         if r is None:
             continue
         B, H = r
@@ -735,6 +736,8 @@ def ir_entry(ctx, sd, i, p, session, risk_mult):
     tags = dict(unicorn=False, fvg_bottom=float(sd.l[i]), fvg_ce=eq, entry_kind="ir", mitigation=False,
                 propulsion=False, market=True, no_leg_wait=True, imm_rebal=True, lvx={"ir_eq": (eq, False)},
                 skip_po3=not p.synth_po3)
+    if p.ir_def != "a7":                  # caption-gap A7: "fast delivery expected" (the level is a PD array on its timeframe)
+        tags["lv_tags"] = ["ir_fast_" + p.ir_def]
     return S._finish_order(ctx, sd, i, p, session, sw, float(sd.c[i]), float(sd.l[i]) - p.pad,
                            risk_mult, float(sd.h[i]), tags, skip_leg_pd=True)
 
@@ -1270,7 +1273,12 @@ def draw_prefs(ctx, sd, sw, i, p, session, entry, risk, keep) -> list:
     if p.mmxm_ctx:
         q = parent_high(sd, sw["ext_i"], i)
         if q is not None and q.price > entry:
-            out.append((S._exit_px(q.price, "pool", p), "pool", "mmxm"))
+            px_ = q.price
+            if p.orig_consol:             # caption-gap M1-original-consolidation (104 ~27:53): the smooth-edge level of the original consolidation
+                u_ = S._LD3.orig_consol_level(sd, q, sw["ext_i"], i, p)
+                if u_ is not None and u_ > entry:
+                    px_ = u_
+            out.append((S._exit_px(px_, "pool", p), "pool", "mmxm"))
     if p.pm_lunch_target and session == "PM" and sw.get("key") == "lunch" and "lunch" in ctx.sess:
         lu = sd.x(ctx.sess["lunch"][0] if sd.sign > 0 else ctx.sess["lunch"][1])
         if lu > entry:

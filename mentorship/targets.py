@@ -1114,16 +1114,24 @@ def rung_hit(pos: dict, k: int, level: float, h: float, c: float, t: int, tf: in
     return (h >= level + xt, level)
 
 
-def breakaway_gap(sd, ext_i: int, i: int):
+def breakaway_gap(sd, ext_i: int, i: int, p=None):
     """A6: the breakaway gap = the first FVG after the sweep extreme (the structure shift's gap); it
     stays a breakaway gap while it is at least partly open and price retraced at most to its half
-    (001 ~40:03; 062 ~37:02); fully filled / past the half = not breakaway. None when there is none."""
+    (001 ~40:03; 062 ~37:02); fully filled / past the half = not breakaway. None when there is none.
+    Caption-gap A6-breakaway-depth-qualification (`p` = Params; 062 ~37:12 / ~39:01; 065; cc04_009 ~13:37): `bk_depth` "any_open" lets the retrace
+    go anywhere short of the far edge; `bk_bpr_ce` keeps the CE limit when a BPR sits beyond; `bk_state` returns the gap only once QUALIFIED
+    (retraced, then price traded beyond the highest high since it formed with the far edge untouched - levels.bk_state)."""
     g = next((g for g in sd.gaps if g.i - 2 >= ext_i and g.i <= i), None)
     if g is None:
         return None
-    if sd.l[g.i + 1:i + 1].min(initial=np.inf) <= g.mid - 1e-9:
-        return None
-    return g
+    if p is None or (p.bk_depth == "ce" and not p.bk_state and not p.bk_bpr_ce):
+        if sd.l[g.i + 1:i + 1].min(initial=np.inf) <= g.mid - 1e-9:
+            return None
+        return g
+    st, _ = L.bk_state(sd.h, sd.l, g, i, p.bk_depth, sd.bprs() if p.bk_bpr_ce else (), p.bk_bpr_ce)
+    if p.bk_state:
+        return g if st == "qualified" else None
+    return g if st != "dead" else None
 
 
 def manage(ctx, sd, pos: dict, tr, i: int, ts, p, pctx, psides, ppos) -> None:
@@ -1182,7 +1190,7 @@ def manage(ctx, sd, pos: dict, tr, i: int, ts, p, pctx, psides, ppos) -> None:
                 pos["left"] = 0
             pos["wick_chk"] = None
     if p.trail_breakaway and pos["left"]:
-        g = breakaway_gap(sd, pos["ext_i"], i)
+        g = breakaway_gap(sd, pos["ext_i"], i, p)
         if g is not None and c > g.top:
             from . import manage as _MG
             _MG.raise_stop(pos, g.bottom - p.trail_pad)            # X5c: never on a day trade

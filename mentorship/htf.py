@@ -66,10 +66,22 @@ def weeks(d: pd.DataFrame) -> pd.DataFrame:
 
 
 def _arrays(o, h, l, c, tf: str, known_of, vi: bool = False, c2_dir: bool = False,
-            vi_min_gap: float = 0.0, vi_wick_overlap: bool = True, vi_multi: bool = False) -> list[Arr]:
+            vi_min_gap: float = 0.0, vi_wick_overlap: bool = True, vi_multi: bool = False,
+            drill=None, spr: bool = False, void_rt: bool = False) -> list[Arr]:
     """Daily / weekly arrays. levels_detectors: `c2_dir` (A5 fvg_c2_dir) keeps only FVGs whose
     middle candle closes their way; `vi_min_gap` (A9) drops narrower VIs; caption-gap A9 `vi_wick_overlap` /
-    `vi_multi` (see levels.volume_imbalances)."""
+    `vi_multi` (see levels.volume_imbalances).
+    Caption-gap pass (levels_detectors #2/3):
+      `drill`  A12-tf-relative-ob (079 ~15:06: "don't get thrown off that this is the down closed candle"): a callable j -> (o, h, l, c)
+               arrays of the lower-timeframe bars INSIDE bar j (daily -> 1h). When the swing-extreme candle of an FVG's formation
+               (the highest high of the three bars before the displacement for a bearish gap, the lowest low for a bullish one) has the
+               WRONG colour for an order block, the block is the last opposite-colour LTF bar before the displacement - at or before the
+               LTF bar holding the extreme - labelled at the HTF location: zone from its open to its extreme, mean threshold = its body
+               midpoint [our interpretation of "(open, MT, high)"].
+      `spr`    new-single-candle-daily-inefficiency (091 ~25:37): single-pass ranges as typ "spr" arrays (levels.single_pass_ranges);
+               `Arr.ce` = the candle's CE; the 25 / 75% levels come from the candle (`Arr.q`)
+      `void_rt` A12-void-up-down-ob (cc02_007 ~13:33): a one-sided rally followed at once by a one-sided drop through the same range
+               = one OB (typ "ob", ce = 50%)."""
     out = []
     if vi:                       # shared VI wiring (Ep02.8 / Ep03.3 / B1): daily/weekly volume
         for z in L.volume_imbalances(o, h, l, c, vi_min_gap, vi_wick_overlap, vi_multi):   # imbalances as arrays and draws
@@ -80,12 +92,50 @@ def _arrays(o, h, l, c, tf: str, known_of, vi: bool = False, c2_dir: bool = Fals
         out.append(Arr(z.kind, "fvg", tf, z.top, z.bottom, z.mid, known_of(z.i)))
         # order block: last opposite-close candle before the displacement candle
         kind = "bull" if z.kind == "bull" else "bear"
-        ob = L.order_block_blend(o, h, l, c, z.i - 4, z.i - 2, kind)
+        ob = None
+        if drill is not None:
+            ob = _drilled_ob(o, h, l, c, z, kind, drill)
+        if ob is None:
+            ob = L.order_block_blend(o, h, l, c, z.i - 4, z.i - 2, kind)
         if ob is not None:
             disp = c[z.i - 1]
             if (kind == "bull" and disp > ob.top) or (kind == "bear" and disp < ob.bottom):
                 out.append(Arr(kind, "ob", tf, ob.top, ob.bottom, ob.mt, known_of(z.i)))
+    if void_rt:
+        for z in L.void_round_trip_obs(o, h, l, c):
+            out.append(Arr(z.kind, "ob", tf, z.top, z.bottom, z.mt, known_of(z.i)))
+    if spr:
+        for z in L.single_pass_ranges(o, h, l, c):
+            a = Arr(z.kind, "spr", tf, z.top, z.bottom, z.mid, known_of(z.i))
+            a.levels = z.levels
+            a.src_i = z.src
+            out.append(a)
     return out
+
+
+def _drilled_ob(o, h, l, c, z, kind: str, drill):
+    """levels.Zone of the lower-timeframe order block inside a wrong-coloured swing-extreme candle (see `_arrays`), or None. The extreme
+    candle is searched among the bars z.i-4 .. z.i-2 (the three before the displacement candle z.i-1), like the standard OB window."""
+    a = max(0, z.i - 4)
+    rng = range(a, z.i - 1)
+    if not len(rng):
+        return None
+    e = max(rng, key=lambda k: h[k]) if kind == "bear" else min(rng, key=lambda k: l[k])
+    wrong = (c[e] <= o[e]) if kind == "bear" else (c[e] >= o[e])        # an OB needs an up-close (bearish) / down-close (bullish) candle
+    if not wrong:
+        return None
+    sub = drill(e)
+    if sub is None:
+        return None
+    so, sh, sl, sc = sub
+    if not len(sc):
+        return None
+    m = int(np.argmax(sh)) if kind == "bear" else int(np.argmin(sl))
+    for q in range(m, -1, -1):
+        if (kind == "bear" and sc[q] > so[q]) or (kind == "bull" and sc[q] < so[q]):
+            top, bot = (float(sh[q]), float(so[q])) if kind == "bear" else (float(so[q]), float(sl[q]))
+            return L.Zone(kind, top, bot, z.i, e, float((so[q] + sc[q]) / 2))
+    return None
 
 
 def bar_minutes(df: pd.DataFrame) -> int:
@@ -96,13 +146,23 @@ def bar_minutes(df: pd.DataFrame) -> int:
 
 
 def _arr_alive(a: Arr, k: int, o, h, l, c, wo, wc, wl, vi_body_death: bool, vi_rule: str = "full_span",
-               ol: float = 0.0, oh: float = 0.0, open_only: bool = False) -> bool:
+               ol: float = 0.0, oh: float = 0.0, open_only: bool = False, bal: str = "legacy", lcl=None) -> bool:
     """Is array `a` still valid on day k (the table's inline test): a VI under `vi_body_death` dies once a later own-TF body spans
     it (rule "full_span") or overlaps it ("overlap"); other arrays die on a close through the far side / the OB mean threshold;
     opening gaps are never retired by a fill (039). open_only (caption-gap B21 window pick): also not fully rebalanced - the draw
-    is still open (the unrebalanced part of an FVG / VI)."""
+    is still open (the unrebalanced part of an FVG / VI).
+    Caption-gap A11-htf-gap-own-tf (`bal` = Params.balance_tf; 061 ~40:20 "on the weekly time frame it's inefficient still"; 078
+    ~1:13:50): which closes retire an FVG / OB. "legacy" = as first built (a weekly array is judged on the DAILY closes after its
+    week); "own" = only closes of its own timeframe (a weekly array: completed weekly closes, so daily back-and-forth inside it is
+    ignored); "next_lower" = the next lower timeframe (a daily array: the 4h closes `lcl[j]` of each session j; a weekly array: the
+    daily closes)."""
     s = a.known
     cl = c[s:k]
+    if a.tf == "W" and bal == "own":
+        cl = wc[[j for j in range(len(wl)) if a.known < wl[j] <= k]]
+    elif a.tf == "D" and bal == "next_lower" and lcl is not None:
+        parts = [lcl[j] for j in range(s, k) if j < len(lcl) and len(lcl[j])]
+        cl = np.concatenate(parts) if parts else np.array([])
     gap = a.typ in ("ndog", "nwog")
     if a.typ == "vi" and vi_body_death:
         if a.tf == "D":
@@ -131,11 +191,59 @@ def _arr_alive(a: Arr, k: int, o, h, l, c, wo, wc, wl, vi_body_death: bool, vi_r
     return True
 
 
+def spr_target(a: Arr, seen: float, px: float):
+    """new-single-candle-daily-inefficiency (091 ~25:37): the draw of a live single-pass range `a` for price `px` - "needs sell-side delivery": the CE first,
+    then the lower quadrant (the 25% level), then the candle low (the extreme case); mirrored for a down candle. `seen` = the lowest low (highest high)
+    since it formed; a level already traded is skipped, a range traded all the way through is no draw. None when nothing is left on the price's side."""
+    lv = tuple(getattr(a, "levels", ()) or ())
+    ladder = (a.ce,) + ((lv[1], lv[0]) if len(lv) >= 2 else ())
+    if a.kind == "bull":
+        if seen <= a.bottom:
+            return None
+        return next((t for t in ladder if seen > t and t < px), None)
+    if seen >= a.top:
+        return None
+    return next((t for t in ladder if seen < t and t > px), None)
+
+
+def _ltf_provider(df: pd.DataFrame, d: pd.DataFrame, m: int):
+    """A12-tf-relative-ob: a callable j -> (o, h, l, c) arrays of the m-minute bars inside session j of the daily frame `d`
+    (sessions(df): futures-style, labelled by (time + 7h).date)."""
+    lab = (df.index + pd.Timedelta(hours=7)).date
+    g = df.groupby([lab, df.index.floor(f"{m}min")])
+    b = pd.DataFrame({"open": g.open.first(), "high": g.high.max(), "low": g.low.min(), "close": g.close.last()})
+    by = {}
+    for (day, _), r in b.iterrows():
+        by.setdefault(pd.Timestamp(day), []).append((r.open, r.high, r.low, r.close))
+    dates = list(d.index)
+    cache = {}
+
+    def get(j: int):
+        if j in cache:
+            return cache[j]
+        rows = by.get(pd.Timestamp(dates[j]))
+        cache[j] = None if not rows else tuple(np.array(x, float) for x in zip(*rows))
+        return cache[j]
+    return get
+
+
+def _ltf_closes(df: pd.DataFrame, d: pd.DataFrame, m: int) -> list:
+    """balance_tf "next_lower": for each session of `d`, the closes of its m-minute bars."""
+    prov = _ltf_provider(df, d, m)
+    out = []
+    for j in range(len(d)):
+        r = prov(j)
+        out.append(np.array([]) if r is None else r[3])
+    return out
+
+
 def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: int = 60,
           min_gap_pts: float = 1.0, cut_min: int = 570, vi: bool = False,
           flip_triggers: tuple = ("ob_mt", "wk_dc"), c2_dir: bool = False, vi_min_gap: float = 0.0,
           vi_body_death: bool = False, bx: str = "", vi_wick_overlap: bool = True, vi_multi: bool = False,
-          vi_dead_rule: str = "full_span", vi_two_sided: bool = False, ipda_first20: bool = False) -> pd.DataFrame:
+          vi_dead_rule: str = "full_span", vi_two_sided: bool = False, ipda_first20: bool = False,
+          nwog_cfd_src: str = "auto", single_pass_draw: bool = False, void_rt_ob: bool = False, htf_ob_ltf_drill: bool = False,
+          balance_tf: str = "legacy") -> pd.DataFrame:
     """One row per trading day: react / draw / pd / combo bias and the draw levels.
     `cut_min`: the row describes the market as known at that minute of the day - the overnight
     high/low/last use only bars that have CLOSED by cut_min (bar start + bar length <= cut_min).
@@ -150,23 +258,31 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     Caption-gap pass (levels_detectors #1/3): `vi_wick_overlap` / `vi_multi` (A9 definition), `vi_dead_rule` ("full_span" /
     "overlap": the body death rule of a VI), `vi_two_sided` (A9: an open VI stays a draw from either side until a body kills
     it - wicks never retire it, 077), `ipda_first20` (B21 / cc05_007: the daily FVG / OB / VI arrays of the last 20 sessions
-    are the only ones used until all of them are traded through, then 40, then 60 - Arr.ipda_w by the age of `known`)."""
+    are the only ones used until all of them are traded through, then 40, then 60 - Arr.ipda_w by the age of `known`).
+    Caption-gap pass (levels_detectors #2/3): `nwog_cfd_src` (L5-cfd-nwog-mapping, see opening_gaps), `single_pass_draw` (a daily
+    single-pass range is a draw: its CE below / above price until a later low / high trades through it), `void_rt_ob` (a one-sided
+    rally + drop = one OB), `htf_ob_ltf_drill` (a wrong-coloured swing-extreme candle takes its OB from the 1h bars inside it), `balance_tf`
+    ("legacy" / "own" / "next_lower": which closes retire an array, see _arr_alive)."""
     from . import bias_htf as BH
     X = BH.parse(bx)
     d = sessions(df)
     D = len(d)
     o, h, l, c = (d[k].values.astype(float) for k in ("open", "high", "low", "close"))
-    arrs = _arrays(o, h, l, c, "D", lambda i: i + 1, vi, c2_dir, vi_min_gap, vi_wick_overlap, vi_multi)
+    drill = _ltf_provider(df, d, 60) if htf_ob_ltf_drill else None
+    lcl = _ltf_closes(df, d, 240) if balance_tf == "next_lower" else None
+    arrs = _arrays(o, h, l, c, "D", lambda i: i + 1, vi, c2_dir, vi_min_gap, vi_wick_overlap, vi_multi,
+                   drill=drill, spr=single_pass_draw, void_rt=void_rt_ob)
     # weekly arrays become usable the day after the week's last session
     w = weeks(d)
     pos = {t: k for k, t in enumerate(d.index)}
     wl = [pos[t] + 1 for t in w["last"]]
     wo, wc = w.open.values.astype(float), w.close.values.astype(float)
+    wh_, wlow_ = w.high.values.astype(float), w.low.values.astype(float)
     arrs += _arrays(*(w[k].values.astype(float) for k in ("open", "high", "low", "close")), "W",
-                    lambda i: wl[i], vi, c2_dir, vi_min_gap, vi_wick_overlap, vi_multi)
+                    lambda i: wl[i], vi, c2_dir, vi_min_gap, vi_wick_overlap, vi_multi, void_rt=void_rt_ob)
     # opening gaps (ICT 039/051/052): NWOG Fri close -> Sun 18:00, NDOG 17:00 -> 18:00 Mon-Thu
     pos_of = {t: k for k, t in enumerate(d.index)}
-    og_df = opening_gaps(df, es_pt, min_gap_pts)
+    og_df = opening_gaps(df, es_pt, min_gap_pts, nwog_cfd_src)
     for r in og_df.itertuples():
         k = pos_of.get((r.known + pd.Timedelta(hours=7)).normalize().tz_localize(None))
         if k is None:
@@ -209,7 +325,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         win = 60
         if ipda_first20:                                 # B21: the first window that still has an open daily array
             for cand_ in (20, 40, 60):
-                if any((k - a.known + 1) <= cand_ and _arr_alive(a, k, o, h, l, c, wo, wc, wl, vi_body_death, vi_dead_rule, ol, oh, True)
+                if any((k - a.known + 1) <= cand_ and _arr_alive(a, k, o, h, l, c, wo, wc, wl, vi_body_death, vi_dead_rule, ol, oh, True, balance_tf, lcl)
                        for a in live if a.tf == "D" and a.typ in ("fvg", "ob", "vi")):
                     win = cand_
                     break
@@ -221,8 +337,18 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
                 continue
             cl, hi_after, lo_after = c[s:k], h[s:k], l[s:k]
             lo_after = np.append(lo_after, ol); hi_after = np.append(hi_after, oh)
+            if balance_tf == "own" and a.tf == "W":      # A11-htf-gap-own-tf: only completed weekly bars balance a weekly gap
+                dw_ = [j for j in range(len(wl)) if a.known < wl[j] <= k]
+                hi_after = wh_[dw_] if dw_ else np.array([-np.inf])
+                lo_after = wlow_[dw_] if dw_ else np.array([np.inf])
             gap = a.typ in ("ndog", "nwog")              # gaps are never retired by a fill (039)
-            if not _arr_alive(a, k, o, h, l, c, wo, wc, wl, vi_body_death, vi_dead_rule):
+            if a.typ == "spr":                           # 091: a single-pass range is a draw until a later low / high trades through it
+                seen = np.append(l[s:k], ol).min() if a.kind == "bull" else np.append(h[s:k], oh).max()
+                t_ = spr_target(a, float(seen), px)
+                if t_ is not None:
+                    (draws_dn if a.kind == "bull" else draws_up).append((abs(px - t_), f"{a.tf}_spr", t_))
+                continue
+            if not _arr_alive(a, k, o, h, l, c, wo, wc, wl, vi_body_death, vi_dead_rule, bal=balance_tf, lcl=lcl):
                 continue
             wt = 2.0 if a.tf == "W" else 1.0
             # reaction in the last react_days completed days or tonight
@@ -441,24 +567,42 @@ def has_overnight(df: pd.DataFrame) -> bool:
     return bool(((t >= 18) | (t < 4)).mean() > 0.1)
 
 
-def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0) -> pd.DataFrame:
+NWOG_SRCS = ("auto", "sunday_bars", "monday_0930", "none")
+
+
+def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0, nwog_src: str = "auto") -> pd.DataFrame:
     """ICT's opening gaps from bars that include the evening reopen (videos 039, 051, 052):
       NWOG  Friday's last price before the weekend close -> Sunday's first price at the 18:00
             reopen. Levels: high, low, CE. No minimum size; never retired by a fill.
       NDOG  a weekday's last price before the 17:00 close -> the 18:00 reopen (Mon-Thu
             evenings). Only gaps > ~1 ES handle count; they live through the end of that week.
     One row per gap: kind, high, low, ce, known (the reopen time), week (W-FRI period of the
-    trading day the reopen starts)."""
+    trading day the reopen starts).
+    Caption-gap L5-cfd-nwog-mapping (036 ~1:32:40: "it's not going to be perfect"; `nwog_src` = Params.nwog_cfd_src): an SPX / NDX CFD's NWOG is
+    the CFD close of the bar at the futures' Friday close time and the CFD open of the first bar at or after Sunday 18:00 (futures data
+    preferred). "sunday_bars" = exactly that: a weekend whose first bar is NOT a Sunday-evening bar is left out and FLAGGED unavailable
+    (`result.attrs["nwog_unavailable"]` = the dates of the first bar after each such weekend; the NWOG is NaN / missing, never guessed);
+    "monday_0930" = the L5 variant of video 039: Friday's last close -> the open of the Monday 09:30 bar (known when that bar closes);
+    "none" = no NWOG rows; "auto" = the built behaviour = "sunday_bars" (the fall-back to the Monday variant is an explicit choice, never
+    silent: a frame without Sunday bars - SPY extended hours - would otherwise grow NWOGs it never had)."""
+    if nwog_src not in NWOG_SRCS:
+        raise ValueError(f"nwog_cfd_src {nwog_src!r}: expected one of {NWOG_SRCS}")
     t = df.index
     gap = t.to_series().diff() > pd.Timedelta(minutes=45)
     m = t.hour * 60 + t.minute
     reopen = gap.values & (m >= 17 * 60) & (m < 19 * 60)     # evening reopen after the break
+    weekend_brk = np.flatnonzero((t[1:] - t[:-1]) > pd.Timedelta(hours=30)) + 1 if len(t) > 1 else np.array([], int)
+    sunday = {int(k) for k in weekend_brk if t[k].weekday() == 6 and 17 * 60 <= m[k] < 19 * 60}
+    src = "sunday_bars" if nwog_src == "auto" else nwog_src
     rows = []
+    unavailable = []
     for k in np.flatnonzero(reopen):
         if k == 0:
             continue
         a, b = float(df.close.iloc[k - 1]), float(df.open.iloc[k])
         weekend = (t[k] - t[k - 1]) > pd.Timedelta(hours=30)
+        if weekend and src != "sunday_bars":
+            continue
         if not weekend and abs(b - a) <= ndog_min_pts * es_pt:
             continue
         pm = t[k - 1].hour * 60 + t[k - 1].minute
@@ -470,11 +614,56 @@ def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0
                          # caption-gap L5 (051 ~5:38): nwog_high = max(Friday close, Sunday open), nwog_low = min; gap_dir = "down" when
                          # the Friday close is above the Sunday open, else "up". a = the last print before the break (Friday's close)
                          dir="down" if a > b else "up", close_before=a, open_after=b))
-    return pd.DataFrame(rows)
+    if src == "sunday_bars":
+        unavailable = [t[int(k)] for k in weekend_brk if int(k) not in sunday]
+    elif src == "monday_0930":
+        bm = bar_minutes(df)
+        for k in weekend_brk:
+            d0 = t[int(k)].normalize()
+            j = int(t.searchsorted(d0 + pd.Timedelta(hours=9, minutes=30)))
+            if j >= len(t) or t[j].normalize() != d0 or t[j].hour * 60 + t[j].minute >= 12 * 60:
+                unavailable.append(t[int(k)])
+                continue
+            a, b = float(df.close.iloc[int(k) - 1]), float(df.open.iloc[j])
+            day = (t[j] + pd.Timedelta(hours=7)).normalize().tz_localize(None)
+            rows.append(dict(kind="nwog", high=max(a, b), low=min(a, b), ce=(a + b) / 2, up=b > a,
+                             known=t[j] + pd.Timedelta(minutes=bm), week=day.to_period("W-FRI"),
+                             dir="down" if a > b else "up", close_before=a, open_after=b))
+        rows.sort(key=lambda r: r["known"])
+    out = pd.DataFrame(rows)
+    out.attrs["nwog_unavailable"] = unavailable
+    return out
+
+
+def nwog_rebalanced(df: pd.DataFrame, og: pd.DataFrame, tick: float, pts: float = 1.0, sessions_max: int = 60) -> dict:
+    """Caption-gap L5-partial-redelivery (019 ~16:36; Params.nwog_rebalanced): for each NWOG of `og` the time at which it became REBALANCED
+    by the both-way redelivery sequence (levels.nwog_redelivery: far edge reached, back through the gap, a return that only reaches the CE
+    and fails, an exit leg that leaves a lone FVG at the gap edge). The sequence is causal, so the state at time T needs only the bars up
+    to T. Returns {(round(high, 6), round(low, 6)): (known_time, near_edge, exit_edge)} - known_time = the close of the bar that
+    completes the sequence; near_edge = the gap edge on the Sunday-open side; exit_edge = the exit FVG's near edge."""
+    if og is None or not len(og):
+        return {}
+    o, h, l, c = (df[k].values.astype(float) for k in ("open", "high", "low", "close"))
+    bm = bar_minutes(df)
+    per_day = max(1, 24 * 60 // bm)
+    out = {}
+    for r in og[og.kind == "nwog"].itertuples():
+        k0 = int(df.index.searchsorted(r.known))
+        end = min(len(df) - 1, k0 + sessions_max * per_day)
+        res = L.nwog_redelivery(o, h, l, c, k0, float(r.open_after), float(r.close_before), tick, pts, end)
+        if res is not None:
+            k, edge = res
+            out[(round(float(r.high), 6), round(float(r.low), 6))] = (df.index[k] + pd.Timedelta(minutes=bm), float(r.open_after), float(edge))
+    return out
+
+
+class GapList(list):
+    """gaps_for_day result that also carries `reb`: {(high, low): (known_time, near_edge, exit_edge)} of the rebalanced NWOGs (see nwog_rebalanced)."""
+    reb = None
 
 
 def gaps_for_day(g: pd.DataFrame, day, nwog_keep: int = 5, nwog_days: int = 0, skip_holiday: bool = False,
-                 trading_days: bool = False, with_dir: bool = False) -> list[tuple]:
+                 trading_days: bool = False, with_dir: bool = False, reb: dict | None = None) -> list[tuple]:
     """Gaps in force at 09:30 of `day`: NWOGs (the last `nwog_keep`, or with `nwog_days` > 0
     every NWOG from the last that many trading days - ICT's 60-day maximum, 051 ~18:02,
     "60 market days", 065) and this week's NDOGs. Returns (kind, high, low, ce).
@@ -507,7 +696,12 @@ def gaps_for_day(g: pd.DataFrame, day, nwog_keep: int = 5, nwog_days: int = 0, s
     nd = k[(k.kind == "ndog") & (k.week == wk)]
     if with_dir:                      # caption-gap L5: (kind, high, low, ce, dir) - the labels as a tag, "up" / "down"
         return [(r.kind, r.high, r.low, r.ce, r.dir) for r in pd.concat([nw, nd]).itertuples()]
-    return [(r.kind, r.high, r.low, r.ce) for r in pd.concat([nw, nd]).itertuples()]
+    rows = [(r.kind, r.high, r.low, r.ce) for r in pd.concat([nw, nd]).itertuples()]
+    if reb is None:
+        return rows
+    out = GapList(rows)               # caption-gap L5-partial-redelivery: the rebalanced-NWOG table rides along (list equality unchanged)
+    out.reb = reb
+    return out
 
 
 NY_TZ = "America/New_York"

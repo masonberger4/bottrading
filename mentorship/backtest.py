@@ -220,6 +220,11 @@ def htf_kw(p: Params) -> dict:
         kw["vi_dead_rule"] = p.vi_dead_rule
     if p.ipda_arrays_first20:
         kw["ipda_first20"] = True
+    # caption-gap pass (levels_detectors #2/3): the CFD NWOG source and the HTF array definitions
+    if p.nwog_cfd_src != "auto":
+        kw["nwog_cfd_src"] = p.nwog_cfd_src
+    if p.void_rt_ob:
+        kw["void_rt_ob"] = True
     return kw
 
 
@@ -231,6 +236,13 @@ def table_kw(p: Params) -> dict:
         kw["bx"] = p.bx
     if p.vi_two_sided_draw:
         kw["vi_two_sided"] = True       # htf.table only (the Confluence arrays have no draw list)
+    # caption-gap pass (levels_detectors #2/3), htf.table only: the daily single-pass draw, the 1h order-block drill, which closes balance an array
+    if p.single_pass_draw:
+        kw["single_pass_draw"] = True
+    if p.htf_ob_ltf_drill:
+        kw["htf_ob_ltf_drill"] = True
+    if p.balance_tf != "legacy":
+        kw["balance_tf"] = p.balance_tf
     return kw
 
 
@@ -253,6 +265,7 @@ class Prepared:
     eth: dict | None = None        # L2 / L3 / L10 / Ep08.10: {date: (open, high, low, close)} of full sessions
     eve: dict | None = None        # day_week_context: {date: (open, high, low, close)} of the evening session before that date
     midnight_map: dict | None = None   # bias_htf D22 bias_open_src="es_map": {date: the futures midnight open mapped to this instrument}
+    reb: dict | None = None        # caption-gap L5 nwog_rebalanced: {(high, low): (known_time, near_edge, exit_edge)} of the rebalanced NWOGs
 
 
 def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
@@ -269,7 +282,8 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
     bt = bias_table if bias_table is not None else (
         htf.table(df, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers, **table_kw(p)) if ov else None)
     cuts = lock_cuts if lock_cuts is not None else lock_tables(df, p, bt)
-    og = htf.opening_gaps(df, p.es_pt) if ov else None
+    og = htf.opening_gaps(df, p.es_pt, 1.0, p.nwog_cfd_src) if ov else None
+    reb = htf.nwog_rebalanced(df, og, p.tick) if (ov and p.nwog_rebalanced) else None       # caption-gap L5 nwog_rebalanced
     tt = df.index.hour * 60 + df.index.minute
     pre = df[(tt >= 570) & (tt < (p.org_close or p.session_close or 960))]   # L7: per symbol
     closes = pre.groupby(pre.index.date).close.last().to_dict()     # ORG close per day
@@ -293,7 +307,7 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
         else:
             from .levels import map_midnight
             mm = map_midnight(ref_df, df)
-    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth, eve, mm)
+    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth, eve, mm, reb)
 
 
 def evenings(df: pd.DataFrame) -> dict:
@@ -327,7 +341,7 @@ def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: d
                 bias=pr.bt.loc[d].to_dict() if pr.bt is not None and d in pr.bt.index else None,
                 conf=pr.cf,
                 gaps=htf.gaps_for_day(pr.og, d, p.nwog_keep, p.nwog_days, p.nwog_skip_holiday,
-                                      p.nwog_trading_days) if pr.og is not None else None,
+                                      p.nwog_trading_days, reb=pr.reb) if pr.og is not None else None,
                 eth=pr.eth,
                 closes=pr.closes, evening=_evening(pr.df, d) if p.globex_pool else None,
                 intermarket=({**(intermarket or {}), "ext_midnight": pr.midnight_map[d]}
