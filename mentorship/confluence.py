@@ -59,7 +59,7 @@ SRC = {"fvg": 0, "ob": 1, "gap": 2, "vi": 3, "breaker": 4}   # array source code
 
 
 def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=False, c2_dir=False,
-           vi_min_gap=0.0, vi_body_death=False):
+           vi_min_gap=0.0, vi_body_death=False, vi_wick_overlap=True, vi_multi=False, vi_dead_rule="full_span"):
     """Arrays as columns: kind (+1 bull / -1 bear), top, bottom, inv (invalidation level),
     known (time the array can first be used), src (SRC code: FVG 0, OB 1, opening gap 2,
     volume imbalance 3, breaker 4), plus the bar index the invalidation scan starts from.
@@ -67,7 +67,8 @@ def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=F
     FVG); `breakers` adds breaker zones with inv = the breaker MT (owner #6, conf_breakers).
     levels_detectors: `c2_dir` (A5) keeps FVGs whose middle candle closes their way; `vi_min_gap`
     (A9) drops narrow VIs; `vi_body_death` (A9 / Ep03.3) kills a VI when a later body of its
-    timeframe spans it (instead of a close beyond its far edge)."""
+    timeframe spans it (instead of a close beyond its far edge); caption-gap A9: `vi_wick_overlap` / `vi_multi` (the VI
+    definition) and `vi_dead_rule` ("full_span" / "overlap": which body kills a VI)."""
     rows = []
     vi_dead = {}
     for z in L.fvgs(h, l, o, c, c2_dir):
@@ -79,10 +80,11 @@ def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=F
             if (s > 0 and disp > ob.top) or (s < 0 and disp < ob.bottom):
                 rows.append((s, ob.top, ob.bottom, ob.mt, z.i, 1))
     if vi:
-        for z in L.volume_imbalances(o, h, l, c, vi_min_gap):
+        for z in L.volume_imbalances(o, h, l, c, vi_min_gap, vi_wick_overlap, vi_multi):
             s = 1 if z.kind == "bull" else -1
             if vi_body_death:
-                vi_dead[len(rows)] = L.vi_body_dead(o, c, z, end=None if max_bars is None else z.i + max_bars)
+                vi_dead[len(rows)] = L.vi_body_dead(o, c, z, end=None if max_bars is None else z.i + max_bars,
+                                                    rule=vi_dead_rule)
             rows.append((s, z.top, z.bottom, z.bottom if s > 0 else z.top, z.i, 3))
     if breakers:
         for z in L.breakers(o, h, l, c, 1):
@@ -115,8 +117,12 @@ def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=F
 class Confluence:
     def __init__(self, df: pd.DataFrame, base_minutes: int, es_pt: float = 1.0, vi: bool = False,
                  breakers: bool = False, c2_dir: bool = False, vi_min_gap: float = 0.0,
-                 vi_body_death: bool = False):
-        zk = dict(c2_dir=c2_dir, vi_min_gap=vi_min_gap, vi_body_death=vi_body_death)
+                 vi_body_death: bool = False, vi_wick_overlap: bool = True, vi_multi: bool = False,
+                 vi_dead_rule: str = "full_span", ipda_first20: bool = False):
+        zk = dict(c2_dir=c2_dir, vi_min_gap=vi_min_gap, vi_body_death=vi_body_death, vi_wick_overlap=vi_wick_overlap,
+                  vi_multi=vi_multi, vi_dead_rule=vi_dead_rule)
+        self.first20 = ipda_first20            # caption-gap B21: only the freshest IPDA window of daily arrays (see _ipda_mask)
+        self.dends = np.array([])
         self.tol = 0.25 * es_pt
         self.z = {}
         self.st = {}                   # tf -> (bar end times, structure state)
@@ -146,6 +152,7 @@ class Confluence:
         # end of the data is not taken as complete
         close17 = pd.DatetimeIndex((d.index + pd.Timedelta(hours=17)).tz_localize(NY)).as_unit("ns").asi8.astype(float)
         dend = np.maximum(dend, close17)
+        self.dends = np.sort(dend)
         for tf, per in (("D", None), ("W", "W-FRI"), ("M", "M")):
             if per is None:
                 b, ends = d, dend
@@ -181,6 +188,24 @@ class Confluence:
                 z = self.z.get(tf)
                 self.z[tf] = add if z is None else {k: np.concatenate([z[k], add[k]]) for k in add}
 
+    def _ipda_mask(self, tf: str, z: dict, now: float) -> np.ndarray:
+        """Caption-gap B21 (cc05_001 ~22:58; cc07_005 ~14:17: "for day trading you're going to operate in those last 20 days"): with
+        ipda_arrays_first20 the DAILY FVG / OB / VI rows are limited to the 20 sessions after they formed until every one of
+        them is traded through (dead), then 40, then 60 sessions - the age counts closed trading sessions since `known` (Sunday
+        sessions are not in htf.sessions). Other timeframes and the opening gaps are untouched."""
+        n = len(z["kind"])
+        if not getattr(self, "first20", False) or tf != "D" or not len(getattr(self, "dends", ())):
+            return np.ones(n, bool)
+        sel = np.isin(z["src"], [0, 1, 3])
+        age = np.searchsorted(self.dends, now, side="right") - np.searchsorted(self.dends, z["known"], side="right") + 1
+        alive = sel & (z["known"] <= now) & (z["dead"] > now)
+        win = 60
+        for w in (20, 40, 60):
+            if (alive & (age <= w)).any():
+                win = w
+                break
+        return ~sel | (age <= win)
+
     def at(self, t: pd.Timestamp, price: float, side: int, known_by: pd.Timestamp | None = None) -> list[str]:
         """Timeframes with a valid array of the trade's side containing `price` at time t,
         counting only arrays already complete by `known_by` (default t)."""
@@ -194,6 +219,7 @@ class Confluence:
             m = ((z["kind"] == side) & (z["known"] <= kb) & (z["dead"] > now)
                  & (now - z["known"] <= z["life"])
                  & (z["bottom"] - self.tol <= price) & (price <= z["top"] + self.tol))
+            m &= self._ipda_mask(tf, z, now)      # caption-gap B21 ipda_arrays_first20
             if m.any():
                 out.append(tf)
         return out
@@ -211,6 +237,7 @@ def _targets_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs, far_edge
             continue
         m = ((z["kind"] == -side) & (z["known"] <= now) & (z["dead"] > now)
              & (now - z["known"] <= z["life"]))
+        m &= self._ipda_mask(tf, z, now)      # caption-gap B21 ipda_arrays_first20
         if side > 0:
             m &= z["bottom"] > beyond
             near = z["bottom"][m]
@@ -254,6 +281,7 @@ def _resistance_impl(self, t: pd.Timestamp, price: float, side: int, tfs, src=(0
             continue
         m = ((z["kind"] == -side) & (z["known"] <= now) & (z["dead"] > now)
              & (now - z["known"] <= z["life"]) & np.isin(z["src"], list(src)))
+        m &= self._ipda_mask(tf, z, now)      # caption-gap B21 ipda_arrays_first20
         if side > 0:
             m &= (z["top"] > price) if straddle else (z["bottom"] > price)
             lv = np.maximum(z["bottom"][m], price)
@@ -282,6 +310,7 @@ def _support_impl(self, t: pd.Timestamp, price: float, side: int, tf: str, src=(
         return None
     m = ((z["kind"] == side) & (z["known"] <= now) & (z["dead"] > now)
          & (now - z["known"] <= z["life"]) & np.isin(z["src"], list(src)))
+    m &= self._ipda_mask(tf, z, now)      # caption-gap B21 ipda_arrays_first20
     m &= (z["bottom"] <= price) if side > 0 else (z["top"] >= price)
     if not m.any():
         return None
@@ -306,6 +335,7 @@ def _valid_impl(self, t: pd.Timestamp, side: int, tfs, src=(0, 1, 3), known_by: 
             continue
         m = ((z["kind"] == side) & (z["known"] <= kb) & (z["dead"] > now)
              & (now - z["known"] <= z["life"]) & np.isin(z["src"], list(src)))
+        m &= self._ipda_mask(tf, z, now)      # caption-gap B21 ipda_arrays_first20
         for k in np.flatnonzero(m):
             out.append((float(z["top"][k]), float(z["bottom"][k]), tf, int(z["src"][k]), float(z["known"][k])))
     return out
@@ -328,6 +358,7 @@ def _opposing_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs, src=(0,
             continue
         m = ((z["kind"] == -side) & (z["known"] <= now) & (now - z["known"] <= z["life"])
              & np.isin(z["src"], list(src)))
+        m &= self._ipda_mask(tf, z, now)      # caption-gap B21 ipda_arrays_first20
         if not keep_dead:
             m &= z["dead"] > now
         m &= (z["bottom"] > beyond) if side > 0 else (z["top"] < beyond)
@@ -356,6 +387,7 @@ def _opposing_ext_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs, src
             continue
         m = ((z["kind"] == -side) & (z["known"] <= now) & (z["dead"] > now) & (now - z["known"] <= z["life"])
              & np.isin(z["src"], list(src)))
+        m &= self._ipda_mask(tf, z, now)      # caption-gap B21 ipda_arrays_first20
         if side > 0:
             m &= (z["top"] > beyond) if straddle else (z["bottom"] > beyond)
         else:

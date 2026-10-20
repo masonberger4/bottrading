@@ -1425,6 +1425,55 @@ _SB_DECISIONS = {
     "gap8_sb_supercharge": dict(SB_ONLY, sb_runner=True, sb_supercharge=True),
 }
 DECISIONS.update(_SB_DECISIONS)
+# caption-gap pass, levels_detectors #1/3 (digests/rulebook_gaps/*.md): one variant per switch, name prefix = the gap id. The FVG-path
+# variants run the post-MSS entry (SM_POST) so the new entry zones can arm; look-ahead tests: tests/test_caption_gap_ld1.py.
+_LD1_DECISIONS = {
+    "X3-l8-vb-exhaustion-gap": dict(vacuum_blocks=True, vb_context=True),
+    "X3-b21-ipda-anchor_month": dict(ipda_pools=True, ipda_anchor="month"),
+    "X3-b21-ipda-anchor_swing": dict(ipda_pools=True, ipda_anchor="swing"),
+    "B21-ipda-windows-arrays": dict(ipda_arrays_first20=True),
+    "X3-b5-15m-pools-5m-gaps": dict(pool_swings=True, pool_tf=15),
+    "X3-b10-topdown-transposition": dict(topdown_targets=True),
+    "N8-consolidation-builds-orders": dict(consol_pools=True),
+    "A11-bpr-one-pass-definition_single": dict(bpr_def="single_range", bpr_targets=True, bpr_abort=True),
+    "A11-bpr-one-pass-definition_both": dict(bpr_def="both", bpr_targets=True, bpr_abort=True, bpr2_trail=True, bpr2_cont_trigger=True),
+    "A11-bpr-one-pass-definition_two_candle": dict(bpr_def="single_range", bpr_targets=True, bpr2_two_candle=True),
+    "X-efficient-delivery-two-pass": dict(two_pass_state=True, fvg_targets=True),
+    "X-efficient-delivery-two-pass_shield2": dict(two_pass_state=True, fvg_targets=True, shield_passes=2),
+    "A12-ob-candle-selection_original": dict(ob_pick="original"),
+    "A12-ob-candle-selection_largest_body": dict(ob_pick="largest_body"),
+    "A12-ob-candle-selection_blend_in_htf": dict(ob_pick="blend_in_htf"),
+    "A12-ob-candle-selection_skip_encapsulated": dict(ob_skip_encapsulated=True),
+    "A12-consolidation-ob-open-level": dict(cons_ob_open=True, entry_arrays=("cons_ob_open",), **SM_POST),
+    "A8-inversion-any-pd-array": dict(inversions=("ob", "breaker", "vi", "org", "nwog"), **SM_POST),
+    "A12-mt-all-blocks-ce-all-gaps": dict(mit_targets=True, mit_mt_invalid=True),
+    "A13-breaker-candle-selection_last": dict(breaker_candle="last", breaker_entry="fallback", **SM_POST),
+    "A13-breaker-candle-selection_extreme_body": dict(breaker_candle="extreme_body", breaker_body_swing=True, breaker_entry="fallback", **SM_POST),
+    "A13-breaker-zone-extent_blend": dict(breaker_zone="blend", breaker_entry="fallback", **SM_POST),
+    "A13-breaker-zone-extent_leg_disruptor": dict(breaker_zone="leg_disruptor", breaker_entry="fallback", **SM_POST),
+    "A6-breakaway-identification_context": dict(breakaway="hold", breakaway_def="context", **SM_POST),
+    "A6-breakaway-identification_context_wide": dict(breakaway="hold", breakaway_def="context", breakaway_ctx_pts=20.0, **SM_POST),
+    "A6-breakaway-identification_second_mss": dict(breakaway="hold", breakaway_def="second_mss", **SM_POST),
+    "A5-caffeine-bar-bisi": dict(single_bar_fvg_strict=True, **SM_POST),
+    "A5-broken-fvg-reclaim": dict(fvg_reclaim=True, **SM_POST),
+    "B5-htf-arrays-anchor-transpose": dict(htf_entry_arrays=(15, 60), **SM_POST),
+    "N-initial-fvg-reference": dict(initial_fvg=("day", "week", "mon10")),
+    "A9-vi-definition-no-wick-condition": dict(vi_arrays=True, vi_wick_overlap=False, vi_entries=True),
+    "A9-vi-definition-no-wick-condition_multi": dict(vi_arrays=True, vi_wick_overlap=False, vi_multi=True, vi_entries=True),
+    "A9-vi-delivery-state_overlap": dict(vi_arrays=True, vi_dead_rule="overlap", vi_targets=True),
+    "A9-vi-delivery-state_two_sided": dict(vi_arrays=True, vi_two_sided_draw=True, vi_targets=True),
+    "A9-daily-vi-forward-levels": dict(vi_flip_support=True),
+    "A16-propulsion-context-sequence_cc04_008": dict(pb_def="cc04_008", prop_entry=True, **SM_POST),
+    "A16-propulsion-context-sequence_cc09_008": dict(pb_def="cc09_008", prop_entry=True, **SM_POST),
+    "A17-rejection-block-levels_open_close": dict(rb_level="open_close", rb_targets="ladder"),
+    "A17-rejection-block-levels_close": dict(rb_level="close", rb_targets="ladder", rb_ce_level=True),
+    "A21-dealing-range-energetic-swing": dict(leg_anchor="energetic"),          # acts through leg_pd (the Params default 0.5)
+    "A23-wick-quarter-strength": dict(wick_quarters=True, wick_bias_line=True, judas_wick_cap=True),
+    "confluence-stacked-arrays": dict(converge_rank=True, **SM_POST),
+    "A3-diagonal-support-is-liquidity": dict(diag_pools=True),
+    "A3-diagonal-support-is-liquidity_4": dict(diag_pools=True, diag_min_swings=4),
+}
+DECISIONS.update(_LD1_DECISIONS)
 SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): their look-ahead tests are in test_silver_bullet.py
 
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)

@@ -32,7 +32,9 @@ def short_history(n_prior: int, p: Params) -> str | None:
         need = 60                                        # the 60-day range (and ipda_eq_day's three)
     if p.org_days > 5:
         need = max(need, p.org_days + 1)
-    if n_prior < min(need, B.HIST_DAYS):
+    if p.ipda_anchor != "rolling" and (p.ipda_pools or p.ipda_next or p.ipda_eq_day != "off"):
+        need = max(need, 100)                            # caption-gap B21: the windows end before the last closed month's first day
+    if n_prior < min(need, B.hist_days(p)):
         return f"paper history has {n_prior} prior sessions; the ipda / org_days switches need {need}"
     return None
 

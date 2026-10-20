@@ -438,9 +438,13 @@ def array_cands(ctx, sd, sw, i, p, bz) -> list:
     e, ext = sw["ext_i"], sw["ext"]
     out = []
     if "ob" in ea:
-        ob = S._ob_at_low(sd, sw, i)
+        ob = S._ob_at_low(sd, sw, i, p, ctx)
         if ob is not None:
             out.append((ob["body_top"], ob["body_low"], "ob"))
+    if p.cons_ob_open or "cons_ob_open" in ea:       # caption-gap A12: the open of the last candle before a 1h consolidation is support
+        for v, kd in S._LD.cons_ob_levels(ctx, sd, i, p):
+            if kd == ("bull" if sd.sign > 0 else "bear"):
+                out.append((v, v, "cons_ob_open"))
     if "breaker" in ea and bz is not None:
         out.append((bz.top, bz.bottom, "breaker"))
     if "ote" in ea:

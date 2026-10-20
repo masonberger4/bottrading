@@ -57,6 +57,7 @@ and to the notes for context, charts and trade examples. This file states each r
   ~36:20; cc01_003 ~15:23; cc04_014 ~2:17) [both]. Nearly level bodies count even if wicks differ
   (cc05_003 ~1:07:26); draw the REL line at the lower of the two lows (038 ~43:43). ICT never gives
   a tolerance. Bot: `eq_tol_pts=0.5` ES pt, cluster extreme = the pool.
+  - Caption-gap fix (A3-diagonal-support-is-liquidity; 045 ~26:02, cc03_007 ~2:12/~23:18): never use a diagonal trendline or a pattern breakout as S/R, bias, entry or stop. A smooth diagonal run of higher lows (lower highs) on the execution TF = retail stops beneath (above): expect a spike through it; a trendline/pattern break against daily order flow is a trap. Bot: `diag_pools` (off; >= `diag_min_swings` = 3 swings within the REL tolerance of one line [our interpretation]) = a sweep pool of kind "diag" at the extrapolated line.
 - **A4 Bodies vs wicks.** Bodies mark the real level and "tell the story"; wicks "do the damage".
   A 1-2 tick wick beyond a level ("mohawk") still counts as respect (019 ~14:55; 032 ~9:00; 038
   ~46:16; 042 ~1:07:39; 065A ~2:53:30; 096 ~12:04) [2023]. CC: stops sit beyond the body cluster, a
@@ -84,6 +85,9 @@ and to the notes for context, charts and trade examples. This file states each r
   - An FVG overlapping an OB: the FVG near edge comes first (065B ~3:02:40) [2023].
   - Lifetime: extend forward and reuse after fills, up to 60 days back (015 ~22:49; 051 ~19:34;
     065B ~3:58:20) [2023].
+  - Caption-gap fix (X-efficient-delivery-two-pass; 026 ~1:58:21, 050 ~30:29, 061 ~1:35:24): track `up_pass` / `down_pass` on every gap band (FVG, VI, NDOG, NWOG, wick area, void) on its own TF, wicks counting. No pass = open draw; one pass = one-sided (still a target and S/R, the missing side is the next delivery); both = efficient, not a target; NDOG / NWOG stay as references. A band crossed several times (>= `shield_passes` = 3 [our interpretation]) shields the arrays beyond it. Bot: `two_pass_state` (off; intraday bands, HTF bands are not judged yet).
+  - Caption-gap fix (A5-caffeine-bar-bisi; 006 ~12:34): a bullish FVG whose c2 is ONE large displacement candle (range >= 2x the mean of the prior 20 bars [our interpretation]) is a significant array; on a normal day any trade below its low (c1 high) kills it; on NFP / FOMC days price can overshoot, so validity is not judged then. Bot: `single_bar_fvg_strict` (off).
+  - Caption-gap fix (A5-broken-fvg-reclaim; 027 ~22:24, 091 ~20:18): a broken bullish FVG is invalid; it is reclaimed as a bullish discount array only if price first moved away below it (a swing beyond), later came back and closed above its high, and the bias is bullish (not in premium); chop across it does not reclaim (the "or above CE" variant is removed); in bearish / premium context it is an IFVG (A8). Bot: `fvg_reclaim` (off).
 - **A6 Gap types** (062 ~43:58) [2023]:
   - Breakaway gap = first FVG leaving a consolidation or expected level after an MSS. It must stay
     at least partly open and may retrace at most to its half; the range it leaves is "protected"
@@ -91,6 +95,7 @@ and to the notes for context, charts and trade examples. This file states each r
   - Measuring gap = FVG near the middle of the move; project swing extreme -> near edge of the gap,
     target -1 SD (003 ~31:35; 011 ~6:37; 061 ~1:22:05; 062 ~42:19).
   - Common gap = ordinary FVG, may be revisited.
+  - Caption-gap fix (A6-breakaway-identification; 001 ~42:50, 062 ~34:53, 060 ~1:14:06): a breakaway candidate needs HTF context (price leaves a pre-marked level expected to hold: an HTF FVG edge held by bodies, a BPR, an HTF level respected earlier in the week); no context = common gap. Forms: the first FVG as price accelerates away from the held level (with or without an MSS, 001); the SIBI of the SECOND MSS (the first MSS's FVG is a common gap, 062); the FVG after a blow-off run through the target pool is LIKE a breakaway (060, an analogue). If price returns into it, trade it with the stop beyond the candle bodies; a body close beyond its CE = not breakaway, exit. Bot: `breakaway_def` = "first_after_mss" (default) / "context" (`breakaway_ctx_pts`) / "second_mss".
 - **A7 Immediate rebalance** = the next candle trades straight back to the prior candle's extreme
   with no gap; a strong continuation signature (048 ~39:02; 060 ~7:20; 092 ~1:41:14; 099 ~3:46)
   [2023]. Daily version: the open trades exactly to the prior day's high/low (059 ~4:18) [2023].
@@ -103,12 +108,16 @@ and to the notes for context, charts and trade examples. This file states each r
     CE or a little above (078 ~50:28).
   - Bias switch: the same 1m gap is a long target before the HTF array is hit and an IFVG short
     after it (086 ~14:12).
+  - Caption-gap fix (A8-inversion-any-pd-array; 090 ~2:11:45, 068 ~13:37, 086 ~11:30, 035 ~1:02:55): any PD array (FVG, OB, breaker, VI, ORG, NWOG) whose body closes through it is inverted with the opposite role, stored as THREE prices only (high, low, MT / CE: OB per D4, breaker 50% of high-low). An OB closed below: expect resistance at its low and MT, shorts once displacement lower follows; a body close back through the MT invalidates the new role. Bot: `inversions` (empty; subset of ob / breaker / vi / org / nwog) = entry arrays (support role) and targets (resistance role).
 - **A9 Volume imbalance (VI)** = consecutive bodies do not overlap while wicks do; bullish:
   min(o,c)[i] > max(o,c)[i-1] and low[i] <= high[i-1] (003; 009 ~2:16; 022 ~54:26; 090 ~13:01)
   [2023]. Use its low as a stop; it may be touched but not pierced (009 ~13:46). It is dead once a
   later body on its own (or higher) TF closes fully across it (035 ~5:50; 090 ~13:01). VIs are
   "flexible", FVGs strict; clusters of VIs = "porous", low trust (027 ~22:09, ~27:38). Bot:
   `levels.volume_imbalances`, matches.
+  - Caption-gap fix (A9-vi-definition-no-wick-condition; 009 ~7:18, 036 ~22:55, 027 ~22:24): the wick-overlap condition is removed - a VI is bodies only: bullish min(o,c)[i] > max(o,c)[i-1] across a run of candles, zone [max body of the earlier candle(s), min body of the later]; if the wicks do not overlap either it is also a liquidity void. Bot: `vi_wick_overlap` (True = the old rule), `vi_multi` (False).
+  - Caption-gap fix (A9-vi-delivery-state; 035 ~21:01, 046 ~28:33, 050 ~33:20, 077 ~3:23): states on the parent TF (the highest TF on which the VI exists): reached (a later wick through to the far edge by a tick), target_hit (a later body overlaps), dead (a body lays over the whole zone: `vi_dead_rule` "full_span" 046 / 090, or any overlap 035). Until dead an open daily / weekly VI is a two-sided draw, revisited many times; wicks never change state. Bot: `vi_dead_rule`, `vi_two_sided_draw`.
+  - Caption-gap fix (A9-daily-vi-forward-levels; 025 ~23:19, 007 ~3:40/~8:59): mark each daily VI on its own (both body edges + midpoint), never merge; extend through the rest of the week like NWOG edges; a VI above price that is reached becomes a support candidate on a later retrace from above, best with an hourly FVG (mirror for resistance); invalid on a 60m body close beyond its far edge [our interpretation]. Bot: `vi_flip_support` (off).
 - **A10 Liquidity void** = a true price gap (high[i-1] < low[i]) and, above all, session/week gaps
   with no prints (NWOG, NDOG, ORG) (001; 003; 028 ~36:17; 039 ~3:06; 074 ~20:51) [2023]. CC's
   "range of one-sided candles" (cc04_010; cc06_003) is treated as a displacement leg whose start is
@@ -117,6 +126,7 @@ and to the notes for context, charts and trade examples. This file states each r
   ~4:21; 104 ~24:35) [2023]. Trading TO it is easy, THROUGH it rare; expect probes; a body close
   through its midpoint = abort (026 ~1:05:53; 065B ~4:28; 100 ~22:07). Bot: `balanced_ranges`,
   unused.
+  - Caption-gap fix (A11-bpr-one-pass-definition; 001 ~15:17, 003 ~29:37, 032 ~51:23, 056 ~7:24, 075 ~54:50): `bpr_def` "overlap" (Type 1, above) / "single_range" (Type 2) / "both". Type 2 = a gap Z (FVG, void, or two adjacent candles' overlap) that price crossed fully one way and then fully the other in one pass, then left; a touch is repricing, not balancing (032). Balanced once a later bar's range lies fully beyond Z on the far side [our interpretation]; a bullish BPR below price is support, a bearish one above is resistance; a long's stop may sit below its low; a body close below EQ or the low = idea wrong. Do not reuse a spent gap in its original direction. Continuation trigger (056): a retrace into a bullish FVG to at least its CE, then a trade above its high = permission toward the next buy-side draw; trail (003): stop to lo - 1 tick once a new bullish FVG forms above hi. Open SIBIs above are valid targets. Conflict: 010 counts a touched SIBI as balanced, 032 needs a trade-through; 101 rejects the term for a daily FX FVG (terminology only). Re-cite 046 ~50:02 as Type 2. Bot: `bpr_def`, `bpr2_two_candle`, `bpr2_trail`, `bpr2_cont_trigger` (the trigger is a tag).
 
 **Blocks**
 - **A12 Order block (OB).** Bullish = last down-close candle (or run of consecutive down-close
@@ -137,6 +147,9 @@ and to the notes for context, charts and trade examples. This file states each r
   - Opposing OBs are targets and profit spots, not counter-trend entries (cc01_004 ~36:31; 065A
     ~1:38) [both]. Once price trades through an opposing OB's MT, its other half should not be
     revisited (065A ~1:39).
+  - Caption-gap fix (A12-ob-candle-selection; 012 ~14:06, cc04_003 ~1:00, cc03_004 ~10:30, cc06_005 ~19:10, 065 ~1:21:02, 032 ~53:04): candle selection is a listed decision `ob_pick`: "blend" (a consecutive run blended; level = open of the first candle), "original" (the first / highest candle of the run, 012), "largest_body" (the lowest down candle at or through HTF support S, tie-break on the largest body), "blend_in_htf" (blend only when the whole run lies inside a pre-called HTF array; MT = (low first + high last) / 2). All modes skip a last candle whose body sits inside the previous same-colour body and is clearly smaller (`ob_skip_encapsulated`, cc06_005). Bot: entry OBs only (HTF-array OBs unchanged).
+  - Caption-gap fix (A12-consolidation-ob-open-level; 008 ~4:09, one EUR/USD 1h example): on 1h, the last down-close candle before a consolidation range (bullish context): extend its OPEN right as support; pullbacks there are long areas; mirror = the open of the last up-close candle before the range. Bot: `cons_ob_open` (off).
+  - Caption-gap fix (A12-mt-all-blocks-ce-all-gaps; 021 ~21:06): MT = 50% of the block applies to mitigation blocks too (A15 gains an MT per D4) and the "bodies must not close through MT" invalidation (E6 / X8) applies to them; CE is explicit for VIs and voids (A9 / A10). Bot: `mit_mt_invalid` (off).
 - **A13 Breaker.** Bullish: swing low L1, swing high H, lower low L2 that runs L1's sell stops, then
   price breaks above H; the zone is the up-close candle at H. Bearish mirror uses the down-close
   candle at the swing low (001 ~45:02; 007 ~22:46; 012 ~11:07; cc04_005 ~0:37-3:32) [both].
@@ -147,6 +160,8 @@ and to the notes for context, charts and trade examples. This file states each r
     ~1:22; 070 ~56:01).
   - First touch is valid; bodies respect, wicks may poke (022 ~2:47:00; 033 ~57:56).
   - A high-low-higher-high at the wrong time of day is "time distortion", not a breaker (070 ~6:24).
+  - Caption-gap fix (A13-breaker-candle-selection; 015 ~21:17, 032 ~41:26, 043 ~18:03, 060 ~26:39, 063 ~3:49, 081 ~12:52): replace "by body" with the switch `breaker_candle`: "last" (015, 043) / "extreme_close" (032, 063, 081; bearish = the lowest close among the down-close candles at the swing low) / "extreme_body" (029 / 048 / 096; ties to the biggest body); never by largest body alone (032). The swing pattern must hold on bodies, wick-only extremes are discarded (060, 081: `breaker_body_swing`). Owner question: the spec lists "last" as the bot default; the built behaviour (extreme close) stays the default. A weekly breaker: find the candle on the daily (063).
+  - Caption-gap fix (A13-breaker-zone-extent / D6; 025 ~12:13, 032, 042 ~46:29/~58:37, 044 ~37:47, 070 ~46:45, 072, 078, 084): the swing is the outer H1-L-H2 (ignore minor highs inside); zone options body / range / `blend` (the union of the consecutive candles at the swing, 025 / 044 / 042) / `leg_disruptor` (070: from the opposite candle that disrupts the A->B run to B; the whole-leg reading is dropped from 042). A 1-tick overshoot of the zone high still counts (042 ~58:37). Bot: `breaker_zone` gains "blend" and "leg_disruptor".
 - **A14 Unicorn** = an FVG overlapping the breaker zone; strongest right after a sell-side run at the
   09:30 open (007 ~22:39; 101 ~84:31) [2023]. 104 uses the word for a 2nd-stage redistribution OB;
   ignore that usage. Bot: implemented, preferred FVG.
@@ -157,10 +172,12 @@ and to the notes for context, charts and trade examples. This file states each r
 - **A16 Propulsion block** = a down-close candle that trades into an earlier bullish OB and becomes
   the new support; on return price should tag its high and leave; losing its MT = idea wrong
   (cc04_008 ~0:30-5:40; 027 ~11:31; 079 ~10:27) [both].
+  - Caption-gap fix (A16-propulsion-context-sequence; cc04_008 ~3:58, cc09_008 ~14:45): `pb_def`: "cc04_008" = bullish context, a bullish OB, confirmed when a later candle trades above its highest high, price moves higher, then a later down-close candle trades back into the OB and is the PB at its close; "cc09_008" (looser) = a down-close candle adjacent to the prior OB followed by a higher high, level = its open, valid once a later candle trades above its high. Prefer the separated case [our interpretation]. Bot: `pb_def` ("a16" = as built).
 - **A17 Rejection block** = a swing high of long-upper-wick candles; zone = highest open/close of the
   swing up to the highest wick, any candle colour (cc04_006 ~5:04-10:43) [CC]. 2023 uses only the
   body edge as a level: price running the bodies does the same work as running the wicks (015
   ~2:15; 059 ~10:03; 066 ~40:41). Bot: `rejection_blocks`, unused.
+  - Caption-gap fix (A17-rejection-block-levels; 015 ~2:18, 038 ~4:15, 059 ~10:11, 080 ~5:41, 090 ~34:21, cc04_006): bearish RB (a target when bullish) from the swing-high candles on the trading TF: level1 = max close of the up-close candles (`rb_level` "close", 2023) or max(open, close) of any candle ("open_close", cc04_006); W = the highest high; level2 = wick CE = (level1 + W) / 2; valid only if wicks extend beyond the body; targets in order level1, level2, W; as an entry price may trade a little through level1, level2 should hold, stop beyond W [our interpretation]. Bullish mirror. Bot: `rb_level`, `rb_ce_level` (adds level2 and W to the rung ladder).
 - **A18 Reclaimed OB** = in a market maker model, each down candle on the sell side of the curve
   followed by a bounce; do not buy them on the way down; buy their retests on the buy side of the
   curve after the low (cc04_007 ~0:50-5:00; 104 ~46:56) [both]. Not codeable in real time (needs
@@ -188,6 +205,7 @@ and to the notes for context, charts and trade examples. This file states each r
     deep premium (cc01_004 ~23:59; cc01_006 ~2:07; cc06_004 ~31:39) [CC]. Threshold: D12.
   - Wicks for intraday legs, bodies for multi-day ranges (014; 058 ~41:54; cc07_005 ~3:10).
   Bot (bias_htf): `day_pd="20d"` / `pd_day_range` / `pd_body_multiday` (bodies for the multi-day range), `pd_zone` half / third / deep / ote with `ote_band`; the pd20 column.
+  - Caption-gap fix (A21-dealing-range-energetic-swing; 028 ~1:07:33, 044 ~40:26, cc01_005, cc04_002 ~18:44): the low is the most recent 3-candle swing low followed by displacement (consecutive same-direction candles leaving >= 1 FVG within N bars); if two are close take the one with more bars clustered around it; skip older rounded lows and pivots inside a consolidation (anchor where the impulse departs); impulsive leg = >= 60% of bars in direction and / or a displacement FVG and / or >= 1x ATR(14) [our thresholds]; range = that low to the leg high (wicks), EQ 50%; sub-ranges do not override it; MSS reference stays per A19. Bot: `leg_anchor` = "mss_leg" (default) / "energetic" (leg_pd, leg depth).
 - **A22 PD-array matrix**, outward from EQ: mitigation block, breaker, liquidity void, FVG, OB,
   rejection block, old high/low; discount mirror (cc05_014 ~18:20-29:36; cc07_004 ~1:01) [CC].
   Price meets them nearest first; a breaker in the path usually stops price before the arrays
@@ -198,9 +216,11 @@ and to the notes for context, charts and trade examples. This file states each r
   beyond the CE = continuation, close back = revisit (025 ~25:37; 100 ~38:13). Bot:
   `wick_midpoints`; `wick_levels` (on) for the prior day, `wick_days` / `wick_weekly` /
   `wick_both` / `wick_session` switches (levels_detectors).
+  - Caption-gap fix (A23-wick-quarter-strength; 025 ~34:43, 028 ~15:24-16:43, 103 ~24:07/~27:23, 065 ~4:19:02, 075 ~1:05:07, 072 ~5:27): re-cite 028 (not 025) for the CE stop. Quarters / gradients: q25 (25% from the body edge), CE, q75. A retrace into an upper wick used as resistance: turns at q25 = very bearish; at CE = normal; overshoots CE but stays <= q75 = still valid (103); trades through q75 or a body closes above CE = failed [our tiers]. Heavy bearish stance: q25 is the reaction / entry level (025 / 028). Bias line (065 / 075, lower wick 1h+): bullish intact while no body closes at or below CE; a body close at or below it = stop adding. Judas cap (072): (high + max(open, close)) / 2, bearish intact while rallies fail to close above it. Wick entries only at CE or a quarter. Bot: `wick_quarters` (tier tag), `wick_bias_line` (no adds), `judas_wick_cap` (tag).
 - **A24 Not codeable as stated:** implied FVG (035 ~29:49, named once, never defined); Reaper
   (076 ~18:30); "inducement" (not an ICT term in the notes; the bot's sweep step is the closest
   codeable form).
+- **A25 Converged PD arrays** (confluence-stacked-arrays; 100 ~6:05, 103 ~4:38/~25:04, 011 ~7:19) [2023]: a PD-array level is "converged" when an OB also contains an FVG and / or a VI (100), or a wick's CE lies inside an FVG, especially near its CE [our interpretation: within 2 ticks] (103, 011). Rank converged levels above single arrays for entries, partials and targets; a counter-trend retrace may spike to a converged level but should stop there (103). Bot: `converge_rank` (off) picks the entry gap with the most converging arrays and tags `converged_N` (entries only).
 
 ### 2.2 Bias (higher timeframe)
 
@@ -226,6 +246,8 @@ and to the notes for context, charts and trade examples. This file states each r
   cc09_004) [CC]. Bellwether chart: 15m (013 ~2:36; 065B ~05:01). Top-down sequence on news days:
   daily VI, 60m, 30m, 15m, 5m, 1m (Ep 02).
   Bot (bias_htf): `weekly_gate` (no side against the weekly bias), `news_topdown` (release day: the daily VI sets the side), `bellwether_15m` (the 15m read must not deliver against the side).
+  - Caption-gap fix (X3-b5-15m-pools-5m-gaps; cc05_003 ~1:27:21 [CC]): the daily chart is where institutional orders are read; liquidity pools are mapped on the 15m; use the 5m only for small FVGs not visible on the 15m or 1h; never map pools from the 1m. Bot: `pool_tf` (minutes; 1 = the base bars; 15 = the 15m pivots, mapped to their base-bar extreme).
+  - Caption-gap fix (B5-htf-arrays-anchor-transpose; 043 ~3:13, 072 ~1:45, 074 ~7:00, 080 ~11:28, cc04_012 ~0:37/~5:25): detect FVGs, VIs, IFVGs, OBs, breakers, rejection blocks and wicks on each HTF (W, D, 4h, 1h, 15m) from that TF's own bars; store edges, CE and quarters and project them unchanged onto the LTF chart as fixed zones - no LTF 3-candle gap needed; on the LTF look only for the trigger and refinement (LTF body gaps inside it, or an LTF rebalance); weekly -> daily likewise. The HTF level governs stop / invalidation when arrays overlap [our interpretation]. Conflict: A10 (void) vs cc04_012. Bot: `htf_entry_arrays` (minutes, e.g. (15, 60); FVGs and OBs).
 - **B6 Institutional order flow (IOF), scored on the daily.** Bullish = down-close candles hold as
   support, up-close candles get run through, every short-term low taken reverses at once; bearish
   mirror (cc12_003 ~11:41; 075 ~1:21:40; 099 ~14:56; 102 ~1:42:05; cc06_002 ~4:53) [both].
@@ -259,6 +281,7 @@ and to the notes for context, charts and trade examples. This file states each r
   daily arrays only inside weekly arrays. Week+day correcting: only at monthly arrays. Only a bearish
   breaker on a timeframe cancels it (cc06_004 ~1:02-14:47; cc06_005 ~0:46). {1m-derived}
   Bot (bias_htf): `htf_bias="mwd"` (month / week / day displacement states, cases A / B / C), `mwd_nest` tag / filter (cases B / C: entries only inside the weekly / monthly arrays).
+  - Caption-gap fix (X3-b10-topdown-transposition; cc06_003 ~20:01): swing top-down: check the 9-18 month monthly / weekly profile for trend or range (an aggressive exit from a range = displacement); list the active monthly arrays and transpose them to the weekly, the weekly ones to the daily, then to the 4h; buy 4h discount arrays (turtle soup below old lows or rejection-block bodies) and scale out at the transposed daily, weekly and monthly premium arrays; bearish mirror. Bot: `topdown_targets` (off) puts the 4h / D / W / M opposing arrays (conf rows, each with its `tf`) into the target ladder.
 - **B11 Candle-pattern day context** {1m-derived}: inside day -> large range next (012 ~16:17);
   inside week -> expansion within 2 candles, else scalp only (103 ~12:53); down-close outside day
   -> lower prices until that day's high is taken (081 ~1:31); after 3 consecutive up (down) daily
@@ -326,6 +349,8 @@ and to the notes for context, charts and trade examples. This file states each r
   If the 20-day extreme is taken, the 40-day, then 60-day are next (cc05_003 ~28:38; cc07_004).
   Price near EQ of all three with both sides run -> range day until news (cc05_003 ~1:18:26).
   Default: roll daily from yesterday (cc09_008), not anchored on the quarterly shift.
+  - Caption-gap fix (X3-b21-ipda-anchor; cc05_001 ~53:44/~23:23/~26:56, cc05_003 ~19:10): decision `ipda_anchor`: "rolling" (from yesterday, default; cc09_008, cc05_003 ~1:20:41), "month" (the first trading day of the most recent closed calendar month, cc05_001), "swing" (the last daily MSS within 60 days) - also a quarterly shift; LB20/40/60 count trading days LEFT of the anchor and record their extremes, gaps and arrays; 20/40/60 days to the right time the next shift.
+  - Caption-gap fix (B21-ipda-windows-arrays; cc05_001 ~22:58, cc07_005 ~14:17, cc09_008 ~8:47): windows count trading days, skipping Sunday sessions; yesterday = day 1; they roll forward daily; 60 days is the primary look-back; collect PD arrays (OBs, FVGs, voids, breakers, rejection blocks, old highs / lows) inside Range60 tagged by window; day trading works in Range20 and goes to 40 (then 60) only when every 20-day array has been traded through. Bot: `ipda_arrays_first20` (off).
 - **B22 Quarterly shift**: a major turn or consolidation every 3-4 months; bias and sizing context,
   not timing (cc05_001 ~5:05; 084 ~22:12; 098 ~58:30) [both].
   Bot (bias_htf): `qshift_tag` / `qshift_size` (60-session turn or consolidation, due 3-4 months later, 252-session trend).
@@ -418,6 +443,7 @@ and to the notes for context, charts and trade examples. This file states each r
     under ADR5: expansion of 1.5-2x due (cc08_006 ~23:33) [CC].
   - "Seek & Destroy" (both sides run, then reversal): don't hold trades; such weeks come while
     waiting on rates/NFP and in July-August (024 ~13:57; 044 ~1:36:11; cc07_002 ~7:42).
+  - Caption-gap fix (N8-consolidation-builds-orders; cc01_002 ~17:28): the consolidation range edges are the pools for the coming expansion. While consolidating: no entries in skip mode; mark the range high / low as buy-side / sell-side pools (L1); the next leg is an impulsive expansion out of the range, never a retracement or reversal straight out of it; afterwards expect a retracement to the OB it left (then continuation) or a reversal; take the direction from the HTF premise (a false run of the opposite extreme is the manipulation); trade only after the expansion has printed. Bot: `consol_pools` (off): the released chop range's high / low are the pools `consol_h` / `consol_l`.
 - **N9 In-day no-trade conditions** [2023]:
   - No clear draw, no inefficiency, no displacement: no trade (045 ~31:22-40:49).
   - Draw delivered before 09:30: choppy 09:30, trade the PM (022 ~1:16:11).
@@ -559,6 +585,7 @@ and to the notes for context, charts and trade examples. This file states each r
   Variant: Friday close to Monday 09:30 (039 ~14:41). Bot: Monday-09:30 variant (RTH Fri close to Mon
   09:30 open), edges only, last 4. {needs: Sunday 18:00 open = futures; check whether the CFD files
   carry Sunday-evening bars} D21.
+  - Caption-gap fix (L5-nwog-high-low-labelling; 051 ~5:38): nwog_high = max(Friday close, Sunday open), nwog_low = min; gap_dir = "down" if the Friday close is above the Sunday open, else "up"; the Friday close is the last print before the Friday session ends (16:59; on 5m bars the 16:55 bar close). Bot: `htf.opening_gaps` carries `dir` (always on, a tag); `gaps_for_day(with_dir=True)` passes it on.
 - **L6 NDOG** = 17:00 close to 18:00 reopen, Mon-Thu; high, low, midpoint; ignore gaps <= ~1 ES
   pt; lifetime through Friday (052 ~0:46-5:46) or 5 trading days (068 ~9:49); confluence only,
   never a standalone signal (052 ~6:16) [2023]. {needs: futures data with the 17:00-18:00 break}
@@ -574,6 +601,7 @@ and to the notes for context, charts and trade examples. This file states each r
 - **L8 Vacuum block** = the gap between the last close before an event/session open and the first
   open after; gaps at 08:30/early NY usually fill the same day, gaps from 10:00 on tend to stay
   partly open (cc04_009 ~3:58-10:05) [CC].
+  - Caption-gap fix (X3-l8-vb-exhaustion-gap; cc04_009 ~2:48): a bullish vacuum block is valid when the bias is bullish and the gap opens up away from a discount (its lower edge below the 20-day range EQ), after a retracement in an uptrend; a gap up after a multi-day / week rally (5 straight up days, or a close above the 20-day high) may be an exhaustion gap: tag it and do not treat it as a bullish VB; bearish mirror. Bot: `vb_context` (off) filters the vacuum-block rungs and tags `vb_exhaustion`.
 
 **Levels inside arrays**
 - **L9 FVG targets**: near edge first (an FVG beats an overlapping OB), then CE; CE of a weekly gap
@@ -634,6 +662,7 @@ and to the notes for context, charts and trade examples. This file states each r
   ~34:00); 2023 index work does not (007 is the one case). Bot: `round_step_pts` switch (off):
   targets rounded down and limit entries up toward price on the real front-month price (#13
   mapping); stops not rounded.
+- **L18 Initial FVG references** (N-initial-fvg-reference; 048 ~5:40, 082 ~5:13) [2023]: reference arrays, tagged respected / disrespected later; confluence and a narrative tag only, never a stand-alone entry. `initial_fvg_day` = the first 5m FVG whose third candle closes 09:30-10:00, extended to 16:00; `initial_fvg_week` = the first FVG of Monday's session (048: a 5m FVG at Monday 14:50) [our interpretation: the week's first trading session], extended to Friday's close; `monday_10am_1h_fvg` = if Monday's 10:00 1h candle is c2 of a 1h FVG, its high / low / CE as a weekly array (082: a BISI used as resistance later in the week). Bot: `initial_fvg` (empty; "day" / "week" / "mon10"); `Trade.init_fvg_respected`.
 
 ### 2.6 Models and setups
 

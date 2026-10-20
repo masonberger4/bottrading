@@ -638,8 +638,8 @@ def matrix_breakers(sd, p):
 
 def rb_zones(sd, p):
     """A17 (fixed rejection_blocks): the opposing (bearish, side space) rejection blocks."""
-    return sd._lazy(("rb_bear", p.pivot_n, p.rb_min_wick_frac),
-                    lambda: [z for z in L.rejection_blocks(sd.o, sd.h, sd.l, sd.c, p.pivot_n, p.rb_min_wick_frac)
+    return sd._lazy(("rb_bear", p.pivot_n, p.rb_min_wick_frac, p.rb_level),
+                    lambda: [z for z in L.rejection_blocks(sd.o, sd.h, sd.l, sd.c, p.pivot_n, p.rb_min_wick_frac, p.rb_level)
                              if z.kind == "bear"])
 
 
@@ -716,6 +716,8 @@ def extra_sources(ctx, sd, i: int, p, sw: dict, entry: float, risk: float, leg_h
         for z in rb_zones(sd, p):
             if z.i <= i and z.bottom > above and after(z) < z.bottom:
                 out.append((float(z.bottom), "rb"))                  # "replace" is applied by refine()
+                if p.rb_ce_level:                                    # caption-gap A17: level2 (the wick CE) and W (the extreme wick)
+                    out += [(float(z.mid), "rb"), (float(z.top), "rb")]
     if p.matrix_targets:
         if "breaker" in p.matrix_targets:
             for z in matrix_breakers(sd, p):
@@ -723,7 +725,8 @@ def extra_sources(ctx, sd, i: int, p, sw: dict, entry: float, risk: float, leg_h
                     out += [(float(z.bottom), "array"), (float(z.mt if z.mt == z.mt else z.mid), "array")]
         if "mitigation" in p.matrix_targets:
             for z in sd.opp_mits():
-                if z.i <= i and z.bottom > above and (not p.mit_body_respect or L.mitigation_alive(sd.c, z, i)):
+                if z.i <= i and z.bottom > above and (not (p.mit_body_respect or p.mit_mt_invalid)
+                                                  or L.mitigation_alive(sd.c, z, i, p.mit_mt_invalid)):
                     out += [(float(z.bottom), "array"), (float(z.mid), "array")]
         if "rejection" in p.matrix_targets:
             for z in rb_zones(sd, p):

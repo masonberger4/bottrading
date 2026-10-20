@@ -44,6 +44,8 @@ class Arr:
     bottom: float
     ce: float        # consequent encroachment / mean threshold
     known: int       # index (in daily bars) of the first day it can be used
+    ipda_w: int = 0  # caption-gap B21 (cc05_001 ~22:58): the IPDA window (20 / 40 / 60 sessions) of the row being built, by the age of `known`
+                     # (set per day in table(); 0 = older than 60 sessions). Arr objects are shared across days, so read it only inside the loop.
 
 
 def sessions(df: pd.DataFrame) -> pd.DataFrame:
@@ -64,12 +66,13 @@ def weeks(d: pd.DataFrame) -> pd.DataFrame:
 
 
 def _arrays(o, h, l, c, tf: str, known_of, vi: bool = False, c2_dir: bool = False,
-            vi_min_gap: float = 0.0) -> list[Arr]:
+            vi_min_gap: float = 0.0, vi_wick_overlap: bool = True, vi_multi: bool = False) -> list[Arr]:
     """Daily / weekly arrays. levels_detectors: `c2_dir` (A5 fvg_c2_dir) keeps only FVGs whose
-    middle candle closes their way; `vi_min_gap` (A9) drops narrower VIs."""
+    middle candle closes their way; `vi_min_gap` (A9) drops narrower VIs; caption-gap A9 `vi_wick_overlap` /
+    `vi_multi` (see levels.volume_imbalances)."""
     out = []
     if vi:                       # shared VI wiring (Ep02.8 / Ep03.3 / B1): daily/weekly volume
-        for z in L.volume_imbalances(o, h, l, c, vi_min_gap):   # imbalances as arrays and draws
+        for z in L.volume_imbalances(o, h, l, c, vi_min_gap, vi_wick_overlap, vi_multi):   # imbalances as arrays and draws
             a = Arr(z.kind, "vi", tf, z.top, z.bottom, z.mid, known_of(z.i))
             a.src_i = z.i                                     # its own-TF bar (A9 body death)
             out.append(a)
@@ -92,10 +95,47 @@ def bar_minutes(df: pd.DataFrame) -> int:
     return max(1, int(d[d > pd.Timedelta(0)].min().total_seconds() // 60))
 
 
+def _arr_alive(a: Arr, k: int, o, h, l, c, wo, wc, wl, vi_body_death: bool, vi_rule: str = "full_span",
+               ol: float = 0.0, oh: float = 0.0, open_only: bool = False) -> bool:
+    """Is array `a` still valid on day k (the table's inline test): a VI under `vi_body_death` dies once a later own-TF body spans
+    it (rule "full_span") or overlaps it ("overlap"); other arrays die on a close through the far side / the OB mean threshold;
+    opening gaps are never retired by a fill (039). open_only (caption-gap B21 window pick): also not fully rebalanced - the draw
+    is still open (the unrebalanced part of an FVG / VI)."""
+    s = a.known
+    cl = c[s:k]
+    gap = a.typ in ("ndog", "nwog")
+    if a.typ == "vi" and vi_body_death:
+        if a.tf == "D":
+            ob_, cb_ = o[s:k], c[s:k]
+        else:                                    # weekly bodies completed before day k
+            done_w = [j for j in range(len(wl)) if a.known < wl[j] <= k]   # later weeks only
+            ob_, cb_ = wo[done_w], wc[done_w]
+        if len(cb_):
+            lo_b, hi_b = np.minimum(ob_, cb_), np.maximum(ob_, cb_)
+            dead = ((lo_b < a.top) & (hi_b > a.bottom)) if vi_rule == "overlap" else ((lo_b <= a.bottom) & (hi_b >= a.top))
+            if dead.any():
+                return False
+    elif a.kind == "bull" and not gap:
+        lvl = a.ce if a.typ == "ob" else a.bottom
+        if len(cl) and cl.min() < lvl:
+            return False                                   # closed through: invalid
+    elif not gap:
+        lvl = a.ce if a.typ == "ob" else a.top
+        if len(cl) and cl.max() > lvl:
+            return False
+    if open_only and a.typ in ("fvg", "vi"):
+        if a.kind == "bull" and np.append(l[s:k], ol).min() <= a.bottom:
+            return False
+        if a.kind == "bear" and np.append(h[s:k], oh).max() >= a.top:
+            return False
+    return True
+
+
 def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: int = 60,
           min_gap_pts: float = 1.0, cut_min: int = 570, vi: bool = False,
           flip_triggers: tuple = ("ob_mt", "wk_dc"), c2_dir: bool = False, vi_min_gap: float = 0.0,
-          vi_body_death: bool = False, bx: str = "") -> pd.DataFrame:
+          vi_body_death: bool = False, bx: str = "", vi_wick_overlap: bool = True, vi_multi: bool = False,
+          vi_dead_rule: str = "full_span", vi_two_sided: bool = False, ipda_first20: bool = False) -> pd.DataFrame:
     """One row per trading day: react / draw / pd / combo bias and the draw levels.
     `cut_min`: the row describes the market as known at that minute of the day - the overnight
     high/low/last use only bars that have CLOSED by cut_min (bar start + bar length <= cut_min).
@@ -106,20 +146,24 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     dies once a later body of its own timeframe spans it (not on a close beyond its far edge).
     With `vi`, the columns vi_up / vi_dn hold the nearest live VI draw each way (vi_news_draw).
     bias_htf: `bx` (bias_htf.bx_string(Params)) names the extra columns to build (ordered draw, IOF, P/D of the 20-session range,
-    MWD, weekly open, NWOG regime, ...); "" gives the table above unchanged."""
+    MWD, weekly open, NWOG regime, ...); "" gives the table above unchanged.
+    Caption-gap pass (levels_detectors #1/3): `vi_wick_overlap` / `vi_multi` (A9 definition), `vi_dead_rule` ("full_span" /
+    "overlap": the body death rule of a VI), `vi_two_sided` (A9: an open VI stays a draw from either side until a body kills
+    it - wicks never retire it, 077), `ipda_first20` (B21 / cc05_007: the daily FVG / OB / VI arrays of the last 20 sessions
+    are the only ones used until all of them are traded through, then 40, then 60 - Arr.ipda_w by the age of `known`)."""
     from . import bias_htf as BH
     X = BH.parse(bx)
     d = sessions(df)
     D = len(d)
     o, h, l, c = (d[k].values.astype(float) for k in ("open", "high", "low", "close"))
-    arrs = _arrays(o, h, l, c, "D", lambda i: i + 1, vi, c2_dir, vi_min_gap)
+    arrs = _arrays(o, h, l, c, "D", lambda i: i + 1, vi, c2_dir, vi_min_gap, vi_wick_overlap, vi_multi)
     # weekly arrays become usable the day after the week's last session
     w = weeks(d)
     pos = {t: k for k, t in enumerate(d.index)}
     wl = [pos[t] + 1 for t in w["last"]]
     wo, wc = w.open.values.astype(float), w.close.values.astype(float)
     arrs += _arrays(*(w[k].values.astype(float) for k in ("open", "high", "low", "close")), "W",
-                    lambda i: wl[i], vi, c2_dir, vi_min_gap)
+                    lambda i: wl[i], vi, c2_dir, vi_min_gap, vi_wick_overlap, vi_multi)
     # opening gaps (ICT 039/051/052): NWOG Fri close -> Sun 18:00, NDOG 17:00 -> 18:00 Mon-Thu
     pos_of = {t: k for k, t in enumerate(d.index)}
     og_df = opening_gaps(df, es_pt, min_gap_pts)
@@ -162,27 +206,24 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         react = 0.0
         ru = rd = rw_up = rw_dn = 0.0
         draws_up, draws_dn = [], []
+        win = 60
+        if ipda_first20:                                 # B21: the first window that still has an open daily array
+            for cand_ in (20, 40, 60):
+                if any((k - a.known + 1) <= cand_ and _arr_alive(a, k, o, h, l, c, wo, wc, wl, vi_body_death, vi_dead_rule, ol, oh, True)
+                       for a in live if a.tf == "D" and a.typ in ("fvg", "ob", "vi")):
+                    win = cand_
+                    break
         for a in live:
             s = a.known
+            age_ = k - a.known + 1
+            a.ipda_w = 20 if age_ <= 20 else 40 if age_ <= 40 else 60 if age_ <= 60 else 0
+            if ipda_first20 and a.tf == "D" and a.typ in ("fvg", "ob", "vi") and (a.ipda_w == 0 or a.ipda_w > win):
+                continue
             cl, hi_after, lo_after = c[s:k], h[s:k], l[s:k]
             lo_after = np.append(lo_after, ol); hi_after = np.append(hi_after, oh)
             gap = a.typ in ("ndog", "nwog")              # gaps are never retired by a fill (039)
-            if a.typ == "vi" and vi_body_death:          # A9: a later own-TF body spans it
-                if a.tf == "D":
-                    ob_, cb_ = o[s:k], c[s:k]
-                else:                                    # weekly bodies completed before day k
-                    done_w = [j for j in range(len(wl)) if a.known < wl[j] <= k]   # later weeks only
-                    ob_, cb_ = wo[done_w], wc[done_w]
-                if len(cb_) and ((np.minimum(ob_, cb_) <= a.bottom) & (np.maximum(ob_, cb_) >= a.top)).any():
-                    continue
-            elif a.kind == "bull" and not gap:
-                lvl = a.ce if a.typ == "ob" else a.bottom
-                if len(cl) and cl.min() < lvl:
-                    continue                                   # closed through: invalid
-            elif not gap:
-                lvl = a.ce if a.typ == "ob" else a.top
-                if len(cl) and cl.max() > lvl:
-                    continue
+            if not _arr_alive(a, k, o, h, l, c, wo, wc, wl, vi_body_death, vi_dead_rule):
+                continue
             wt = 2.0 if a.tf == "W" else 1.0
             # reaction in the last react_days completed days or tonight
             rl = np.append(l[max(s, k - react_days):k], ol)
@@ -197,7 +238,12 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
                 rw_dn += a.tf == "W"
             # draw: the unrebalanced part of the inefficiency (FVGs and gaps only)
             if a.typ in ("fvg", "ndog", "nwog", "vi"):
-                if a.kind == "bull":
+                if a.typ == "vi" and vi_two_sided:           # caption-gap A9: open until a body kills it; wicks never retire it (077)
+                    if a.top < px:
+                        draws_dn.append((px - a.top, f"{a.tf}_{a.typ}", a.top))
+                    elif a.bottom > px:
+                        draws_up.append((a.bottom - px, f"{a.tf}_{a.typ}", a.bottom))
+                elif a.kind == "bull":
                     low_seen = lo_after.min()
                     if low_seen > a.bottom:                  # not fully rebalanced
                         near = min(a.top, low_seen)
@@ -420,12 +466,15 @@ def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0
             continue                                  # holiday early close: not a 17:00 close
         day = (t[k] + pd.Timedelta(hours=7)).normalize().tz_localize(None)
         rows.append(dict(kind="nwog" if weekend else "ndog", high=max(a, b), low=min(a, b),
-                         ce=(a + b) / 2, up=b > a, known=t[k], week=day.to_period("W-FRI")))
+                         ce=(a + b) / 2, up=b > a, known=t[k], week=day.to_period("W-FRI"),
+                         # caption-gap L5 (051 ~5:38): nwog_high = max(Friday close, Sunday open), nwog_low = min; gap_dir = "down" when
+                         # the Friday close is above the Sunday open, else "up". a = the last print before the break (Friday's close)
+                         dir="down" if a > b else "up", close_before=a, open_after=b))
     return pd.DataFrame(rows)
 
 
 def gaps_for_day(g: pd.DataFrame, day, nwog_keep: int = 5, nwog_days: int = 0, skip_holiday: bool = False,
-                 trading_days: bool = False) -> list[tuple[str, float, float, float]]:
+                 trading_days: bool = False, with_dir: bool = False) -> list[tuple]:
     """Gaps in force at 09:30 of `day`: NWOGs (the last `nwog_keep`, or with `nwog_days` > 0
     every NWOG from the last that many trading days - ICT's 60-day maximum, 051 ~18:02,
     "60 market days", 065) and this week's NDOGs. Returns (kind, high, low, ce).
@@ -456,6 +505,8 @@ def gaps_for_day(g: pd.DataFrame, day, nwog_keep: int = 5, nwog_days: int = 0, s
     else:
         nw = nw.tail(nwog_keep)
     nd = k[(k.kind == "ndog") & (k.week == wk)]
+    if with_dir:                      # caption-gap L5: (kind, high, low, ce, dir) - the labels as a tag, "up" / "down"
+        return [(r.kind, r.high, r.low, r.ce, r.dir) for r in pd.concat([nw, nd]).itertuples()]
     return [(r.kind, r.high, r.low, r.ce) for r in pd.concat([nw, nd]).itertuples()]
 
 

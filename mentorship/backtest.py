@@ -195,6 +195,12 @@ HIST_DAYS = 61                    # prior sessions handed to run_day (backtest a
                                   # the IPDA 60-day look-back + 1 (B21, levels_detectors; was 45)
 
 
+def hist_days(p: Params) -> int:
+    """Prior sessions handed to run_day. Caption-gap B21 ipda_anchor "month" / "swing": the windows end up to ~43 sessions before
+    yesterday (the first trading day of the last closed month; the last daily MSS), so 60 more sessions of history are kept."""
+    return HIST_DAYS + (45 if getattr(p, "ipda_anchor", "rolling") != "rolling" else 0)
+
+
 def htf_kw(p: Params) -> dict:
     """levels_detectors switches that change the htf table / confluence arrays (A5 c2 check, A9 VI
     size and death rule). Empty at the old values, so cached tables keep their meaning."""
@@ -205,6 +211,15 @@ def htf_kw(p: Params) -> dict:
         kw["vi_min_gap"] = p.vi_min_gap_pts * p.es_pt
     if p.vi_body_death:
         kw["vi_body_death"] = True
+    # caption-gap pass (levels_detectors #1/3): the VI definition / death rule / two-sided draw and the IPDA array window
+    if not p.vi_wick_overlap:
+        kw["vi_wick_overlap"] = False
+    if p.vi_multi:
+        kw["vi_multi"] = True
+    if p.vi_dead_rule != "full_span":
+        kw["vi_dead_rule"] = p.vi_dead_rule
+    if p.ipda_arrays_first20:
+        kw["ipda_first20"] = True
     return kw
 
 
@@ -214,6 +229,8 @@ def table_kw(p: Params) -> dict:
     kw = htf_kw(p)
     if p.bx:
         kw["bx"] = p.bx
+    if p.vi_two_sided_draw:
+        kw["vi_two_sided"] = True       # htf.table only (the Confluence arrays have no draw list)
     return kw
 
 
@@ -306,7 +323,7 @@ def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: d
     """run_day inputs for day k of pr.ds (the partner / log / locks plumbing is the caller's)."""
     p, g = pr.p, pr.ds[k]
     d = g.index[0].date()
-    return dict(df=g, hist=[rth(x) for x in pr.ds[max(0, k - HIST_DAYS):k]], symbol=pr.symbol, p=p, tf=pr.tf,
+    return dict(df=g, hist=[rth(x) for x in pr.ds[max(0, k - hist_days(p)):k]], symbol=pr.symbol, p=p, tf=pr.tf,
                 bias=pr.bt.loc[d].to_dict() if pr.bt is not None and d in pr.bt.index else None,
                 conf=pr.cf,
                 gaps=htf.gaps_for_day(pr.og, d, p.nwog_keep, p.nwog_days, p.nwog_skip_holiday,
