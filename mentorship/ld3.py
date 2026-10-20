@@ -29,7 +29,8 @@ def daily_hl(ctx) -> list:
     d = getattr(ctx, "ipda_days", None)
     if d is None:
         d = [(float(x.high.max()), float(x.low.min())) for x in getattr(ctx, "hist", [])]
-    return d
+    lb = (getattr(ctx, "tf_lookback", None) or {}).get("D")
+    return d[-int(lb):] if lb else d          # caption-gap new-lookback-per-tf-topdown: the daily levels come from the last `D` sessions only
 
 
 def daily_piv(ctx, sign: int):
@@ -125,6 +126,15 @@ def eng_pools(ctx, sd, i: int, p, buy: bool) -> list:
 
 # --- L3 session opening ranges ---------------------------------------------------------------------------------------
 
+def sor_windows(p) -> tuple:
+    """The (start_minute, minutes) windows of the session opening ranges: Params.session_ors, plus (480, 60) - the 08:00-09:00 range, the bonds'
+    pool for the stock open (LLT3-0800-0900-pool-stock-open, cc10_006 ~4:06) - with Params.or0809_pool."""
+    w = tuple(tuple(x) for x in p.session_ors)
+    if p.or0809_pool and (480, 60) not in w:
+        w += ((480, 60),)
+    return w
+
+
 def build_sors(ctx, p) -> list:
     """L3-midnight-session-opening-ranges (050 ~18:13): [(name, high, low, created_bar)] for each (start_minute, minutes) of Params.session_ors,
     from today's frame bars with start <= minute-of-day < start + minutes (the Asian 20:00 range is the prior evening, which is in the frame
@@ -132,7 +142,7 @@ def build_sors(ctx, p) -> list:
     out = []
     S = ctx.start
     t = ctx.t
-    for st, mins in p.session_ors:
+    for st, mins in sor_windows(p):
         st, mins = int(st), int(mins)
         idx = np.flatnonzero((t[S:] >= st) & (t[S:] < st + mins)) + S
         if not len(idx):
@@ -187,7 +197,7 @@ def target_pools(ctx, sd, i: int, p) -> list:
             out.append((float(v), ctx.start))
     if p.engineered_pools:
         out += [(v, cr) for v, cr, _, _ in eng_pools(ctx, sd, i, p, True)]
-    for name, hi, lo, cr in (getattr(ctx, "sors", []) if p.session_ors else []):
+    for name, hi, lo, cr in (getattr(ctx, "sors", []) if sor_windows(p) else []):
         if cr <= i:
             out.append((float(sd.x(hi if sd.sign > 0 else lo)), cr))
     if p.open_float_pools:
@@ -230,7 +240,7 @@ def sell_pools(ctx, sd, i: int, p, out: dict) -> None:
             out[nm] = float(v)
             cr_map[nm] = cr
             sc_map[nm] = sc
-    for name, hi, lo, cr in (getattr(ctx, "sors", []) if p.session_ors else []):
+    for name, hi, lo, cr in (getattr(ctx, "sors", []) if sor_windows(p) else []):
         if cr <= i:
             out[name] = float(sd.x(lo if sd.sign > 0 else hi))
             cr_map[name] = cr
@@ -263,7 +273,7 @@ def lock_cands(ctx, p, t_lock: int, kl: int) -> list:
         v = L.first_old_beyond([-q.price for q in pl], -float(ctx.l[S:kl].min()))
         if v is not None:
             out.append((-float(v), "pool", "old_lo", -1, S))
-    for name, hi, lo, cr in (getattr(ctx, "sors", []) if p.session_ors else []):
+    for name, hi, lo, cr in (getattr(ctx, "sors", []) if sor_windows(p) else []):
         if cr <= kl:
             out += [(hi, "pool", name + "_h", 1, cr), (lo, "pool", name + "_l", -1, cr)]
     return out

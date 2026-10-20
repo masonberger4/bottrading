@@ -197,8 +197,21 @@ HIST_DAYS = 61                    # prior sessions handed to run_day (backtest a
 
 def hist_days(p: Params) -> int:
     """Prior sessions handed to run_day. Caption-gap B21 ipda_anchor "month" / "swing": the windows end up to ~43 sessions before
-    yesterday (the first trading day of the last closed month; the last daily MSS), so 60 more sessions of history are kept."""
-    return HIST_DAYS + (45 if getattr(p, "ipda_anchor", "rolling") != "rolling" else 0)
+    yesterday (the first trading day of the last closed month; the last daily MSS), so 60 more sessions of history are kept.
+    Caption-gap levels_detectors #3/3: the longest ipda window (63 / 126 / 252 sessions), tf_lookback["D"], the 3 completed months of monthly_ohlc (90),
+    ipda_beyond_days, org_days > 60 and the forward intervals of ipda_forward (60 more) widen it; the defaults keep 61."""
+    ext = 45 if getattr(p, "ipda_anchor", "rolling") != "rolling" else 0
+    n = HIST_DAYS + ext
+    n = max(n, max(getattr(p, "ipda_windows", (60,))) + 1 + ext)
+    if getattr(p, "ipda_forward", False):
+        n += 60
+    if getattr(p, "monthly_ohlc", False):
+        n = max(n, 90)
+    if getattr(p, "tf_lookback", None) and p.tf_lookback.get("D"):
+        n = max(n, int(p.tf_lookback["D"]) + 1)
+    if getattr(p, "ipda_beyond_days", 0):
+        n = max(n, p.ipda_beyond_days + 1)
+    return max(n, getattr(p, "org_days", 0) + 1)
 
 
 def htf_kw(p: Params) -> dict:
@@ -225,6 +238,9 @@ def htf_kw(p: Params) -> dict:
         kw["nwog_cfd_src"] = p.nwog_cfd_src
     if p.void_rt_ob:
         kw["void_rt_ob"] = True
+    # caption-gap pass (levels_detectors #3/3): the per-timeframe look-back windows (array lives)
+    if p.tf_lookback:
+        kw["tf_lookback"] = dict(p.tf_lookback)
     return kw
 
 
@@ -281,7 +297,7 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
     bt = bias_table if bias_table is not None else (
         htf.table(df, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers, **table_kw(p)) if ov else None)
     cuts = lock_cuts if lock_cuts is not None else lock_tables(df, p, bt)
-    og = htf.opening_gaps(df, p.es_pt, 1.0, p.nwog_cfd_src) if ov else None
+    og = htf.opening_gaps(df, p.es_pt, 1.0, p.nwog_cfd_src, p.gap_views, p.org_close or p.session_close or 960) if ov else None   # (gap_views "both": + the RTH weekend gap)
     reb = htf.nwog_rebalanced(df, og, p.tick) if (ov and p.nwog_rebalanced) else None       # caption-gap L5 nwog_rebalanced
     tt = df.index.hour * 60 + df.index.minute
     pre = df[(tt >= 570) & (tt < (p.org_close or p.session_close or 960))]   # L7: per symbol
@@ -294,7 +310,7 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
     eth = None
     ipda_on = p.ipda_pools or p.ipda_next or p.ipda_eq_day != "off"
     if (p.pd_hl_session == "eth" or p.matrix_full or p.wick_session == "eth" or p.pw_pm_full_session
-            or (ipda_on and p.ipda_session == "eth") or (p.ma_deuce and p.md_eth)
+            or (ipda_on and p.ipda_session == "eth") or (p.ma_deuce and p.md_eth) or p.week_pools
             or p.tgif_zone or p.dw_needs_eth):   # M15 md_eth (review fix); M14.2 the weekly range from Sunday 18:00; day_week_context
         se = htf.sessions(df)                  # full sessions (evening reopen -> close), by trading date
         eth = {t.date(): (float(r.open), float(r.high), float(r.low), float(r.close)) for t, r in se.iterrows()}
@@ -340,7 +356,9 @@ def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: d
                 bias=pr.bt.loc[d].to_dict() if pr.bt is not None and d in pr.bt.index else None,
                 conf=pr.cf,
                 gaps=htf.gaps_for_day(pr.og, d, p.nwog_keep, p.nwog_days, p.nwog_skip_holiday,
-                                      p.nwog_trading_days, reb=pr.reb) if pr.og is not None else None,
+                                      p.nwog_trading_days, reb=pr.reb, holiday_pick=p.nwog_holiday_pick,
+                                      ref_px=float(g.open.iloc[0])) if pr.og is not None else None,
+                prev_full=pr.ds[k - 1] if (k > 0 and (p.prev_london_pool or p.london_lr_zone != "off")) else None,
                 eth=pr.eth,
                 closes=pr.closes, evening=_evening(pr.df, d) if p.globex_pool else None,
                 intermarket=({**(intermarket or {}), "ext_midnight": pr.midnight_map[d]}

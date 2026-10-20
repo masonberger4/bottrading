@@ -243,7 +243,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
           vi_body_death: bool = False, bx: str = "", vi_wick_overlap: bool = True, vi_multi: bool = False,
           vi_dead_rule: str = "full_span", vi_two_sided: bool = False, ipda_first20: bool = False,
           nwog_cfd_src: str = "auto", single_pass_draw: bool = False, void_rt_ob: bool = False, htf_ob_ltf_drill: bool = False,
-          balance_tf: str = "own") -> pd.DataFrame:
+          balance_tf: str = "own", tf_lookback: dict | None = None) -> pd.DataFrame:
     """One row per trading day: react / draw / pd / combo bias and the draw levels.
     `cut_min`: the row describes the market as known at that minute of the day - the overnight
     high/low/last use only bars that have CLOSED by cut_min (bar start + bar length <= cut_min).
@@ -303,6 +303,8 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     on = pd.DataFrame({"high": g.high.max(), "low": g.low.min(), "last": g.close.last()})
 
     mid_open = BH.week_open_mon(df, d) if X.get("bc") == "midnight" else None     # M0.1 bias_candle_open="midnight": the 00:00 opens
+    # caption-gap new-lookback-per-tf-topdown (cc01_003 ~13:38: "your daily chart needs to show 12 months"): tf_lookback["D"] = the daily arrays' life in sessions
+    lb_d = int((tf_lookback or {}).get("D") or lookback)
     rows = []
     wk_first = {}                                    # W-FRI period -> first session position (bias_htf: the week's open)
     for k_, t_ in enumerate(d.index):
@@ -313,7 +315,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
             continue
         px = float(on.at[day, "last"])
         oh, ol = float(on.at[day, "high"]), float(on.at[day, "low"])
-        lo_k = max(0, k - lookback)
+        lo_k = max(0, k - lb_d)
         live = [a for a in arrs if lo_k <= a.known - 1 and a.known <= k and a.typ != "nwog"]
         live += [a for a in arrs if a.typ == "nwog" and k - lookback <= a.known <= k]   # 60 days (051)
         # NDOGs live through the week they form in (Mon-Fri)
@@ -570,7 +572,11 @@ def has_overnight(df: pd.DataFrame) -> bool:
 NWOG_SRCS = ("auto", "sunday_bars", "monday_0930", "sunday_else_monday", "none")
 
 
-def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0, nwog_src: str = "auto") -> pd.DataFrame:
+GAP_VIEWS = ("auto", "both")
+
+
+def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0, nwog_src: str = "auto",
+                 gap_views: str = "auto", rth_close: int = 960) -> pd.DataFrame:
     """ICT's opening gaps from bars that include the evening reopen (videos 039, 051, 052):
       NWOG  Friday's last price before the weekend close -> Sunday's first price at the 18:00
             reopen. Levels: high, low, CE. No minimum size; never retired by a fill.
@@ -586,9 +592,16 @@ def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0
     "sunday_else_monday" = the PER-WEEKEND fall-back (review fix #68): a weekend that has a Sunday-evening reopen bar uses it, one that
     does not uses the Monday 09:30 variant (the Monday is the first date after the break that is not the Sunday; no bar at 09:30-12:00 that
     day = unavailable, flagged); "none" = no NWOG rows; "auto" = the built behaviour = "sunday_bars" (the fall-back to the Monday variant is an explicit choice, never
-    silent: a frame without Sunday bars - SPY extended hours - would otherwise grow NWOGs it never had)."""
+    silent: a frame without Sunday bars - SPY extended hours - would otherwise grow NWOGs it never had).
+    Caption-gap L5-rth-and-eth-gap-views (levels_detectors #3/3; 019 ~4:31: "you use regular trading hours and electronic trading hours"):
+    `gap_views` = "both" (Params.gap_views) also keeps the RTH-bar view of the weekend gap - kind "nwog_rth": the last RTH close of the Friday
+    (the last bar starting before `rth_close`, minute of day) -> the open of the Monday 09:30 bar (known when that bar closes), next to
+    the ETH "nwog" with no de-duplication ("auto" = the ETH rows only, as before). The Monday is the first date after the break that is not
+    the Sunday evening; no 09:30-12:00 bar that day = no row."""
     if nwog_src not in NWOG_SRCS:
         raise ValueError(f"nwog_cfd_src {nwog_src!r}: expected one of {NWOG_SRCS}")
+    if gap_views not in GAP_VIEWS:
+        raise ValueError(f"gap_views {gap_views!r}: expected one of {GAP_VIEWS}")
     t = df.index
     gap = t.to_series().diff() > pd.Timedelta(minutes=45)
     m = t.hour * 60 + t.minute
@@ -636,6 +649,28 @@ def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0
                              known=t[j] + pd.Timedelta(minutes=bm), week=day.to_period("W-FRI"),
                              dir="down" if a > b else "up", close_before=a, open_after=b))
         rows.sort(key=lambda r: r["known"])
+    if gap_views == "both":
+        bm = bar_minutes(df)
+        for k in weekend_brk:
+            k = int(k)
+            fri = t[k - 1].normalize()
+            fm = (t.hour * 60 + t.minute)[:k]
+            fk = np.flatnonzero((t[:k].normalize() == fri) & (fm >= 570) & (fm < rth_close))
+            if not len(fk):
+                continue
+            a = float(df.close.iloc[int(fk[-1])])
+            d0 = t[k].normalize()
+            if t[k].weekday() == 6:
+                d0 = d0 + pd.DateOffset(days=1)
+            j = int(t.searchsorted(d0.replace(hour=9, minute=30)))
+            if j >= len(t) or t[j].normalize() != d0 or t[j].hour * 60 + t[j].minute >= 12 * 60:
+                continue
+            b = float(df.open.iloc[j])
+            day = (t[j] + pd.Timedelta(hours=7)).normalize().tz_localize(None)
+            rows.append(dict(kind="nwog_rth", high=max(a, b), low=min(a, b), ce=(a + b) / 2, up=b > a,
+                             known=t[j] + pd.Timedelta(minutes=bm), week=day.to_period("W-FRI"),
+                             dir="down" if a > b else "up", close_before=a, open_after=b))
+        rows.sort(key=lambda r: r["known"])
     out = pd.DataFrame(rows)
     out.attrs["nwog_unavailable"] = unavailable
     return out
@@ -675,40 +710,67 @@ class GapList(list):
 
 
 def gaps_for_day(g: pd.DataFrame, day, nwog_keep: int = 5, nwog_days: int = 0, skip_holiday: bool = False,
-                 trading_days: bool = False, with_dir: bool = False, reb: dict | None = None) -> list[tuple]:
+                 trading_days: bool = False, with_dir: bool = False, reb: dict | None = None,
+                 holiday_pick: str = "all", ref_px: float | None = None) -> list[tuple]:
     """Gaps in force at 09:30 of `day`: NWOGs (the last `nwog_keep`, or with `nwog_days` > 0
     every NWOG from the last that many trading days - ICT's 60-day maximum, 051 ~18:02,
     "60 market days", 065) and this week's NDOGs. Returns (kind, high, low, ce).
     levels_detectors L5: `trading_days` counts nwog_days in real trading days (calendar module)
     instead of the old calendar estimate; `skip_holiday` (046 ~16:01; 048 ~2:54) drops the NWOG
-    of a holiday-shortened week (fewer than 5 trading days) - the nearest normal ones remain."""
+    of a holiday-shortened week (fewer than 5 trading days) - the nearest normal ones remain.
+    Caption-gap L5-holiday-nwog (levels_detectors #3/3; 046 ~16:34: "if I don't have it then I don't use it"): with `skip_holiday` and
+    `holiday_pick` = "closest" (Params.nwog_holiday_pick), when THIS week's NWOG was dropped as a holiday week only the single remaining
+    NWOG (within the nwog_days / nwog_keep selection) closest to the reference price `ref_px` (the day's open) stays - the distance from
+    the price to the gap's range, then to its CE; none when there is no other. "all" (default) keeps every normal NWOG. Caption-gap
+    L5-rth-and-eth-gap-views: the "nwog_rth" rows of opening_gaps(gap_views="both") are selected like the NWOGs (same rules, own list)."""
     if g is None or not len(g):
         return []
     cut = pd.Timestamp(day, tz=NY_TZ) + pd.Timedelta(hours=9, minutes=30)
     k = g[g.known < cut]
     wk = pd.Timestamp(day).to_period("W-FRI")
-    nw = k[k.kind == "nwog"]
-    if skip_holiday and len(nw):
-        from .calendar import is_trading_day
-        full = [sum(is_trading_day((w.start_time + pd.Timedelta(days=j)).date()) for j in range(7)) >= 5
-                for w in nw.week]
-        nw = nw[np.asarray(full, bool)]
-    if nwog_days:
-        if trading_days:
-            from .calendar import prev_trading_day
-            d0 = day
-            for _ in range(nwog_days):
-                d0 = prev_trading_day(d0)
-            # formed at or after the start of the earliest counted session (its 18:00 reopen)
-            nw = nw[nw.known >= pd.Timestamp(d0, tz=NY_TZ) - pd.Timedelta(hours=6)]
+    skipped_now = [False]
+
+    def pick(nw):
+        if skip_holiday and len(nw):
+            from .calendar import is_trading_day
+            full = np.asarray([sum(is_trading_day((w.start_time + pd.Timedelta(days=j)).date()) for j in range(7)) >= 5
+                               for w in nw.week], bool)
+            skipped_now[0] = skipped_now[0] or bool((~full & (nw.week.values == wk)).any())
+            nw = nw[full]
+        if nwog_days:
+            if trading_days:
+                from .calendar import prev_trading_day
+                d0 = day
+                for _ in range(nwog_days):
+                    d0 = prev_trading_day(d0)
+                # formed at or after the start of the earliest counted session (its 18:00 reopen)
+                nw = nw[nw.known >= pd.Timestamp(d0, tz=NY_TZ) - pd.Timedelta(hours=6)]
+            else:
+                nw = nw[nw.known >= cut - pd.Timedelta(days=round(nwog_days * 7 / 5) + 2)]
         else:
-            nw = nw[nw.known >= cut - pd.Timedelta(days=round(nwog_days * 7 / 5) + 2)]
-    else:
-        nw = nw.tail(nwog_keep)
+            nw = nw.tail(nwog_keep)
+        return nw
+
+    nw = pick(k[k.kind == "nwog"])
+    nr = pick(k[k.kind == "nwog_rth"]) if (k.kind == "nwog_rth").any() else k.iloc[:0]
+    if holiday_pick == "closest" and skipped_now[0] and ref_px is not None:
+        def dist(r):
+            d_rng = 0.0 if r.low <= ref_px <= r.high else min(abs(ref_px - r.low), abs(ref_px - r.high))
+            return (d_rng, abs(ref_px - r.ce))
+        for nm in ("nw", "nr"):
+            fr = nw if nm == "nw" else nr
+            if len(fr):
+                best = min(fr.itertuples(), key=dist)
+                fr = fr[(fr.high == best.high) & (fr.low == best.low) & (fr.known == best.known)]
+            if nm == "nw":
+                nw = fr
+            else:
+                nr = fr
     nd = k[(k.kind == "ndog") & (k.week == wk)]
+    sel = pd.concat([nw, nr, nd])
     if with_dir:                      # caption-gap L5: (kind, high, low, ce, dir) - the labels as a tag, "up" / "down"
-        return [(r.kind, r.high, r.low, r.ce, r.dir) for r in pd.concat([nw, nd]).itertuples()]
-    rows = [(r.kind, r.high, r.low, r.ce) for r in pd.concat([nw, nd]).itertuples()]
+        return [(r.kind, r.high, r.low, r.ce, r.dir) for r in sel.itertuples()]
+    rows = [(r.kind, r.high, r.low, r.ce) for r in sel.itertuples()]
     if reb is None:
         return rows
     out = GapList(rows)               # caption-gap L5-partial-redelivery: the rebalanced-NWOG table rides along (list equality unchanged)

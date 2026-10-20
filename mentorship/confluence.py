@@ -124,7 +124,12 @@ class Confluence:
                  breakers: bool = False, c2_dir: bool = False, vi_min_gap: float = 0.0,
                  vi_body_death: bool = False, vi_wick_overlap: bool = True, vi_multi: bool = False,
                  vi_dead_rule: str = "full_span", ipda_first20: bool = False, nwog_cfd_src: str = "auto",
-                 void_rt_ob: bool = False):
+                 void_rt_ob: bool = False, tf_lookback: dict | None = None):
+        # caption-gap new-lookback-per-tf-topdown: tf_lookback {tf: trading days} replaces the array LIFE of that timeframe (calendar days = x 7 / 5)
+        life = dict(LIFE)
+        for k_, n_ in (tf_lookback or {}).items():
+            if k_ in life:
+                life[k_] = f"{max(1, round(int(n_) * 7 / 5))}D"
         zk = dict(c2_dir=c2_dir, vi_min_gap=vi_min_gap, vi_body_death=vi_body_death, vi_wick_overlap=vi_wick_overlap,
                   vi_multi=vi_multi, vi_dead_rule=vi_dead_rule)
         self.first20 = ipda_first20            # caption-gap B21: only the freshest IPDA window of daily arrays (see _ipda_mask)
@@ -142,13 +147,13 @@ class Confluence:
                 b = pd.DataFrame({"open": g.open.first(), "high": g.high.max(), "low": g.low.min(),
                                   "close": g.close.last()})
             end = (b.index + pd.Timedelta(minutes=m)).as_unit("ns").asi8
-            life_bars = int(pd.Timedelta(LIFE[tf]).total_seconds() // 60 // m)
+            life_bars = int(pd.Timedelta(life[tf]).total_seconds() // 60 // m)
             z = _zones(*(b[k].values.astype(float) for k in ("open", "high", "low", "close")),
                        end.astype(float), max_bars=life_bars, vi=vi, breakers=breakers,
                        void_rt=void_rt_ob and m >= 240, **zk)
             self.st[tf] = (end.astype(float), _structure(b.high.values, b.low.values, b.close.values))
             if z:
-                z["life"] = pd.Timedelta(LIFE[tf]).value
+                z["life"] = pd.Timedelta(life[tf]).value
                 self.z[tf] = z
         d = htf.sessions(df)
         # a session's end time: its last bar's close
@@ -173,7 +178,7 @@ class Confluence:
                        np.asarray(ends, float), vi=vi, breakers=breakers, void_rt=void_rt_ob, **zk)
             self.st[tf] = (np.asarray(ends, float), _structure(b.high.values, b.low.values, b.close.values))
             if z:
-                z["life"] = np.full(len(z["kind"]), float(pd.Timedelta(LIFE[tf]).value))
+                z["life"] = np.full(len(z["kind"]), float(pd.Timedelta(life[tf]).value))
                 self.z[tf] = z
         # opening gaps as ICT defines them (htf.opening_gaps): NDOGs count on the daily
         # timeframe through the end of their week; NWOGs on the weekly for 60 trading days.
@@ -232,10 +237,11 @@ class Confluence:
         return out
 
 
-def _targets_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs, far_edge: bool = False) -> list[float]:
+def _targets_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs, far_edge: bool = False, min_known: dict | None = None) -> list[float]:
     """Opposing PD arrays (FVGs, order blocks, opening gaps) still valid at time t on the
     given timeframes, beyond `beyond` in the trade's direction: their near edge and CE.
-    For a long (side +1): bearish arrays above; for a short: bullish arrays below."""
+    For a long (side +1): bearish arrays above; for a short: bullish arrays below.
+    Caption-gap B21 ipda_arrays (levels_detectors #3/3): `min_known` {tf: ns} keeps only the arrays of that timeframe known at or after the time."""
     now = float(t.value)
     out = []
     for tf in tfs:
@@ -245,6 +251,8 @@ def _targets_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs, far_edge
         m = ((z["kind"] == -side) & (z["known"] <= now) & (z["dead"] > now)
              & (now - z["known"] <= z["life"]))
         m &= self._ipda_mask(tf, z, now)      # caption-gap B21 ipda_arrays_first20
+        if min_known and tf in min_known:
+            m &= z["known"] >= min_known[tf]
         if side > 0:
             m &= z["bottom"] > beyond
             near = z["bottom"][m]

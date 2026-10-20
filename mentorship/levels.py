@@ -343,7 +343,7 @@ OB_PICKS = ("blend", "original", "largest_body", "blend_in_htf")
 
 
 def order_block_blend(o, h, l, c, start: int, end: int, kind: str, pick: str = "blend", s: float | None = None,
-                      skip_encap: bool = False, htf_zone: tuple | None = None) -> Zone | None:
+                      skip_encap: bool = False, htf_zone: tuple | None = None, outside: tuple | None = None) -> Zone | None:
     """ICT order block: the last down-close candle in [start, end] (bullish; up-close for
     bearish) together with the consecutive same-colour candles right before it, blended into
     one block (002 ~4:14; 029 ~29:28; 032 ~23:06). Zone = the series' full range; `mt` = the
@@ -361,14 +361,19 @@ def order_block_blend(o, h, l, c, start: int, end: int, kind: str, pick: str = "
                       first + high of the last) / 2; otherwise the last candle alone (mt = its body midpoint)
     skip_encap (Params.ob_skip_encapsulated, cc06_005 ~19:10, all modes): a last candle whose body lies fully
     inside the previous same-colour candle's body and is clearly smaller [our interpretation: at most half of
-    it] is skipped - the previous candle is the last candle of the block."""
+    it] is skipped - the previous candle is the last candle of the block.
+    Caption-gap A12-entry-ob-outside-fvg (levels_detectors #3/3; 065 ~4:04:05: "we have to use the out outside of the range"; `outside` =
+    (bottom, top) of the FVG / shaded zone, bullish terms): candles whose whole range lies inside the zone are IGNORED - the block is the
+    last down-close candle OUTSIDE the zone (and the run before it); the blend still stops at an opposite-close candle. `outside=None`
+    is the old behaviour exactly."""
     if pick not in OB_PICKS:
         raise ValueError(f"ob pick {pick!r}: expected one of {OB_PICKS}")
     down = (lambda k: c[k] < o[k]) if kind == "bull" else (lambda k: c[k] > o[k])
     body = lambda k: (min(o[k], c[k]), max(o[k], c[k]))
     start = max(start, 0)
+    inside = (lambda k: False) if outside is None else (lambda k: l[k] >= outside[0] - 1e-9 and h[k] <= outside[1] + 1e-9)
     for k in range(min(end, len(o) - 1), start - 1, -1):
-        if down(k):
+        if down(k) and not inside(k):
             while skip_encap and k - 1 >= start and down(k - 1):
                 (bl, bh), (pl_, ph_) = body(k), body(k - 1)
                 if bl >= pl_ and bh <= ph_ and (bh - bl) <= 0.5 * (ph_ - pl_):
@@ -376,16 +381,27 @@ def order_block_blend(o, h, l, c, start: int, end: int, kind: str, pick: str = "
                 else:
                     break
             j = k
-            while j - 1 >= start and down(j - 1):
-                j -= 1
+            if outside is None:
+                while j - 1 >= start and down(j - 1):
+                    j -= 1
+            else:                                     # the zone's candles are skipped, an opposite-close candle ends the run
+                q = k - 1
+                while q >= start:
+                    if inside(q):
+                        q -= 1
+                    elif down(q):
+                        j, q = q, q - 1
+                    else:
+                        break
+            mem = [q for q in range(j, k + 1) if not inside(q)]      # (outside=None: the whole run)
             if pick == "blend":
-                hi, lo = float(max(h[j:k + 1])), float(min(l[j:k + 1]))
+                hi, lo = float(max(h[q] for q in mem)), float(min(l[q] for q in mem))
                 if kind == "bull":
-                    mt = (max(o[j:k + 1]) + min(c[j:k + 1])) / 2
+                    mt = (max(o[q] for q in mem) + min(c[q] for q in mem)) / 2
                 else:
-                    mt = (min(o[j:k + 1]) + max(c[j:k + 1])) / 2
+                    mt = (min(o[q] for q in mem) + max(c[q] for q in mem)) / 2
                 return Zone(kind, hi, lo, end, j, float(mt))
-            run = list(range(j, k + 1))
+            run = mem
             if pick == "blend_in_htf":
                 hi, lo = float(max(h[j:k + 1])), float(min(l[j:k + 1]))
                 zs = [] if not htf_zone else (list(htf_zone) if isinstance(htf_zone[0], (tuple, list)) else [htf_zone])
@@ -1949,3 +1965,212 @@ def void_round_trip_obs(o, h, l, c, min_run: int = 3) -> list[Zone]:
                     k += 1
             a = b + 1
     return sorted(out, key=lambda z: z.i)
+
+
+# --- caption-gap pass, package levels_detectors #3/3 (digests/rulebook_gaps/*.md) -------------------------------------------
+# Pure detectors (arrays in, objects out), bullish terms (the engine mirrors a short's prices); each reports the bar at which its
+# object is known. The engine glue is in ld4.py.
+
+def reactionary_highs(o, h, l, c, pivs, disp_mult: float = 1.5, leg_bars: int = 3, end: int | None = None) -> list[tuple]:
+    """Caption-gap new-reactionary-high-liquidity (046 ~56:01; 099 ~51:16: "this is exactly where everybody's trailed stop losses are
+    sitting"): a REACTIONARY high = a pivot high whose following leg is a displacement down - within `leg_bars` bars after the pivot candle
+    a down-close candle whose body is at least `disp_mult` x the mean body of the (up to 10) bars before it (the A20 test), and the leg
+    trades below the pivot candle's low [our interpretation]. Returns [(price, bar, known)] for every such pivot, oldest first; known = the
+    later of the pivot's confirmation and the displacement bar. `end` limits the scan to bars <= end (the answer at a bar never depends on
+    later bars). The caller keeps the latest UNTAKEN one (no later high at or above the price). Mirror: pass negated lows as `h`
+    (and negated opens / closes)."""
+    n = len(c) if end is None else min(len(c), end + 1)
+    out = []
+    for q in pivs:
+        if q.known >= n:
+            continue
+        for b in range(q.i + 1, min(q.i + leg_bars, n - 1) + 1):
+            if not c[b] < o[b]:
+                continue
+            a = max(0, b - 10)
+            body = abs(c[b] - o[b])
+            prev = np.abs(np.asarray(c[a:b], float) - np.asarray(o[a:b], float))
+            if len(prev) and body < disp_mult * float(prev.mean()):
+                continue
+            if float(np.min(l[q.i + 1:b + 1])) < float(l[q.i]):
+                out.append((float(q.price), int(q.i), int(max(q.known, b))))
+                break
+    return [r for r in out if r[2] < n]
+
+
+def parent_pools(o, h, l, c, lows, n_min: int = 2, band: float = 0.0, end: int | None = None) -> list[tuple]:
+    """Caption-gap new-parent-pool-bodies-short (050 ~56:39: "the parent price swing and liquidity pool is this one"): an earlier swing low
+    L0 with at least `n_min` LATER swing lows in the same area (within `band` above L0) whose candle bodies all stop short of it
+    (min(open, close) above L0's low) is the PARENT swing and the real sell-side pool - the later ones are intermediates (partial
+    levels at most). L0 must be untaken (no later bar's low below it, through `end`). Returns [(price, bar, known)] - known = the bar
+    at which the n_min-th later low is confirmed. Bullish terms; the buy-side mirror is the same call on negated highs."""
+    n = len(c) if end is None else min(len(c), end + 1)
+    out = []
+    lows = [q for q in lows if q.known < n]
+    for k, q0 in enumerate(lows):
+        later = [q for q in lows[k + 1:] if q.i > q0.i and q0.price < q.price <= q0.price + band
+                 and min(o[q.i], c[q.i]) > q0.price]
+        if len(later) < n_min:
+            continue
+        known = int(sorted(q.known for q in later)[n_min - 1])
+        if known >= n or (n > q0.i + 1 and float(np.min(l[q0.i + 1:known + 1])) < q0.price):
+            continue
+        out.append((float(q0.price), int(q0.i), known))
+    return out
+
+
+def trendline_highs(pivs, tol: float, l=None, last: int = 12) -> dict | None:
+    """Caption-gap new-trendline-trap(-target) (cc03_007 ~8:18-11:26: "that's where a lot of the buy stops are going to be residing"): the LATEST
+    three-touch down-trendline of retail's - three swing highs H1 > H2 > H3 (Pivot objects, oldest first) with the middle touch within `tol` of
+    the straight line through H1 and H3 [our interpretation]. The newest H3 wins, then the newest H2, then the newest H1. Returns
+    dict(h1, h2, h3 = the Pivots, l23, l23_i = the lowest low (and its bar) between H2 and H3 when the lows `l` are given, known =
+    H3's confirmation bar) or None. Bullish terms; the up-trendline of lows (rising L1 < L2 < L3, H23 between L2 and L3) is the mirror:
+    `trendline_touches`."""
+    pv = list(pivs)[-last:]
+    for c_ in range(len(pv) - 1, 1, -1):
+        for b_ in range(c_ - 1, 0, -1):
+            for a_ in range(b_ - 1, -1, -1):
+                pa, pb, pc = pv[a_], pv[b_], pv[c_]
+                if not (pa.price > pb.price > pc.price and pa.i < pb.i < pc.i):
+                    continue
+                line = pa.price + (pc.price - pa.price) * (pb.i - pa.i) / (pc.i - pa.i)
+                if abs(pb.price - line) <= tol + 1e-9:
+                    out = dict(h1=pa, h2=pb, h3=pc, known=int(pc.known))
+                    if l is not None and pc.i > pb.i + 1:
+                        seg = np.asarray(l[pb.i + 1:pc.i], float)
+                        out["l23"] = float(seg.min())
+                        out["l23_i"] = int(pb.i + 1 + int(np.argmin(seg)))
+                    return out
+    return None
+
+
+def trendline_touches(lows, tol: float, h=None, last: int = 12) -> dict | None:
+    """The mirror of `trendline_highs` for an UP-trendline: three swing lows L1 < L2 < L3 (Pivot objects) on a line within `tol`; H23 = the
+    highest high between L2 and L3 when the highs `h` are given. Returns dict(l1, l2, l3, h23, h23_i, known) or None."""
+    neg = [Pivot(q.i, -q.price, q.known) for q in lows]
+    r = trendline_highs(neg, tol, None if h is None else -np.asarray(h, float), last)
+    if r is None:
+        return None
+    out = dict(l1=Pivot(r["h1"].i, -r["h1"].price, r["h1"].known), l2=Pivot(r["h2"].i, -r["h2"].price, r["h2"].known),
+               l3=Pivot(r["h3"].i, -r["h3"].price, r["h3"].known), known=r["known"])
+    if "l23" in r:
+        out["h23"], out["h23_i"] = -r["l23"], r["l23_i"]
+    return out
+
+
+def head_shoulders(h, l, n: int, tol: float, end: int | None = None) -> dict | None:
+    """Caption-gap new-hs-fade (cc03_008 ~6:30-7:11: "i see that as a turtle soup long that took out two previous lows"): the latest
+    head-and-shoulders on the bars (h, l): three consecutive swing highs S1, H, S2 with H above both shoulders, and the lows between them
+    (l1 = the lowest low between S1 and H, l2 = between H and S2) relatively equal (within `tol`) - the neckline LOWS. Returns
+    dict(s1, head, s2 = the Pivots, neck = min(l1, l2), neck_hi = max(l1, l2), known = S2's confirmation bar) or None. `end` limits the
+    scan to bars <= end (the shape is known only when S2 is confirmed). The inverse shape (sell the neckline highs) is the same call
+    on mirrored prices."""
+    ph, _ = pivots(h, l, n)
+    ph = [q for q in ph if end is None or q.known <= end]
+    for k in range(len(ph) - 1, 1, -1):
+        s1, hd, s2 = ph[k - 2], ph[k - 1], ph[k]
+        if not (hd.price > s1.price and hd.price > s2.price):
+            continue
+        l1 = float(np.min(l[s1.i:hd.i + 1]))
+        l2 = float(np.min(l[hd.i:s2.i + 1]))
+        if abs(l1 - l2) <= tol + 1e-9:
+            return dict(s1=s1, head=hd, s2=s2, neck=min(l1, l2), neck_hi=max(l1, l2), known=int(s2.known))
+    return None
+
+
+def ipda_forward(days: list, d_idx: int, size: int = 20) -> dict:
+    """Caption-gap B21-open-float-forward-windows (cc05_004 ~25:15: "you look back 60 and you look forward 60"): the FORWARD intervals of
+    the data range anchored at session `d_idx` of `days` ([(high, low)] of the completed sessions, oldest first). Each COMPLETED interval
+    D..D+19, D+20..D+39, D+40..D+59 (all its sessions already closed) is returned as ("f20", "f40", "f60") -> (high, low); the large-fund
+    pool "float" = the high / low of D-60..D+59, the REALISED part only (sessions up to the last completed one; absent when the history does
+    not reach D-60). No interval is returned before it is complete, so the answer at a day never depends on later days."""
+    out = {}
+    n = len(days)
+    for m, name in enumerate(("f20", "f40", "f60")):
+        a, b = d_idx + size * m, d_idx + size * m + size - 1
+        if a >= 0 and b <= n - 1:
+            seg = days[a:b + 1]
+            out[name] = (max(x[0] for x in seg), min(x[1] for x in seg))
+    if d_idx - 60 >= 0 and d_idx <= n - 1:
+        seg = days[d_idx - 60:min(d_idx + 59, n - 1) + 1]
+        out["float"] = (max(x[0] for x in seg), min(x[1] for x in seg))
+    return out
+
+
+def ipda_sequence(wins: dict, seen: float, tick: float, exhausted20: bool = False, beyond: float | None = None) -> list[tuple]:
+    """Caption-gap B21-progression-20-40-60-beyond (cc05_004 ~26:38; cc06_008 ~12:50; cc07_004 ~7:43; cc05_003 ~28:40): the IPDA buy-side draw
+    sequence. `wins` = {window: high} (e.g. 20 / 40 / 60); `seen` = the highest high traded (today's so far). The near-term draw is the 20-day
+    high; it rolls out to the 40-day window when the 20-day extreme is taken (`seen` at or above it) or - `exhausted20` - every PD array of the
+    20-day window has been traded to; a window whose extreme equals the previous one's adds nothing and is skipped (the 60-day is next);
+    when all the extremes are taken the nearest older swing `beyond` (a price above `seen`) is the draw, named "expansion". Returns
+    [(level, name)] - at most one level; [] when there is none. Bullish terms."""
+    seq, last = [], None
+    for n_ in sorted(wins):
+        v = wins[n_]
+        if last is not None and abs(v - last) <= 1e-9:
+            continue                                                   # the window adds nothing beyond the previous one
+        seq.append((float(v), n_))
+        last = v
+    if exhausted20 and len(seq) > 1:
+        seq = seq[1:]
+    live = [(v, n_) for v, n_ in seq if not seen >= v + tick - 1e-9]
+    if live:
+        return [(live[0][0], f"ipda{live[0][1]}")]
+    if beyond is not None and beyond > seen:
+        return [(float(beyond), "expansion")]
+    return []
+
+
+def monthly_candles(dates: list, o, h, l, c, day, n: int = 3, first_month_full: bool = False) -> list[tuple]:
+    """Caption-gap L3-monthly-ohlc-3m (cc03_004 ~1:46: "the opens the highs the close and the low of every single candle on a monthly chart"):
+    the last `n` COMPLETED monthly candles (months before `day`'s month) from the daily arrays (oldest first): [((year, month), open, high,
+    low, close)]. A month the history only partly covers (the history starts inside it and `first_month_full` is False) is left out."""
+    keys = [(d.year, d.month) for d in dates]
+    cur = (day.year, day.month)
+    months = []
+    for k, key in enumerate(keys):
+        if key >= cur:
+            break
+        if not months or months[-1][0] != key:
+            months.append([key, k, k])
+        else:
+            months[-1][2] = k
+    if months and keys and not first_month_full and months[0][1] == 0:
+        months = months[1:]                                            # the first month in the history may be cut off
+    out = []
+    for key, a, b in months[-n:]:
+        out.append((key, float(o[a]), float(np.max(h[a:b + 1])), float(np.min(l[a:b + 1])), float(c[b])))
+    return out
+
+
+def time_distortion_mask(t, releases, td_lunch: bool = True, pre_release_min: int = 15, close_min: int = 960,
+                         lunch: tuple = (730, 840)) -> np.ndarray:
+    """Caption-gap new-time-distortion (060 ~24:12; 100 ~42:21; 075 ~1:40:05: "it's being held for a news event ... being held for a session
+    close"): True for the bars (minute of day `t`) where no swing / MSS / breaker / FVG signal is read: (b) the `pre_release_min` minutes
+    before each scheduled release (`releases` = minutes of day), (c) from `close_min` (16:00) on, (d) the lunch chop `lunch` (12:10-14:00)
+    when `td_lunch`. Case (a) - bodies holding inside an FVG - is `fvg_body_hold`."""
+    t = np.asarray(t)
+    m = t >= close_min
+    for r in releases:
+        m |= (t >= r - pre_release_min) & (t < r)
+    if td_lunch:
+        m |= (t >= lunch[0]) & (t < lunch[1])
+    return m
+
+
+def fvg_body_hold(o, h, l, c, bottom: float, top: float, a: int, b: int, min_bars: int = 5) -> bool:
+    """Caption-gap new-time-distortion (a) (060 ~24:12: "the Wicks will go just outside that fair value Gap but that's okay"): within bars
+    a..b the last `min_bars` (several bars: 5+ [our interpretation]) bodies all stay inside the gap [bottom, top] while at least one wick
+    pokes outside it - the gap is held and stays valid."""
+    if b - a + 1 < min_bars or b >= len(c):
+        return False
+    bodies_in = [(min(o[k], c[k]) >= bottom - 1e-9 and max(o[k], c[k]) <= top + 1e-9) for k in range(a, b + 1)]
+    run = 0
+    for ok in reversed(bodies_in):
+        if not ok:
+            break
+        run += 1
+    if run < min_bars:
+        return False
+    k0 = b - run + 1
+    return bool((np.asarray(l[k0:b + 1]) < bottom - 1e-9).any() or (np.asarray(h[k0:b + 1]) > top + 1e-9).any())

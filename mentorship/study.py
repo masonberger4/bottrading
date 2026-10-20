@@ -1510,6 +1510,40 @@ _LD2_DECISIONS = {
     "B21-data-range-fv-eq": dict(ipda_pools=True, ipda_fv=True, ipda_consol_eq=True, ipda_eq_day="tag"),
 }
 DECISIONS.update(_LD2_DECISIONS)
+# caption-gap pass, levels_detectors #3/3 (digests/rulebook_gaps/*.md): one variant per switch, name prefix = the gap id; look-ahead tests:
+# tests/test_caption_gap_ld3.py (+ the per-variant ES run of test_bias_htf_lookahead.py).
+_LD3B_DECISIONS = {
+    "L5-rth-and-eth-gap-views": dict(gap_views="both"),
+    "L5-holiday-nwog": dict(nwog_skip_holiday=True, nwog_holiday_pick="closest", htf_bias="combo", weekly_open="sun18", tue_open_ref=True),
+    "L7-org-lifetime-sr": dict(org_days=60, org_both_ways=True),
+    "L10-older-daily-weekly-wick-ce": dict(wick_levels=True, wick_days=10, wick_weekly=True, wick_weeks=3, wick_untraded=True, wick_lod_tag="tag"),
+    "new-reactionary-high-liquidity": dict(reactionary_pools=True),
+    "new-parent-pool-bodies-short": dict(parent_pools=True),
+    "L2-sr-needs-fvg": dict(daily_level_needs_array="fvg"),
+    "L1-prior-day-london-pm-pools": dict(prev_london_pool=True, extra_pools=True),
+    "new-lookback-per-tf-topdown": dict(tf_lookback={"D": 252, "4h": 63, "1h": 15, "15m": 4}),
+    "L3-monthly-ohlc-3m": dict(monthly_ohlc=True),
+    "L3-htf-pd-arrays-intraday": dict(htf_targets=("15m", "1h", "4h", "D", "W", "M")),
+    "L3-3-6-12-month-pools": dict(ipda_pools=True, ipda_windows=(20, 40, 60, 63, 126, 252)),
+    "new-trendline-trap-target": dict(trendline_pools=True),
+    "B21-reference-points-in-windows": dict(ipda_pools=True, ipda_rb=True, ipda_arrays=True),
+    "B21-progression-20-40-60-beyond": dict(ipda_next=True, ipda_roll_arrays=True, ipda_beyond_days=120),
+    "B21-open-float-forward-windows": dict(ipda_pools=True, ipda_anchor="current_month", ipda_forward=True),
+    "B21-anchor-month-vs-daily_current_month": dict(ipda_pools=True, ipda_anchor="current_month"),
+    "B21-anchor-month-vs-daily_daily": dict(ipda_pools=True, ipda_anchor="daily"),
+    "LLT3-london-extreme-preny-range_tag": dict(london_lr_zone="tag"),
+    "LLT3-london-extreme-preny-range_require": dict(london_lr_zone="require", htf_bias="combo"),
+    "LLT3-0800-0900-pool-stock-open": dict(or0809_pool=True),
+    "A17-rejection-block-short-protocol": dict(rb_pools=True),
+    "A12-entry-ob-outside-fvg": dict(ob_outside_fvg=True, ob_entry="both"),
+    "new-trendline-trap": dict(trendline_trap=True, htf_bias="combo"),
+    "new-hs-fade": dict(hs_fade=True, htf_bias="combo", hs_tf=15, hs_stop_pts=10.0),
+    "new-intra-week-extreme-raid": dict(week_pools=True),
+    "T4-or-length_20": dict(or_minutes=20),
+    "L3-or-refs-expire-1100": dict(or_expire=660, or_fvg_entries=True),
+    "new-time-distortion": dict(time_distortion=True, td_lunch=True, td_fvg_hold=True, single_bar_fvg_strict=True),
+}
+DECISIONS.update(_LD3B_DECISIONS)
 SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): their look-ahead tests are in test_silver_bullet.py
 
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)

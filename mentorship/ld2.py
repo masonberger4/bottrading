@@ -26,20 +26,37 @@ def ipda_windows(ctx, p, dates: list) -> tuple[dict, object]:
     """X3-b21-ipda-anchor (cc05_001 ~53:44 / ~23:23 / ~26:56): the 20 / 40 / 60 session windows (high, low) and the date of
     the last session they include. "rolling" ends on yesterday (the first build); "month" ends on the session before the
     first trading day of the last closed calendar month; "swing" ends on the last daily MSS (L.daily_mss_end). A window
-    the history cannot fill is left out."""
+    the history cannot fill is left out.
+    Caption-gap levels_detectors #3/3: the windows are Params.ipda_windows (20, 40, 60 and the 3 / 6 / 12-month 63, 126, 252 - cc05_002 ~2:41);
+    "current_month" (B21-anchor-month-vs-daily, cc05_004 ~16:04: "we keep moving that basis forward each new month") ends them ON the first trading
+    day of the CURRENT month, fixed until the next month (on that day itself, which is not complete, they end yesterday). Also stored: ctx.ipda_end
+    (the number of sessions up to the window end) and ctx.ipda_D (the anchor session of the forward intervals, None for "rolling")."""
     days = ctx.ipda_days
     end = len(days)
+    ctx.ipda_D = None
     if p.ipda_anchor == "month":
         k = L.ipda_month_end(dates, ctx.day)
         end = k if k is not None else 0
+        ctx.ipda_D = k
+    elif p.ipda_anchor == "current_month":
+        k = next((j for j, d in enumerate(dates) if (d.year, d.month) == (ctx.day.year, ctx.day.month)), None)
+        if k is not None and k > 0 and (dates[k - 1].year, dates[k - 1].month) != (ctx.day.year, ctx.day.month):
+            end = k + 1
+            ctx.ipda_D = k
+        elif k is None:                                # today is the month's first trading day: no completed session of this month yet
+            end = len(days)
+        else:
+            end = 0                                    # the history does not reach the month's first day
     elif p.ipda_anchor == "swing" and days:
         h = np.array([d[0] for d in days], float)
         l = np.array([d[1] for d in days], float)
         c = np.array([float(x.close.iloc[-1]) for x in ctx.hist[-len(days):]], float)
         k = L.daily_mss_end(h, l, c)
         end = (k + 1) if k is not None else 0
+        ctx.ipda_D = k
+    ctx.ipda_end = end
     out = {}
-    for n in (20, 40, 60):
+    for n in sorted(p.ipda_windows):
         if 0 < n <= end:
             seg = days[end - n:end]
             out[n] = (max(x[0] for x in seg), min(x[1] for x in seg))
@@ -216,13 +233,16 @@ def ob_run(ctx, sd, sw, j: int, k: int, i: int, p):
     return j, k, None
 
 
-def ob_blend(ctx, sd, sw, i: int, p, a: int, b: int):
+def ob_blend(ctx, sd, sw, i: int, p, a: int, b: int, g=None):
     """The blended bullish OB in [a, b] with the caption-gap A12 pick (`ob_pick`, `ob_skip_encapsulated`); "blend" without the skip is
-    levels.order_block_blend exactly as before."""
+    levels.order_block_blend exactly as before. Caption-gap A12-entry-ob-outside-fvg (065 ~4:04:05; Params.ob_outside_fvg): the candles inside the
+    FVG / shaded zone - the entry gap `g`, else the displacement FVG after the sweep extreme - are ignored (levels_detectors #3/3)."""
+    from . import ld4 as _L4
+    outside = _L4.disp_fvg_zone(sd, sw, i, g) if p.ob_outside_fvg else None
     if p.ob_pick == "blend" and not p.ob_skip_encapsulated:
-        return L.order_block_blend(sd.o, sd.h, sd.l, sd.c, a, b, "bull")
+        return L.order_block_blend(sd.o, sd.h, sd.l, sd.c, a, b, "bull", outside=outside)
     zs = htf_zones_side(ctx, sd, i) if p.ob_pick == "blend_in_htf" else None
-    return L.order_block_blend(sd.o, sd.h, sd.l, sd.c, a, b, "bull", p.ob_pick, sw.get("level"), p.ob_skip_encapsulated, zs)
+    return L.order_block_blend(sd.o, sd.h, sd.l, sd.c, a, b, "bull", p.ob_pick, sw.get("level"), p.ob_skip_encapsulated, zs, outside)
 
 
 # --- A5 / A8 / A9 entry zones ----------------------------------------------------------------------------------------
@@ -234,6 +254,9 @@ def gap_open(sd, g, i: int, ctx, p) -> bool:
     if p.single_bar_fvg_strict and g.tag == "single_bar":
         from claude_hf.daytypes import events
         if not (events(ctx.day) & {"jobs", "fomc"}):
+            from . import ld4 as _L4
+            if _L4.td_hold(ctx, sd, g, i, p):      # caption-gap new-time-distortion (a): bodies hold inside the gap - the wicks do not kill it
+                return True
             return bool(sd.l[g.i + 1:i + 1].min(initial=np.inf) >= g.bottom)
     return bool(sd.c[g.i + 1:i + 1].min(initial=np.inf) >= g.bottom)
 

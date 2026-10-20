@@ -34,6 +34,14 @@ def short_history(n_prior: int, p: Params) -> str | None:
         need = max(need, p.org_days + 1)
     if p.ipda_anchor != "rolling" and (p.ipda_pools or p.ipda_next or p.ipda_eq_day != "off"):
         need = max(need, 100)                            # caption-gap B21: the windows end before the last closed month's first day
+    if p.ipda_pools or p.ipda_next or p.ipda_eq_day != "off":
+        need = max(need, max(p.ipda_windows) + 1)             # caption-gap levels_detectors #3/3: the 3 / 6 / 12-month windows
+    if p.monthly_ohlc:
+        need = max(need, 90)
+    if p.tf_lookback.get("D"):
+        need = max(need, int(p.tf_lookback["D"]) + 1)
+    if p.ipda_beyond_days:
+        need = max(need, p.ipda_beyond_days + 1)
     if n_prior < min(need, B.hist_days(p)):
         return f"paper history has {n_prior} prior sessions; the ipda / org_days switches need {need}"
     return None
