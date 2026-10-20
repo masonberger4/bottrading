@@ -1275,7 +1275,20 @@ class Params:
     outside_day_mirror: bool = True      # [our interpretation] the up-close outside day blocks shorts until its low trades
     nr_tags: tuple = ()                  # B11 (cc06_007 ~21:24): tag "nr3" / "nr7" (yesterday has the smallest range of 3 / 7 days)
                                          # and "inside_body" (yesterday's body inside the day before's body)
-    nr_expansion: str = "off"            # B11: an NR / inside-bar day -> expansion, no direction: "tag" or "no_chop_skip"
+    nr_expansion: str = "off"            # B11: an NR / inside-bar day -> expansion, no direction: "tag" or "no_chop_skip". The
+                                         # inside day and the NR3 / NR7 readings all count while it is on (nr_tags only adds the
+                                         # reporting tags and "inside_body", which is expansion only when listed there)
+    # B17.4 daily range regime (the third reading of "sloppy": a multi-day range / inside daily BISI / run into premium)
+    daily_range_regime: str = "off"      # "tag" / "scalp" (all sessions scalp) / "skip" (no trading) on a day whose completed daily
+                                         # candles read as drr_tests say [our interpretation; sloppy_mode/sloppy_tests are the
+                                         # intraday + day-level #10 owner switch, this one is the daily-candle regime]
+    drr_tests: tuple = ("range",)        # "range" (the last drr_days sessions net moved < drr_net_frac of their high-low range and
+                                         # that range is < drr_range_mult x their mean daily range: no daily trend), "inside_bisi"
+                                         # (yesterday's whole range inside one open daily FVG), "premium_run" (a one-way run into an
+                                         # old daily high / low) - any of them
+    drr_days: int = 5
+    drr_net_frac: float = 0.5
+    drr_range_mult: float = 2.0
     # B15 ORG direction tell and gap x bias (030 ~1:27:01; 055 ~17:50)
     org_tell: str = "off"                # "tag" / "filter": the 09:30 gap with NO attempt back to org_tell_level of it by
                                          # 09:30 + org_break_min is very bullish (gap up) / bearish (gap down): only that side after 10:00
@@ -1291,12 +1304,16 @@ class Params:
                                          # (ran away from it) / "neither"; "filter": neither = no trade Monday (trade from Tuesday)
     sunday_away_mult: float = 1.0        # [our interpretation] "away" = beyond the Sunday open by >= this x the gap
     sunday_min_gap_pts: float = 1.0      # smaller gaps = "no_gap" (neither scenario can play out)
+    sunday_no_gap_trade: bool = False    # [our interpretation] "filter": a Sunday without a gap has no scenario to wait for - False (the
+                                         # default) treats it like "neither" (no Monday trade), True trades it as an ordinary Monday
     # N7 holidays and calendar (cc08_006 ~5:06; 090 ~8:00; 072 ~3:36; 079 ~8:54; 093 ~0:32)
     skip_holiday_eve: bool = False       # N7.1: no trading the day before a long weekend / market holiday
     holiday_eve_bank: bool = False       # N7.1 "and bank holidays": Columbus / Veterans Day count as holidays
     early_close_flat: bool = True        # N7.1 EARLY_CLOSE: flat before a shortened day's close (those days are not loaded by
                                          # backtest.days(); matters for live / custom frames)
     skip_post_holiday_am: bool = True    # N7.2 (090 ~8:00): the morning after a holiday is choppy - no AM trade (PM / next day)
+    post_holiday_pre_open: bool = False  # N7.2: the post-holiday AM block also covers the 07:00 / 08:00 pre-open (Ma Deuce) windows
+                                         # (False = the NY 09:30 family only [our interpretation])
     post_holiday_pm_sync: bool = False   # N7.2: the PM trades only once ES / NQ move in step (needs the partner instrument)
     holiday_week_thu_fri: str = "off"    # N7.3 (072 ~3:36): holiday weeks deliver cleaner Thu / Fri: "trade" lifts the NFP-week
                                          # Thu / Fri block in a holiday week (the holiday_week tag is always set)
@@ -1312,7 +1329,8 @@ class Params:
     low_vol_inside: str = "off"          # Ep01.8 / N7.4 (Ep 01 ~16:42): the last trading day of the year is a low-volatility inside
                                          # day: "tag", "scalp" or "skip"
     low_vol_holiday_adj: bool = False    # also the days next to a market holiday
-    first_day_wait: int = 0              # Ep02.7 (Ep 02 "don't rush"): first trading day of the year, AM entries from this minute (> 600)
+    first_day_wait: int = 0              # Ep02.7 (Ep 02 "don't rush"): first trading day of the year, AM entries from this minute (a floor:
+                                         # values <= the order's own time move nothing; 0 = off)
     first_day_skip_am: bool = False      # Ep02.7: no AM trade on the first trading day of the year (PM allowed)
     # N8 day type
     adr_basis: str = "rth"               # N8.5 / X16a: the ranges of the day_week_context rules: "rth" (09:30-16:00) or "eth" (full sessions)
@@ -1365,7 +1383,9 @@ class Params:
     macro_move_pts: float = 0.0          # [our interpretation] "a move" = the window's extreme beyond the reference extreme by > this
     macro_ref_min: int = 30              # reference = the extremes of the minutes before the window
     london_adr_skip: float = 0.8         # N9.6 (cc08_001 ~13:41): London already made this x ADR5 (0 = off) -> skip NY
-    london_adr_win: tuple = (120, 480)   # [our interpretation] the London range: 02:00-08:00
+    london_adr_win: tuple = (120, 300)   # the London window of N9.6 and of the N9.4 raid_ref="london" test: 02:00-05:00, the same
+                                         # window as ctx.sess["london"] and T3 (one London everywhere; the pre-open 07:00 / 08:00 windows
+                                         # see the finished range, the NY open sees it too)
     # N10 day of week
     monday_mode: str = "trade"           # N10.2 / D20 (065B ~4:12; 101 ~30:53): "skip", "pm_only" or "obvious" outside NFP / FOMC weeks;
                                          # Tuesday after a Monday holiday acts like Monday (cc09_008 ~55:24)
@@ -1610,7 +1630,7 @@ class Params:
                          ("monday_mode", ("trade", "skip", "pm_only", "obvious")), ("tue_off_monday", ("off", "tag", "filter")),
                          ("mon_wed_extreme", ("off", "tag")), ("thu_fri_break", ("off", "tag", "side")),
                          ("friday_objective", ("off", "tag", "scalp", "skip")), ("friday_week_done", ("off", "draw", "trades")),
-                         ("tue_week_extreme", ("off", "tag", "side")), ("week_done_on_draw", ("off", "tag", "skip")),
+                         ("tue_week_extreme", ("off", "tag", "side")), ("daily_range_regime", ("off", "tag", "scalp", "skip")), ("week_done_on_draw", ("off", "tag", "skip")),
                          ("week_done_pick", ("any", "nearest")), ("roll_week_src", ("calendar", "data", "either"))):
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
@@ -1618,6 +1638,7 @@ class Params:
                 or set(self.consol_predictors) - {"no_report", "htf_array", "htf_50", "holiday_eve", "auction"}
                 or set(self.consol_pm_pools) - {"pd", "london", "on", "draw"}
                 or set(self.tgif_model_skip) - {"tgif", "tgif_zone", "tgif_htf_array", "tgif_week_sweep", "tgif_timing"}
+                or set(self.drr_tests) - {"range", "inside_bisi", "premium_run"}
                 or set(self.week_done_levels) - {"pwh", "pwl", "nwog_ce"} or set(self.tgif_htf_tfs) - set(CF_TFS)):
             raise ValueError("day_week_context: nr_tags / trend_news / consol_predictors / week_done_levels / tgif_htf_tfs name an unknown item")
         if len(self.seasonal_map) != 12 or (self.seasonal_map_b and len(self.seasonal_map_b) != 12):
@@ -1626,7 +1647,8 @@ class Params:
                 or self.min_on_range_frac < 0 or self.min_raid_pts < 0 or self.monday_small_range < 0
                 or self.am_range_skip_pm < 0 or self.b11_inside_week_days < 1 or self.consol_min_predictors < 1
                 or not 0 < self.org_tell_level <= 1 or not 0 < self.org_gap_fill_frac <= 1 or self.macro_ref_min < 1
-                or self.year_first_am_from < 0 or self.first_day_wait < 0 or self.trend_array_days < 1):
+                or self.year_first_am_from < 0 or self.first_day_wait < 0 or self.trend_array_days < 1
+                or self.drr_days < 3 or not 0 < self.drr_net_frac <= 1 or self.drr_range_mult <= 0):
             raise ValueError("day_week_context: risk multipliers > 0, ADR fractions >= 0, day / minute counts >= 1 (or 0 = off)")
         for name in ("macro_no_move_wins", "macro_no_move_pm_wins", "tgif_timing", "london_adr_win"):
             w = getattr(self, name)
@@ -4308,9 +4330,6 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         trades += run_sb(ctx, sides, p, day, symbol, blocked, btag)
     if _out is not None:
         _out["extras"] = list(trades[n_main:])
-    if wl is not None and len(trades) > wl:                # X15 / D19: the week's budget in ENTRY-time order across all engines
-        trades.sort(key=lambda t_: t_.entry_time)
-        del trades[wl:]
     if pos is not None:   # data ended early
         tr = pos["trade"]
         if not live:
@@ -4318,6 +4337,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             _after_close(pos, trades, p, done, state, i=len(ctx.t) - 1, ctx=ctx)     # review fix: the risk state / day-loss see this close too
         else:
             trades.append(tr)
+    if wl is not None and len(trades) > wl:                # X15 / D19: the week's budget in ENTRY-time order across all engines
+        trades.sort(key=lambda t_: t_.entry_time)          # (after a position left open at the data end is in the list)
+        del trades[wl:]
     if state["rs"] is not None and (p.ma_deuce or p.sb_model):
         _EN.replay_risk_state(state["rs"], ctx.risk_view["rs0"], trades, p)   # E10: carried state in time order
     if locks is not None:

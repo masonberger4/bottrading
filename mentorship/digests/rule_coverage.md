@@ -22,6 +22,8 @@ New rules go in as Params switches that are off by default. The only exception i
 | NA | 18 | 4% |
 | **Total** | **473** | |
 
+These are the audit-time counts: status changes from the builds are listed in sections 4 to 8 (the tables in sections 1 and 2 are not rewritten).
+
 The checker changed 23 statuses (section 2, "revised" column). It agreed with the other 450, sometimes after rewriting the build spec.
 
 ### By rulebook section
@@ -112,22 +114,22 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | B8f | Stop above the breaker cancels SMT -> long | MISSING | reverse_after_loss | No forced direction. Now built: see section 4. | no |
 | B9 | What is not a flip | SIMPLIFIED | per-day bias, closes | No neutral-on-target. No retracement persistence. No fallback to the next weekly array. | no |
 | B10 | MWD sequential | MISSING | building blocks only | No case logic. | no |
-| B11 | Candle-pattern day context | SIMPLIFIED | day_context; three_day_rule | Inside day is a tag only. No inside week, outside day or NR3/NR7. | no |
+| B11 | Candle-pattern day context | SIMPLIFIED | day_context; three_day_rule | Inside day is a tag only. No inside week, outside day or NR3/NR7. (Audit-time note. Now built: see section 8.) | no |
 | B11a | 3-day rule | FULL | three_day_rule | Ma Deuce skips it (minor). | no |
-| B11b | Down-close outside day | MISSING | (none) | Not detected. | no |
-| B11c | Inside week / NR -> expansion | SIMPLIFIED | inside_day tag | No inside week or NR, no effect. | no |
+| B11b | Down-close outside day | MISSING | (none) | Not detected. (Audit-time note. Now built: see section 8.) | no |
+| B11c | Inside week / NR -> expansion | SIMPLIFIED | inside_day tag | No inside week or NR, no effect. (Audit-time note. Now built: see section 8.) | no |
 | B12 | Intraday PO3 vs the midnight/13:30 open | FULL | use_bias | Strict `<` (minor). | no |
 | B13 | Weekly open | MISSING | (none) | No weekly-open level. | no |
 | B14.1 | NWOG regime | MISSING | NWOG used as targets | No return count, no regime, no convergence. | no |
 | B14.2 | Converging NWOGs | MISSING | (none) | No comparison between gaps. | no |
 | B14.3 | Bias vs NWOG | MISSING | H react (touch + CE) | No hold-above / reclaim state. | no |
-| B15 | ORG direction tell | MISSING | DayCtx.org as targets | No 30-minute attempt test. No gap x bias rule. | no |
-| B16 | Sunday gap scenarios | MISSING | skip_monday (exempts NFP/FOMC weeks) | No scenario check. | no |
+| B15 | ORG direction tell | MISSING | DayCtx.org as targets | No 30-minute attempt test. No gap x bias rule. (Audit-time note. Now built: see section 8.) | no |
+| B16 | Sunday gap scenarios | MISSING | skip_monday (exempts NFP/FOMC weeks) | No scenario check. (Audit-time note. Now built: see section 8.) | no |
 | B17 | Neutral / no-bias conditions | SIMPLIFIED | htf_bias + bias_neutral; neutral_skip | B17.1 is a proxy. B17.3-5 are absent. | yes (was MISSING) |
 | B17.1 | 50/50 framing -> no trade | MISSING | (none) | No both-sides check. | no |
 | B17.2 | Stuck or chop -> wait for 09:30 | FULL | AM starts 09:30 | Pre-open switches have no guard. | no |
 | B17.3 | HTF draw delivered -> stop for the week | MISSING | (none) | No objective-met state. | no |
-| B17.4 | Range market / inside daily BISI / sloppy | MISSING | neutral_skip (N8) | None of the three is detected. Now built: see section 4. | no |
+| B17.4 | Range market / inside daily BISI / sloppy | MISSING | neutral_skip (N8) | None of the three is detected. Now built: see section 4. (Audit-time note. Now built: see section 8.) | no |
 | B17.5 | Indices decoupled; SMT both ways | MISSING | _smt per sweep | No decoupling measure. | no |
 | B18.1 | SMT qualifier | SIMPLIFIED | _smt, smt_min | No PD-array requirement. No "obvious" gap. No rel-eq SMT. | no |
 | B18.2 | SMT windows | MISSING | (none) | No window filter. No pre-09:30 SMT. | no |
@@ -143,7 +145,7 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | B20 | COT/OI/sentiment overall | MISSING | (none) | All three missing. | no |
 | B21 | IPDA 20/40/60-day ranges | MISSING | (none) | No pools. History passed in is only 45 days. | no |
 | B22 | Quarterly shift | MISSING | (none) | Not computed. | no |
-| B23 | Seasonals | MISSING | BT by_month (reporting only) | No map, tag or report. | yes (was SIMPLIFIED) |
+| B23 | Seasonals | MISSING | BT by_month (reporting only) | No map, tag or report. (Audit-time note. Now built: see section 8.) | yes (was SIMPLIFIED) |
 | N1 | NFP Friday | SIMPLIFIED | nfp_day=True; entries from 09:30 | Pyramids on NFP. Pre-open switches break the first-hour rule. | no |
 | N2 | NFP week beginner block | FULL | nfp_week_block (off) | Also needs nfp_thu=False. | no |
 | N3 | FOMC overall | SIMPLIFIED | blocked fomc_pm; am_exit | Day-before, day-after and no-re-entry handling is missing or partial. | no |
@@ -161,32 +163,32 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | N5.5 | Fed chair at 10:00 | MISSING | (none) | No calendar. | no |
 | N5.6 | Treasury auction AM | MISSING | (none) | No calendar. | no |
 | N6 | News Judas profile | SIMPLIFIED | post_news news_range | No first-side tracking. No CE target. No breaker change on NFP/CPI/FOMC. | no |
-| N7 | Holidays and calendar | MISSING | roll_week tag | None of the behaviours. | no |
-| N7.1 | Holiday eve skip | MISSING | (none) | Not implemented. | no |
-| N7.2 | Morning after a holiday | MISSING | (none) | Not implemented. | no |
-| N7.3 | Holiday week Thu/Fri | MISSING | (none) | No tag. | no |
-| N7.4 | Year end / year start | MISSING | (none) | Not implemented. | no |
-| N7.5 | Roll week | SIMPLIFIED | day_type roll_week | Tag is overwritten by other day types. No switch. | no |
-| N7.6 | August | MISSING | (none) | Not implemented. | no |
-| N8 | Day type overall | SIMPLIFIED | big_prev + neutral_skip | Only the >2x ADR5 skip exists. | no |
-| N8.1 | Consolidation = no trade | MISSING | (none) | No detector. | no |
-| N8.2 | Trending-day recipe | MISSING | (none) | Not combined. | no |
-| N8.3 | Consolidation predictors | MISSING | (none) | Not implemented. | no |
-| N8.4 | Big ORG/prior range -> sacrifice the AM | MISSING | neutral_skip (whole day) | No AM-only skip. | yes (was SIMPLIFIED) |
-| N8.5 | >2x ADR5 skip / <ADR5 expansion due | SIMPLIFIED | big_prev | No expansion-due logic. Ranges are RTH only. | no |
-| N8.6 | Seek & destroy | MISSING | (none) | Not implemented. | no |
-| N9 | In-day no-trade conditions | SIMPLIFIED | _scan requirements | Only N9.1, plus a proxy for N9.3. | no |
+| N7 | Holidays and calendar | MISSING | roll_week tag | None of the behaviours. (Audit-time note. Now built: see section 8.) | no |
+| N7.1 | Holiday eve skip | MISSING | (none) | Not implemented. (Audit-time note. Now built: see section 8.) | no |
+| N7.2 | Morning after a holiday | MISSING | (none) | Not implemented. (Audit-time note. Now built: see section 8.) | no |
+| N7.3 | Holiday week Thu/Fri | MISSING | (none) | No tag. (Audit-time note. Now built: see section 8.) | no |
+| N7.4 | Year end / year start | MISSING | (none) | Not implemented. (Audit-time note. Now built: see section 8.) | no |
+| N7.5 | Roll week | SIMPLIFIED | day_type roll_week | Tag is overwritten by other day types. No switch. (Audit-time note. Now built: see section 8.) | no |
+| N7.6 | August | MISSING | (none) | Not implemented. (Audit-time note. Now built: see section 8.) | no |
+| N8 | Day type overall | SIMPLIFIED | big_prev + neutral_skip | Only the >2x ADR5 skip exists. (Audit-time note. Now built: see section 8.) | no |
+| N8.1 | Consolidation = no trade | MISSING | (none) | No detector. (Audit-time note. Now built: see section 8.) | no |
+| N8.2 | Trending-day recipe | MISSING | (none) | Not combined. (Audit-time note. Now built: see section 8.) | no |
+| N8.3 | Consolidation predictors | MISSING | (none) | Not implemented. (Audit-time note. Now built: see section 8.) | no |
+| N8.4 | Big ORG/prior range -> sacrifice the AM | MISSING | neutral_skip (whole day) | No AM-only skip. (Audit-time note. Now built: see section 8.) | yes (was SIMPLIFIED) |
+| N8.5 | >2x ADR5 skip / <ADR5 expansion due | SIMPLIFIED | big_prev | No expansion-due logic. Ranges are RTH only. (Audit-time note. Now built: see section 8.) | no |
+| N8.6 | Seek & destroy | MISSING | (none) | Not implemented. (Audit-time note. Now built: see section 8.) | no |
+| N9 | In-day no-trade conditions | SIMPLIFIED | _scan requirements | Only N9.1, plus a proxy for N9.3. (Audit-time note. Now built: see section 8.) | no |
 | N9.1 | No draw/inefficiency/displacement -> no trade | FULL | _scan | (none) | no |
-| N9.2 | Draw delivered pre-09:30 | MISSING | (none) | htf.table removes overnight-delivered draws. | no |
-| N9.3 | Objective done before lunch | MISSING | no_pm_after_am_win | No objective tracking. | no |
-| N9.4 | Narrow overnight / shallow raid | MISSING | (none) | Not implemented. | no |
-| N9.5 | Macro with no move -> close the charts | MISSING | MACROS tag | No session end. | no |
-| N9.6 | London ~80% of ADR5 | MISSING | (none) | Not implemented. | no |
-| N10 | Day of week | SIMPLIFIED | skip_monday; tgif; flatten | Monday rules partial. No Thu/Fri structure. Friday rules mostly missing. | no |
+| N9.2 | Draw delivered pre-09:30 | MISSING | (none) | htf.table removes overnight-delivered draws. (Audit-time note. Now built: see section 8.) | no |
+| N9.3 | Objective done before lunch | MISSING | no_pm_after_am_win | No objective tracking. (Audit-time note. Now built: see section 8.) | no |
+| N9.4 | Narrow overnight / shallow raid | MISSING | (none) | Not implemented. (Audit-time note. Now built: see section 8.) | no |
+| N9.5 | Macro with no move -> close the charts | MISSING | MACROS tag | No session end. (Audit-time note. Now built: see section 8.) | no |
+| N9.6 | London ~80% of ADR5 | MISSING | (none) | Not implemented. (Audit-time note. Now built: see section 8.) | no |
+| N10 | Day of week | SIMPLIFIED | skip_monday; tgif; flatten | Monday rules partial. No Thu/Fri structure. Friday rules mostly missing. (Audit-time note. Now built: see section 8.) | no |
 | N10.1 | No Sunday open | FULL | session build | (none) | no |
-| N10.2 | Monday | SIMPLIFIED | skip_monday | No PM-only mode, no "obvious" rule, no Tuesday-off-Monday. | no |
-| N10.3 | Tue/Wed ideal; Mon-Wed extremes | MISSING | weekday tag | Not implemented. | no |
-| N10.4 | Friday rules | SIMPLIFIED | tgif | No Friday 80/20. No weekly objective. Strong-Thursday check missing. | no |
+| N10.2 | Monday | SIMPLIFIED | skip_monday | No PM-only mode, no "obvious" rule, no Tuesday-off-Monday. (Audit-time note. Now built: see section 8.) | no |
+| N10.3 | Tue/Wed ideal; Mon-Wed extremes | MISSING | weekday tag | Not implemented. (Audit-time note. Now built: see section 8.) | no |
+| N10.4 | Friday rules | SIMPLIFIED | tgif | No Friday 80/20. No weekly objective. Strong-Thursday check missing. (Audit-time note. Now built: see section 8.) | no |
 | N10.5 | No weekend or 17:00 holds | FULL | flatten=960 | (none) | no |
 | T1 | NY time, time-based charts | FULL | tz_convert NY | (none) | no |
 | T2 | Opening prices | SIMPLIFIED | L.opens; use_bias | 08:30 and 09:30 opens unused. No release-day 08:30 body rule. | no |
@@ -201,7 +203,7 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | T11 | End of day | SIMPLIFIED | flatten | No late-add cutoff. No fade block. | no |
 | T12 | Extreme timing statistics | NA | (none) | Research only. | no |
 | T13 | Day templates / PO3 | SIMPLIFIED | use_bias; _judas tag | Judas not required. No expansion hold. No profiles. No NFP seek-and-destroy. | no |
-| T14 | Weekly time statistics | MISSING | (none) | No study, no switch. | yes (was NA) |
+| T14 | Weekly time statistics | MISSING | (none) | No study, no switch. (Audit-time note. Now built: see section 8.) | yes (was NA) |
 | L1 | Session pools and priority | SIMPLIFIED | DayCtx.sess; _sell_side | AM range ends 13:30 (rule: 12:00). No previous-AM pool. No priority. ORG is not a pool. | no |
 | L2 | Liquidity matrix | SIMPLIFIED | pdh/pdl 1-3 | No PD-array/flow requirement. RTH only. | no |
 | L3 | Higher pools | SIMPLIFIED | pw/pm_ switches; or_minutes | No 20/40/60-day pools. RTH only. One OR length at a time. | no |
@@ -291,10 +293,10 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | M12.4 | External turtle soup | MISSING | (none) | Not built. Now built: see section 4. | no |
 | M12.5 | Turtle soup context | SIMPLIFIED | conf/topdown gates | No depth or reversal test. Now built: see section 4. | no |
 | M13 | OTE | SIMPLIFIED | leg_pd | No band, no 70.5%, strict 50% passes, no leg stop. | no |
-| M14 | TGIF | SIMPLIFIED | tgif block | Direction only. | no |
-| M14.1 | TGIF context | SIMPLIFIED | day_context | No HTF-array check. RTH week only. | no |
+| M14 | TGIF | SIMPLIFIED | tgif block | Direction only. (Audit-time note. Now built: see section 8.) | no |
+| M14.1 | TGIF context | SIMPLIFIED | day_context | No HTF-array check. RTH week only. (Audit-time note. Now built: see section 8.) | no |
 | M14.2 | TGIF 20-30% zone | MISSING | (none) | Not built. | no |
-| M14.3 | TGIF timing | MISSING | (none) | Not built. | no |
+| M14.3 | TGIF timing | MISSING | (none) | Not built. (Audit-time note. Now built: see section 8.) | no |
 | M14.4 | TGIF exits | SIMPLIFIED | ladder | No grid. | no |
 | M15 | Ma Deuce | SIMPLIFIED | PO.run_ma_deuce | No big-candle check, no 2nd entry, one target, not blocked by blocked(). | no |
 | M16 | Index SMT / sick sister | SIMPLIFIED | _smt; combine | Neither model exists. | no |
@@ -363,7 +365,7 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | X10a | Last AM unit off before noon | FULL | am_exit=720 | (none) | no |
 | X10b | Bulk off 10:00-11:00 | MISSING | (none) | Not built. | no |
 | X10c | Hold AM SMT trades to 10:30-11:00 | MISSING | (none) | Not built. | no |
-| X10d | AM delivered the range -> skip PM | MISSING | (none) | Not built. | no |
+| X10d | AM delivered the range -> skip PM | MISSING | (none) | Not built. (Audit-time note. Now built: see section 8.) | no |
 | X11 | PM exits | SIMPLIFIED | pm_done_by; flatten | c missing. | no |
 | X11a | Done by 15:00 if the target is hit | FULL | pm_done_by | (none) | no |
 | X11b | Hold PM trends to 15:00-16:00 | FULL | flatten | (none) | no |
@@ -378,16 +380,16 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | X14b | Chop: one win and stop | MISSING | (none) | Not built. | no |
 | X14c | AM win -> skip the PM | FULL | no_pm_after_am_win | (none) | no |
 | X14d | No re-entry after a winner | SIMPLIFIED | done per session | Per session, not per day. | yes (was FULL) |
-| X15 | Frequency | SIMPLIFIED | max_trades_week | d missing. Truncation-order bug. | no |
+| X15 | Frequency | SIMPLIFIED | max_trades_week | d missing. Truncation-order bug. (Audit-time note. Now built: see section 8.) | no |
 | X15a | Weekly cap | FULL | max_trades_week | (none) | no |
 | X15b | One AM SB a day | FULL | SB per window | (none) | no |
 | X15c | ~2 setups a day | FULL | done | (none) | no |
-| X15d | Weekly objective -> done | MISSING | (none) | Not built. | no |
-| X16 | Journal items | SIMPLIFIED | tags | Partial. | no |
-| X16a | Range vs ADR5 | SIMPLIFIED | big_prev tag | Flag only. | yes (was MISSING) |
-| X16b | Last 3 days' highs/lows taken | MISSING | (none) | Not built. | no |
-| X16c | Weekly H/L weekday and session | MISSING | (none) | Not built. | no |
-| X16d | Entry-array timeframe | SIMPLIFIED | entry_kind | No per-trade timeframe. | no |
+| X15d | Weekly objective -> done | MISSING | (none) | Not built. (Audit-time note. Now built: see section 8.) | no |
+| X16 | Journal items | SIMPLIFIED | tags | Partial. (Audit-time note. Now built: see section 8.) | no |
+| X16a | Range vs ADR5 | SIMPLIFIED | big_prev tag | Flag only. (Audit-time note. Now built: see section 8.) | yes (was MISSING) |
+| X16b | Last 3 days' highs/lows taken | MISSING | (none) | Not built. (Audit-time note. Now built: see section 8.) | no |
+| X16c | Weekly H/L weekday and session | MISSING | (none) | Not built. (Audit-time note. Now built: see section 8.) | no |
+| X16d | Entry-array timeframe | SIMPLIFIED | entry_kind | No per-trade timeframe. (Audit-time note. Now built: see section 8.) | no |
 | D1 | AM from 09:30 vs 10:00; or_no_entry | SIMPLIFIED | am | No or_no_entry. The 10:00 test drops OR sweeps. | no |
 | D2 | SB as its own setup | SIMPLIFIED | SB | No fvg_in_window. No first-FVG switch. | no |
 | D3 | MSS close vs wick | FULL | mss_mode | (none) | no |
@@ -406,8 +408,8 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | D16 | AM 12:00 / PM 15:00 exits | FULL | am_exit; pm_done_by | (none) | no |
 | D17 | Pivot size | FULL | pivot_n=1 | (none) | no |
 | D18 | Re-entry after a stop-out | SIMPLIFIED | reentry_half | See X13b. | no |
-| D19 | Trade frequency | SIMPLIFIED | done; caps | Truncation order. No cap in paper.py. Breakeven counts as a win. | no |
-| D20 | Mondays | SIMPLIFIED | skip_monday | No PM-only mode. | no |
+| D19 | Trade frequency | SIMPLIFIED | done; caps | Truncation order. No cap in paper.py. Breakeven counts as a win. (Audit-time note. Now built: see section 8.) | no |
+| D20 | Mondays | SIMPLIFIED | skip_monday | No PM-only mode. (Audit-time note. Now built: see section 8.) | no |
 | D21 | NWOG/ORG conventions | SIMPLIFIED | H gaps; org | org_days capped at 6. Monday gap mode has no CE. | no |
 | D22 | Real midnight open | SIMPLIFIED | L.opens | No bias_open switch. Live SPY uses 04:00. | no |
 | D23 | SD anchor | SIMPLIFIED | sd_targets | Anchor is leg_hi. No switch. | no |
@@ -419,8 +421,8 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | Ep01.5 | Breakaway gap | SIMPLIFIED | open-gap check; ce_hold | No classification. | no |
 | Ep01.6 | Breaker body close | SIMPLIFIED | inline bz | No lower-low check. Not an entry. | no |
 | Ep01.7 | Narrative vs bias | NA | (none) | Concept. | no |
-| Ep01.8 | Low-vol inside day | SIMPLIFIED | pdh1/pdl1 | No detection. | no |
-| Ep01.9 | Year end reprices up | MISSING | (none) | Audit-time note superseded: owner #3 = December's direction (mapping pending). See section 4. | no |
+| Ep01.8 | Low-vol inside day | SIMPLIFIED | pdh1/pdl1 | No detection. (Audit-time note. Now built: see section 8.) | no |
+| Ep01.9 | Year end reprices up | MISSING | (none) | Audit-time note superseded: owner #3 = December's direction (mapping pending). See section 4. (Audit-time note. Now built: see section 8.) | no |
 | Ep01.10 | AM 08:30-11:00, PM 14:00-16:00 | SIMPLIFIED | am/pm | 08:30-09:00 never scanned. | no |
 | Ep01.11 | PM 15:15-15:45; nothing by 15:50 -> no trade | SIMPLIFIED | pm; tag | Audit-time note superseded: owner #1 = entries 15:00-15:50, 15:15-15:45 tag only. See section 4. | yes (was FULL) |
 | Ep01.12 | AM loss no reverse | FULL | reverse_after_loss | (none) | no |
@@ -441,7 +443,7 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | Ep02.4 | CE/MT | FULL | Zone.mid/mt | (none) | no |
 | Ep02.5 | HTF targets / runner | SIMPLIFIED | htf_targets | No 30m. No reclaim exit. | no |
 | Ep02.6 | No narrative -> scalp | MISSING | (none) | Not built. | no |
-| Ep02.7 | First day of year | MISSING | (ISM 10:00 by accident) | No rule. | no |
+| Ep02.7 | First day of year | MISSING | (ISM 10:00 by accident) | No rule. (Audit-time note. Now built: see section 8.) | no |
 | Ep02.8 | Daily VI top-down | SIMPLIFIED | topdown | VIs unused. | no |
 | Ep02.9 | Open FVG = breakaway | SIMPLIFIED | ce_hold | No tag. | no |
 | Ep03.1 | NFP week | FULL | nfp_week_block | (none) | no |
@@ -907,14 +909,14 @@ Low:
 
 ### day_week_context (49 items)
 
-**[built 2026-10-19, stage 8]** All items built except B17.4 (partial: daily-BISI / premium-run tests open) and B23 (report-only tag by design); per-item status and switches in `build_log.md` section "day_week_context". Original build specs below.
+**[built 2026-10-19, stage 8; review fixes 2026-10-19]** All items built (B17.4 `daily_range_regime` added in the review fixes; B23 is a report-only tag by design; T14 switch built but the study does not support the claim, see section 8); per-item status and switches in `build_log.md` section "day_week_context". Original build specs below.
 
 Owns: `day_context`, the day branches of `blocked()`, the weekly state in BT.run, and the study scripts. Build `adr5()` and `next_trading_day()` here first.
 
 Medium:
 - **B15:** Add org_tell tag/filter (no 50% attempt by 10:00) and `org_bias_gap`.
 - **B16:** Add sunday_scenario tag/filter (futures only).
-- **B17.4:** Add daily_range_regime tag/scalp/skip (range days, inside daily BISI, run into premium). **[partial 2026-10-18]** Owner #10 `sloppy_mode` (stand_aside / scalp / off=tag) with big_prev, chop and NFP-week tests [our interpretation]; default "off" (tag only) until the owner answers; the daily-BISI / premium-run tests are still open.
+- **B17.4:** Add daily_range_regime tag/scalp/skip (range days, inside daily BISI, run into premium). **[partial 2026-10-18]** Owner #10 `sloppy_mode` (stand_aside / scalp / off=tag) with big_prev, chop and NFP-week tests [our interpretation]; default stand_aside with big_prev + chop (owner #10 answer); premium_run / inside_bisi / fomc_week stay opt-in in `sloppy_tests`; **[built 2026-10-19]** `daily_range_regime` off / tag / scalp / skip with `drr_tests` (range / inside_bisi / premium_run) - section 8.
 - **N7:** Umbrella for holidays.
 - **N8:** Add the adr5 helper and switches for each N8 sub-rule.
 - **N8.1:** Add `consol_skip` (range < 0.35 ADR5 and 4+ crosses of the midnight open; expansion resumes trading).
@@ -1197,3 +1199,28 @@ Calendar and session-window rules (`mentorship/newscal.py`, `calendar.py`, hooks
 | Ep06.1 | FULL | `london_kz`, `london_kz_start`, `ny_kz_futures` (futures only) |
 | Ep01.11 | FULL | owner #1 (earlier) |
 | N2 / D8 (bug) | FULL | `blocked()` NFP-week rules relative to the real jobs date (Thursday NFP weeks) |
+
+## 8. day_week_context build (2026-10-19)
+
+`mentorship/daycontext.py`, `study_week.py`, hooks in `strategy.run_day` / `sb_model` / `pre_open` (`build_log.md` "day_week_context" lists every item with its switches and defaults). Two defaults change the
+engine (N7.2 `skip_post_holiday_am`, N9.6 `london_adr_skip=0.8`, plus N10.4 `friday_slow_split`, `early_close_flat`, `be_counts_as_win`, `journal_tags`; all pinned back in `study.CURRENT` / `study.PRE_OWNER`).
+Status changes against section 2:
+
+| Id | New status | Note |
+|---|---|---|
+| B11, B11b, B11c | FULL | `b11_inside_week` (+ days), `b11_inside_expansion`, `outside_day_rule` (+ mirror), `nr_tags`, `nr_expansion` (NR3 / NR7 evaluated without `nr_tags`) |
+| B15 | FULL | `org_tell` (+ level, wait), `org_bias_gap` (+ src, fill frac) |
+| B16 | FULL | `sunday_scenario`, `sunday_away_mult`, `sunday_min_gap_pts`, `sunday_no_gap_trade`; futures only; applies to Monday and the Tuesday after a Monday holiday |
+| B17.4 | FULL | #10 `sloppy_mode` / `sloppy_tests` (earlier) + `daily_range_regime` off / tag / scalp / skip with `drr_tests` (range / inside_bisi / premium_run), `drr_days`, `drr_net_frac`, `drr_range_mult` [our interpretation] |
+| N7, N7.1, N7.2, N7.3, N7.5, N7.6 | FULL | holiday eve / post-holiday (NY AM family; `post_holiday_pre_open` adds PRE7 / PRE8) / holiday week / roll week / August; N7.2 and early-close flat are defaults |
+| N7.4, Ep01.9 | SIMPLIFIED | year end (owner #3: `year_end="december"`, `year_end_map="squaring"` are the defaults) and year start (`year_first_am_from`, `first_day_*`); mapping still needs owner confirmation |
+| N8, N8.1-N8.6 | FULL | `consol_skip`, `trend_recipe`, `consol_day_rules` (+ predictors, OR small, 11:00 out, PM rule), `big_day_am_skip`, `expansion_due` / `expansion_targets`, `sd_no_hold` / `sd_week_skip` |
+| N9, N9.2-N9.6 | FULL | `eve_draw` / `pre_draw_pm` (whole NY AM family), `objective_done_skip`, `min_on_range_frac` / `min_raid_pts`, `macro_no_move`, `london_adr_skip` (default 0.8; London window now 02:00-05:00 everywhere) |
+| N10, N10.2, N10.3, N10.4 | FULL | `monday_mode`, `tue_off_monday`, `pool_mon_wed`, `mon_wed_extreme`, `thu_fri_break`, `friday_*`, `strong_thu_*` |
+| T14 | SIMPLIFIED | `study_week.py` run on ES 5m 2019-2026 (407 weeks): the Tuesday-London-low claim does NOT hold (1.3% of bullish weeks, 19% Tuesday low); the Mon-Wed claim holds (89.7%). `tue_week_extreme` stays an off switch (contested), not a default |
+| M14, M14.1, M14.3 | FULL | `tgif_model` umbrella, `tgif_htf_array`, `tgif_timing`, `tgif_week_sweep` |
+| X10d, X15, X15d, D19, D20 | FULL | `am_range_skip_pm`, `max_trades_week` (all engines, entry-time order, open position at the data end included), `week_done_on_draw`, `be_counts_as_win`, `monday_small_range` |
+| X16, X16a-X16d | FULL | `journal_tags` columns (`taken_3d` / `prev3_taken` from the last three sessions' extremes; `adr5_today` is a post-hoc whole-day column for study reports only), `weekly_extremes`, `day_ranges` |
+| B23 | SIMPLIFIED | report-only tag by design (`seasonal_tag`); never gates |
+| Ep01.8, Ep02.7 | FULL | `low_vol_inside`, `first_day_wait` (a floor on the AM entry minute), `first_day_skip_am` |
+

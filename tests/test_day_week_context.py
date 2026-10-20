@@ -85,6 +85,8 @@ def test_defaults_and_validation():
     assert (p.be_counts_as_win, p.journal_tags, p.consol_skip, p.sd_week_news) == (True, True, True, True)
     assert p.skip_holiday_eve is False and p.monday_mode == "trade" and p.roll_week_src == "calendar"
     assert p.consol_pm_pools == ("pd", "london", "draw") and p.tgif_model_skip == ()
+    assert p.london_adr_win == (120, 300) and p.daily_range_regime == "off" and p.sunday_no_gap_trade is False
+    assert p.year_end == "december" and p.year_end_map == "squaring" and p.sloppy_mode == "stand_aside" and p.sloppy_tests == ("big_prev", "chop")
     assert p.week_done_on_draw == "off" and p.friday_week_done == "off" and p.tue_off_monday == "off"
     for kw in (dict(b11_inside_week="x"), dict(outside_day_rule="x"), dict(org_tell="x"), dict(org_bias_gap="x"),
                dict(sunday_scenario="x"), dict(low_vol_inside="x"), dict(adr_basis="x"), dict(trend_recipe="x"),
@@ -92,7 +94,8 @@ def test_defaults_and_validation():
                dict(friday_week_done="x"), dict(week_done_on_draw="x"), dict(roll_week_src="x"), dict(nr_tags=("x",)),
                dict(consol_pm_pools=("x",)), dict(tgif_model_skip=("x",)), dict(seasonal_map=("bull",)),
                dict(roll_risk=0.0), dict(london_adr_skip=-1.0), dict(org_tell_level=0.0), dict(macro_no_move_wins=((700, 600),)),
-               dict(tgif_timing=((600,),)), dict(london_adr_win=(500, 400)), dict(b11_inside_week_days=0)):
+               dict(tgif_timing=((600,),)), dict(london_adr_win=(500, 400)), dict(b11_inside_week_days=0),
+               dict(daily_range_regime="x"), dict(drr_days=2), dict(drr_tests=("x",)), dict(drr_net_frac=0.0), dict(drr_range_mult=0.0)):
         with pytest.raises(ValueError):
             Params(**kw)
 
@@ -539,49 +542,5 @@ def test_final_hit_is_set_by_every_engine_for_the_week_state():
     assert "final_hit" in inspect.getsource(sb_model.run_sb) and "final_hit" in inspect.getsource(pre_open.run_ma_deuce)
 
 
-# --- no look-ahead: every new switch (the DECISIONS variants of this package, in chunks) ---------------------------
-
-def _variants():
-    names = list(study.DECISIONS)
-    return names[names.index("B11_inside_week_tag"):names.index("X16_journal_tags_off") + 1]
-
-
-_FILTERY = ("skip", "filter", "only", "block", "side", "apply", "obvious", "pm_only", "no_move", "consol_day",
-            "range_skip", "no_hold", "no_long", "done_on_draw", "trades")
-
-
-def _chunks(n_filter=8, n_plain=2):
-    """Blocking variants spread thinly (merged they would leave no trades to compare), plain / tag variants merged."""
-    v = _variants()
-    fl = [x for x in v if any(t in x for t in _FILTERY)]
-    pl = [x for x in v if x not in fl]
-    return [fl[i::n_filter] for i in range(n_filter)] + [pl[i::n_plain] for i in range(n_plain)]
-
-
-LA_COLS = ["entry_time", "entry", "stop", "t1", "day_tags"]
-
-
-def _la_params(names, **extra):
-    kw = {}
-    for nm in names:
-        kw.update(study.DECISIONS[nm])
-    kw.update(extra)
-    return Params(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, leg_pd=0, min_draw_pts=0, **kw)
-
-
-@pytest.mark.skipif(not ES, reason="ES data missing")
-@pytest.mark.parametrize("k", range(10))
-def test_no_look_ahead_every_new_switch_5m(k):
-    es = B.load("ES", 5, source="databento")
-    es = es[(es.index >= "2023-11-15") & (es.index < "2024-04-15")]
-    p = _la_params(_chunks()[k])
-    _no_look_ahead(es, 5, "ES", p, LA_COLS, every=3, min_trades=1)
-
-
-@pytest.mark.skipif(not Path("data/mentorship/ES_1min_db.csv").exists(), reason="ES 1m data missing")
-def test_no_look_ahead_week_switches_with_sb_and_ma_deuce_1m():
-    es = B.load("ES", 1, source="databento")
-    es = es[(es.index >= "2024-01-02") & (es.index < "2024-02-23")]
-    names = [n for n in _variants() if n.startswith(("N10", "M14", "X15d", "D19", "N7", "X10d", "N9", "N8.4"))]
-    p = _la_params(names, sb_model=True, ma_deuce=True, pre_0700=True, pre_0900=True, am=(0, 0), pm=(0, 0))
-    _no_look_ahead(es, 1, "ES", p, ["entry_time", "entry", "stop", "t1", "side"], every=3, min_trades=0, lag=1)
+# (the no-look-ahead runs of every switch - one variant per run, 5m and 1m with Silver Bullet / Ma Deuce - are in
+#  test_day_week_lookahead.py)

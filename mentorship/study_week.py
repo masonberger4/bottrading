@@ -30,9 +30,10 @@ def week_table(df: pd.DataFrame) -> pd.DataFrame:
     return DW.weekly_extremes(df)
 
 
-def _by_wed_london(df: pd.DataFrame) -> pd.Series:
+def _by_wed_london(df: pd.DataFrame, cut_min: int = 300) -> pd.Series:
     """For each week the share of the whole week's high-low range already made by the end of Wednesday's London
-    session (05:00 New York on the trading day Wednesday)."""
+    session: cut_min minutes New York on the trading day Wednesday - 300 = the 05:00 London kill-zone end, 600 =
+    the 10:00 London close that M14.3 / the rulebook use (the study reports both)."""
     lab = DW.trading_label(df.index)
     wk = pd.Series(lab.to_period("W-FRI"), index=df.index)
     wd = pd.Series(lab.dayofweek, index=df.index)
@@ -44,7 +45,7 @@ def _by_wed_london(df: pd.DataFrame) -> pd.Series:
         w = wd.loc[g.index]
         mm = m.loc[g.index]
         # trading-day Wednesday 05:00: the evening bars (>= 18:00) already belong to the next trading day
-        cut = (w < 2) | ((w == 2) & ((mm < 300) | (mm >= 18 * 60)))
+        cut = (w < 2) | ((w == 2) & ((mm < cut_min) | (mm >= 18 * 60)))
         part = g[cut.values]
         full = float(g.high.max() - g.low.min())
         if len(part) and full > 0:
@@ -82,6 +83,10 @@ def summarize(wk: pd.DataFrame, df: pd.DataFrame | None = None) -> dict:
         if len(s):
             out["by_wed_london_mean"] = round(float(s.mean()), 3)
             out["by_wed_london_30_50"] = round(float(((s >= 0.3) & (s <= 0.5)).mean()), 3)
+        s10 = _by_wed_london(df, 600)                                  # the 10:00 London close of M14.3
+        if len(s10):
+            out["by_wed_london_close_mean"] = round(float(s10.mean()), 3)
+            out["by_wed_london_close_30_50"] = round(float(((s10 >= 0.3) & (s10 <= 0.5)).mean()), 3)
     t = out["tue_london_low_bullish"]
     out["tue_week_extreme_claim_holds"] = bool(t is not None and t >= 0.5)
     return out

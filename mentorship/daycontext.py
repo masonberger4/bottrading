@@ -250,6 +250,7 @@ def plan(ctx, hist, p, week: dict | None = None, eve: tuple | None = None, dt: s
     _friday_rules(P, ctx, d, p, hist, eth, a5)
     _monday_rules(P, ctx, d, p, hist, eth, a5)
     _consol_rules(P, ctx, d, p, hist, eth, a5)
+    _regime_rules(P, d, p, hist, eth)
     _misc_rules(P, ctx, d, p, hist, eth, a5)
     return P
 
@@ -293,8 +294,9 @@ def _calendar_rules(P: DayPlan, d: date, p, hist, ctx, a5) -> None:
     if p.skip_holiday_eve and "holiday_eve" in tg:                          # N7.1 (cc08_006 ~5:06; cc10_008 ~6:54)
         P.block(None, "holiday_eve")
     if p.skip_post_holiday_am and "post_holiday" in tg:                     # N7.2 (090 ~8:00)
-        P.block(NY_AM, "post_holiday_am")                                    # [our interpretation] the NY AM family only:
-                                                                            # London / the 07:00-08:30 pre-open windows are not "the morning"
+        P.block(NY_MORNING if p.post_holiday_pre_open else NY_AM, "post_holiday_am")   # [our interpretation] the NY AM family
+                                                                            # only (post_holiday_pre_open adds the 07:00-08:30 pre-open
+                                                                            # windows); London is not "the morning"
     if p.skip_august and d.month == 8 and d.day >= p.august_from_day:       # N7.6 (079 ~8:54; 084; 087)
         P.block(None, "august")
     if p.skip_roll_week and "roll_week" in tg:                              # N7.5 (093 ~0:32)
@@ -337,7 +339,11 @@ def _candle_rules(P: DayPlan, d: date, p, hist, eth, a5) -> None:
         tg.add("nr7")
     if "inside_body" in p.nr_tags and cp["inside_body"]:
         tg.add("inside_body")
-    if p.nr_expansion != "off" and tg & {"nr3", "nr7", "inside_body", "inside_day"}:
+    # nr_expansion evaluates NR3 / NR7 itself (nr_tags only controls the reporting tags and the opt-in inside_body reading)
+    if p.nr_expansion != "off" and (cp["nr3"] or cp["nr7"] or tg & {"inside_body", "inside_day"}):
+        for k_ in ("nr3", "nr7"):
+            if cp[k_]:
+                tg.add(k_)
         tg.add("nr_expansion")
         P.expansion.add("nr")
     if p.outside_day_rule != "off" and cp["outside"]:
@@ -561,7 +567,7 @@ def _monday_rules(P: DayPlan, ctx, d: date, p, hist, eth, a5) -> None:
         P.info["off_ref"] = (float(hist[-1].high.max()), float(hist[-1].low.min()))     # [our interpretation] a Tuesday after a
         tg.add("tue_off_monday")                                                          # Monday holiday has no Monday: no reference
     # B16: Sunday scenarios (futures only: needs the Sunday 18:00 open)
-    if p.sunday_scenario != "off" and d.weekday() == 0:
+    if p.sunday_scenario != "off" and monday_like:                  # N7.2: the Tuesday after a Monday holiday has the Sunday gap too
         P.info["sunday"] = True
     # N10: Mon-Wed extremes (cc07_008): Thu / Fri
     if d.weekday() in (3, 4) and (p.mon_wed_extreme != "off" or p.pool_mon_wed or p.thu_fri_break != "off"):
@@ -681,6 +687,46 @@ def _consol_rules(P: DayPlan, ctx, d: date, p, hist, eth, a5) -> None:
         P.info["sd_week"] = _sd_week(d, p)
 
 
+def range_regime(hist, p, eth=None) -> list:
+    """B17.4 the daily-candle regime reasons ("range", "inside_bisi", "premium_run") among p.drr_tests, from completed
+    sessions only [our interpretation]:
+      range         the last drr_days sessions went nowhere: |last close - first open| < drr_net_frac x their high-low
+                    range, and that range is < drr_range_mult x their mean daily range (a stack of overlapping candles,
+                    not a trend that merely paused) - a multi-day range with no daily trend
+      inside_bisi   yesterday's whole range sat inside one open daily FVG (strategy._inside_daily_fvg, 091 ~6:12)
+      premium_run   a one-way run into an old daily high / low (strategy._premium_run, 044 ~1:14:47)"""
+    out = []
+    n = p.drr_days
+    if "range" in p.drr_tests and len(hist) >= n:
+        w = hist[-n:]
+        o, h, l, c = _ohlc(w)
+        rng = float(h.max() - l.min())
+        mean = float(np.mean([day_range(x, eth, p) for x in w]))
+        if rng > 0 and mean > 0 and abs(float(c[-1]) - float(o[0])) < p.drr_net_frac * rng and rng < p.drr_range_mult * mean:
+            out.append("range")
+    if "inside_bisi" in p.drr_tests or "premium_run" in p.drr_tests:
+        from . import strategy as _S
+        if "inside_bisi" in p.drr_tests and _S._inside_daily_fvg(hist):
+            out.append("inside_bisi")
+        if "premium_run" in p.drr_tests and _S._premium_run(hist, p):
+            out.append("premium_run")
+    return out
+
+
+def _regime_rules(P: DayPlan, d: date, p, hist, eth) -> None:
+    if p.daily_range_regime == "off":
+        return
+    why = range_regime(hist, p, eth)
+    if not why:
+        return
+    P.tags |= {"daily_range"} | {"drr_" + x for x in why}
+    P.info["drr"] = why
+    if p.daily_range_regime == "skip":
+        P.block(None, "daily_range")
+    elif p.daily_range_regime == "scalp":
+        P.set_scalp("daily_range")
+
+
 def _misc_rules(P: DayPlan, ctx, d: date, p, hist, eth, a5) -> None:
     tg = P.tags
     if p.seasonal_tag:
@@ -764,11 +810,12 @@ def overnight_stats(ctx, p, hist) -> dict | None:
         hi, lo = max(hi, ctx.eve[1]), min(lo, ctx.eve[2])
     out = dict(hi=hi, lo=lo, range=hi - lo)
     if p.raid_ref == "london":
-        seg = [(ctx.t[j] >= 120) and (ctx.t[j] < 300) for j in range(ctx.start, k)]
+        w0, w1 = p.london_adr_win                        # one London window for N9.6 and this raid test
+        seg = [(ctx.t[j] >= w0) and (ctx.t[j] < w1) for j in range(ctx.start, k)]
         idx = np.flatnonzero(seg) + ctx.start
         if len(idx):
             lh, ll = float(ctx.h[idx].max()), float(ctx.l[idx].min())
-            post = np.flatnonzero((ctx.t[ctx.start:k] >= 300)) + ctx.start
+            post = np.flatnonzero((ctx.t[ctx.start:k] >= w1)) + ctx.start
             if len(post):
                 out["raid"] = max(float(ctx.h[post].max()) - lh, ll - float(ctx.l[post].min()), 0.0)
             else:
@@ -806,7 +853,7 @@ def eve_draw(ctx, p, hist) -> dict | None:
 
 def london_adr_hit(ctx, p, i: int) -> bool:
     """N9.6 (cc08_001 ~13:41) London already made >= london_adr_skip x ADR5: skip the NY session. The London range
-    is today's high - low over london_adr_win (02:00-08:00) through the closed bar i; ADR5 from the completed
+    is today's high - low over london_adr_win (default 02:00-05:00, the London window everywhere else) through the closed bar i; ADR5 from the completed
     sessions."""
     a = _adr(ctx, p)
     if not a:
@@ -892,7 +939,7 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()) -> str | None:
             if p.min_raid_pts and st.get("raid") is not None and st["raid"] < p.min_raid_pts * p.es_pt:
                 return "x_dw_raid"
     # N9.2 the prior-close draw was delivered before 09:30: choppy open, trade the PM (022 ~1:16:11)
-    if p.pre_draw_pm and session == "AM" and t >= 570:
+    if p.pre_draw_pm and session in NY_AM and t >= 570:
         ed = eve_draw(ctx, p, hist)
         if ed is not None and ed["done"]:
             return "x_dw_pre_draw"
@@ -907,7 +954,9 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()) -> str | None:
         if t + ctx.tf < ctx.or_end:
             return "x_dw_consol_or_wait"
         a = _adr(ctx, p)
-        if a and ctx.or_hl is not None and (ctx.or_hl[0] - ctx.or_hl[1]) >= p.consol_or_frac * a:
+        if a and ctx.or_hl is None:
+            return "x_dw_consol_or_missing"          # no opening-range data: not "small", so no stand-in scalp
+        if a and (ctx.or_hl[0] - ctx.or_hl[1]) >= p.consol_or_frac * a:
             return "x_dw_consol_or_big"
     if P.info.get("consol_apply") and session in LATE and p.consol_pm_rule:
         if am_ran_pool(ctx, hist, i, p.consol_pm_pools):
@@ -951,7 +1000,7 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()) -> str | None:
         if t < 570:
             return "x_dw_sunday_wait"
         sc = sunday_state(ctx, p, hist)
-        if sc in ("neither", "no_gap"):
+        if sc == "neither" or (sc == "no_gap" and not p.sunday_no_gap_trade):
             return "x_dw_sunday_" + sc
     # N7.2 PM after a holiday only once ES / NQ move in step
     if p.post_holiday_pm_sync and "post_holiday" in P.tags and session in LATE:
@@ -1406,7 +1455,7 @@ def conf_tz(conf, frames):
 
 def stamp(ctx, trades, p) -> None:
     """Fill the day_week_context columns on every trade of the day (reporting only - never read by a decision):
-    dw_tags, week_idx, adr5_prev, adr_prev, adr_fill, adr5_today (the whole day: study only), taken_3d /
+    dw_tags, week_idx, adr5_prev, adr_prev, adr_fill, adr5_today (the whole day's range, POST-HOC: a look-ahead column for the study reports, no decision reads it), taken_3d /
     prev3_taken, entry_array_tf, seasonal, eve_draw_*."""
     P = getattr(ctx, "dplan", None)
     if P is None or not trades:
@@ -1439,15 +1488,15 @@ def stamp(ctx, trades, p) -> None:
             if k >= 0:
                 tr.adr_fill = round(float(ctx.h[ctx.start:k + 1].max() - ctx.l[ctx.start:k + 1].min()) / a5, 4)
         if p.journal_tags and k >= 0:
-            names = []
-            for key in ("pdh1", "pdh2", "pdh3", "pdl1", "pdl2", "pdl3"):
-                v = ctx.pd.get(key)
-                if v is None:
-                    continue
-                if key.startswith("pdh") and ctx.h[ctx.start:k + 1].max() >= v:
-                    names.append(key)
-                elif key.startswith("pdl") and ctx.l[ctx.start:k + 1].min() <= v:
-                    names.append(key)
+            names = []                                    # the last three completed sessions' highs / lows (all of them, also those a
+            hi_k, lo_k = ctx.h[ctx.start:k + 1].max(), ctx.l[ctx.start:k + 1].min()      # session in between already took) vs today to the fill
+            for j_ in (1, 2, 3):
+                if len(hist) >= j_:
+                    ph, pl = _hl(hist[-j_])
+                    if hi_k >= ph:
+                        names.append(f"pdh{j_}")
+                    if lo_k <= pl:
+                        names.append(f"pdl{j_}")
             tr.prev3_taken = "|".join(names)
             tr.taken_3d = len(names)
             tr.entry_array_tf = entry_array_tf(ctx, tr, p, k)

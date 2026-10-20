@@ -387,7 +387,7 @@ and to the notes for context, charts and trade examples. This file states each r
   - Holiday weeks deliver cleaner Thu/Fri (072 ~3:36) [2023].
   - Last trading day of the year: low volatility, expect an inside day; first trading day: don't
     rush (Ep 01; Ep 02).
-  - Futures rollover week: more volatile and choppy (093 ~0:32). Bot: `roll_week` tag exists.
+  - Futures rollover week: more volatile and choppy (093 ~0:32). Bot: `roll_week` tag (calendar, the data's roll flag, or either: `roll_week_src`), `roll_risk`, `skip_roll_week` (N7.5).
   - August: choppy "meat grinder", trade small or stand aside, especially the last two weeks (079
     ~8:54; 084; 087) [2023].
 - **N8 Day type** [both]:
@@ -998,7 +998,7 @@ and to the notes for context, charts and trade examples. This file states each r
 - **X15 Frequency**: one good setup per week (Ep 03; 003 ~1:05:10; cc02_003 ~12:03); ~3 trades per
   week (099 ~47:36); one AM SB trade a day (047 ~8:00); CC day-trade model ~2 setups a day
   (cc08_001 ~1:30) [both]. Weekly objective delivered -> done for the week (038 ~6:33; 101
-  ~34:21). Bot: no weekly cap. D19.
+  ~34:21). Bot: `max_trades_week` caps the week in every engine (entry-time order; paper.py reads the week's trades), `week_done_on_draw` / `friday_week_done` end the week when the objective is delivered (off). D19.
 - **X16 Journal items that are code**: record each day's range vs ADR5 and which of the last 3
   days' highs/lows were taken (cc08_006 ~23:42; cc09_005 ~14:22; 010 ~65:54); the weekday and
   session that made each weekly high/low (cc01_003 ~16:36); the timeframe of each entry array (078

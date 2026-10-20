@@ -842,17 +842,17 @@ commands: `mentorship/digests/RESUME.md`.
 
 ## day_week_context (stage 8, 49 items; rule_coverage.md section 3) - built 2026-10-19, finished after the laptop restart
 
-New files: `mentorship/daycontext.py` (plan / helpers: calendar, holiday and early-close, weekly profiles, day templates, consolidation / inside / outside days, TGIF, ADR), `mentorship/study_week.py` (T14 weekly-extreme study). ~100 Params switches, every one with a `study.py` DECISIONS variant (prefix = rule id). Tests: `tests/test_day_week_context.py` (unit + scenario + look-ahead sets: six 5m chunks over every new variant, one 1m set with Silver Bullet / Ma Deuce / pre-open on).
+New files: `mentorship/daycontext.py` (plan / helpers: calendar, holiday and early-close, weekly profiles, day templates, consolidation / inside / outside days, TGIF, ADR), `mentorship/study_week.py` (T14 weekly-extreme study). ~100 Params switches, every one with a `study.py` DECISIONS variant (prefix = rule id). Tests: `tests/test_day_week_context.py` (unit + scenario), `tests/test_day_week_scenarios.py` (behaviour tests of the dynamic gates and side rules), `tests/test_day_week_lookahead.py` (one variant per run, 5m and 1m with Silver Bullet / Ma Deuce).
 Format: id | status | switches | default | note
 
 B15 | done | org_tell, org_tell_level, org_tell_wait, org_bias_gap, org_bias_src, org_gap_fill_frac | off | tag / filter; gap tag modes write tags
-B16 | done | sunday_scenario, sunday_away_mult, sunday_min_gap_pts | off | futures only (Sunday 18:00 open)
-B17.4 | partial | sloppy_mode (earlier) | off | big_prev / chop / NFP-week tests only; daily-BISI and premium-run reachability tests still open
+B16 | done | sunday_scenario, sunday_away_mult, sunday_min_gap_pts, sunday_no_gap_trade | off | futures only (Sunday 18:00 open); Monday and the Tuesday after a Monday holiday; no_gap blocks like neither unless sunday_no_gap_trade
+B17.4 | done | sloppy_mode, sloppy_tests (earlier, owner #10: default stand_aside with big_prev + chop), daily_range_regime, drr_tests, drr_days, drr_net_frac, drr_range_mult | stand_aside / off | daily_range_regime off / tag / scalp / skip: range (last drr_days sessions net < drr_net_frac of their range, range < drr_range_mult x mean daily range), inside_bisi, premium_run; reachability tests for all three
 N7 | done | umbrella of N7.1-N7.6 | mixed | see below
 N7.1 | done | skip_holiday_eve, holiday_eve_bank, early_close_flat | off / off / on | EARLY_CLOSE flattening on by default
-N7.2 | done | skip_post_holiday_am, post_holiday_pm_sync | on / off | post-holiday AM blocked in NY AM family only (not London, not Ma Deuce)
+N7.2 | done | skip_post_holiday_am, post_holiday_pre_open, post_holiday_pm_sync | on / off / off | post-holiday AM blocked in the NY AM family (AM / PRE9 / NEWS); post_holiday_pre_open adds PRE7 / PRE8 (Ma Deuce); London never. Scope still to confirm with the owner
 N7.3 | done | holiday_week_thu_fri | off | holiday_week tag always
-N7.4 | done | year_end (earlier), year_first_am_from | off / 0 | December mapping still needs owner confirmation
+N7.4 | done | year_end (earlier), year_first_am_from | december (map squaring) / 0 | owner #3 answer is the default; December mapping still needs owner confirmation
 N7.5 | done | roll_week_src, roll_risk, skip_roll_week | calendar / 1.0 / off | independent roll tag; data roll flag used for src data / either
 N7.6 | done | august_risk, august_from_day, skip_august | 1.0 / 1 / off |
 N8 | done | adr5 helper + adr_basis | rth | umbrella of N8.x
@@ -867,7 +867,7 @@ N9.2 | done | eve_draw, pre_draw_pm | off | eve_draw columns; gate in run_day
 N9.3 | done | objective_done_skip | off | draw hit before 12:00 -> PM done
 N9.4 | done | min_on_range_frac, min_raid_pts, raid_ref, on_range_from | 0 | 
 N9.5 | done | macro_no_move, macro_no_move_pm, macro_no_move_wins, macro_no_move_pm_wins, macro_move_pts, macro_ref_min | off |
-N9.6 | done | london_adr_skip, london_adr_win | 0.8 | on by default per the spec; old presets pin 0.0
+N9.6 | done | london_adr_skip, london_adr_win | 0.8, (120, 300) | on by default per the spec; old presets pin 0.0. London window = 02:00-05:00, the same as ctx.sess['london'], T3 and raid_ref='london' (was 02:00-08:00; study variant N9.6_london_adr_win_0800 keeps it)
 N10 | done | monday_mode, tue_off_monday, mon_wed_extreme, thu_fri_break, friday_first_pool, friday_week_done, strong_thu_no_long (+mirror/mult/frac) | off / trade | thu_reversal tag
 N10.2 | done | monday_mode, tue_off_monday | trade / off | also in Silver Bullet and Ma Deuce per-order rules
 N10.3 | done | pool_mon_wed, mon_wed_extreme, thu_fri_break | off | mw_break tags
@@ -875,24 +875,37 @@ N10.4 | done | friday_slow_split, friday_objective, friday_week_done, no_fri_aft
 M14 | done | tgif_model, tgif_model_skip | off | umbrella forcing the sub-switches except those in the skip list
 M14.1 | done | tgif_htf_array, tgif_htf_tfs | off | 4h / D / W array, NWOG / NDOG, Sunday 18:00 range
 M14.3 | done | tgif_timing, tgif_week_sweep | off | all three engines
-T14 | done | tue_week_extreme + study_week.py | off | study first, switch tag / side
+T14 | done | tue_week_extreme + study_week.py | off | study run on ES 5m 2019-2026 (407 weeks): Tuesday-London low in 1.3% of bullish weeks, Tuesday low 19%, bearish-week high on Tuesday 24.6%: the claim does NOT hold, so the switch stays off (contested alternative). Mon-Wed extreme 89.7% holds; by Wednesday's 05:00 London end 64.2% of the week's range (30-50%: 21%), by the 10:00 London close 67.0% (30-50%: 16.5%)
 X10d | done | am_range_skip_pm | 0 | AM range >= k x ADR5 -> PM and SB_PM done
 X15 | done | max_trades_week, week_left | off | sorted by entry time before truncating; paper.py cap
 X15d | done | week_done_on_draw, week_done_levels, week_done_pick | off | also first day of the week (NWOG CE)
-B11 | done | b11_inside_week, b11_inside_week_days, nr_tags, nr_expansion | off | inside_week scalp, nr3 / nr7 / inside_bar_body
+B11 | done | b11_inside_week, b11_inside_week_days, nr_tags, nr_expansion | off | inside_week scalp, nr3 / nr7 / inside_bar_body; nr_expansion evaluates NR3 / NR7 without nr_tags (nr_tags: reporting tags + inside_body)
 B11b | done | outside_day_rule, outside_day_mirror | off | block longs until the outside day's high trades
 B11c | done | b11_inside_expansion, b11_inside_week | off |
 B23 | done (report-only) | seasonal_tag, seasonal_map, seasonal_map_b, seasonal_fail_day | off | tag only, never gates
 X16 | done | journal_tags | on | tags adr5_prev, adr5_today, prev3_taken, entry_array_tf
 X16a | done | (fields adr_prev / adr_fill) | | day_ranges CSV via study_week
-X16b | done | (taken_3d tag) | | 
+X16b | done | (taken_3d tag) | | the last three sessions' highs / lows vs today's bars to the fill (including those an intervening session took); adr5_today is a post-hoc whole-day column, study only
 X16c | done | weekly_extremes() | | kill-zone labels
 X16d | done | (entry_tf tag) | | 
 D19 | done | max_trades_week, be_counts_as_win | off / on | week_left budget across engine / SB / Ma Deuce, paper.py cap
 D20 | done | monday_mode, monday_small_range | trade / 0 |
 Ep01.8 | done | low_vol_inside, low_vol_holiday_adj | off |
 Ep01.9 | done (earlier) | year_end, year_end_map | off | owner #3
-Ep02.7 | done | first_day_wait, first_day_skip_am | 0 / off |
+Ep02.7 | done | first_day_wait, first_day_skip_am | 0 / off | first_day_wait is a floor on the AM entry minute (values <= the order's own time move nothing)
 Ep03.24 | done (earlier) | t1_fixed_pts, t1_fixed_all | off | owner #2
 
-Known gaps: B17.4 daily-BISI / premium-run reachability; B23 is report-only by design; Silver Bullet / Ma Deuce do not get the AM-only dynamic gates (N8.3 PM rule, N9.5 macro_no_move) - main engine only.
+Known gaps: B23 is report-only by design; T14 `tue_week_extreme` is built but unsupported by the study (off). Silver Bullet and Ma Deuce DO read the dynamic gates: `_DW.gate()` (N8.3 PM rule, N9.5 macro_no_move, N9.2-N9.6, X10d, X15d, monday / sunday / tgif gates) is called from `run_sb` (session "AM" / "PM" / "LON") and `run_ma_deuce` (session "PRE8"); Ma Deuce's windows end before the first macro window and before the PM, so macro_no_move / consol_pm_rule cannot fire there by construction. `side_ok` / `order_ok` are wired in both too (tested in `test_silver_bullet_and_ma_deuce_call_the_day_week_gate`).
+
+### day_week_context review fixes (2026-10-19)
+- B17.4: `daily_range_regime` built (see the row above) with reachability tests for the range, inside_bisi and premium_run readings and the three modes through plan / run_day.
+- Look-ahead: `tests/test_day_week_lookahead.py` replaces the merged chunks. ONE study variant per run, 5m main engine on a window chosen by the switch (August, the March roll week, Christmas / New Year / MLK, July, FOMC / NFP / CPI stretch; a wider window as the last resort for the "only" modes) and the same variants again on 1m with Silver Bullet, Ma Deuce and the 07:00 / 09:00 pre-open models on (a window with at least one extras trade is preferred); at least one trade per run is required.
+- Behaviour tests: `tests/test_day_week_scenarios.py` (long and mirrored short): org_tell, org_gap_state, org_bias_gap, sunday_state / gate (Monday and post-holiday Tuesday), eve_draw / pre_draw_pm, overnight_stats / min_on_range_frac / min_raid_pts, london_adr_hit (window, session, default), macro_failed, objective_done, am_range_done, am_ran_pool, consol_day_rules (apply, OR wait / big / missing, 11:00 exit), partners_in_step / post_holiday_pm_sync, big_day_am_skip / big ORG, monday_small_range, seek_destroy / sd_week, strong Thursday both ways, thu_fri_break, pool_mon_wed, tue_week_extreme, tue_off_monday, tgif_week_sweep, tgif_context, expansion_levels, daily_arrays_touched, seasonal (+ htf tag), taken_3d, weekly_extremes / day_ranges, the Silver Bullet / Ma Deuce gate wiring.
+- N9.6 London window: one London (02:00-05:00) for london_adr_skip and raid_ref="london" (`london_adr_win` drives both).
+- nr_expansion evaluates NR3 / NR7 without nr_tags. B16: the Tuesday after a Monday holiday gets the Sunday check; `sunday_no_gap_trade` decides the no-gap case (default: blocked like neither). N9.2 `pre_draw_pm` covers the NY AM family (AM / PRE9 / NEWS). N7.2 `post_holiday_pre_open` (opt-in) adds PRE7 / PRE8.
+- X16b `taken_3d` / `prev3_taken` read the last three sessions' extremes (an intervening session's take no longer hides them); `adr5_today` documented as post-hoc.
+- D19 / X15: the week-budget truncation now runs after the position left open at the data end is added.
+- N8.3 `consol_day_rules`: a missing opening range is not "small" (`x_dw_consol_or_missing`).
+- study_week: the by-Wednesday share is reported for both the 05:00 London kill-zone end and the 10:00 London close (M14.3 / rulebook); T14 result recorded in the T14 row.
+- Docs: rule_coverage section 8 (and "Now built" notes in section 2), the rulebook Bot notes (X15, N7.5), the defaults in this log (year_end, sloppy_mode).
+- New study variants: B11_nr_expansion_nr3, B17.4_daily_range_tag / _scalp / _skip / _all_tests, B16_sunday_no_gap_trade, N7.2_post_holiday_pre_open, N9.6_london_adr_win_0800.
