@@ -58,6 +58,7 @@ from .calendar import next_trading_day, release_times
 from . import levels as L
 from .confluence import TFS as CF_TFS
 from . import daycontext as _DW
+from . import bias_day as _BD
 from .daycontext import SEASONAL_DOW20
 
 # ICT macro windows (T6): 08:50-09:10, 09:50-10:10, 10:50-11:10, 11:50-12:10, 13:10-13:40,
@@ -245,11 +246,13 @@ class Params:
                                    # window (10-11, 14-15) after that session's trade, tagged sb_am/sb_pm
     smt_min: int = 0               # B18: at least this many sister indices (NQ, YM) must have
                                    # failed to take their version of the swept level; 0 = tag only
-    htf_bias: str = "off"          # daily HTF bias filter: off / react / draw / pd / combo / flip (htf.py)
+    htf_bias: str = "off"          # daily HTF bias filter: off / react / draw / pd / combo / flip (htf.py); bias_htf adds
+                                   # "ordered" (B2), "iof" / "combo2" (B6), "ob_mt" (B7), "mwd" (B10), "nwog" (B14.3), "candle"
+                                   # (M0.1, bias_candle), "draw_pd" (Ep03.12), "wk" (B5 weekly), "pd20" (A21)
     flip_triggers: tuple = ("ob_mt", "wk_dc")   # B8 triggers of the htf "flip" column: ob_mt (B8a),
                                    # wk_dc (B8c), flip_pd3 (B8b), flip_close_above (B8d), flip_thu_wopen
                                    # (B8e); B8f is the engine switch stop_flip
-    bias_neutral: str = "skip"     # with a bias filter, a 0 day: "skip" it or trade "both" sides
+    bias_neutral: str = "skip"     # with a bias filter, a 0 day: "skip" it, trade "both" sides, or (Ep02.6) "scalp" them
     lot: int = 1                   # units per contract: 1 for shares; 5 for MES, 2 for MNQ
                                    # (a unit is $1 per point, so P&L = points x units)
 
@@ -497,7 +500,13 @@ class Params:
     # T2 opening prices (010 ~38:31; 064 ~55:13)
     release_open: bool = False           # 08:30 release days: retrace bodies hold the 08:30 open (AM entries)
     release_open_stop: str = ""          # "open": stop beyond the 08:30 open; "wick_ce": the 08:30 candle's wick CE
-    bias_open: str = "midnight"          # the AM premium/discount open: "midnight" / "0830" / "0930" (D22)
+    bias_open: str = "midnight"          # the AM premium/discount open: "midnight" / "0830" / "0930" (D22); Ep08.3 "all" = the
+                                         # entry must be on the right side of EVERY one of the three opens already printed
+    bias_open_src: str = "data"          # D22: where the midnight open comes from: "data" = the frame's own first bar from 00:00 (a
+                                         # futures / CFD midnight bar; SPY's 04:00 stand-in), "spy" = force the 04:00 stand-in
+                                         # (the old behaviour, for comparison), "es_map" = a futures midnight open mapped to the
+                                         # traded instrument by the prior close ratio (backtest.prepare(ref_df=...), paper mode)
+    es_symbol: str = "/ES"               # D22 es_map in paper mode: the futures symbol whose bars give the midnight open
     # Ep01.5 / Ep02.9 / A6 breakaway gap = the first FVG after the MSS (001 ~40:03; 002 ~4:35)
     breakaway: str = "off"               # "tag"; "hold" = a body close beyond its CE exits; "next_fvg" = not an
                                          # entry, wait for the next FVG
@@ -681,7 +690,10 @@ class Params:
     sick_sister: bool = False            # M16.2 (053 ~1:56-7:57): trade only the index that took the fewest
                                          # reference highs (lows) by the session start, in the day's discount;
                                          # targets the references it failed to take
-    smt_pick: str = "first"              # Ep03.11 / D15 (backtest.combine): "leader" / "laggard" by the SMT tag
+    smt_pick: str = "first"              # Ep03.11 / D15 (backtest.combine): "leader" / "laggard" by the SMT tag; D15 "trend" = the leader
+                                         # on trend days, the laggard on consolidation days (the DayPlan's consolidation tags)
+    one_market: bool = False             # D15 / Ep05 "watch one market only": after the first fill of the day the other instrument's
+                                         # trades are dropped for the rest of the day (backtest.combine)
     # B18 / B18.1 / B18.2 SMT qualifier
     smt_min_gap_pts: float = 0.0         # B18.1 (cc10_011 ~16:59 "if not obvious"): partner held by >= N ES pts
     smt_need_array: bool = False         # B18 (022): SMT counts only at a PD array (the htf tag)
@@ -1432,6 +1444,103 @@ class Params:
     seasonal_fail_day: int = 10
     journal_tags: bool = True            # X16 / X16a / X16b / X16d: adr5_prev, adr_prev, adr_fill, adr5_today, taken_3d, entry_array_tf columns
 
+    # ===== package bias_htf (rule_coverage.md section 3 "bias_htf"; build_log.md). The daily columns are built by bias_htf.py inside
+    # htf.table (bias_htf.bx_string(Params)); the bar-level rules live in bias_day.py behind daycontext.side_ok / order_ok / gate /
+    # scalp_now. Everything defaults to the old behaviour; nothing here is on unless named. =====
+    want_all_engines: bool = True        # B3: the Silver Bullet and Ma Deuce honour the htf_bias side too (inert while htf_bias is "off")
+    # B2 / B3 / L14 / L14a the draw
+    draw_ext_target: bool = False        # B2 (104 ~16:18): beyond a liquidity draw the nearest inefficiency sets how far the run goes - the
+                                         # locked target becomes that array (the pool a rung)
+    judas_required: str = "off"          # B3 / M0 (068 ~16:30; 082 ~8:02): "tag" / "filter" - the bias side's entry waits for the Judas, price
+                                         # delivered AGAINST the bias by judas_min_pts from the session's first open
+    judas_min_pts: float = 2.0           # [our interpretation]
+    draw_first: str = "off"              # L14 / L14a umbrella: "session" = draw_lock "session" + draw_lock_pick "ordered" (B2 order) + the HTF target
+                                         # hygiene ("htf" in target_hygiene) + draw_ext_target + cond_draw; draw_first_skip names the parts to leave
+    draw_first_skip: tuple = ()          # from ("pick", "hygiene", "ext", "cond")
+    cond_draw: bool = False              # L14e (080 ~16:58): a failed draw switches the lock once to the other side (the failed target spent)
+    cond_draw_adr: float = 0.25          # [our interpretation] failure = a close this many ADR5 beyond the lock price, away from the draw
+    matrix_tf_lower: bool = False        # L14c (cc06_003 ~0:50): after a reaction from timeframe X the draw is the opposing array one timeframe lower
+    react_tf_tag: bool = False           # report the table's react_tf column (W / D) with matrix_tf_lower off
+    # B6 institutional order flow
+    iof_days: int = 10                   # B6: the sessions scored (candle respect + pivot raids) [our interpretation]
+    iof_min: int = 2                     # |score| needed for a +1 / -1 reading
+    # A21 premium / discount of the multi-day range
+    day_pd: str = "swing"                # A21.2: "20d" = the P/D reading (htf `pd`, also in combo / combo2 / draw_pd) is the pd_day_range-session range
+    pd_day_range: int = 20               # A21 / A21.2 (cc07_004 ~7:00; cc09_008 ~8:47): sessions of the day-context range
+    pd_body_multiday: bool = True        # A21.4 (cc07_005 ~3:10; 058 ~41:54): bodies for the multi-day range, wicks for intraday legs
+    pd_zone: str = "half"                # A21: "half" (< 50%) / "third" / "deep" (0.3 / 0.7) / "ote" (ote_band retracement) - the zone that counts as P/D
+    ote_band: tuple = (0.62, 0.79)       # A21 (cc01_004 ~23:59): the OTE retracement band
+    cond_pd_tags: bool = False           # build the pd20 column without using it (reporting)
+    # B5 timeframe chain
+    weekly_gate: str = "off"             # B5 (064 ~1:44:34; 095 ~12:52): "tag" / "filter" - weekly direction first: no side against the weekly bias
+    news_topdown: str = "off"            # B5 (Ep 02): "tag" / "side" - on a release day the daily VI sets the side
+    bellwether_15m: str = "off"          # B5 (013 ~2:36): "tag" / "filter" - the 15m bellwether (last 15m close vs the midpoint of the last four) must not deliver against the side
+    # B7 / B8 / B9 flips and persistence
+    how_rule: str = "off"                # B7 (101 ~32:58): "tag" / "no_long" - a daily close below 50% of the last down-close candle = high of the week in
+    objective_neutral: str = "off"       # B9 / B17 (038 ~6:33): "day" / "week" / "both" - the previous day's / the week's draw delivered: bias neutral
+    objective_met_stop: str = "off"      # B17.3: "day" / "week" / "both" - the same, but no new trades at all (stand aside)
+    bias_persist: int = 0                # B9 (cc05_003 ~1:34:51): an opposite reading must show this many sessions in a row (or a close-based flip agrees) to count
+    next_array_on_fail: bool = False     # B9 (cc05_015 ~18:45): a failed daily array -> the next weekly array is a re-buy (react +1 / -1), not a bias change
+    nof_days: int = 3
+    mwd_disp_mult: float = 1.0           # B10 (cc06_004 ~1:02): body >= this x the mean body of the last 10 bars for a displacement
+    mwd_nest: str = "off"                # B10 cases B / C: "tag" / "filter" - entries only inside the weekly (B) / monthly (C) arrays
+    # B13 weekly open
+    weekly_open: str = "off"             # B13 (048 ~1:00:10): "sun18" / "mon00" / "either" - best longs below the week's open early, then above it
+    weekly_open_early_days: int = 2      # Monday and Tuesday are "early"
+    # B14 NWOG
+    nwog_regime: str = "off"             # B14.1 (025 ~3:11; 051 ~9:25-13:30): "tag" / "scalp" / "skip" on a consolidation week (returns to the gap, converging gaps)
+    nwog_leave_adr: float = 0.5          # [our interpretation] "left sharply" = moved this many ADR5 from the gap
+    nwog_returns_cons: int = 2           # returns to the gap that make a consolidation week
+    nwog_converge_pts: float = 10.0      # B14.2 (053 ~1:31): this NWOG's CE within this many ES pts of the previous one = converging
+    nwog_bias: str = "off"               # B14.3 (036 ~16:00; 058 ~53:46): "tag" / "filter" - bullish while above the NWOG, bearish while below
+    nwog_bias_reclaim: str = "low"       # which level ends a state: "low" (literal: bearish until back above the low, bullish until back below the high), "ce", "high"
+    # B17 neutral / no-bias conditions
+    neutral_gate: tuple = ()             # B17: tests from fifty_fifty, premium_chop, draw_delivered, range_market, decoupled
+    neutral_gate_mode: str = "tag"       # "tag" / "skip" / "scalp" for the tests above (premium_chop: before 09:30 only)
+    neutral_5050: str = "off"            # B17.1 (025 ~11:18; 095 ~27:33): "armed" (both sides armed in one window: stand aside) / "react" (both sides' reaction weights alike)
+    fifty_react_ratio: float = 0.5       # "react": the smaller side's weight at least this share of the larger
+    chop_mode: str = "off"               # Ep08.2 (Ep 08): "skip" (wait for 09:30) / "skip_day" / "scalp" when stuck inside an HTF array or the overnight range is narrow
+    chop_on_adr: float = 0.35            # [our interpretation] narrow = overnight range < this x ADR5
+    chop_in_array: bool = True           # count "price inside a daily / weekly array" as chop
+    decoupled_mode: str = "off"          # B17.5 (045 ~1:01:43; 090 ~41:00): "tag" / "scalp" / "skip" when the indices are decoupled
+    decouple_days: int = 10
+    decouple_corr: float = 0.5           # daily-return correlation (S&P vs Nasdaq 100, prior sessions) under this = decoupled
+    smt_both: str = "off"                # B17.5 (090 ~41:00): "tag" / "skip" - SMT both ways at once with no bias = no trade
+    # M0.1 / Ep02.6 / Ep03.12
+    bias_candle: str = "D"               # M0.1: "D" / "W" - htf_bias "candle": the nearest unreached draw from the candle's open
+    bias_candle_tag: bool = False
+    no_narrative_scalp: bool = False     # Ep02.6 (Ep 02): no daily narrative (neutral bias) -> intraday scalps, small targets, no adds
+    mmbm_zone: str = "off"               # Ep03.12 (Ep 03): "tag" / "filter" - the buy model enters the discount half of [sweep low .. draw]
+    # B19 intermarket and B20 COT / OI / sentiment
+    intermarket_model: bool = False      # B19 umbrella: dxy_gate "block", bond_range "scalp", bond_dir "filter", decoupled_mode "scalp" (intermarket_model_skip leaves parts alone)
+    intermarket_model_skip: tuple = ()   # from ("dxy_gate", "bond_range", "bond_dir", "decoupled_mode")
+    dxy_gate: str = "off"                # B19.1 (031 ~7:54; 045 ~42:05): "tag" / "block" - the dollar's prior close above its 20-day high and rising: no longs
+    dxy_gate_days: int = 20
+    bond_range: str = "off"              # B19.3 (061 ~1:05:42; cc10_008 ~8:47): "tag" / "scalp" / "skip" - the 10-year yield in a range: markets consolidate
+    bond_range_days: int = 10
+    bond_range_frac: float = 0.3         # the last bond_range_days' span under this share of the last 60 sessions' span
+    bond_dir: str = "off"                # B19.3 / B57: "tag" / "filter" - rising yields (falling bonds) hold equity rallies back: no longs
+    cot_oi_model: bool = False           # B20 umbrella: cot_tag / oi_tag / wpr_tag "tag" (cot_oi_model_skip leaves parts alone)
+    cot_oi_model_skip: tuple = ()        # from ("cot_tag", "oi_tag", "wpr_tag")
+    cot_tag: str = "off"                 # B20.1 (cc10_001 ~8:48; cc12_003 ~4:25): "tag" / "filter" - commercial net vs the midpoint of the 52-week range (files in data/mentorship/cot)
+    cot_market: str = "E-MINI S&P 500"
+    oi_tag: str = "off"                  # B20.2 (cc05_003 ~58:26): "tag" - the roll-summed open interest moved by oi_pct over oi_days (data/mentorship/ES_oi.csv)
+    oi_days: int = 10
+    oi_pct: float = 0.125
+    wpr_tag: str = "off"                 # B20.3 (cc12_002 ~12:17): "tag" / "filter" - weekly Williams %R: <= -80 long, >= -20 short
+    wpr_len: int = 14
+    # B22 quarterly shift
+    qshift_tag: bool = False             # B22 (cc05_001 ~5:05; cc12_001 ~18:43): tags qs_turn / qs_cons / qs_due from the 60-session turn or consolidation
+    qshift_size: float = 1.0             # risk multiplier against the 252-session trend while a shift is due (1 = off)
+    qs_turn_pct: float = 0.03            # [our interpretation] a turn = the sign of the 60-session change flips by at least this
+    qs_cons_pct: float = 0.07            # a consolidation = the 60-session range under this share of the price
+    qs_due_lo: int = 63                  # 3-4 months after the last shift began, in sessions
+    qs_due_hi: int = 84
+    # Ep06.6 / Ep08.3 the opens
+    midnight_target: bool = False        # Ep06.6: the midnight open is a target rung toward it (a short entered above it)
+    midnight_confirm: str = "off"        # Ep06.6 (Ep 06 ~0:51): "tag" / "filter" - the bias side needs price beyond the midnight open in its direction
+    midnight_below_ok: bool = False      # Ep06.6: with use_bias, a confirmed bias side may enter on the far side of the midnight open
+
 
     def __post_init__(self):
         if self.unicorn_sides not in ("both", "long", "short"):
@@ -1442,7 +1551,7 @@ class Params:
             raise ValueError(f"breaker_mt_mode {self.breaker_mt_mode!r}")
         for name, ok in (("news_wait", ("range", "fixed", "off")), ("draw_lock", ("session", "off")),
                          ("draw_lock_neutral", ("skip", "both")), ("draw_lock_levels", ("frozen", "live")),
-                         ("draw_lock_pick", ("nearest",)),
+                         ("draw_lock_pick", ("nearest", "ordered", "largest")),
                          ("ob_entry", ("pre_break", "post_mss", "both")),
                          ("ob_entry_px", ("body_top", "mt", "range_top", "open", "high")), ("ob_arm", ("leave", "touch")),
                          ("ob_stop", ("mt", "ext")), ("risk_basis", ("fixed", "equity")),
@@ -1462,7 +1571,7 @@ class Params:
                          ("org_draw", ("off", "tag", "draw")), ("wick_session", ("rth", "eth")),
                          ("wick_react", ("off", "tag", "require")), ("gap_pool_edge", ("far", "ce")),
                          ("release_open_stop", ("", "open", "wick_ce")),
-                         ("bias_open", ("midnight", "0830", "0930")),
+                         ("bias_open", ("midnight", "0830", "0930", "all")), ("bias_open_src", ("data", "spy", "es_map")),
                          ("breakaway", ("off", "tag", "hold", "next_fvg")),
                          ("breaker_cand_to", ("ext", "h")), ("breaker_time", ("off", "hl2", "all")),
                          ("breaker_entry", ("off", "fallback", "prefer", "classic")),
@@ -1472,7 +1581,7 @@ class Params:
                          ("mss_on_side", ("off", "tag", "require")), ("mm_context", ("off", "tag", "require")),
                          ("three_drives", ("off", "tag", "require")), ("unicorn_entry", ("edge", "overlap")),
                          ("cc_swings", ("off", "breaker", "failure", "both")), ("ifvg_entry", ("edge", "ce")),
-                         ("ote", ("off", "filter", "limit")), ("smt_pick", ("first", "leader", "laggard")),
+                         ("ote", ("off", "filter", "limit")), ("smt_pick", ("first", "leader", "laggard", "trend")),
                          ("news_profile", ("off", "tag", "require")), ("nfp_sd", ("off", "tag", "skip")),
                          ("candle_draw_bias", ("off", "daily", "weekly")),
                          ("ob_pre_gate", ("off", "cancel", "hold")), ("cc_profile", ("off", "tag", "gate"))):
@@ -1662,7 +1771,64 @@ class Params:
                     setattr(self, nm_, True)
             if not self.tgif_timing and "tgif_timing" not in self.tgif_model_skip:
                 self.tgif_timing = ((600, 720), (810, 900))     # 10:00-12:00 (London close) and 13:30-15:00 (PM)
+        # package bias_htf: validation and the umbrellas (replace() re-runs this)
+        for name, ok in (("htf_bias", ("off", "react", "draw", "pd", "combo", "flip", "ordered", "iof", "combo2", "ob_mt", "mwd",
+                                       "nwog", "candle", "draw_pd", "wk", "pd20")),
+                         ("bias_neutral", ("skip", "both", "scalp")), ("judas_required", ("off", "tag", "filter")),
+                         ("draw_first", ("off", "session")), ("day_pd", ("swing", "20d")),
+                         ("pd_zone", ("half", "third", "deep", "ote")), ("weekly_gate", ("off", "tag", "filter")),
+                         ("news_topdown", ("off", "tag", "side")), ("bellwether_15m", ("off", "tag", "filter")),
+                         ("how_rule", ("off", "tag", "no_long")), ("objective_neutral", ("off", "day", "week", "both")),
+                         ("objective_met_stop", ("off", "day", "week", "both")), ("mwd_nest", ("off", "tag", "filter")),
+                         ("weekly_open", ("off", "sun18", "mon00", "either")), ("nwog_regime", ("off", "tag", "scalp", "skip")),
+                         ("nwog_bias", ("off", "tag", "filter")), ("nwog_bias_reclaim", ("low", "ce", "high")),
+                         ("neutral_gate_mode", ("tag", "skip", "scalp")), ("neutral_5050", ("off", "armed", "react")),
+                         ("chop_mode", ("off", "skip", "skip_day", "scalp")), ("decoupled_mode", ("off", "tag", "scalp", "skip")),
+                         ("smt_both", ("off", "tag", "skip")), ("bias_candle", ("D", "W")),
+                         ("mmbm_zone", ("off", "tag", "filter")), ("dxy_gate", ("off", "tag", "block")),
+                         ("bond_range", ("off", "tag", "scalp", "skip")), ("bond_dir", ("off", "tag", "filter")),
+                         ("cot_tag", ("off", "tag", "filter")), ("oi_tag", ("off", "tag")), ("wpr_tag", ("off", "tag", "filter")),
+                         ("midnight_confirm", ("off", "tag", "filter"))):
+            if getattr(self, name) not in ok:
+                raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
+        if (set(self.neutral_gate) - {"fifty_fifty", "premium_chop", "draw_delivered", "range_market", "decoupled"}
+                or set(self.draw_first_skip) - {"pick", "hygiene", "ext", "cond"}
+                or set(self.intermarket_model_skip) - {"dxy_gate", "bond_range", "bond_dir", "decoupled_mode"}
+                or set(self.cot_oi_model_skip) - {"cot_tag", "oi_tag", "wpr_tag"}):
+            raise ValueError("bias_htf: neutral_gate / draw_first_skip / intermarket_model_skip / cot_oi_model_skip name an unknown item")
+        if (self.iof_days < 3 or self.iof_min < 1 or self.pd_day_range < 3 or len(self.ote_band) != 2
+                or not 0 <= self.ote_band[0] < self.ote_band[1] <= 1 or self.bias_persist < 0 or self.nof_days < 1
+                or self.mwd_disp_mult <= 0 or self.weekly_open_early_days < 1 or self.nwog_leave_adr <= 0
+                or self.nwog_returns_cons < 1 or self.nwog_converge_pts < 0 or self.chop_on_adr < 0
+                or not 0 < self.fifty_react_ratio <= 1 or self.judas_min_pts < 0 or self.cond_draw_adr <= 0
+                or self.decouple_days < 3 or self.dxy_gate_days < 3 or self.bond_range_days < 3
+                or not 0 < self.bond_range_frac <= 1 or self.oi_days < 1 or self.oi_pct <= 0 or self.wpr_len < 2
+                or self.qshift_size <= 0 or self.qs_due_lo < 1 or self.qs_due_hi < self.qs_due_lo):
+            raise ValueError("bias_htf: day counts >= 1 (3 for ranges), fractions in (0, 1], ote_band (lo, hi) inside [0, 1]")
+        if self.draw_first == "session":              # L14 / L14a umbrella
+            sk = self.draw_first_skip
+            self.draw_lock = "session"
+            if "pick" not in sk:
+                self.draw_lock_pick = "ordered"
+            if "hygiene" not in sk and "htf" not in self.target_hygiene:
+                self.target_hygiene = tuple(self.target_hygiene) + ("htf",)
+            if "ext" not in sk:
+                self.draw_ext_target = True
+            if "cond" not in sk:
+                self.cond_draw = True
+        if self.intermarket_model:                    # B19 umbrella
+            for nm_, val_ in (("dxy_gate", "block"), ("bond_range", "scalp"), ("bond_dir", "filter"), ("decoupled_mode", "scalp")):
+                if nm_ not in self.intermarket_model_skip:
+                    setattr(self, nm_, val_)
+        if self.cot_oi_model:                         # B20 umbrella: tags only (optional enhancers, cc06_002 ~0:24)
+            for nm_ in ("cot_tag", "oi_tag", "wpr_tag"):
+                if nm_ not in self.cot_oi_model_skip:
+                    setattr(self, nm_, "tag")
         inert = []                                  # switches the current draw_lock / vi_arrays make inert
+        if (self.draw_lock_pick != "nearest" or self.draw_ext_target or self.cond_draw) and self.draw_lock != "session":
+            inert.append("draw_lock_pick / draw_ext_target / cond_draw act only in the #9 lock (draw_lock='session')")
+        if self.news_topdown != "off" and not self.vi_arrays:
+            inert.append("news_topdown needs vi_arrays=True (the daily VI rows)")
         if self.vi_news_draw and self.draw_lock != "session":
             inert.append("vi_news_draw acts only in the #9 lock (draw_lock='session')")
         if (self.vi_news_draw or self.vi_htf_draw) and not self.vi_arrays:
@@ -1690,6 +1856,12 @@ class Params:
     def dw_needs_eve(self) -> bool:
         """The switches that read the evening session (18:00-24:00) before the day (futures / CFDs with overnight bars)."""
         return bool(self.sunday_scenario != "off" or self.eve_draw or self.pre_draw_pm or self.on_range_from == "globex")
+
+    @property
+    def bx(self) -> str:
+        """package bias_htf: the htf.table configuration these switches need (bias_htf.bx_string)."""
+        from . import bias_htf
+        return bias_htf.bx_string(self)
 
     @property
     def dw_needs_week(self) -> bool:
@@ -2393,6 +2565,10 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
             if p.nwog_quarters or p.gap_quarters:
                 lv += [(sd.x(a + 0.25 * (b - a)), "array"), (sd.x(a + 0.75 * (b - a)), "array")]
     lv += _lv_target_arrays(ctx, sd, i, p)                             # levels_detectors arrays
+    if p.midnight_target:                   # Ep06.6: the midnight open is the level price returns to (a short entered above it)
+        m_ = _open_known(ctx, "midnight", i)
+        if m_ is not None:
+            lv.append((sd.x(m_), "array"))
     if p.org_days:
         orgs = ctx.org[:-1] if (pre_open and ctx.org_today) else ctx.org
         for a, b in orgs[-p.org_days:]:
@@ -3427,15 +3603,25 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
         now = pd.Timestamp(ctx.day, tz=ctx.idx.tz) + pd.Timedelta(minutes=t_lock)
         tfs = tuple(p.htf_targets) or ("15m", "1h", "4h", "D")
         for sgn in (1, -1):
-            r = ctx.conf.opposing(now, px, sgn, tfs, (0,))
+            if "htf" in p.target_hygiene:          # L14 / L14d conf-target hygiene: an array price already traded into since it formed is no draw
+                r = _BD.untraded_arrays(ctx, kl - 1, now, px, sgn, tfs, (0,))
+            else:
+                r = ctx.conf.opposing(now, px, sgn, tfs, (0,))
             if r:
                 prefs.append((r[0][1], "array", "htf_ce", 0, S))
     if p.vi_htf_draw and getattr(ctx, "conf", None) is not None:          # A9 (review fix: in the lock too)
         now = pd.Timestamp(ctx.day, tz=ctx.idx.tz) + pd.Timedelta(minutes=t_lock)
         for sgn in (1, -1):
-            r = ctx.conf.opposing(now, px, sgn, ("1h", "4h", "D", "W"), (3,))
+            if "htf" in p.target_hygiene:
+                r = _BD.untraded_arrays(ctx, kl - 1, now, px, sgn, ("1h", "4h", "D", "W"), (3,))
+            else:
+                r = ctx.conf.opposing(now, px, sgn, ("1h", "4h", "D", "W"), (3,))
             if r:
                 prefs.append((r[0][0], "array", "htf_vi", 0, S))
+    if p.matrix_tf_lower:                          # L14c: the opposing array one timeframe below the one price reacted from
+        r_ = _BD.tf_lower_pref(ctx, row, px, pd.Timestamp(ctx.day, tz=ctx.idx.tz) + pd.Timedelta(minutes=t_lock), S)
+        if r_ is not None:
+            prefs.append(r_)
     cands = prefs + cands                          # review fix: a preferred draw keeps its own name
     pref_keys = {(round(v, 9), k) for v, k, *_ in prefs}
     near = lambda v: any(abs(v - s) <= p.es_pt for s in spent)
@@ -3482,12 +3668,20 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
     elif p.pool_rank or p.draw_below_eq:           # L4: the larger pool / beyond the range's equilibrium
         up, dn = _TP.lock_rank(ctx, p, up, px, True), _TP.lock_rank(ctx, p, dn, px, False)
     side = 0
-    if up and (not dn or up[0][0] < dn[0][0]):
+    if p.draw_lock_pick != "nearest" and not pf and not (p.pool_rank or p.draw_below_eq):
+        side, up, dn = _BD.ordered_side(up, dn, row, p)   # B2 / B3: inefficiency first, then liquidity by P/D ("largest": the bigger move)
+    elif up and (not dn or up[0][0] < dn[0][0]):
         side = 1
     elif dn and (not up or dn[0][0] < up[0][0]):
         side = -1
     pick = up if side > 0 else dn
-    lock = dict(day=ctx.day, session=session, side=side, t_lock=t_lock, px=px,
+    ext_from = None
+    if side and p.draw_ext_target:                 # B2 (104 ~16:18): the nearest inefficiency beyond a liquidity draw is how far it runs
+        e_ = _BD.ext_target(pick, pick)
+        if e_ is not None:
+            ext_from = pick[0][1]
+            pick = [e_] + [x for x in pick if x is not e_]
+    lock = dict(ext_from=ext_from, day=ctx.day, session=session, side=side, t_lock=t_lock, px=px,
                 target=pick[0][1] if side else None, kind=pick[0][2] if side else "",
                 name=pick[0][3] if side else "", marked=[(v, k, n, dr) for _, v, k, n, dr in mk] + (
                     [(w[s_], "array", "wick_ce", 0) for w in getattr(ctx, "wicks", [ctx.wick])
@@ -3673,6 +3867,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     ctx.am_lunch_hl = _NC.am_range(ctx, p) if p.lunch else None     # T8: the AM range, complete before the lunch session
     ctx.lon_start = p.london_kz_start
     ctx.bias_row = bias                                   # setups_models: htf table row (draws)
+    _BD.apply_open_src(ctx, p, intermarket)               # bias_htf D22: bias_open_src "spy" / "es_map"
     ctx.eth = eth
     _attach_meta(ctx, meta, p, symbol)
     _setup_news(ctx, day, p)
@@ -3716,7 +3911,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         return []
     ctx.sl_day = sl_day
     ctx.day_tags = "|".join(sorted(dt))
+    ctx.bias_by_cut = bias_by_cut or {}                   # (bias_htf rows known before 09:30 come from these cuts)
     dw = _DW.plan(ctx, hist, p, week, eve, dt)            # day_week_context: the day's blocks / flags / tags
+    _BD.plan(dw, ctx, hist, p, dt)                        # bias_htf: day tags, range_market reading, ctx.bh_on
     wl = dw.info.get("week_left")                         # D19 / X15: trades left in the week's budget (None = no cap)
     why_dw = next((r_ for ss_, r_ in dw.blocks if ss_ is None), None)
     if why_dw is not None:
@@ -3767,10 +3964,11 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     btag = {f"b_{k}": (None if bias is None else int(bias[k])) for k in ("react", "draw", "pd")}
     want = None
     if p.htf_bias != "off":
-        want = 0 if bias is None else int(bias[p.htf_bias])
-        if want == 0 and p.bias_neutral == "skip":
-            return []
+        want = _BD.bias_value(bias, p)                    # the 09:30 reading (reporting + the legacy day-level skip)
+        if want == 0 and p.bias_neutral == "skip" and not p.want_all_engines:
+            return []                                     # (want_all_engines: the skip is per session, from the row known at its bar)
     lock_t = _lock_times(p, day, pre_windows) if p.draw_lock == "session" else {}
+    ctx.lock_t = lock_t                                   # bias_htf: the session start minutes (judas, row cuts)
     ctx.lock, all_locks, spent = {}, [], []
     for i in range(ctx.start, len(ctx.t)):
         t = ctx.t[i]
@@ -4260,8 +4458,12 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 continue                              # X13b: a re-entry is the same direction only
             if p.weekly_bias and ctx.wbias == -sd.sign:
                 continue
-            if want and want != sd.sign:
-                continue
+            w_ = _BD.want_at(ctx, p, session, i) if want is not None else 0     # B3: the bias known at THIS bar (pre-09:30 sessions: their own cut)
+            if want is not None:
+                if w_ and w_ != sd.sign:
+                    continue
+                if not w_ and p.bias_neutral == "skip":
+                    continue
             if p.three_day_rule and sd.sign in block_side.get("three", ()):
                 continue
             if p.tgif and sd.sign in block_side.get("tgif", ()):
@@ -4289,7 +4491,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             if p.smt_bias == "filter" and smtb and sd.sign != smtb:
                 continue                              # B18.3: against the SMT bias
             ctx.cur_lock = lk if (lk is not None and lk["side"] == sd.sign) else None
-            ctx.cur_bias = lk["side"] if (lk is not None and lk["side"]) else (want or 0)
+            ctx.cur_bias = lk["side"] if (lk is not None and lk["side"]) else (w_ or 0)
             o_ = _scan(ctx, sd, i, p, session, w0, pctx, psides, ppos, _risk_mult(state, session, p))
             if o_ is not None and rc_ is not None and rc_.get("pending") and not _MG.reentry_order_ok(o_, sd, rc_, p):
                 _f("x_reentry_gate")
@@ -4478,6 +4680,15 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
                     done[s_] = True
                 continue
         hit = ctx.h[i] >= lk["target"] if lk["side"] > 0 else ctx.l[i] <= lk["target"]
+        if not hit and p.cond_draw:                   # L14e: the draw failed - switch once to the other side (the failed target spent)
+            nl = _BD.cond_relock(ctx, p, lk, i, spent)
+            if nl is not None:
+                ctx.lock[s_] = lk = nl
+                _f("x_cond_draw")
+                if pending is not None and pending["side"].sign != nl["side"] and \
+                        ("LH" if pending.get("done_key") == "LH" else pending["session"]) == s_:
+                    pending = None
+                continue
         if hit:
             lk.update(delivered=True, delivered_t=ctx.idx[i], delivered_i=i)
             spent.append(lk["target"])
@@ -5606,13 +5817,14 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     # does not gate them unless synth_po3 (the first build's behaviour) [our interpretation]
     skip_po3 = bool(tags.pop("skip_po3", False))
     if p.use_bias and not skip_po3:      # T2 / D22 bias_open: the AM reference open
-        ref_open = _open_known(ctx, "1330" if session == "PM" else p.bias_open, i)
-        if ref_open is None and session != "PM":     # review fix: a pre-09:30 window (PRE7 / PRE9 /
-            ref_open = _open_known(ctx, "midnight", i)   # NEWS) reads the midnight open until it prints
-        if ref_open is not None and not (entry <= sd.x(ref_open) + p.eq_tol_pts * p.es_pt if p.po3_inclusive
-                                         else entry < sd.x(ref_open) + p.mo_tol_pts * p.es_pt):   # Ep04.4 / Ep04.6
-            _f("x_wrong_side_of_open")
-            return None
+        refs = _BD.reference_opens(ctx, p, session, i)   # Ep08.3 "all": every open already printed (each only once its bar closed)
+        for ref_open in refs:
+            if not (entry <= sd.x(ref_open) + p.eq_tol_pts * p.es_pt if p.po3_inclusive
+                    else entry < sd.x(ref_open) + p.mo_tol_pts * p.es_pt):   # Ep04.4 / Ep04.6
+                if p.midnight_below_ok and _BD.below_ok(ctx, p, sd, session, i):
+                    break                    # Ep06.6: a confirmed bias side may enter on the far side of the midnight open
+                _f("x_wrong_side_of_open")
+                return None
     pd_hi = _EN.pd_high(sd, sw, i, leg_hi, p)         # L14b erl_range_swings
     if not skip_leg_pd and p.leg_pd and p.leg_pd_at == "arm" and entry > sw["ext"] + p.leg_pd * (pd_hi - sw["ext"]):
         _f("x_leg_premium")

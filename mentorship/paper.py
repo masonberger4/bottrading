@@ -98,19 +98,26 @@ def snapshot(c, symbol: str, partner: str | None, minutes: int, p: Params, risk_
     now = pd.Timestamp.now(tz=B.NY)
     df = schwab_history(c, symbol, days=days, minutes=minutes)
     q = schwab_history(c, partner, days=days, minutes=minutes) if partner else None
-    trades, log, _ = evaluate(df, symbol, minutes, p, now, q, risk_state=risk_state, week=week)
+    ref = None
+    if p.bias_open_src == "es_map":              # bias_htf D22: the futures midnight open mapped onto this instrument
+        try:                                      # [not exercised against the live feed: Schwab futures symbols vary]
+            ref = schwab_history(c, p.es_symbol, days=days, minutes=minutes)
+        except Exception as e:                    # no futures bars: the frame's own midnight stand-in is used
+            warnings.warn(f"bias_open_src='es_map': no {p.es_symbol} bars ({e}); using the frame's own midnight open")
+    trades, log, _ = evaluate(df, symbol, minutes, p, now, q, risk_state=risk_state, week=week, ref_df=ref)
     return trades, log
 
 
 def evaluate(df: pd.DataFrame, symbol: str, minutes: int, p: Params, now: pd.Timestamp,
              partner_df: pd.DataFrame | None = None, meta: pd.DataFrame | None = None,
-             risk_state: dict | None = None, week: dict | None = None):
+             risk_state: dict | None = None, week: dict | None = None, ref_df: pd.DataFrame | None = None):
     """The paper decision for `now` from a recorded / live frame: closed bars only, today's
     session as a partial day, built by backtest.prepare / day_kwargs exactly like a backtest
     (same session close, lock tables, confluence, gaps, history length). Returns (trades, log,
     locks); ([], [], []) when today is not in the frame."""
     df = df[df.index + pd.Timedelta(minutes=minutes) <= now]          # closed bars only
-    pr = B.prepare(df, minutes, symbol, p, partial_last=True, meta=meta)   # owner #1 resolved inside
+    pr = B.prepare(df, minutes, symbol, p, partial_last=True, meta=meta, ref_df=ref_df)   # owner #1 resolved inside
+                                                                          # (ref_df: D22 es_map - the futures frame whose midnight is mapped)
     ds = pr.ds
     if len(ds) < 4 or ds[-1].index[0].date() != now.date():
         return [], [], []

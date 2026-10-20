@@ -87,11 +87,11 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | A19.4 | Two MSS = on side | MISSING | (none) | No count of a second shift. | no |
 | A19.5 | Liquidity run first | FULL | _scan needs sd.sweep | (none) | no |
 | A20 | Displacement size and speed | SIMPLIFIED | any FVG after the sweep | No 2-3x OB-body test, no follow-through, no rip-through margin. | no |
-| A21 | Premium/discount | SIMPLIFIED | leg_pd, use_bias, htf pd (off) | No 20-day range, no OTE band, no body-based multi-day range. | no |
+| A21 | Premium/discount | FULL | leg_pd, use_bias, htf pd (off) | No 20-day range, no OTE band, no body-based multi-day range. Now built: see section 9. | yes (was SIMPLIFIED) |
 | A21.1 | EQ = 50%, buy below / sell above | FULL | leg_pd=0.5; htf pd | (none) | no |
-| A21.2 | Intraday leg; day context = 20-day high/low | SIMPLIFIED | leg_pd; htf pd swings | No 20-day premium/discount. | no |
+| A21.2 | Intraday leg; day context = 20-day high/low | FULL | leg_pd; htf pd swings | No 20-day premium/discount. Now built: see section 9. | yes (was SIMPLIFIED) |
 | A21.3 | OTE 62-79%, thirds, deep | SIMPLIFIED | leg_pd (upper bound only) | No 79% floor, no 70.5% entry, no depth tag. | no |
-| A21.4 | Wicks intraday, bodies multi-day | SIMPLIFIED | htf pd on wick pivots | Multi-day ranges use wicks, not bodies. | no |
+| A21.4 | Wicks intraday, bodies multi-day | FULL | htf pd on wick pivots | Multi-day ranges use wicks, not bodies. Now built: see section 9. | yes (was SIMPLIFIED) |
 | A22 | PD-array matrix | SIMPLIFIED | _targets sorted; htf_targets | Breakers, mitigation blocks and rejection blocks are never targets. No breaker precedence. Exhaustion is only partly checked. | no |
 | A23 | Wick CE | SIMPLIFIED | L.wick_midpoints; wick_levels | Only the prior RTH day. No continuation/revisit read. Docs and code disagree on the default. | no |
 | A24 | Not codeable (implied FVG, Reaper, inducement) | SIMPLIFIED | sweep step | The Reaper is missing (A24.2). | no |
@@ -99,52 +99,52 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | A24.2 | Reaper | MISSING | (none) | Not built. | no |
 | A24.3 | Inducement = sweep step | FULL | _scan sweep | (none) | no |
 | B1 | Price runs liquidity or rebalances, else consolidates | SIMPLIFIED | _targets; htf_targets; fvg_targets off | VIs unused. Voids/LTF FVGs off by default. Only the prior day's wick CE. No consolidation state. | no |
-| B2 | Draw search order | MISSING | H.table draw = nearest | No inefficiency-first order, no P/D-chosen liquidity, no extent level. | no |
-| B3 | Bias toward the next draw; one direction | SIMPLIFIED | htf_bias (off); want filter | Nearest draw, not the largest move. Pre-open look-ahead. SB/Ma Deuce ignore `want`. Judas is only a tag. Now built: see section 4. | no |
+| B2 | Draw search order | FULL | H.table draw = nearest | No inefficiency-first order, no P/D-chosen liquidity, no extent level. Now built: see section 9. | yes (was MISSING) |
+| B3 | Bias toward the next draw; one direction | FULL | htf_bias (off); want filter | Nearest draw, not the largest move. Pre-open look-ahead. SB/Ma Deuce ignore `want`. Judas is only a tag. Now built: see section 4. Now built: see section 9. | yes (was SIMPLIFIED) |
 | B4 | Bias is a condition, not a trade | FULL | run_day + _scan | (none) | no |
-| B5 | Timeframe chain | SIMPLIFIED | topdown, conf_min_top (off) | No weekly gate. No bellwether delivery read. No news-day chain. No daily VI. | no |
-| B6 | Institutional order flow on the daily | MISSING | (none) | No IOF score. | no |
-| B7 | Daily OB MT close rule | SIMPLIFIED | H react drop; weekly_bias | No OB state or flip. No "high of the week in" rule. | no |
-| B8 | Close-based bias flips | MISSING | partial analogues only | No persistent bias state to flip. Now built: see section 4. | no |
-| B8a | Flip on a close through the daily OB MT | MISSING | H.table drops the OB | No flip output. Now built: see section 4. | no |
-| B8b | Flip on closes through 3 PD arrays | MISSING | pd3_exit (intraday) | No daily version. Now built: see section 4. | no |
-| B8c | Weekly close below the last down-close week | MISSING | (none) | No weekly-close rule. Now built: see section 4. | no |
-| B8d | Close above Friday's high / wick CE / weekly quadrant | SIMPLIFIED | weekly_bias wick-CE cancel | Only the strong-day wick CE exists. No Friday high, no weekly wick CE or quadrant, no htf_bias flip. Now built: see section 4. | yes (was MISSING) |
-| B8e | Thursday trade back through the weekly open | MISSING | (none) | No weekly-open logic. Now built: see section 4. | no |
-| B8f | Stop above the breaker cancels SMT -> long | MISSING | reverse_after_loss | No forced direction. Now built: see section 4. | no |
-| B9 | What is not a flip | SIMPLIFIED | per-day bias, closes | No neutral-on-target. No retracement persistence. No fallback to the next weekly array. | no |
-| B10 | MWD sequential | MISSING | building blocks only | No case logic. | no |
+| B5 | Timeframe chain | FULL | topdown, conf_min_top (off) | No weekly gate. No bellwether delivery read. No news-day chain. No daily VI. Now built: see section 9. | yes (was SIMPLIFIED) |
+| B6 | Institutional order flow on the daily | FULL | (none) | No IOF score. Now built: see section 9. | yes (was MISSING) |
+| B7 | Daily OB MT close rule | FULL | H react drop; weekly_bias | No OB state or flip. No "high of the week in" rule. Now built: see section 9. | yes (was SIMPLIFIED) |
+| B8 | Close-based bias flips | FULL | partial analogues only | No persistent bias state to flip. Now built: see section 4. Now built: see section 9. | yes (was MISSING) |
+| B8a | Flip on a close through the daily OB MT | FULL | H.table drops the OB | No flip output. Now built: see section 4. Now built: see section 9. | yes (was MISSING) |
+| B8b | Flip on closes through 3 PD arrays | FULL | pd3_exit (intraday) | No daily version. Now built: see section 4. Now built: see section 9. | yes (was MISSING) |
+| B8c | Weekly close below the last down-close week | FULL | (none) | No weekly-close rule. Now built: see section 4. Now built: see section 9. | yes (was MISSING) |
+| B8d | Close above Friday's high / wick CE / weekly quadrant | FULL | weekly_bias wick-CE cancel | Only the strong-day wick CE exists. No Friday high, no weekly wick CE or quadrant, no htf_bias flip. Now built: see section 4. Now built: see section 9. | yes (was SIMPLIFIED) |
+| B8e | Thursday trade back through the weekly open | FULL | (none) | No weekly-open logic. Now built: see section 4. Now built: see section 9. | yes (was MISSING) |
+| B8f | Stop above the breaker cancels SMT -> long | FULL | reverse_after_loss | No forced direction. Now built: see section 4. Now built: see section 9. | yes (was MISSING) |
+| B9 | What is not a flip | FULL | per-day bias, closes | No neutral-on-target. No retracement persistence. No fallback to the next weekly array. Now built: see section 9. | yes (was SIMPLIFIED) |
+| B10 | MWD sequential | FULL | building blocks only | No case logic. Now built: see section 9. | yes (was MISSING) |
 | B11 | Candle-pattern day context | SIMPLIFIED | day_context; three_day_rule | Inside day is a tag only. No inside week, outside day or NR3/NR7. (Audit-time note. Now built: see section 8.) | no |
 | B11a | 3-day rule | FULL | three_day_rule | Ma Deuce skips it (minor). | no |
 | B11b | Down-close outside day | MISSING | (none) | Not detected. (Audit-time note. Now built: see section 8.) | no |
 | B11c | Inside week / NR -> expansion | SIMPLIFIED | inside_day tag | No inside week or NR, no effect. (Audit-time note. Now built: see section 8.) | no |
 | B12 | Intraday PO3 vs the midnight/13:30 open | FULL | use_bias | Strict `<` (minor). | no |
-| B13 | Weekly open | MISSING | (none) | No weekly-open level. | no |
-| B14.1 | NWOG regime | MISSING | NWOG used as targets | No return count, no regime, no convergence. | no |
-| B14.2 | Converging NWOGs | MISSING | (none) | No comparison between gaps. | no |
-| B14.3 | Bias vs NWOG | MISSING | H react (touch + CE) | No hold-above / reclaim state. | no |
+| B13 | Weekly open | FULL | (none) | No weekly-open level. Now built: see section 9. | yes (was MISSING) |
+| B14.1 | NWOG regime | FULL | NWOG used as targets | No return count, no regime, no convergence. Now built: see section 9. | yes (was MISSING) |
+| B14.2 | Converging NWOGs | FULL | (none) | No comparison between gaps. Now built: see section 9. | yes (was MISSING) |
+| B14.3 | Bias vs NWOG | FULL | H react (touch + CE) | No hold-above / reclaim state. Now built: see section 9. | yes (was MISSING) |
 | B15 | ORG direction tell | MISSING | DayCtx.org as targets | No 30-minute attempt test. No gap x bias rule. (Audit-time note. Now built: see section 8.) | no |
 | B16 | Sunday gap scenarios | MISSING | skip_monday (exempts NFP/FOMC weeks) | No scenario check. (Audit-time note. Now built: see section 8.) | no |
-| B17 | Neutral / no-bias conditions | SIMPLIFIED | htf_bias + bias_neutral; neutral_skip | B17.1 is a proxy. B17.3-5 are absent. | yes (was MISSING) |
-| B17.1 | 50/50 framing -> no trade | MISSING | (none) | No both-sides check. | no |
+| B17 | Neutral / no-bias conditions | FULL | htf_bias + bias_neutral; neutral_skip | B17.1 is a proxy. B17.3-5 are absent. Now built: see section 9. | yes (was SIMPLIFIED) |
+| B17.1 | 50/50 framing -> no trade | FULL | (none) | No both-sides check. Now built: see section 9. | yes (was MISSING) |
 | B17.2 | Stuck or chop -> wait for 09:30 | FULL | AM starts 09:30 | Pre-open switches have no guard. | no |
-| B17.3 | HTF draw delivered -> stop for the week | MISSING | (none) | No objective-met state. | no |
+| B17.3 | HTF draw delivered -> stop for the week | FULL | (none) | No objective-met state. Now built: see section 9. | yes (was MISSING) |
 | B17.4 | Range market / inside daily BISI / sloppy | MISSING | neutral_skip (N8) | None of the three is detected. Now built: see section 4. (Audit-time note. Now built: see section 8.) | no |
-| B17.5 | Indices decoupled; SMT both ways | MISSING | _smt per sweep | No decoupling measure. | no |
+| B17.5 | Indices decoupled; SMT both ways | FULL | _smt per sweep | No decoupling measure. Now built: see section 9. | yes (was MISSING) |
 | B18.1 | SMT qualifier | SIMPLIFIED | _smt, smt_min | No PD-array requirement. No "obvious" gap. No rel-eq SMT. | no |
 | B18.2 | SMT windows | MISSING | (none) | No window filter. No pre-09:30 SMT. | no |
 | B18.3 | SMT uses (partials, instrument) | SIMPLIFIED | combine tie-break | No SMT partials. Instrument choice is a tie-break only. No bias input. | no |
 | B18 | SMT overall | SIMPLIFIED | _smt | See B18.1-B18.3. | no |
-| B19.1 | DXY up = risk-off | SIMPLIFIED | INTERMARKET dxy tag | Tag only, using a 20-day mean, not the range high. | no |
+| B19.1 | DXY up = risk-off | FULL | INTERMARKET dxy tag | Tag only, using a 20-day mean, not the range high. Now built: see section 9. | yes (was SIMPLIFIED) |
 | B19.2 | ES lower low vs DXY higher high | NA | (none) | Needs DXY 1m data. | no |
-| B19.3 | Bonds range -> consolidation | SIMPLIFIED | tnx tag | No range detection, no effect. | no |
-| B19 | Intermarket overall | SIMPLIFIED | INTERMARKET | Tags only. | no |
-| B20.1 | COT commercials | MISSING | (none) | No data. | no |
-| B20.2 | Open interest | MISSING | (none) | No data. | no |
-| B20.3 | Weekly Williams %R | MISSING | (none) | Not computed. | no |
-| B20 | COT/OI/sentiment overall | MISSING | (none) | All three missing. | no |
+| B19.3 | Bonds range -> consolidation | FULL | tnx tag | No range detection, no effect. Now built: see section 9. | yes (was SIMPLIFIED) |
+| B19 | Intermarket overall | FULL | INTERMARKET | Tags only. Now built: see section 9. | yes (was SIMPLIFIED) |
+| B20.1 | COT commercials | SIMPLIFIED | (none) | No data. Now built: see section 9. | yes (was MISSING) |
+| B20.2 | Open interest | SIMPLIFIED | (none) | No data. Now built: see section 9. | yes (was MISSING) |
+| B20.3 | Weekly Williams %R | FULL | (none) | Not computed. Now built: see section 9. | yes (was MISSING) |
+| B20 | COT/OI/sentiment overall | FULL | (none) | All three missing. Now built: see section 9. | yes (was MISSING) |
 | B21 | IPDA 20/40/60-day ranges | MISSING | (none) | No pools. History passed in is only 45 days. | no |
-| B22 | Quarterly shift | MISSING | (none) | Not computed. | no |
+| B22 | Quarterly shift | FULL | (none) | Not computed. Now built: see section 9. | yes (was MISSING) |
 | B23 | Seasonals | MISSING | BT by_month (reporting only) | No map, tag or report. (Audit-time note. Now built: see section 8.) | yes (was SIMPLIFIED) |
 | N1 | NFP Friday | SIMPLIFIED | nfp_day=True; entries from 09:30 | Pyramids on NFP. Pre-open switches break the first-hour rule. | no |
 | N2 | NFP week beginner block | FULL | nfp_week_block (off) | Also needs nfp_thu=False. | no |
@@ -217,19 +217,19 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | L11 | Rejection-block target | MISSING | (none) | Exits go past the wick. | no |
 | L12 | SD targets | SIMPLIFIED | sd_targets (off) | No -0.5, one anchor, no clusters, no roles, no alignment. | no |
 | L13 | Other projections | MISSING | (none) | No breaker/measuring/ORG/extension projections. | no |
-| L14 | Choose the draw | SIMPLIFIED | draw = nearest pool | Parts a, c, d, e missing or partial. | no |
-| L14a | Draw first, trade toward it | SIMPLIFIED | htf_bias draw (off) | No session draw, no objective-met state, no B2 order. Now built: see section 4. | no |
+| L14 | Choose the draw | FULL | draw = nearest pool | Parts a, c, d, e missing or partial. Now built: see section 9. | yes (was SIMPLIFIED) |
+| L14a | Draw first, trade toward it | FULL | htf_bias draw (off) | No session draw, no objective-met state, no B2 order. Now built: see section 4. Now built: see section 9. | yes (was SIMPLIFIED) |
 | L14b | Enter IRL, exit ERL | SIMPLIFIED | FVG entry; pool exits | No OB/void entries. Range not redefined. Arrays used as exits. | yes (was FULL) |
-| L14c | Opposing array one TF lower | SIMPLIFIED | react; conf.targets | No TF link. | no |
+| L14c | Opposing array one TF lower | FULL | react; conf.targets | No TF link. Now built: see section 9. | yes (was SIMPLIFIED) |
 | L14d | Untraded targets only | SIMPLIFIED | `seen` filter (pools) | Arrays never retired. | no |
-| L14e | Conditional draws | MISSING | (none) | No session draw state. | no |
+| L14e | Conditional draws | FULL | (none) | No session draw state. Now built: see section 9. | yes (was MISSING) |
 | L14f | Sorted level list | FULL | ladder | (none) | no |
 | L14g | SB draw list | SIMPLIFIED | SB._arm -> _targets | No PWH/PWL by default, no OTE, no HTF, no fallback. | no |
 | L15 | Room (10-handle framework) | FULL | min_draw_pts=5 | (none) | no |
 | L16 | ADR5 targets | MISSING | _split only | Not implemented. | no |
 | L17 | Rounding | MISSING | (none) | No switch. Now built: see section 4. | no |
 | M0 | Common skeleton | SIMPLIFIED | _scan; htf | Bias proxy. No pool priority. FVG/IFVG entries only. | no |
-| M0.1 | Bias = weekly/daily candle draw | SIMPLIFIED | htf_bias | No candle projection. SB/Ma Deuce ignore it. Now built: see section 4. | no |
+| M0.1 | Bias = weekly/daily candle draw | FULL | htf_bias | No candle projection. SB/Ma Deuce ignore it. Now built: see section 4. Now built: see section 9. | yes (was SIMPLIFIED) |
 | M0.2 | Window pools | SIMPLIFIED | _sell_side all armed | No single-window choice. No previous-AM pool. | no |
 | M0.3 | Judas raid | FULL | _scan sweep; use_bias | (none) | no |
 | M0.4 | MSS with displacement leaves an FVG | SIMPLIFIED | _scan | Displacement is only "an FVG exists". | yes (was FULL) |
@@ -404,14 +404,14 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | D12 | P/D leg filter, add cutoff, OTE | SIMPLIFIED | leg_pd | No add_cutoff. The OTE test is inverted. | no |
 | D13 | First partial size | FULL | ladder fracs | (none) | no |
 | D14 | Breakeven / trailing modes | SIMPLIFIED | be_on; ladder_trail | No after_mss or stall BE. Trail-off undocumented. | no |
-| D15 | Which index on divergence | SIMPLIFIED | combine | No smt_pick. No consolidation gate. | no |
+| D15 | Which index on divergence | FULL | combine | No smt_pick. No consolidation gate. Now built: see section 9. | yes (was SIMPLIFIED) |
 | D16 | AM 12:00 / PM 15:00 exits | FULL | am_exit; pm_done_by | (none) | no |
 | D17 | Pivot size | FULL | pivot_n=1 | (none) | no |
 | D18 | Re-entry after a stop-out | SIMPLIFIED | reentry_half | See X13b. | no |
 | D19 | Trade frequency | SIMPLIFIED | done; caps | Truncation order. No cap in paper.py. Breakeven counts as a win. (Audit-time note. Now built: see section 8.) | no |
 | D20 | Mondays | SIMPLIFIED | skip_monday | No PM-only mode. (Audit-time note. Now built: see section 8.) | no |
 | D21 | NWOG/ORG conventions | SIMPLIFIED | H gaps; org | org_days capped at 6. Monday gap mode has no CE. | no |
-| D22 | Real midnight open | SIMPLIFIED | L.opens | No bias_open switch. Live SPY uses 04:00. | no |
+| D22 | Real midnight open | SIMPLIFIED | L.opens | No bias_open switch. Live SPY uses 04:00. Now built: see section 9. | no |
 | D23 | SD anchor | SIMPLIFIED | sd_targets | Anchor is leg_hi. No switch. | no |
 | Ep01.0 | NY time | FULL | tz NY | (none) | no |
 | Ep01.1 | BSL/SSL | FULL | pools | (none) | no |
@@ -442,7 +442,7 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | Ep02.3 | Bearish OB MT | SIMPLIFIED | mt_mode | Wick-triggered MT stop. | no |
 | Ep02.4 | CE/MT | FULL | Zone.mid/mt | (none) | no |
 | Ep02.5 | HTF targets / runner | SIMPLIFIED | htf_targets | No 30m. No reclaim exit. | no |
-| Ep02.6 | No narrative -> scalp | MISSING | (none) | Not built. | no |
+| Ep02.6 | No narrative -> scalp | FULL | (none) | Not built. Now built: see section 9. | yes (was MISSING) |
 | Ep02.7 | First day of year | MISSING | (ISM 10:00 by accident) | No rule. (Audit-time note. Now built: see section 8.) | no |
 | Ep02.8 | Daily VI top-down | SIMPLIFIED | topdown | VIs unused. | no |
 | Ep02.9 | Open FVG = breakaway | SIMPLIFIED | ce_hold | No tag. | no |
@@ -457,7 +457,7 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | Ep03.9 | OB anchor high/open | SIMPLIFIED | order_block_blend | No open entry. | no |
 | Ep03.10 | First FVG trail | SIMPLIFIED | ladder_trail | Not the first FVG. | no |
 | Ep03.11 | Stronger index | SIMPLIFIED | combine | First fill only. | no |
-| Ep03.12 | MM buy context | SIMPLIFIED | htf_bias | No draw+pd combination. No pre-existing array. | no |
+| Ep03.12 | MM buy context | FULL | htf_bias | No draw+pd combination. No pre-existing array. Now built: see section 9. | yes (was SIMPLIFIED) |
 | Ep03.13 | STL then STH MSS | FULL | _scan | (none) | no |
 | Ep03.14 | Entry/stop at the FVG | FULL | _scan | (none) | no |
 | Ep03.15 | BE after buy-side | SIMPLIFIED | be_on | Not keyed to a pool. | no |
@@ -501,7 +501,7 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | Ep06.3 | SIBI retrace to CE | FULL | entry ce; ce_hold | (none) | yes (was SIMPLIFIED) |
 | Ep06.4 | SD projection | SIMPLIFIED | sd_targets | Anchor and close-based hits differ. | no |
 | Ep06.5 | DXY/EURUSD | NA | dxy tag | FX. | no |
-| Ep06.6 | Midnight reference | SIMPLIFIED | use_bias | No confirm, no target. | no |
+| Ep06.6 | Midnight reference | FULL | use_bias | No confirm, no target. Now built: see section 9. | yes (was SIMPLIFIED) |
 | Ep06.7 | Prefer rel-eq pools | SIMPLIFIED | _eq_levels | No preference. | no |
 | Ep07.1 | Old daily close draw | SIMPLIFIED | ORG q=0 | No weekly draw, no "unrealized" filter. | no |
 | Ep07.2 | AM model | SIMPLIFIED | _scan | No VI entry. Edge default. | no |
@@ -514,8 +514,8 @@ Bias (B) has the most MISSING rules: 28 of 48. The bot has a daily htf.table and
 | Ep07.9 | Bulk exit; 1% risk | FULL | ladder; risk | (none) | no |
 | Ep07.10 | 5-handle thinking | NA | (none) | Expectation. | no |
 | Ep08.1 | Daily wick CE / FVG edges | SIMPLIFIED | wick; htf | One RTH day. Early exit. | no |
-| Ep08.2 | Neutral / chop | SIMPLIFIED | bias_neutral | No chop mode. | no |
-| Ep08.3 | Three opens | SIMPLIFIED | L.opens | 08:30/09:30 unusable. | no |
+| Ep08.2 | Neutral / chop | FULL | bias_neutral | No chop mode. Now built: see section 9. | yes (was SIMPLIFIED) |
+| Ep08.3 | Three opens | FULL | L.opens | 08:30/09:30 unusable. Now built: see section 9. | yes (was SIMPLIFIED) |
 | Ep08.4 | MSS swing validity | SIMPLIFIED | refs[-1] | Minor swing. | no |
 | Ep08.5 | Bearish OB open | SIMPLIFIED | ob_mt | No open entry. | no |
 | Ep08.6 | PM 13:30 Judas | FULL | use_bias | (none) | no |
@@ -796,6 +796,8 @@ Low:
 - **M0.4 (reassigned):** Add `disp_body_mult` and `disp_follow`.
 
 ### bias_htf (45 items)
+
+**[built 2026-10-19: every item below; see section 9 and `build_log.md` "Package bias_htf"]**
 
 Owns: `htf.table`, run_day bias filters, `weekly_bias`, `INTERMARKET` and new data loaders.
 
@@ -1224,3 +1226,42 @@ Status changes against section 2:
 | B23 | SIMPLIFIED | report-only tag by design (`seasonal_tag`); never gates |
 | Ep01.8, Ep02.7 | FULL | `low_vol_inside`, `first_day_wait` (a floor on the AM entry minute), `first_day_skip_am` |
 
+
+
+## 9. bias_htf build (2026-10-19)
+
+All 45 items of the package are built behind Params switches (`build_log.md` "Package bias_htf" lists the switches, defaults and notes per item). Status changes
+against section 2:
+
+| Id | New status | Note |
+|---|---|---|
+| B2 | FULL | `draw_lock_pick="ordered"`, `htf_bias="ordered"`, table columns draw_ord / draw_ord_lvl / draw_ext_lvl, `draw_ext_target` |
+| B3, L14a | FULL | owner #9 lock + the ordered / largest pick, `want_all_engines` (Silver Bullet and Ma Deuce read `htf_bias`), per-bar pre-09:30 bias read, `judas_required` |
+| L14 | FULL | `draw_first` umbrella, `matrix_tf_lower` (L14c), `cond_draw` (L14e), lock hygiene through `target_hygiene` "htf" |
+| B6 | FULL | `iof` column, `htf_bias` "iof" / "combo2" |
+| A21, A21.2, A21.4 | FULL | `day_pd="20d"`, `pd_day_range`, `pd_zone`, `ote_band`, `pd_body_multiday`; pd20 column |
+| B5 | FULL | `weekly_gate`, `news_topdown`, `bellwether_15m` ([our interpretation] of the 15m read) |
+| B7, B8, B8a-B8f | FULL | `ob_mt` column / bias, `how_rule`; the flip column and `stop_flip` were built earlier (new variant B8_flip_all_triggers) |
+| B9 | FULL | `objective_neutral`, `bias_persist`, `next_array_on_fail` |
+| B10 | FULL | `htf_bias="mwd"`, `mwd_nest` (the state machine is [our interpretation]) |
+| B13 | FULL | `weekly_open` sun18 / mon00 / either |
+| B14.1, B14.2, B14.3 | FULL | `nwog_regime`, `nwog_converge_pts`, `nwog_bias` (hold until reclaim) |
+| B17, B17.1, B17.3 | FULL | `neutral_gate` tests + mode, `neutral_5050`, `objective_met_stop` |
+| B17.5 | FULL | `decoupled_mode`, `smt_both` |
+| B19, B19.1, B19.3 | FULL | `intermarket_model` umbrella, `dxy_gate`, `bond_range`, `bond_dir` (daily Yahoo files, prior sessions) |
+| B20, B20.3 | FULL | `cot_oi_model` umbrella, `wpr_tag` |
+| B20.1, B20.2 | SIMPLIFIED | loaders and tags built and unit-tested; no COT / open-interest file is shipped, so the tags are inert until data/mentorship/cot and data/mentorship/ES_oi.csv exist |
+| B22 | FULL | `qshift_tag`, `qshift_size` |
+| M0.1 | FULL | `htf_bias="candle"`, `bias_candle` D / W |
+| D15 | FULL | `smt_pick="trend"`, `one_market` |
+| D22 | SIMPLIFIED | `bias_open_src` "spy" / "es_map", `levels.map_midnight`, `prepare(ref_df)`, `paper.snapshot` fetches the `es_symbol` bars through Schwab when the switch is on (not exercised against the live feed) |
+| Ep02.6 | FULL | `no_narrative_scalp`, `bias_neutral="scalp"` |
+| Ep03.12 | FULL | `htf_bias="draw_pd"`, `mmbm_zone` |
+| Ep06.6 | FULL | `midnight_target`, `midnight_confirm`, `midnight_below_ok` |
+| Ep08.2 | FULL | `chop_mode` skip / skip_day / scalp |
+| Ep08.3 | FULL | `bias_open="all"` |
+
+Integration notes. (1) Every table column is built by `htf.table(..., bx=Params.bx)`; `bx` is empty unless a bias_htf switch needs a column, so the plain table and
+its CSV cache are unchanged (study caches tables with `bx` in memory only). (2) The bar-level rules sit behind the existing `daycontext.side_ok / gate / order_ok /
+scalp_now` funnel, which all three engines call. (3) A pre-09:30 session no longer reads the 09:30 row for `htf_bias`: it reads the table cut at the latest lock
+time that has passed (none: no bias).

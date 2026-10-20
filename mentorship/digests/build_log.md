@@ -909,3 +909,169 @@ Known gaps: B23 is report-only by design; T14 `tue_week_extreme` is built but un
 - study_week: the by-Wednesday share is reported for both the 05:00 London kill-zone end and the 10:00 London close (M14.3 / rulebook); T14 result recorded in the T14 row.
 - Docs: rule_coverage section 8 (and "Now built" notes in section 2), the rulebook Bot notes (X15, N7.5), the defaults in this log (year_end, sloppy_mode).
 - New study variants: B11_nr_expansion_nr3, B17.4_daily_range_tag / _scalp / _skip / _all_tests, B16_sunday_no_gap_trade, N7.2_post_holiday_pre_open, N9.6_london_adr_win_0800.
+
+
+## Package bias_htf (2026-10-19)
+
+Sources: `owner_directives.md` (#9 lock one draw per session, the standing decisions), `owner_directive_specs.md` section 9, `rule_coverage.md` section 3
+"bias_htf" (45 items), the rulebook B1-B23 / L14 / A21 / M0 / D15 / D22 lines, `digests/bias.md`, the Ep 02 / 03 / 06 / 08 notes.
+Code: new `mentorship/bias_htf.py` (the `htf.table` columns, the COT / open-interest loaders, the intermarket flags from the free daily files) and new
+`mentorship/bias_day.py` (the bar-level rules: bias side per session, side / order / gate / scalp / size hooks, lock helpers, opening prices); hooks in
+`htf.table` (new `bx` keyword = `Params.bx`, absent when empty so the old table and its cache keys are unchanged), `strategy.run_day` (bias value, per-session
+`want`, plan hook, `ctx.lock_t`), `strategy.mark_levels` / `_lock_step` (ordered / largest pick, extent target, lower-timeframe draw, hygiene, conditional relock),
+`daycontext.side_ok / order_ok / gate / scalp_now` (one funnel for the main engine, the Silver Bullet and Ma Deuce), `entries.size_mult`, `backtest` (table_kw,
+`combine`, `prepare(ref_df=)`), `levels.opens(src)` / `map_midnight`, `paper.evaluate(ref_df=)`, `study.DECISIONS` (~85 variants after `X16_journal_tags_off`).
+Tests: `tests/test_bias_htf.py` (unit + engine scenarios, long AND mirrored short, table without look-ahead at the 09:30 and 13:30 cuts),
+`tests/test_bias_htf_lookahead.py` (full vs truncated runs: every new variant alone on ES 5m, five switch groups on ES 1m with the Silver Bullet, Ma Deuce and the
+pre-open models).
+Defaults: every switch is OFF / the old value except `want_all_engines=True` (inert while `htf_bias` is "off") and the per-session bias read described below.
+
+How the bias reaches the bar loop. `htf_bias` names a table column (`bias_day.bias_col`): react, draw, pd, combo, flip as before, plus ordered (draw_ord), iof,
+combo2, ob_mt, mwd, nwog (nwog_bias), candle (bc_D / bc_W), draw_pd, wk (wk_bias), pd20. The row is read PER BAR (`bias_day.want_at`): from 09:30 the ordinary
+table, before 09:30 the table cut at the latest lock time that has passed (a pre-open window used to read the 09:30 row = overnight bars that had not printed;
+without a cut table - `draw_lock="off"` - a pre-09:30 session now has no bias and `bias_neutral="skip"` skips it). The main loop, the Silver Bullet and Ma Deuce all
+call `daycontext.side_ok`, which calls `bias_day.side_ok` (B3 `want_all_engines`); the day-level rules come back through `daycontext.gate` / `scalp_now` the same way.
+Look-ahead: every table column reads sessions before the row's day plus the overnight bars closed by the cut; the intermarket flags read sessions before the day.
+
+Checklist (id | status | switches | default | note):
+
+B2 | done | `draw_lock_pick="ordered"`, `htf_bias="ordered"`, `draw_ext_target` | nearest / off / False | `htf.table` columns draw_ord, draw_ord_lvl, draw_ord_kind, draw_ord_name, draw_ext_lvl, draw_ext_name (bx "ord"): the nearest inefficiency (FVG / VI / opening gap) either side first, else liquidity by premium / discount (discount: the buy-side, premium: the sell-side, 0: the nearer), a tie is neutral; the lock does the same over its marked levels (`bias_day.ordered_side`, arrays before pools); `draw_ext_target` makes the nearest array beyond a pool the locked target (the pool a rung, `lock["ext_from"]`)
+B3 | done | `draw_lock_pick="largest"`, `want_all_engines`, `judas_required`, `judas_min_pts` | nearest, True, off, 2.0 | table cut per session start was built earlier (owner #9); now also the bias READ is causal per bar (`row_for`); Silver Bullet and Ma Deuce honour `htf_bias`; "largest" = the side whose ordered candidate is the farther [our interpretation of "the day's largest move"]; `judas_required` tag / filter: the bias side waits until price has been delivered against it by `judas_min_pts` from the session's first open
+B6 | done | `htf_bias="iof"` / `"combo2"`, `iof_days`, `iof_min` | off, 10, 2 | `iof_score`: down-close candles retested and held (+1) or closed through (-1), up-close candles run through (+1) or held as resistance (-1), pivot raids reversed at once (+1 / -1 mirror) [our interpretation of "respect"]; combo2 = react, else IOF, else P/D
+L14 | done | `draw_first` (umbrella), `draw_first_skip`, `conf_target_hygiene` is `target_hygiene` "htf" | off | `draw_first="session"` = draw_lock session + ordered pick + HTF hygiene + `draw_ext_target` + `cond_draw`; hygiene extension: with "htf" in `target_hygiene` the lock's confluence draws (`htf_ce_draw`, `vi_htf_draw`) drop arrays price has traded into since they formed (`bias_day.untraded_arrays`; gaps are kept)
+L14a | done | `draw_first="session"` | off | the owner #9 lock (built earlier) plus the B2 order, a side gate in all three engines and the session done when delivered
+A21 | done | `pd_day_range`, `pd_zone`, `ote_band`, `pd_body_multiday`, `day_pd` | 20, half, (0.62, 0.79), True, swing | zones half / third / deep (0.3 / 0.7) / ote (the retracement band measured from the extreme) apply to the 20-session range (`pd20`, `pd20_pos`) and to the swing range's `pd`
+A21.2 | done | `day_pd="20d"`, `htf_bias="pd20"` | swing | `pd` (and combo / combo2 / draw_pd) become the P/D of the 20 prior sessions' range
+A21.4 | done | `pd_body_multiday` | True | bodies for the multi-day range, wicks stay for intraday legs
+B5 | done | `weekly_gate`, `news_topdown`, `bellwether_15m` (+ `vi_arrays` earlier) | off | weekly_gate: no side against `wk_bias` (weekly arrays' reaction, else the weekly-close flip); news_topdown: on a release day the nearer daily VI sets the side (needs `vi_arrays`); bellwether_15m: the last completed 15m close against the midpoint of the last four 15m bars [our interpretation]; VI rows in C = `vi_arrays`
+B7 | done | `htf_bias="ob_mt"`, `how_rule` | off | `ob_mt` state + `ob_mt_lvl` (the last daily OB's MT); `how_in`: in a rally week a daily close below 50% of the last down-close candle; "no_long" blocks longs for the rest of the week (not a short signal)
+B8 | done earlier | `htf_bias="flip"`, `flip_triggers` | ob_mt, wk_dc | stateful `flip` column, tests in test_review_fixes; new study variant `B8_flip_all_triggers`
+B8a | done earlier | `flip_triggers` "ob_mt" | on | (same column)
+B8b | done earlier | `flip_triggers` "flip_pd3" | off |
+B8c | done earlier | `flip_triggers` "wk_dc" | on |
+B8d | done earlier | `flip_triggers` "flip_close_above" | off | the result is neutral
+B8e | done earlier | `flip_triggers` "flip_thu_wopen" | off |
+B8f | done earlier | `stop_flip` | off | engine switch (breaker / smt); test_stop_flip_after_a_breaker_stop_out
+B9 | done | `objective_neutral`, `bias_persist`, `next_array_on_fail`, `nof_days` | off, 0, False, 3 | objective_neutral day / week / both: the previous day's draw (obj_day) or the week's weekly-class draw (obj_week) delivered -> the bias reads neutral; persistence: an opposite sign counts only after `bias_persist` sessions in a row or when the close-based flip column agrees (plain readings kept as `<col>0`); next_array_on_fail: a bullish daily array closed through within `nof_days` and an intact weekly array below that price traded into and holds above its CE -> react +1 (mirror -1)
+B10 | done | `htf_bias="mwd"`, `mwd_nest`, `mwd_disp_mult` | off | month / week / day states (`bias_htf.tf_states`: a displacement candle closing beyond the last swing; a counter displacement only marks the state correcting; the opposite structure break turns it) and cases A / B / C (`mwd_case`, `mwd_zones`); mwd_nest tag / filter: cases B / C enter only inside the weekly / monthly arrays [our interpretation of "displacement from a discount array"]
+B13 | done | `weekly_open`, `weekly_open_early_days` | off, 2 | sun18 / mon00 / either (bx "wo": wo_sun, wo_mon, wk_dir, wo_expired): the week's direction side enters below the open on Monday-Tuesday and above it from Wednesday, until a daily array opposing the week is reached
+B14.1 | done | `nwog_regime`, `nwog_leave_adr`, `nwog_returns_cons` | off, 0.5, 2 | returns to the current NWOG after a session fully outside it; "cons" (>= 2 returns or converging gaps) tag / scalp / skip, "trend" (left sharply, <= 1 return) tag
+B14.2 | done | `nwog_converge_pts` | 10.0 | this NWOG's CE within the distance of the previous one, or three in a row each closer = converging -> "cons"
+B14.3 | done | `nwog_bias`, `nwog_bias_reclaim`, `htf_bias="nwog"` | off, low | +1 above the NWOG high, -1 below its low, hold until reclaim ("low" literal 036 / 058, "ce", "high" = widest hold)
+B17 | done | `neutral_gate`, `neutral_gate_mode` | (), tag | tests fifty_fifty, premium_chop (before 09:30 only), draw_delivered, range_market (the B17.4 reading), decoupled; tag / skip / scalp
+B17.1 | done | `neutral_5050`, `fifty_react_ratio` | off, 0.5 | "armed": both sides armed in one window -> the window is stood aside (the second arming is refused, `gate`); "react": both sides' reaction weights alike (table column `fifty`)
+B17.3 | done | `objective_met_stop` | off | day / week / both: no new trades while the previous day's / the week's draw is delivered
+B17.5 | done | `decoupled_mode`, `decouple_corr`, `decouple_days`, `smt_both` | off | daily S&P / Nasdaq-100 return correlation of prior sessions (or an opposite-sign prior day) and the live partner test (`entries.decoupled`): tag / scalp / skip; smt_both: SMT at the previous day's high AND low in the overnight range with no bias (no lock side, no want) = no trade
+B19 | done | `intermarket_model` (umbrella), `intermarket_model_skip` | off | dxy_gate "block", bond_range "scalp", bond_dir "filter", decoupled_mode "scalp"
+B19.1 | done | `dxy_gate`, `dxy_gate_days` | off, 20 | the dollar's prior close above the highest high of the 20 sessions before it and above the close before: no longs ("tag" only reports)
+B19.3 | done | `bond_range`, `bond_range_days`, `bond_range_frac`, `bond_dir` | off, 10, 0.3 | the 10-year yield's last-10-session span under 30% of the 60-session span: tag / scalp / skip; bond_dir "filter": rising yields -> no longs
+B20 | done | `cot_oi_model` (umbrella), `cot_oi_model_skip` | off | cot_tag / oi_tag / wpr_tag "tag" (optional enhancers, cc06_002 ~0:24)
+B20.1 | done (data) | `cot_tag`, `cot_market` | off | `bias_htf.load_cot`: CFTC legacy / TFF CSV or TXT files in data/mentorship/cot, usable from the Monday after the Friday release, commercial net vs the midpoint of the trailing 52-week range; NO COT FILE IS SHIPPED in the repo (downloading needs a go-ahead): the tag is inert (one warning) until files are supplied; unit-tested on a synthetic file
+B20.2 | done (data) | `oi_tag`, `oi_days`, `oi_pct` | off, 10, 0.125 | `bias_htf.load_oi`: Databento statistics (stat_type 9) or an open_interest CSV at data/mentorship/ES_oi.csv, ROLL-SUMMED per day; tags oi_up / oi_dn on a +-12.5% change over 10 sessions; no OI file in the repo: inert (one warning)
+B20.3 | done | `wpr_tag`, `wpr_len` | off, 14 | weekly Williams %R from our own weekly bars: <= -80 long, >= -20 short; "filter" blocks the counter side
+B22 | done | `qshift_tag`, `qshift_size`, `qs_turn_pct`, `qs_cons_pct`, `qs_due_lo`, `qs_due_hi` | off, 1.0, 0.03, 0.07, 63, 84 | qs_state turn / cons from the 60-session change against the 60 before, qs_due = 63-84 sessions after the last shift began, qs_trend = the 252-session trend; qshift_size multiplies the risk against that trend while a shift is due [our interpretation]
+L14c | done | `matrix_tf_lower` | off | the table's react_tf (W / D) and react: the draw is the opposing array one timeframe lower (W -> D, D -> 4h) from the confluence arrays
+L14e | done | `cond_draw`, `cond_draw_adr` | off, 0.25 | a close 0.25 x ADR5 beyond the lock price away from the draw switches the lock ONCE to the nearest marked level on the other side, the failed target spent; a pending order of the old side is dropped
+M0.1 | done | `htf_bias="candle"`, `bias_candle` | off, D | bc_D / bc_W: the nearest unreached draw from the candle's open (the session open; the weekly open for W with weekly-class draws first); `want` applies in Silver Bullet / Ma Deuce (B3)
+D15 | done | `smt_pick="trend"`, `one_market` | first, False | trend = leader on trend days, laggard on consolidation days (`backtest.consolidation_day` from the trades' day tags); one_market drops the other instrument's trades after the day's first fill
+D22 | partial | `bias_open_src` ("data" / "spy" / "es_map"), `es_symbol` | data, /ES | "spy" re-reads the 04:00 stand-in from a futures frame; "es_map": `levels.map_midnight` + `prepare(ref_df=)` / `paper.evaluate(ref_df=)` map a futures midnight open onto the traded instrument by the prior-close ratio. `paper.snapshot` fetches `es_symbol` bars through Schwab when the switch is on, NOT exercised against the live feed
+Ep02.6 | done | `no_narrative_scalp`, `bias_neutral="scalp"` | off | no daily narrative (the bias column 0, `combo` when `htf_bias` is off) -> every order of the day is a scalp (one exit min(+5, T1), no adds)
+Ep03.12 | done | `htf_bias="draw_pd"`, `mmbm_zone` | off | draw and premium / discount agree (daily VI draws preferred when `vi_arrays` is on); mmbm_zone tag / filter: the entry in the discount half of [sweep low .. draw]
+Ep06.6 | done | `midnight_target`, `midnight_confirm`, `midnight_below_ok` | off | the midnight open as a target rung; the bias side needs price beyond it in its direction; with `use_bias` a confirmed side may enter on the far side of the open
+Ep08.2 | done | `chop_mode`, `chop_on_adr`, `chop_in_array` | off, 0.35, True | "skip" = wait for 09:30 (the pre-open windows), "skip_day", "scalp"; chop = the 09:30 price inside a daily / weekly array, or an overnight range under 0.35 x ADR5
+Ep08.3 | done | `bias_open="all"` | midnight | the entry must be on the right side of EVERY open already printed (midnight, 08:30, 09:30; an open counts only once its own bar closed)
+
+Known gaps: D22's live path (`paper.snapshot` fetching `es_symbol` bars) is not exercised against the Schwab feed; B20.1 / B20.2 need data files that are not in the repo; the "judgment" thresholds above are marked [our interpretation]
+and exposed as Params. The ES 5m reachability probe (2023-11..2024-02, baseline 23 trades) is recorded under "Probe" below.
+
+### Probe: ES 5m, 2023-11-01..2024-03-01, one variant at a time (baseline BASE 23 trades)
+
+`same` = the same entries as the baseline (the switch only tags, rescales or reshapes exits, or never fired in this window - no futures pre-open windows, no COT / OI file, a single instrument). Funnel keys are the bias_htf rejections (counted per bar and side).
+
+| variant | trades | entries vs baseline | bias_htf funnel |
+|---|---|---|---|
+| B2_ordered_pick | 23 | DIFF |  |
+| B2_htf_bias_ordered | 18 | DIFF |  |
+| B2_draw_ext_target | 23 | DIFF |  |
+| B3_largest_pick | 31 | DIFF |  |
+| B3_want_all_engines_draw | 13 | DIFF |  |
+| B3_want_main_only_draw | 13 | DIFF |  |
+| B3_judas_filter | 21 | DIFF | x_bh_judas=280 |
+| B3_judas_tag | 23 | same |  |
+| B6_iof | 3 | DIFF |  |
+| B6_combo2 | 5 | DIFF |  |
+| B6_iof_days5 | 4 | DIFF |  |
+| L14_draw_first | 19 | DIFF | x_cond_draw=50 |
+| L14_draw_first_no_cond | 23 | DIFF |  |
+| L14a_draw_first_pick_only | 23 | DIFF |  |
+| L14_conf_hygiene | 21 | DIFF |  |
+| L14c_matrix_tf_lower | 25 | DIFF |  |
+| L14e_cond_draw | 17 | DIFF | x_cond_draw=43 |
+| A21_pd_zone_third | 5 | DIFF |  |
+| A21_pd_zone_ote | 1 | DIFF |  |
+| A21_pd_zone_deep | 5 | DIFF |  |
+| A21.2_day_pd_20d | 12 | DIFF |  |
+| A21.2_pd20_bias | 12 | DIFF |  |
+| A21.4_pd_bodies_off | 12 | DIFF |  |
+| B5_weekly_gate_filter | 10 | DIFF | x_bh_weekly_gate=1507 |
+| B5_weekly_gate_bias | 3 | DIFF |  |
+| B5_news_topdown_side | 21 | DIFF | x_bh_news_topdown=440 |
+| B5_bellwether_filter | 1 | DIFF | x_bh_bellwether=1884 |
+| B5_bellwether_tag | 23 | same |  |
+| B7_ob_mt_bias | 1 | DIFF |  |
+| B7_how_rule_no_long | 23 | same | x_bh_how=126 |
+| B8_flip_all_triggers | 1 | DIFF |  |
+| B9_objective_neutral_day | 2 | DIFF |  |
+| B9_objective_neutral_week | 2 | DIFF |  |
+| B9_bias_persist2 | 4 | DIFF |  |
+| B9_next_array_on_fail | 4 | DIFF |  |
+| B10_mwd_bias | 6 | DIFF |  |
+| B10_mwd_nest_filter | 3 | DIFF | x_bh_mwd_nest=4 |
+| B13_weekly_open_sun18 | 20 | DIFF | x_bh_weekly_open=654 |
+| B13_weekly_open_mon00 | 20 | DIFF | x_bh_weekly_open=611 |
+| B13_weekly_open_either | 20 | DIFF | x_bh_weekly_open=578 |
+| B14.1_nwog_regime_scalp | 23 | same |  |
+| B14.1_nwog_regime_skip | 18 | DIFF | x_bh_nwog_cons=350 |
+| B14.2_nwog_converge_skip | 13 | DIFF | x_bh_nwog_cons=1142 |
+| B14.3_nwog_bias_filter | 7 | DIFF | x_bh_nwog_bias=1702 |
+| B14.3_nwog_bias_ce | 3 | DIFF |  |
+| B17_neutral_gate_fifty | 22 | DIFF | x_bh_ng_fifty_fifty=165 |
+| B17_neutral_gate_premium_chop | 23 | same |  |
+| B17_neutral_gate_draw_delivered | 7 | DIFF | x_bh_ng_draw_delivered=1484 |
+| B17_neutral_gate_range_market | 23 | same |  |
+| B17_neutral_gate_decoupled | 5 | DIFF | x_bh_ng_decoupled=1906 |
+| B17.1_neutral_5050_armed | 23 | same |  |
+| B17.1_neutral_5050_react | 22 | DIFF | x_bh_fifty_fifty=165 |
+| B17.3_objective_met_stop_day | 11 | DIFF | x_bh_objective_met=1090 |
+| B17.3_objective_met_stop_week | 13 | DIFF | x_bh_objective_met=1014 |
+| B17.5_decoupled_scalp | 22 | DIFF |  |
+| B17.5_smt_both_skip | 23 | same |  |
+| B19_intermarket_model | 22 | DIFF | x_bh_bond_dir=588, x_bh_dxy_gate=123 |
+| B19.1_dxy_gate_block | 23 | same | x_bh_dxy_gate=123 |
+| B19.3_bond_range_scalp | 23 | same |  |
+| B19.3_bond_dir_filter | 22 | DIFF | x_bh_bond_dir=690 |
+| B20_cot_oi_model | 23 | same |  |
+| B20.1_cot_tag_filter | 23 | same |  |
+| B20.2_oi_tag | 23 | same |  |
+| B20.3_wpr_tag_filter | 23 | same | x_bh_wpr=328 |
+| B22_qshift_tag | 23 | same |  |
+| B22_qshift_size_half | 23 | same |  |
+| M0.1_bias_candle_D | 15 | DIFF |  |
+| M0.1_bias_candle_W | 15 | DIFF |  |
+| D15_smt_pick_trend | 23 | same |  |
+| D15_one_market | 23 | same |  |
+| D22_bias_open_src_spy | 26 | DIFF |  |
+| Ep02.6_no_narrative_scalp | 23 | same |  |
+| Ep03.12_draw_pd | 6 | DIFF |  |
+| Ep03.12_mmbm_zone_filter | 21 | DIFF | x_bh_mmbm_zone=3 |
+| Ep06.6_midnight_target | 23 | same |  |
+| Ep06.6_midnight_confirm_filter | 2 | DIFF | x_bh_midnight_confirm=338 |
+| Ep06.6_midnight_below_ok | 28 | DIFF |  |
+| Ep08.2_chop_skip | 23 | same |  |
+| Ep08.2_chop_scalp | 23 | same |  |
+| Ep08.3_bias_open_all | 19 | DIFF |  |
+| L14c_react_tf_tag | 23 | same |  |
+| M0.1_bias_candle_tag | 23 | same |  |
+| A21_pd20_column_only | 23 | same |  |
+| Ep08.2_chop_skip_day | 20 | DIFF | x_bh_chop=620 |
+| B14.3_nwog_bias_tag | 23 | same |  |

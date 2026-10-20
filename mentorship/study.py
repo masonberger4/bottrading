@@ -37,7 +37,7 @@ def _real(job):
     p = replace(Params(), **VARIANTS[name])
     a = B.run(spy, tf, "SPY", p, qqq)
     b = B.run(qqq, tf, "QQQ", replace(p, es_pt=q_pt), spy)
-    out = {"SPY": a, "QQQ": b, "combined": B.combine(a, b, pick=p.smt_pick)}
+    out = {"SPY": a, "QQQ": b, "combined": B.combine(a, b, pick=p.smt_pick, one_market=p.one_market)}
     for k, v in out.items():
         if len(v):
             v["variant"], v["tf"], v["book"] = name, tf, k
@@ -1204,6 +1204,92 @@ DECISIONS = {
     "B23_seasonal_two_samples": dict(seasonal_tag=True, seasonal_map_b=("bear", "bull", "cons", "bull", "bull", "cons", "bull", "cons", "bear", "bull", "bull", "bull"),
                                        seasonal_fail_day=5),
     "X16_journal_tags_off": dict(journal_tags=False),
+    # ---- package bias_htf (name prefix = rule id; the look-ahead test runs each one alone) ----
+    "B2_ordered_pick": dict(draw_lock_pick="ordered"),
+    "B2_htf_bias_ordered": dict(htf_bias="ordered"),
+    "B2_draw_ext_target": dict(draw_lock_pick="ordered", draw_ext_target=True),
+    "B3_largest_pick": dict(draw_lock_pick="largest"),
+    "B3_want_all_engines_draw": dict(htf_bias="draw", want_all_engines=True),
+    "B3_want_main_only_draw": dict(htf_bias="draw", want_all_engines=False),
+    "B3_judas_filter": dict(judas_required="filter"),
+    "B3_judas_tag": dict(judas_required="tag"),
+    "B6_iof": dict(htf_bias="iof"),
+    "B6_combo2": dict(htf_bias="combo2"),
+    "B6_iof_days5": dict(htf_bias="iof", iof_days=5, iof_min=1),
+    "L14_draw_first": dict(draw_first="session"),
+    "L14_draw_first_no_cond": dict(draw_first="session", draw_first_skip=("cond",)),
+    "L14a_draw_first_pick_only": dict(draw_first="session", draw_first_skip=("hygiene", "ext", "cond")),
+    "L14_conf_hygiene": dict(target_hygiene=("htf",), htf_ce_draw=True, vi_htf_draw=True, vi_arrays=True),
+    "L14c_matrix_tf_lower": dict(matrix_tf_lower=True),
+    "L14e_cond_draw": dict(cond_draw=True),
+    "A21_pd_zone_third": dict(htf_bias="pd", pd_zone="third"),
+    "A21_pd_zone_ote": dict(htf_bias="pd", pd_zone="ote"),
+    "A21_pd_zone_deep": dict(htf_bias="pd", pd_zone="deep"),
+    "A21.2_day_pd_20d": dict(htf_bias="pd", day_pd="20d"),
+    "A21.2_pd20_bias": dict(htf_bias="pd20"),
+    "A21.4_pd_bodies_off": dict(htf_bias="pd", day_pd="20d", pd_body_multiday=False),
+    "B5_weekly_gate_filter": dict(weekly_gate="filter"),
+    "B5_weekly_gate_bias": dict(htf_bias="wk"),
+    "B5_news_topdown_side": dict(news_topdown="side", vi_arrays=True),
+    "B5_bellwether_filter": dict(bellwether_15m="filter"),
+    "B5_bellwether_tag": dict(bellwether_15m="tag"),
+    "B7_ob_mt_bias": dict(htf_bias="ob_mt"),
+    "B7_how_rule_no_long": dict(how_rule="no_long"),
+    "B8_flip_all_triggers": dict(htf_bias="flip", flip_triggers=("ob_mt", "wk_dc", "flip_pd3", "flip_close_above", "flip_thu_wopen")),
+    "B9_objective_neutral_day": dict(htf_bias="combo", objective_neutral="day"),
+    "B9_objective_neutral_week": dict(htf_bias="combo", objective_neutral="week"),
+    "B9_bias_persist2": dict(htf_bias="combo", bias_persist=2),
+    "B9_next_array_on_fail": dict(htf_bias="combo", next_array_on_fail=True),
+    "B10_mwd_bias": dict(htf_bias="mwd"),
+    "B10_mwd_nest_filter": dict(htf_bias="mwd", mwd_nest="filter"),
+    "B13_weekly_open_sun18": dict(weekly_open="sun18"),
+    "B13_weekly_open_mon00": dict(weekly_open="mon00"),
+    "B13_weekly_open_either": dict(weekly_open="either"),
+    "B14.1_nwog_regime_scalp": dict(nwog_regime="scalp"),
+    "B14.1_nwog_regime_skip": dict(nwog_regime="skip", nwog_returns_cons=1),
+    "B14.2_nwog_converge_skip": dict(nwog_regime="skip", nwog_converge_pts=40.0),
+    "B14.3_nwog_bias_filter": dict(nwog_bias="filter"),
+    "B14.3_nwog_bias_ce": dict(htf_bias="nwog", nwog_bias_reclaim="ce"),
+    "B17_neutral_gate_fifty": dict(neutral_gate=("fifty_fifty",), neutral_gate_mode="skip"),
+    "B17_neutral_gate_premium_chop": dict(neutral_gate=("premium_chop",), neutral_gate_mode="skip"),
+    "B17_neutral_gate_draw_delivered": dict(neutral_gate=("draw_delivered",), neutral_gate_mode="skip"),
+    "B17_neutral_gate_range_market": dict(neutral_gate=("range_market",), neutral_gate_mode="scalp"),
+    "B17_neutral_gate_decoupled": dict(neutral_gate=("decoupled",), neutral_gate_mode="skip", decouple_corr=0.97),
+    "B17.1_neutral_5050_armed": dict(neutral_5050="armed"),
+    "B17.1_neutral_5050_react": dict(neutral_5050="react"),
+    "B17.3_objective_met_stop_day": dict(objective_met_stop="day"),
+    "B17.3_objective_met_stop_week": dict(objective_met_stop="week"),
+    "B17.5_decoupled_scalp": dict(decoupled_mode="scalp", decouple_corr=0.97),
+    "B17.5_smt_both_skip": dict(smt_both="skip"),
+    "B19_intermarket_model": dict(intermarket_model=True),
+    "B19.1_dxy_gate_block": dict(dxy_gate="block"),
+    "B19.3_bond_range_scalp": dict(bond_range="scalp"),
+    "B19.3_bond_dir_filter": dict(bond_dir="filter"),
+    "B20_cot_oi_model": dict(cot_oi_model=True),
+    "B20.1_cot_tag_filter": dict(cot_tag="filter"),
+    "B20.2_oi_tag": dict(oi_tag="tag"),
+    "B20.3_wpr_tag_filter": dict(wpr_tag="filter"),
+    "B22_qshift_tag": dict(qshift_tag=True),
+    "B22_qshift_size_half": dict(qshift_size=0.5),
+    "M0.1_bias_candle_D": dict(htf_bias="candle", bias_candle="D"),
+    "M0.1_bias_candle_W": dict(htf_bias="candle", bias_candle="W"),
+    "D15_smt_pick_trend": dict(smt_pick="trend"),
+    "D15_one_market": dict(one_market=True),
+    "D22_bias_open_src_spy": dict(bias_open_src="spy"),
+    "Ep02.6_no_narrative_scalp": dict(no_narrative_scalp=True),
+    "Ep03.12_draw_pd": dict(htf_bias="draw_pd", vi_arrays=True),
+    "Ep03.12_mmbm_zone_filter": dict(mmbm_zone="filter"),
+    "Ep06.6_midnight_target": dict(midnight_target=True),
+    "Ep06.6_midnight_confirm_filter": dict(midnight_confirm="filter", htf_bias="combo"),
+    "Ep06.6_midnight_below_ok": dict(midnight_confirm="tag", midnight_below_ok=True),
+    "Ep08.2_chop_skip": dict(chop_mode="skip"),
+    "Ep08.2_chop_scalp": dict(chop_mode="scalp"),
+    "Ep08.3_bias_open_all": dict(bias_open="all"),
+    "L14c_react_tf_tag": dict(react_tf_tag=True),
+    "M0.1_bias_candle_tag": dict(bias_candle_tag=True),
+    "A21_pd20_column_only": dict(cond_pd_tags=True),
+    "Ep08.2_chop_skip_day": dict(chop_mode="skip_day"),
+    "B14.3_nwog_bias_tag": dict(nwog_bias="tag"),
 }
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
 
@@ -1213,6 +1299,9 @@ SRC = os.environ.get("MENTORSHIP_SRC", "histdata")      # "histdata" (SPX/NDX CF
 SYMS = {"histdata": ("SPX", "NDX"), "merged": ("SPX", "NDX"), "databento": ("ES", "NQ", "YM")}[SRC]
 
 
+_BX_TABLES: dict = {}
+
+
 def _bias_cache(tf: int, cut: int = 570, vi: bool = False, flip: tuple = ("ob_mt", "wk_dc"),
                 kw: dict | None = None) -> pd.DataFrame:
     """The htf table (cut at `cut` minutes; 570 = the ordinary bias table), cached per source,
@@ -1220,9 +1309,18 @@ def _bias_cache(tf: int, cut: int = 570, vi: bool = False, flip: tuple = ("ob_mt
     the levels_detectors table switches `kw` (backtest.htf_kw: A5 c2 check, A9 VI size / death)."""
     from . import htf
     kw = kw or {}
+    import hashlib
     tag = ("" if cut == 570 else f"_cut{cut}") + ("_vi" if vi else "") + \
         ("" if tuple(flip) == ("ob_mt", "wk_dc") else "_" + "-".join(flip)) + \
-        "".join(f"_{k}{v}" for k, v in sorted(kw.items()))
+        "".join(f"_{k}{v}" if k != "bx" else "_bx" + hashlib.md5(str(v).encode()).hexdigest()[:8]
+                for k, v in sorted(kw.items()))
+    if "bx" in kw:        # bias_htf columns hold lists / strings a CSV would flatten: built once per process instead
+        key = (tf, cut, vi, tuple(flip), tuple(sorted(kw.items())))
+        if key not in _BX_TABLES:
+            _BX_TABLES[key] = htf.table(B.load(SYMS[0], tf, source=SRC), cut_min=cut, vi=vi, flip_triggers=tuple(flip), **kw)
+        t = _BX_TABLES[key].copy()
+        t.index = pd.to_datetime(t.index).date
+        return t
     f = Path(f"runs/mentorship/htf_table_{SRC}_{tf}m{tag}.csv")
     if not f.exists() or "flip" not in pd.read_csv(f, nrows=1).columns:     # B8 flip column
         htf.table(B.load(SYMS[0], tf, source=SRC), cut_min=cut, vi=vi, flip_triggers=tuple(flip), **kw).to_csv(f)
@@ -1235,7 +1333,7 @@ def _lock_cache(tf: int, p: Params) -> dict:
     """#9: the per-lock-time tables of backtest.lock_tables (same cuts: B.lock_cuts), from the cache."""
     if p.draw_lock == "off":
         return {}
-    return {m: _bias_cache(tf, m, p.vi_arrays, p.flip_triggers, B.htf_kw(p)) for m in sorted(B.lock_cuts(p))}
+    return {m: _bias_cache(tf, m, p.vi_arrays, p.flip_triggers, B.table_kw(p)) for m in sorted(B.lock_cuts(p))}
 
 
 def _dec_job(job):
@@ -1250,15 +1348,15 @@ def _dec_job(job):
         p2 = p2[(p2.index >= lo) & (p2.index < b)]
     t = B.run(df[(df.index >= lo) & (df.index < b)], tf, SYMS[0], p, pa[(pa.index >= lo) & (pa.index < b)],
               partner2=p2,
-              bias_table=_bias_cache(tf, 570, p.vi_arrays, p.flip_triggers, B.htf_kw(p)), meta=B.load_meta(SYMS[0], tf, SRC),
+              bias_table=_bias_cache(tf, 570, p.vi_arrays, p.flip_triggers, B.table_kw(p)), meta=B.load_meta(SYMS[0], tf, SRC),
               lock_cuts=_lock_cache(tf, p))
-    if p.smt_pick != "first":
+    if p.smt_pick != "first" or p.one_market:
         # Ep03.11 (review fix): smt_pick only acts when two instruments are combined - run the
         # partner as its own book (es_pt scaled by the price ratio, as main_index) and combine
         q = replace(p, es_pt=round(p.es_pt * float(pa.close.median() / df.close.median()), 2))
         tb = B.run(pa[(pa.index >= lo) & (pa.index < b)], tf, SYMS[1], q, df[(df.index >= lo) & (df.index < b)],
                    meta=B.load_meta(SYMS[1], tf, SRC) if SRC == "databento" else None, lock_cuts={} if p.draw_lock == "off" else None)
-        t = B.combine(t, tb, pick=p.smt_pick)
+        t = B.combine(t, tb, pick=p.smt_pick, one_market=p.one_market)
     if len(t):
         t = t[pd.to_datetime(t.entry_time.astype(str).str[:10]) >= f"{year}-01-01"].copy()
         t["tf"], t["year"], t["variant"] = tf, year, name

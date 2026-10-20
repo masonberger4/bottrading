@@ -372,15 +372,44 @@ def equal_levels(prices, tol: float) -> list[float]:
     return out
 
 
-def opens(index, o) -> dict[str, float]:
+def opens(index, o, src: str = "data") -> dict[str, float]:
     """Opening prices for one day: midnight, 08:30, 09:30, 13:30 (first bar at or after).
-    SPY has no bars at midnight, so its first pre-market bar (04:00) stands in for it."""
+    SPY has no bars at midnight, so its first pre-market bar (04:00) stands in for it.
+    D22 `src` ("spy"): use that 04:00 stand-in even when the frame has bars from midnight (a futures / CFD frame), the old SPY
+    reading kept for comparison (rulebook P1 "bias_open_src")."""
     t = index.hour * 60 + index.minute
     out = {}
-    for name, m in (("midnight", 0), ("0830", 510), ("0930", 570), ("1330", 810)):
+    for name, m in (("midnight", 240 if src == "spy" else 0), ("0830", 510), ("0930", 570), ("1330", 810)):
         k = np.flatnonzero(t >= m)
         if len(k):
             out[name] = float(o[k[0]])
+    return out
+
+
+def map_midnight(ref, df) -> dict:
+    """D22 (rulebook P1 "live midnight from the CFD / ES mapped to SPY"): the midnight open of a futures / CFD frame `ref` mapped to
+    the traded instrument's price level, per trading date of `df`: ref's first bar from 00:00 of that calendar day times the
+    ratio df.close / ref.close at the PRIOR session's last bar of `df` at or before 16:00 (known before the day starts). Returns
+    {date: mapped open}; dates without a ref midnight bar or a prior overlap are absent."""
+    import pandas as pd
+    out = {}
+    lab = df.index.date
+    days = sorted(set(lab))
+    rm = ref.groupby(ref.index.date).open.first()
+    rm_t = ref.groupby(ref.index.date).apply(lambda x: x.index[0])
+    for k in range(1, len(days)):
+        d, pd_ = days[k], days[k - 1]
+        if d not in rm.index or rm_t[d].hour * 60 + rm_t[d].minute > 120:
+            continue                                   # the reference frame has no bar near midnight that day
+        prev = df[lab == pd_]
+        prev = prev[(prev.index.hour * 60 + prev.index.minute) < 960]
+        if not len(prev):
+            continue
+        t0 = prev.index[-1]
+        rc = ref.close.asof(t0)
+        if rc != rc or rc <= 0:
+            continue
+        out[d] = float(rm[d]) * float(prev.close.iloc[-1]) / float(rc)
     return out
 
 

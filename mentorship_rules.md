@@ -187,6 +187,7 @@ and to the notes for context, charts and trade examples. This file states each r
   - Zones: OTE 62-79%, 70.5% sweet spot; strict = lower/upper third; 0.2-0.3 deep discount, 0.8-0.9
     deep premium (cc01_004 ~23:59; cc01_006 ~2:07; cc06_004 ~31:39) [CC]. Threshold: D12.
   - Wicks for intraday legs, bodies for multi-day ranges (014; 058 ~41:54; cc07_005 ~3:10).
+  Bot (bias_htf): `day_pd="20d"` / `pd_day_range` / `pd_body_multiday` (bodies for the multi-day range), `pd_zone` half / third / deep / ote with `ote_band`; the pd20 column.
 - **A22 PD-array matrix**, outward from EQ: mitigation block, breaker, liquidity void, FVG, OB,
   rejection block, old high/low; discount mirror (cc05_014 ~18:20-29:36; cc07_004 ~1:01) [CC].
   Price meets them nearest first; a breaker in the path usually stops price before the arrays
@@ -209,11 +210,13 @@ and to the notes for context, charts and trade examples. This file states each r
 - **B2 Draw search order:** inefficiency first; if none, liquidity: from premium, sell-side below an
   old low; from discount, buy-side above a short-term high (065A ~50:00). Beyond the obvious pool,
   the nearest inefficiency sets how far the run goes (104 ~16:18) [2023].
+  Bot (bias_htf): `htf.table` columns draw_ord / draw_ord_lvl / draw_ext_lvl (inefficiency first, then P/D liquidity, then the extent); `htf_bias="ordered"`; `draw_lock_pick="ordered"` (and "largest" for B3's largest move); `draw_ext_target` makes the nearest inefficiency beyond a pool the locked target.
 - **B3 Bias = direction toward the next draw**, decided before the session; then take ONE
   direction only (019 ~13:57; 054 ~7:45; 067 ~12:00) [2023]. Bias is the direction of the day's
   largest move, not the first move; expect the first delivery against it (068 ~16:30; 082 ~8:02).
   Narrative (how the day trades) is separate from bias (001 ~17:01). Bot: no HTF bias; both sides
   are scanned every session (P3 `htf_bias`).
+  Bot (bias_htf): `want_all_engines` (the Silver Bullet / Ma Deuce honour `htf_bias`, each pre-09:30 session reads the table cut at its own lock time), `judas_required` tag / filter (the bias side waits for price delivered against it by `judas_min_pts`), `draw_first="session"` umbrella (L14 / L14a).
 - **B4 Bias is a condition, not a trade.** It still needs displacement in its direction, an FVG, a
   retrace into it and a valid time of day; no setup = no trade (063 ~12:22-15:47; cc12_003 ~25:07)
   [both].
@@ -222,15 +225,18 @@ and to the notes for context, charts and trade examples. This file states each r
   aligned with daily/weekly/monthly arrays (4h minimum) are not high probability (cc07_007 ~26:34;
   cc09_004) [CC]. Bellwether chart: 15m (013 ~2:36; 065B ~05:01). Top-down sequence on news days:
   daily VI, 60m, 30m, 15m, 5m, 1m (Ep 02).
+  Bot (bias_htf): `weekly_gate` (no side against the weekly bias), `news_topdown` (release day: the daily VI sets the side), `bellwether_15m` (the 15m read must not deliver against the side).
 - **B6 Institutional order flow (IOF), scored on the daily.** Bullish = down-close candles hold as
   support, up-close candles get run through, every short-term low taken reverses at once; bearish
   mirror (cc12_003 ~11:41; 075 ~1:21:40; 099 ~14:56; 102 ~1:42:05; cc06_002 ~4:53) [both].
   {SPX/NDX daily bars from 1m}
+  Bot (bias_htf): `htf.table` column iof (candle respect + pivot raids over `iof_days`), `htf_bias="iof"` / `"combo2"` (react, else IOF, else P/D).
 - **B7 Daily OB MT close rule.** Bullish flow is intact while no daily close is below the MT of the
   last daily bullish OB; a close through it is "definitive failure" (058 ~6:01-7:41; 007 ~2:15). A
   daily close below 50% of the last down-close daily candle = high of the week probably in (101
   ~32:58) [2023]. Bot: `weekly_bias` (off) codes Ep 05's one-week case only (strong day, close
   back through 50% of its wick); generalise (P3).
+  Bot (bias_htf): `htf_bias="ob_mt"` (the ob_mt state column), `how_rule` (a close below 50% of the last down-close candle = high of the week in; "no_long" blocks longs for the rest of the week).
 - **B8 Close-based bias flips** (closes, not wicks) [2023 unless noted]:
   - daily close through the last daily OB MT (B7);
   - bodies closing through three PD arrays against the idea (098 ~47:00; 078 ~1:02:38);
@@ -247,10 +253,12 @@ and to the notes for context, charts and trade examples. This file states each r
   retracement, cc05_003 ~1:34:51); a failed daily array (look to the next weekly array,
   cc05_015 ~18:45); the counter move after the open (= Judas swing, 013 ~4:52; 082 ~8:02) [both].
   An intraday MSS may need no close (see D3), but bias flips use closes (012 ~30:30; 026; 075).
+  Bot (bias_htf): `objective_neutral` (day / week / both: the draw delivered -> neutral), `bias_persist` (an opposite reading must repeat, or a close-based flip agree), `next_array_on_fail` (a failed daily array -> the next weekly array is a re-buy).
 - **B10 MWD sequential** [CC]: a timeframe is bullish when a discount array there produced
   displacement. Month+week+day bullish: buy every daily/4h discount array. Day correcting: buy
   daily arrays only inside weekly arrays. Week+day correcting: only at monthly arrays. Only a bearish
   breaker on a timeframe cancels it (cc06_004 ~1:02-14:47; cc06_005 ~0:46). {1m-derived}
+  Bot (bias_htf): `htf_bias="mwd"` (month / week / day displacement states, cases A / B / C), `mwd_nest` tag / filter (cases B / C: entries only inside the weekly / monthly arrays).
 - **B11 Candle-pattern day context** {1m-derived}: inside day -> large range next (012 ~16:17);
   inside week -> expansion within 2 candles, else scalp only (103 ~12:53); down-close outside day
   -> lower prices until that day's high is taken (081 ~1:31); after 3 consecutive up (down) daily
@@ -266,11 +274,13 @@ and to the notes for context, charts and trade examples. This file states each r
   early in the week, then buy each day while above it; bearish mirror; valid until an opposing
   daily PD array is hit (048 ~1:00:10; cc08_001 ~22:58-29:03; cc12_003 ~19:03) [both]. {needs:
   Sunday 18:00 = futures data; Monday 00:00 is in the CFD data}
+  Bot (bias_htf): `weekly_open` sun18 / mon00 / either (the week's direction side: longs below the open Mon-Tue, above it from Wednesday; expired at an opposing daily array).
 - **B14 NWOG regime.** Price keeps returning to the current NWOG = consolidation week (scalp, small
   targets, no runners); leaves sharply and does not return (one retest allowed) = trending week;
   converging NWOGs = consolidation (025 ~3:11; 030 ~10:17; 039 ~12:26; 051 ~9:25-13:30; 053 ~1:31)
   [2023]. Bias vs NWOG: bullish while above the current NWOG, bearish until back above the NWOG low
   (036 ~16:00; 058 ~53:46).
+  Bot (bias_htf): `nwog_regime` (returns to the gap, converging gaps, `nwog_converge_pts`), `nwog_bias` / `htf_bias="nwog"` (hold until reclaim, `nwog_bias_reclaim`).
 - **B15 ORG direction tell.** If 09:30 opens below the prior RTH close and makes no attempt back to
   it within ~30 min = very bearish; mirror for a gap up (030 ~1:27:01). Bullish + gap up = fill then
   higher; bearish + gap up = the fill is a false run (055 ~17:50) [2023]. {1m}
@@ -290,6 +300,7 @@ and to the notes for context, charts and trade examples. This file states each r
     interpretation]; `sloppy_mode` decides tag / stand aside / scalp.
   - Indices decoupled (ES/NQ/YM not in step) = high-resistance runs: scalp or skip; SMT both ways
     with no bias = no trade (045 ~1:01:43; 046 ~1:06; 090 ~41:00) [2023].
+  Bot (bias_htf): `neutral_gate` tests (fifty_fifty, premium_chop, draw_delivered, range_market, decoupled) with `neutral_gate_mode` tag / skip / scalp, `neutral_5050` (armed / react), `objective_met_stop` (stand aside once the draw is met), `chop_mode` (Ep 08), `decoupled_mode` and `smt_both` (B17.5), `bias_neutral="scalp"` / `no_narrative_scalp` (Ep 02).
 - **B18 SMT** (ES vs NQ vs YM): one index fails to confirm the others' lower low (bullish) or higher
   high (bearish) at a PD array (Ep 03; 022; 065B ~05:04) [both].
   - It is a qualifier, never a signal on its own (031 ~0:44:53; 070 ~21:14; 099 ~55:07). If not
@@ -304,10 +315,12 @@ and to the notes for context, charts and trade examples. This file states each r
   ~59:00; 045 ~42:05; 095 ~26:17). {d: DXY daily; intraday needs: DXY 1m}. Bonds and stocks move
   together; bonds in a range -> all markets consolidate (061 ~1:05:42; cc10_008 ~8:47; cc05_009
   ~5:02) [both] {d: FRED yields}.
+  Bot (bias_htf): `dxy_gate` (the dollar's prior close above its 20-day high and rising: no longs), `bond_range` (yield range: tag / scalp / skip), `bond_dir`; `intermarket_model` umbrella. Daily files in data/mentorship/yahoo, prior sessions only.
 - **B20 COT / OI / sentiment** [CC]: commercials' net vs the midpoint of its 12-month range = buy or
   sell program (cc10_001; cc12_003 ~4:25); OI drop 10-15%+ into HTF support = bullish (cc05_003
   ~58:26; cc12_003 ~10:42); weekly Williams %R extremes (cc12_002 ~12:17). Optional enhancers only
   (cc06_002 ~0:24). {d: CFTC COT; needs: CME OI history}
+  Bot (bias_htf): `cot_tag` (files in data/mentorship/cot; none shipped), `oi_tag` (data/mentorship/ES_oi.csv, roll-summed), `wpr_tag` (weekly %R(14) from our bars); `cot_oi_model` umbrella.
 - **B21 IPDA data ranges** [CC]: look back 20/40/60 trading days; the high/low of each are the
   near/short/intermediate pools; 20-day most sensitive (015 ~4:25; cc05_004 ~1:56; cc09_008 ~6:03).
   If the 20-day extreme is taken, the 40-day, then 60-day are next (cc05_003 ~28:38; cc07_004).
@@ -315,6 +328,7 @@ and to the notes for context, charts and trade examples. This file states each r
   Default: roll daily from yesterday (cc09_008), not anchored on the quarterly shift.
 - **B22 Quarterly shift**: a major turn or consolidation every 3-4 months; bias and sizing context,
   not timing (cc05_001 ~5:05; 084 ~22:12; 098 ~58:30) [both].
+  Bot (bias_htf): `qshift_tag` / `qshift_size` (60-session turn or consolidation, due 3-4 months later, 252-session trend).
 - **B23 Seasonals** (road map, never a trigger; use only when long- and short-sample lines agree and
   HTF trend agrees; a missing seasonal signals strength the other way) (cc05_010; cc05_011; 074
   ~49:22) [both]. Index map (Dow 20-yr, cc10_015 ~5:04): Jan bearish, Feb bullish, Mar
@@ -607,6 +621,7 @@ and to the notes for context, charts and trade examples. This file states each r
     045 ~6:38; 105 ~29:59) [2023].
   - Silver Bullet draw list: PDH/PDL; previous session H/L (London for the AM); PWH/PWL; NWOG; OTE;
     FVGs. If already raided, use an HTF pool (054 ~4:02-6:50) [2023].
+  Bot (bias_htf): `draw_first` umbrella, `matrix_tf_lower` (react timeframe, then the opposing array one timeframe lower), `cond_draw` (a failed draw switches the lock once, the failed target spent), conf-target hygiene (`target_hygiene` "htf" also filters the lock's confluence draws).
 - **L15 Room ("10-handle framework")**: 5 handles is the MINIMUM room to the draw (10 for new
   traders), not the goal; the target is the draw / PD array (024 ~25:26; 046 ~32:40; 054 ~0:36; 058
   ~37:16; 059 ~10:36; 060 ~50:00; 072 ~35:11) [2023] [owner correction #2, 2026-10-18]. Bot:

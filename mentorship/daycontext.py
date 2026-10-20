@@ -1011,7 +1011,8 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()) -> str | None:
         if not any(a <= t < b for a, b in p.tgif_timing):
             return "x_dw_tgif_timing"
     # N8.1 / N8.6 consolidation / seek-and-destroy handled via scalp_now (no gate)
-    return None
+    from . import bias_day as _BD                    # bias_htf: objective met, neutral gates, chop, intermarket, NWOG regime ...
+    return _BD.gate(ctx, p, session, i, t)
 
 
 def am_ran_pool(ctx, hist, i: int, pools: tuple = ("pd", "london", "draw")) -> bool:
@@ -1253,7 +1254,8 @@ def side_ok(ctx, p, sign: int, session: str, i: int) -> str | None:
             if b and sign != b:
                 return "x_dw_tue_week_extreme"
     # N8.6 seek & destroy context required for no_hold is a scalp rule (see scalp_now); nothing here
-    return None
+    from . import bias_day as _BD                    # bias_htf: the bias side (all engines), weekly open, judas, filters ...
+    return _BD.side_ok(ctx, p, sign, session, i)
 
 
 def order_ok(ctx, sd, o: dict, session: str, i: int, p) -> str | None:
@@ -1277,7 +1279,8 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p) -> str | None:
             taken = bool(dh is not None and (dh[0] > hi if sd.sign < 0 else dh[1] < lo))
             if not taken:
                 return "x_dw_tgif_week_sweep"
-    return None
+    from . import bias_day as _BD                    # bias_htf: mwd_nest, mmbm_zone, 50/50 and the order tags
+    return _BD.order_ok(ctx, sd, o, session, i, p)
 
 
 def scalp_now(ctx, p, session: str, i: int | None = None) -> str:
@@ -1294,7 +1297,8 @@ def scalp_now(ctx, p, session: str, i: int | None = None) -> str:
         if (not p.sd_context_required) or P.info.get("sd_week"):
             if seek_destroy(ctx, i):
                 return "sd_no_hold"
-    return ""
+    from . import bias_day as _BD                    # bias_htf: neutral bias / no narrative / chop / consolidation-week scalps
+    return _BD.scalp_now(ctx, p, session, i)
 
 
 def seek_destroy(ctx, i: int) -> bool:

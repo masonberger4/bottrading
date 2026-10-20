@@ -95,7 +95,7 @@ def bar_minutes(df: pd.DataFrame) -> int:
 def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: int = 60,
           min_gap_pts: float = 1.0, cut_min: int = 570, vi: bool = False,
           flip_triggers: tuple = ("ob_mt", "wk_dc"), c2_dir: bool = False, vi_min_gap: float = 0.0,
-          vi_body_death: bool = False) -> pd.DataFrame:
+          vi_body_death: bool = False, bx: str = "") -> pd.DataFrame:
     """One row per trading day: react / draw / pd / combo bias and the draw levels.
     `cut_min`: the row describes the market as known at that minute of the day - the overnight
     high/low/last use only bars that have CLOSED by cut_min (bar start + bar length <= cut_min).
@@ -104,7 +104,11 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     arrays/draws (shared VI wiring). `flip` is the stateful bias column (B8; shared): see _flip.
     levels_detectors: `c2_dir` / `vi_min_gap` (see _arrays); `vi_body_death` (A9 / Ep03.3): a VI
     dies once a later body of its own timeframe spans it (not on a close beyond its far edge).
-    With `vi`, the columns vi_up / vi_dn hold the nearest live VI draw each way (vi_news_draw)."""
+    With `vi`, the columns vi_up / vi_dn hold the nearest live VI draw each way (vi_news_draw).
+    bias_htf: `bx` (bias_htf.bx_string(Params)) names the extra columns to build (ordered draw, IOF, P/D of the 20-session range,
+    MWD, weekly open, NWOG regime, ...); "" gives the table above unchanged."""
+    from . import bias_htf as BH
+    X = BH.parse(bx)
     d = sessions(df)
     D = len(d)
     o, h, l, c = (d[k].values.astype(float) for k in ("open", "high", "low", "close"))
@@ -118,7 +122,8 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
                     lambda i: wl[i], vi, c2_dir, vi_min_gap)
     # opening gaps (ICT 039/051/052): NWOG Fri close -> Sun 18:00, NDOG 17:00 -> 18:00 Mon-Thu
     pos_of = {t: k for k, t in enumerate(d.index)}
-    for r in opening_gaps(df, es_pt, min_gap_pts).itertuples():
+    og_df = opening_gaps(df, es_pt, min_gap_pts)
+    for r in og_df.itertuples():
         k = pos_of.get((r.known + pd.Timedelta(hours=7)).normalize().tz_localize(None))
         if k is None:
             continue
@@ -138,6 +143,9 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     on = pd.DataFrame({"high": g.high.max(), "low": g.low.min(), "last": g.close.last()})
 
     rows = []
+    wk_first = {}                                    # W-FRI period -> first session position (bias_htf: the week's open)
+    for k_, t_ in enumerate(d.index):
+        wk_first.setdefault(t_.to_period("W-FRI"), k_)
     for k in range(5, D):
         day = d.index[k]
         if day not in on.index:
@@ -151,6 +159,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         wk = day.to_period("W-FRI")
         live = [a for a in live if a.typ != "ndog" or d.index[a.known].to_period("W-FRI") == wk]
         react = 0.0
+        ru = rd = rw_up = rw_dn = 0.0
         draws_up, draws_dn = [], []
         for a in live:
             s = a.known
@@ -179,8 +188,12 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
             rh = np.append(h[max(s, k - react_days):k], oh)
             if a.kind == "bull" and rl.min() <= a.top and px > a.ce:
                 react += wt
+                ru += wt
+                rw_up += a.tf == "W"
             if a.kind == "bear" and rh.max() >= a.bottom and px < a.ce:
                 react -= wt
+                rd += wt
+                rw_dn += a.tf == "W"
             # draw: the unrebalanced part of the inefficiency (FVGs and gaps only)
             if a.typ in ("fvg", "ndog", "nwog", "vi"):
                 if a.kind == "bull":
@@ -232,18 +245,29 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         pdb = 0
         if rh_ is not None and rl_ is not None and rh_ > rl_:
             pdb = 1 if px < (rh_ + rl_) / 2 else -1
+            if "pd20" in X and X["pd20"][2] != "half":          # A21 pd_zone: the swing range's zone (third / deep / ote)
+                pdb = BH.pd_state(px, rh_, rl_, X["pd20"][2], tuple(X["pd20"][3]))[0]
         rb = int(np.sign(react))
-        rows.append(dict(date=day.date(), px=px, react=rb, react_score=react, draw=draw, pd=pdb,
-                         combo=rb if rb else pdb,
-                         draw_up=up[2] if up else np.nan, draw_up_name=up[1] if up else "",
-                         draw_dn=dn[2] if dn else np.nan, draw_dn_name=dn[1] if dn else "",
-                         vi_up=vu[2] if vu else np.nan, vi_dn=vd[2] if vd else np.nan))
+        row = dict(date=day.date(), px=px, react=rb, react_score=react, draw=draw, pd=pdb,
+                   combo=rb if rb else pdb,
+                   draw_up=up[2] if up else np.nan, draw_up_name=up[1] if up else "",
+                   draw_dn=dn[2] if dn else np.nan, draw_dn_name=dn[1] if dn else "",
+                   vi_up=vu[2] if vu else np.nan, vi_dn=vd[2] if vd else np.nan)
+        if X:
+            wk0 = wk_first.get(wk)
+            row.update(BH.row_extras(X, px, oh, ol, float(o[k]), float(o[wk0]) if wk0 is not None else float(o[k]),
+                                     draws_up, draws_dn, pdb, ru, rd, rw_up, rw_dn, live, es_pt))
+        rows.append(row)
     cols = ["date", "px", "react", "react_score", "draw", "pd", "combo", "draw_up", "draw_up_name",
             "draw_dn", "draw_dn_name"] + (["vi_up", "vi_dn"] if vi else [])
-    out = pd.DataFrame(rows, columns=cols).set_index("date")
+    if X:
+        cols += [k_ for k_ in (rows[0] if rows else {}) if k_ not in cols]
+    out = pd.DataFrame(rows, columns=cols or None).set_index("date")
     if flip_triggers and len(out):
         fl = _flip(d, w, arrs, flip_triggers)
         out["flip"] = [fl.get(pd.Timestamp(x), 0) for x in out.index]
+    if X and len(out):
+        out = BH.add_columns(out, X, d, w, arrs, og_df, on, df, es_pt, vi)
     return out
 
 

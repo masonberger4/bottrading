@@ -183,7 +183,7 @@ def lock_tables(df: pd.DataFrame, p: Params, bias_table: pd.DataFrame | None = N
             out[m] = bias_table
         else:
             out[m] = htf.table(df, p.es_pt, cut_min=m, vi=p.vi_arrays, flip_triggers=p.flip_triggers,
-                               **htf_kw(p))
+                               **table_kw(p))
     return out
 
 
@@ -201,6 +201,15 @@ def htf_kw(p: Params) -> dict:
         kw["vi_min_gap"] = p.vi_min_gap_pts * p.es_pt
     if p.vi_body_death:
         kw["vi_body_death"] = True
+    return kw
+
+
+def table_kw(p: Params) -> dict:
+    """htf.table keywords: htf_kw plus the bias_htf column configuration `bx` (Params.bx; absent when empty, so the old table
+    and its cache keys are unchanged). The Confluence arrays take htf_kw only."""
+    kw = htf_kw(p)
+    if p.bx:
+        kw["bx"] = p.bx
     return kw
 
 
@@ -222,12 +231,13 @@ class Prepared:
     meta: pd.DataFrame | None
     eth: dict | None = None        # L2 / L3 / L10 / Ep08.10: {date: (open, high, low, close)} of full sessions
     eve: dict | None = None        # day_week_context: {date: (open, high, low, close)} of the evening session before that date
+    midnight_map: dict | None = None   # bias_htf D22 bias_open_src="es_map": {date: the futures midnight open mapped to this instrument}
 
 
 def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             partial_last: bool = False, bias_table: pd.DataFrame | None = None,
             confluence: bool = True, meta: pd.DataFrame | None = None,
-            lock_cuts: dict | None = None) -> Prepared:
+            lock_cuts: dict | None = None, ref_df: pd.DataFrame | None = None) -> Prepared:
     p = resolve_session_close(p or Params(), df, symbol)        # owner #1: 16:15 futures, 16:00 SPY
     ov = htf.has_overnight(df)
     inert = meta is None or p.price_frame == "back_adjusted"
@@ -236,7 +246,7 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
                       f"meta {'missing' if meta is None else 'given'}): no front-month mapping",
                       stacklevel=3)
     bt = bias_table if bias_table is not None else (
-        htf.table(df, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers, **htf_kw(p)) if ov else None)
+        htf.table(df, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers, **table_kw(p)) if ov else None)
     cuts = lock_cuts if lock_cuts is not None else lock_tables(df, p, bt)
     og = htf.opening_gaps(df, p.es_pt) if ov else None
     tt = df.index.hour * 60 + df.index.minute
@@ -255,7 +265,14 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
         se = htf.sessions(df)                  # full sessions (evening reopen -> close), by trading date
         eth = {t.date(): (float(r.open), float(r.high), float(r.low), float(r.close)) for t, r in se.iterrows()}
     eve = evenings(df) if (ov and p.dw_needs_eve) else None
-    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth, eve)
+    mm = None
+    if p.bias_open_src == "es_map":
+        if ref_df is None:
+            warnings.warn("bias_open_src='es_map' needs a futures / CFD frame (prepare(ref_df=...)): the frame's own midnight is used")
+        else:
+            from .levels import map_midnight
+            mm = map_midnight(ref_df, df)
+    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth, eve, mm)
 
 
 def evenings(df: pd.DataFrame) -> dict:
@@ -292,7 +309,8 @@ def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: d
                                       p.nwog_trading_days) if pr.og is not None else None,
                 eth=pr.eth,
                 closes=pr.closes, evening=_evening(pr.df, d) if p.globex_pool else None,
-                intermarket=intermarket, equity=equity,
+                intermarket=({**(intermarket or {}), "ext_midnight": pr.midnight_map[d]}
+                             if pr.midnight_map and d in pr.midnight_map else intermarket), equity=equity,
                 bias_by_cut={m: t_.loc[d].to_dict() for m, t_ in pr.cuts.items() if d in t_.index},
                 meta=pr.meta, week=week, eve=(pr.eve or {}).get(d))
 
@@ -450,7 +468,18 @@ def save(t: pd.DataFrame, rep: dict, out: str) -> None:
     Path(out).with_suffix(".json").write_text(json.dumps(rep, indent=1, default=str))
 
 
-def combine(*runs: pd.DataFrame, pick: str = "first") -> pd.DataFrame:
+CONSOL_MARKS = ("consol_", "daily_range", "inside_day", "big_prev", "inside_week", "bh_nwog_cons", "bh_bond_range", "bh_chop",
+                "low_vol")
+
+
+def consolidation_day(row) -> bool:
+    """D15: a trade's day is a consolidation day when its day tags (strategy.day_context: inside_day, big_prev ...) or the DayPlan
+    tags (dw_tags: consol_*, daily_range, inside_week, bias_htf nwog_cons / bond_range / chop ...) name one."""
+    s = f"{row.get('day_tags', '')}|{row.get('dw_tags', '')}"
+    return any(m in s for m in CONSOL_MARKS)
+
+
+def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False) -> pd.DataFrame:
     """Trade one instrument per session (watch one market, rules Ep 05): of the setups the
     instruments produced, keep the first to fill. On a tie, keep the one whose SMT check
     didn't show its partner holding stronger. Uses only what was known at the fill.
@@ -458,20 +487,37 @@ def combine(*runs: pd.DataFrame, pick: str = "first") -> pd.DataFrame:
     check did NOT show the sister holding stronger (smt is not True: this index made the cleaner
     extreme, 003); "laggard" only those where it did (the sick sister, 045 / 053). Each fill's
     smt tag is known at its sweep, so skipping one instrument's fills is causal. Same-bar ties:
-    the larger (leader) / smaller (laggard) relative leg (leg_hi_px - ext_px) / ext_px."""
+    the larger (leader) / smaller (laggard) relative leg (leg_hi_px - ext_px) / ext_px.
+    bias_htf D15: pick="trend" = "leader" on trend days and "laggard" on consolidation days (ICT's reconciliation: the sick sister
+    only in consolidation, 053 ~08:20; consolidation_day reads the trades' day tags); one_market=True (Ep 05 "watch one market
+    only"): once the day's first fill is chosen, the other instrument's trades of that date are dropped."""
     t = pd.concat([r for r in runs if len(r)], ignore_index=True)
     if not len(t):
         return t
-    if pick not in ("first", "leader", "laggard"):
+    if pick not in ("first", "leader", "laggard", "trend"):
         raise ValueError(f"pick {pick!r}")
+    out = None
     if pick != "first":
         lag = t.smt.eq(True)
-        t = t[lag if pick == "laggard" else ~lag]
+        if pick == "trend":
+            cons = t.apply(consolidation_day, axis=1)
+            keep = (lag & cons) | (~lag & ~cons)          # laggards on consolidation days, leaders on trend days
+            lead_row = ~cons
+        else:
+            keep = lag if pick == "laggard" else ~lag
+            lead_row = pd.Series(pick == "leader", index=t.index)
+        t = t[keep]
+        lead_row = lead_row[keep]
         if not len(t):
             return t
         if {"ext_px", "leg_hi_px"} <= set(t.columns):
             rel = ((t.leg_hi_px - t.ext_px).abs() / t.ext_px.abs()).fillna(0.0)
-            t = t.assign(_rel=-rel if pick == "leader" else rel).sort_values(["entry_time", "_rel"], kind="stable")
-            return t.groupby(["date", "session"], sort=False).head(1).drop(columns="_rel").sort_values("entry_time")
-    t = t.assign(_weak=t.smt.eq(True)).sort_values(["entry_time", "_weak"])
-    return t.groupby(["date", "session"], sort=False).head(1).drop(columns="_weak").sort_values("entry_time")
+            t = t.assign(_rel=rel.where(~lead_row, -rel)).sort_values(["entry_time", "_rel"], kind="stable")
+            out = t.groupby(["date", "session"], sort=False).head(1).drop(columns="_rel").sort_values("entry_time")
+    if out is None:
+        t = t.assign(_weak=t.smt.eq(True)).sort_values(["entry_time", "_weak"])
+        out = t.groupby(["date", "session"], sort=False).head(1).drop(columns="_weak").sort_values("entry_time")
+    if one_market and len(out):
+        first = out.sort_values("entry_time", kind="stable").groupby("date").symbol.first()
+        out = out[out.symbol == out.date.map(first)]
+    return out

@@ -346,6 +346,8 @@ def size_mult(ctx, sd, sw, i, p, session, entry, htf_tag, sloppy: str, lvt: list
     m *= _NC.day_risk(day, p, lvt)               # news_calendar_times: the eve of FOMC / CPI (N3, N3.4, N4, D9)
     from . import daycontext as _DW
     m *= _DW.day_risk(ctx, p, lvt)               # day_week_context: August (N7.6) and roll-week (N7.5) risk
+    from . import bias_day as _BD
+    m *= _BD.size_mult(ctx, sd, i, p, lvt)       # bias_htf B22: qshift_size against the 252-session trend while a shift is due
     for r in p.size_up_rules:
         on = False
         if r == "bpr":
