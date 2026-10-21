@@ -1444,6 +1444,9 @@ def add_ok(sd, pos, px, i, p) -> bool:
         lg = hi - ext
         if px > ext + 0.5 * lg or sd.h[pos["fill_i"]:i + 1].max() > ext + 0.75 * lg:
             return False
+    if leg and (pos.get("sm4") or {}).get("implied_eq") is not None and sd.h[pos["fill_i"] + 1:i + 1].max(initial=-np.inf) > leg[1] + 1e-9:
+        S._SM2.hit("implied_add_cut")
+        return False                              # review fix, M2-implied-range-eq-gate (025 ~00:46:41): adds only while no new structural extreme beyond the post-MSS leg printed (side space: no swing high over the leg high)
     if not add_pd_ok(pos, px, p):
         return False
     if p.adds_in_breaker and pos.get("bz_side"):

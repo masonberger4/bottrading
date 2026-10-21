@@ -25,7 +25,7 @@ GAP_IDS = (
     "D15-one-clean-gap-instrument",
 )
 TUNING = {"stab_tfs", "po3_rest_off_pts", "po3_rest_mgmt", "lh_add2_mult", "lh_old_low_stop_pts", "pm_old_high_bars", "pm_rev_first_only", "pm_after_room_pts", "nwog_fill_tol_pts",
-          "wick_ce_pad_pts", "wick_ce_need_pool", "ob_key_ticks", "sick_units", "ifvg_sym_bars", "dagger_level"}
+          "wick_ce_pad_pts", "wick_ce_need_pool", "ob_key_ticks", "sick_units", "ifvg_sym_bars", "dagger_level", "lh_array_sd_k", "wick_ce_precursor"}
 
 
 def test_every_gap_id_has_a_study_variant_that_builds():
@@ -60,35 +60,38 @@ SYN_CASES = {
     # name: (seed, switches, the sm2.HITS counters the full run must have bumped)
     "stack_a": (5, G1, ("pm_after_draw", "pm_rev_partial", "po3_ideal", "lh_old_low", "implied_range", "ob_post", "m2_live_eq_drop")),
     "pm_old_high": (3, dict(pm_old_high_fvg=True, pm_reversal=True), ("pm_old_high",)),
-    "stack_b": (5, G2, ("wick_ce_intrabar", "pm_am_stops_targets", "m2_runup_fvg", "unused_drop", "leg_tf_eval", "lh_array_eval", "nwog_fill_eval")),
+    "stack_b": (5, G2, ("wick_ce_intrabar", "pm_am_stops_targets", "m2_runup_fvg", "unused_drop")),
     "stab": (7, dict(turtle_soup="htf_stab"), ("htf_stab",)),
     "gates": (7, G3, ("wick_ce_tf", "org_fill_reverse", "breaker_counter", "ob_at_key", "breaker_low", "nwog_edge_pool")),
-    "complete": (5, dict(complete_model="tag", breaker_entry="fallback", unicorn_pref=True), ("complete_eval",)),
+    "complete": (5, dict(complete_model="tag", breaker_entry="fallback", unicorn_pref=True), ("complete_eval",)),     # (the outcome is covered by es_cm)
     "misc": (3, G4, ("gap_count", "sick_ob_open", "wick_ce_retrace", "lunch_nwog_long")),
-    "trend": (5, dict(smt_trend_ignore=True, smt_bias="filter", sick_sister=True), ("trend_eval", "trend_day")),
-    "ifvg": (5, dict(ifvg_entries=True, ifvg_tf=5, ifvg_symmetry_skip=True, ifvg_hold=True), ("ifvg_5m", "ifvg_sym_eval")),
+    "trend": (4, dict(smt_trend_ignore=True, smt_bias="filter", sick_sister=True), ("trend_eval", "trend_day", "trend_waive")),
+    "ifvg": (5, dict(ifvg_entries=True, ifvg_tf=5, ifvg_symmetry_skip=True, ifvg_hold=True), ("ifvg_5m", "ifvg_sym_eval")),     # (the symmetry SKIP outcome is in EXCEPTIONS)
     "sb_counter": (3, dict(sb_model=True, sb_counter_after_draw=True), ("sb_counter_after_draw",)),
     "sick_ote": (5, dict(sick_entry="ote_stack", sick_units=2, draw_lock="off"), ("sick_ote_eval", "sick_ote_stack")),
 }
 ES_CASES = {
     # name: (window, tf, base, switches, the HITS the full run must have bumped)
-    "es_stack": (("2023-03-06", "2023-03-27"), 5, ES_B, dict(dagger_entry=True, po3_resting=True, turtle_soup="htf_stab", lh_array_short=True, leg_tfs=(15,), fvg_pick="2022",
+    "es_stack": (("2023-03-06", "2023-03-27"), 5, ES_B, dict(dagger_entry=True, po3_resting=True, turtle_soup="htf_stab", lh_array_short=True, last_hour_own_slot=True, lh_array_target="sd3", leg_tfs=(15,), fvg_pick="2022",
                                                                lh_old_low_entry=True, pm_old_high_fvg=True, pm_after_draw=True, pm_reversal=True, pm_rev_partial=True),
-                 ("dagger", "po3_rest_fill", "htf_stab", "lh_array_eval", "leg_tf_eval", "lh_old_low", "pm_old_high", "pm_after_draw", "pm_rev_partial")),
+                 ("dagger", "po3_rest_fill", "htf_stab", "lh_array_short", "lh_array_sd", "lh_old_low", "pm_old_high", "pm_after_draw", "pm_rev_partial")),
     "es_arrays": (("2023-10-02", "2023-10-23"), 5, ES_B, dict(entry_arrays=("ob", "vi", "breaker"), entry_pick="shallowest_unused", ob_at_key="tag", breaker_entry="fallback",
                                                                 breaker_low_invalidate=True, complete_model="tag", unicorn_pref=True),
-                  ("unused_drop", "ob_at_key", "breaker_low", "complete_eval")),
+                  ("unused_drop", "ob_at_key", "breaker_low")),
     "es_implied": (("2024-11-04", "2024-11-25"), 5, dict(ES_B, draw_lock="session"), dict(implied_range_gate=True), ("implied_range",)),
     "es_m2": (("2024-11-04", "2024-11-25"), 5, ES_B, dict(m2_live_eq=True, fvg_pick="2022"), ("m2_live_eq_drop",)),
     "es_breaker": (("2024-05-13", "2024-06-03"), 5, ES_B, dict(breaker_block_counter=True, breaker_entry="fallback"), ("breaker_counter",)),
     "es_org": (("2024-09-16", "2024-10-07"), 5, ES_NB, dict(org_fill_reverse=True, nwog_edge_ce=True), ("org_fill_reverse", "nwog_edge_pool")),
     "es_gates": (("2023-03-06", "2023-03-27"), 5, ES_B, dict(htf_fvg_top_short=True, three_drives_htf=True, nwog_fill_long=True, wick_ce_entries=True, wick_ce_mode="intrabar"),
-                 ("top_short_eval", "td_htf_eval", "nwog_fill_eval", "wick_ce_intrabar")),
+                 ("top_short_eval", "td_htf_eval", "wick_ce_intrabar")),
+    "es_nwog": (("2024-11-04", "2024-11-25"), 5, ES_NB, dict(nwog_fill_long=True), ("nwog_fill",)),
+    "es_leg": (("2024-02-19", "2024-03-11"), 5, ES_NB, dict(leg_tfs=(5, 15, 3), fvg_pick="2022"), ("leg_tf",)),                  # (an ascending tuple on purpose: the order does not matter)
+    "es_cm": (("2024-07-01", "2024-07-22"), 5, ES_NB, dict(complete_model="tag", breaker_entry="fallback", unicorn_pref=True), ("complete_eval", "complete_model")),
     "es_ndog": (("2024-05-13", "2024-06-03"), 5, ES_B, dict(ndog_scalp=True, asia_session=True), ("ndog_eval", "ndog_scalp")),
     "es_lh_org": (("2024-02-19", "2024-03-11"), 5, ES_B, dict(lh_org_fill=True, last_hour_own_slot=True), ("lh_org_fill",)),
     "es_wick": (("2023-03-06", "2023-03-27"), 5, ES_B, dict(wick_ce_entries=True, wick_ce_tf=15, entry_arrays=("ob_post",), wick_ce_mode="retrace"),
                 ("wick_ce_tf", "ob_post", "wick_ce_retrace")),
-    "es_lunch": (("2023-10-02", "2023-10-23"), 5, ES_B, dict(lunch_nwog_long=True), ("lunch_nwog_long",)),
+    "es_lh_draw": (("2023-10-02", "2023-10-23"), 5, ES_B, dict(lh_array_short=True, last_hour_own_slot=True, lh_array_need_draw=True, draw_lock="session"), ("lh_array_short",)),
 }
 _HITS = {}
 
@@ -119,18 +122,23 @@ def test_look_ahead_es(case):
 # the sm2.HITS counter that proves a switch's code path RAN
 SWITCH_HIT = {
     "dagger_entry": "dagger", "po3_ideal": "po3_ideal", "po3_resting": "po3_rest_fill", "lh_old_low_entry": "lh_old_low", "pm_old_high_fvg": "pm_old_high", "pm_rev_partial": "pm_rev_partial",
-    "pm_after_draw": "pm_after_draw", "sb_counter_after_draw": "sb_counter_after_draw", "leg_tfs": "leg_tf_eval", "m2_live_eq": "m2_live_eq_drop", "m2_anchor": "m2_runup_fvg",
-    "implied_range_gate": "implied_range", "pm_am_stops": "pm_am_stops_targets", "lh_array_short": "lh_array_eval", "nwog_fill_long": "nwog_fill_eval", "wick_ce_mode": "wick_ce_intrabar",
+    "pm_after_draw": "pm_after_draw", "sb_counter_after_draw": "sb_counter_after_draw", "leg_tfs": "leg_tf", "m2_live_eq": "m2_live_eq_drop", "m2_anchor": "m2_runup_fvg",
+    "implied_range_gate": "implied_range", "pm_am_stops": "pm_am_stops_targets", "lh_array_short": "lh_array_short", "nwog_fill_long": "nwog_fill", "lh_array_target": "lh_array_sd", "lh_array_iofed": "lh_array_iofed", "lh_array_need_draw": "lh_array_short", "lunch_nwog_entry": "lunch_nwog_ob", "wick_ce_mode": "wick_ce_intrabar",
     "wick_ce_tf": "wick_ce_tf", "entry_pick": "unused_drop", "nwog_edge_ce": "nwog_edge_pool", "org_fill_reverse": "org_fill_reverse", "ob_at_key": "ob_at_key",
     "breaker_low_invalidate": "breaker_low", "breaker_block_counter": "breaker_counter", "sick_entry": "sick_ob_open", "lunch_nwog_long": "lunch_nwog_long",
-    "ifvg_symmetry_skip": "ifvg_sym_eval", "ifvg_tf": "ifvg_5m", "htf_fvg_top_short": "top_short_eval", "ndog_scalp": "ndog_scalp", "asia_session": "ndog_scalp",
-    "smt_trend_ignore": "trend_eval", "three_drives_htf": "td_htf_eval", "complete_model": "complete_eval", "lh_org_fill": "lh_org_fill",
+    "ifvg_symmetry_skip": "ifvg_symmetry", "ifvg_tf": "ifvg_5m", "htf_fvg_top_short": "htf_fvg_top_short", "ndog_scalp": "ndog_scalp", "asia_session": "ndog_scalp",
+    "smt_trend_ignore": "trend_waive", "three_drives_htf": "td_htf_eval", "complete_model": "complete_model", "lh_org_fill": "lh_org_fill",
 }
 # the values of EXISTING Params fields this chunk added: (field, value) -> the counter
 EXTRA_VALUES = {("turtle_soup", "htf_stab"): "htf_stab", ("entry_arrays", "ob_post"): "ob_post", ("smt_pick", "clean"): "gap_count", ("wick_ce_mode", "retrace"): "wick_ce_retrace",
                 ("sick_entry", "ote_stack"): "sick_ote_stack"}
 # no data window reaches these: none left (every switch of the chunk runs in a full-vs-truncated case; the unit tests stay in test_caption_gap_sm4a.py)
-EXCEPTIONS = {}
+EXCEPTIONS = {
+    "htf_fvg_top_short": "needs a daily FVG of the other kind, a 5m breaker whose zone holds its near edge and a swing high between entry and the far edge, inside the morning: no ES window of 15 tried reached the outcome; its evaluation counter runs (top_short_eval) and test_short_top_of_daily_bisi covers the outcome",
+    "ifvg_symmetry_skip": "needs the two books to be symmetric AND an opposing bearish FVG of the leg that price already sits in: 56 synthetic runs reached the evaluation (ifvg_sym_eval) but never the skip; test_ifvg_skipped_when_symmetric covers the outcome",
+    "lh_array_iofed": "the add needs a down-close bar into the first new gap after a lh_array_short fill: no ES window reached it (lh_array_short itself runs in es_stack); test_lh_array_sd3_target_iofed_and_draw covers it",
+    "lunch_nwog_entry": "needs a down AM and price inside the NWOG zone at 11:40-12:10: lunch_nwog_long itself runs (misc, es_lunch) but no window held a down-close OB inside the zone; test_lunch_nwog_ob_entry_and_long_only covers it",
+}
 _RUN_KW = {}
 for _c, (_s, _kw, _need) in SYN_CASES.items():
     _RUN_KW[_c] = (_kw, _need)

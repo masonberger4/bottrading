@@ -122,6 +122,19 @@ def dagger_order(ctx, sd, i: int, p, session: str, risk_mult: float):
 
 # --- 12 M12-0930-htf-fvg-stab-no-mss --------------------------------------------------------------------------------------------------------------
 
+def big_event_day(ctx, session: str, p, t: int = 0) -> bool:
+    """Review fix (#12 / #43): a Fed-chair / FOMC / other big-event day, from the calendar itself (the engine's `blocked()` rules are switches that default off): the FOMC day or its tag, a Fed-chair
+    testimony / speech day, the jobs day, a CPI day - or a day `strategy.blocked` already flags."""
+    S = _S()
+    from claude_hf.daytypes import events
+    from . import calendar as CAL
+    d = ctx.day
+    if events(d) & {"fomc", "jobs", "cpi"} or CAL.fomc_info(d)["fomc"] or d in CAL.FED_CHAIR or d in CAL.FED_CHAIR_EXTRA:
+        return True
+    r = S.blocked(d, session, p, t)
+    return r is not None and not r.startswith("nfp_week") and r != "monday"        # (the NFP-week Thursday / Friday and Monday rules are not events)
+
+
 def stab_order(ctx, sd, sw, i: int, p, session: str, risk_mult: float):
     """M12-0930-htf-fvg-stab-no-mss (015 ~00:16:57; 038 ~00:21:57): turtle_soup="htf_stab" - an HTF (`stab_tfs`) bullish FVG lying beyond a pool of relatively equal lows; the run of the pool
     arms a limit at the FVG's near edge (no MSS, no SMT, whatever the touching candle is), stop beyond its far edge, the target the session lock / the normal ladder. Not on a Fed-chair / FOMC
@@ -129,8 +142,7 @@ def stab_order(ctx, sd, sw, i: int, p, session: str, risk_mult: float):
     S = _S()
     if not str(sw.get("key", "")).startswith("rel_eq"):
         return None
-    from claude_hf.daytypes import events
-    if "fomc" in events(ctx.day):
+    if big_event_day(ctx, session, p, int(ctx.t[i])):
         hit("stab_fomc")
         return None
     if sd.c[i] < sw["ext"]:
@@ -251,17 +263,17 @@ def manage(ctx, sd, pos, tr, i: int, ts, p) -> None:
         return
     S = _S()
     k = st.get("kind")
-    if k == "lh_old_low" and pos["add"] is None and st.get("add2") is None:
+    if k in ("lh_old_low", "lh_array") and pos["add"] is None and st.get("add2") is None and (k == "lh_old_low" or p.lh_array_iofed):
         new = [g for g in sd.gaps if g.i <= i and g.i - 2 > pos["fill_i"]]
         if new:
-            g = new[-1]
+            g = new[0]                                           # review fix: the FIRST gap formed after the fill (lh_old_low 013; lh_array_short the next SIBI - the IOFED add)
             if sd.c[g.i + 1:i + 1].min(initial=np.inf) < g.bottom - MIN1:
                 return
             if sd.c[i] < sd.o[i] and sd.l[i] <= g.top and g.top > pos["stop"]:
                 q = S._lots(pos["plan_shares"] * p.lh_add2_mult, p.lot)
                 S._arm_add(pos, tr, float(g.top), i, p, ctx.equity, floor=float(g.bottom), size=q)
                 st["add2"] = int(g.i)
-                hit("lh_add2")
+                hit("lh_add2" if k == "lh_old_low" else "lh_array_iofed")
     elif k == "pm_old_high" and pos["add"] is None and not st.get("added"):
         g = st["gap"]
         if sd.c[i] < sd.o[i] and sd.l[i] <= g[0] and float(sd.o[i]) > pos["stop"]:
@@ -467,19 +479,20 @@ def m2_eq(sd, sw, i: int) -> float:
 
 def leg_tf_gaps(ctx, sd, sw, gaps: list, i: int, p):
     """B5-multi-tf-fvg-scan (022 ~00:43:05; 055 ~00:11:46): with `leg_tfs` set and no 1m gap of the leg at or under the leg EQ (side space: the discount; real short: at or above EQ), look for one
-    on each timeframe of `leg_tfs` in that order (the bars of the leg, `sd.zones_tf`) and take the first timeframe that has one; where a higher-TF gap holds a narrower gap of a LATER (lower)
+    on each timeframe of `leg_tfs` (highest first - the tuple is sorted; the bars of the leg, `sd.zones_tf`) and take the first timeframe that has one; where a higher-TF gap holds a narrower gap of a LATER (lower)
     timeframe of the tuple the narrower gap's edges are used (the more sensitive level). Returns (gaps, [added zones])."""
     eq = m2_eq(sd, sw, i)
     if any(g.top <= eq + MIN1 for g in gaps):
         return gaps, []
     hit("leg_tf_eval")
     e = sw["ext_i"]
-    for n, m in enumerate(p.leg_tfs):
+    tfs = sorted({int(m) for m in p.leg_tfs}, reverse=True)       # review fix: the order of the tuple does not matter - the highest timeframe first, a narrower gap of a lower one inside it refines it
+    for n, m in enumerate(tfs):
         zs = [z for z in _tf_fvgs(ctx, sd, m) if z.i <= i and z.src > e and z.top <= eq + MIN1 and _alive(sd, z, i)]
         if not zs:
             continue
         z = zs[-1]
-        for m2 in p.leg_tfs[n + 1:]:
+        for m2 in tfs[n + 1:]:
             inner = [y for y in _tf_fvgs(ctx, sd, m2) if y.i <= i and y.src > e and y.top <= z.top + MIN1 and y.bottom >= z.bottom - MIN1 and _alive(sd, y, i)]
             if inner:
                 z, m = inner[-1], m2
@@ -549,6 +562,9 @@ def implied_gate(ctx, sd, sw, gaps: list, i: int, p, session: str):
         return None, gaps
     hit("implied_eval")
     if not (sd.h[sw["ext_i"] + 1:i + 1] >= eq - MIN1).any():
+        if sd.l[sw["ext_i"] + 1:i + 1].min(initial=np.inf) < float(sw["ext"]) - MIN1:
+            hit("implied_h_traded")
+            return "dead", gaps                           # review fix: H traded first (our interpretation, 025) - the suspect extreme was taken before any premium-to-discount trade: cancelled
         return "wait", gaps
     hit("implied_range")
     return eq, [g for g in gaps if g.top <= eq + MIN1]
@@ -608,7 +624,7 @@ def lh_array_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     low and stays off the array, then its high is taken; (4) the MSS: a swing high formed after R pierced by one tick (no close needed); (5) the entry: the VI the displacement left (limit at its
     top - as soon as price trades back into it, even on an up-close candle), else the CE of the latest gap of the leg; stop under R's low; target the draw (the normal ladder). 15:00-15:50."""
     S = _S()
-    if not lh_slot_now(ctx, i, p, session) or _want(ctx) not in (0, sd.sign):
+    if not lh_slot_now(ctx, i, p, session) or _want(ctx) not in ((sd.sign,) if p.lh_array_need_draw else (0, sd.sign)):
         return None
     k900 = S._idx_at(ctx, p.last_hour[0])
     if k900 > i or k900 < 1:
@@ -642,7 +658,15 @@ def lh_array_order(ctx, sd, i: int, p, session: str, risk_mult: float):
         stop = float(sd.l[r]) - p.pad
         if entry - stop < p.min_risk_pts * p.es_pt:
             stop = entry - p.min_risk_pts * p.es_pt
-        return _order(ctx, sd, i, p, session, risk_mult, "lh_array_short", entry, stop, level=top, ext=float(sd.l[r]), ext_i=r, fvg_bottom=bot2, lv=("lh_array_" + kind,) + (("lh_early_conf",) if early else ()))
+        fx = None
+        if p.lh_array_target == "sd3":                                # [026] the -3 SD projection of the MSS leg (R's extreme .. the leg extreme), side space: above the leg high
+            leg_hi = float(sd.h[r:i + 1].max())
+            tgt = leg_hi + p.lh_array_sd_k * (leg_hi - float(sd.l[r]))
+            if tgt > entry + MIN1:
+                fx = [(float(S._exit_px(tgt, "array", p)), "array")]
+                hit("lh_array_sd")
+        return _order(ctx, sd, i, p, session, risk_mult, "lh_array_short", entry, stop, level=top, ext=float(sd.l[r]), ext_i=r, fvg_bottom=bot2, fixed=fx, sm4=dict(kind="lh_array", add2=None),
+                      lv=("lh_array_" + kind,) + (("lh_early_conf",) if early else ()))
     return None
 
 
@@ -693,8 +717,7 @@ def wick_ce_entry(ctx, sd, sw, i: int, p, session: str, risk_mult: float, ref: f
     if p.wick_ce_tf:
         if sw.get("wce_sent") or (p.wick_ce_need_pool and sw.get("key") == "htf_array"):
             return None
-        from claude_hf.daytypes import events
-        if "fomc" in events(ctx.day):
+        if big_event_day(ctx, session, p, int(ctx.t[i])):
             return None
         first, last, done, o, hh, ll, c = buckets(ctx, sd, p.wick_ce_tf)
         j = int(np.searchsorted(first, e, side="right") - 1)
@@ -721,6 +744,8 @@ def wick_ce_entry(ctx, sd, sw, i: int, p, session: str, risk_mult: float, ref: f
         entry = float(ce + tk)
         if not sd.c[e] > entry + MIN1:
             return None
+        if p.wick_ce_precursor and not (e >= 1 and sd.c[e - 1] > sd.o[e - 1]):
+            return None                                              # review fix, 028 ~00:18:38: the wick follows a precursor that closed WITH the trade (a down-close for the short; side space: an up-close)
         hit("wick_ce_intrabar")
         stop = float(ce - p.wick_ce_pad_pts * p.es_pt)
         tags = dict(unicorn=False, fvg_bottom=sw["ext"], fvg_ce=ce, entry_kind="wick_ce", mitigation=False, propulsion=False, no_leg_wait=True, lv_tags=["wick_ce_intrabar"])
@@ -767,10 +792,7 @@ def key_levels(ctx, sd, i: int, p, session: str) -> list:
         out += [float(sd.x(hi)), float(sd.x(lo)), float(sd.x(ce))]
     for a, b in (ctx.org[:-1] if (ctx.t[i] < 570 and getattr(ctx, "org_today", False)) else ctx.org)[-5:]:
         out += [float(sd.x(a)), float(sd.x(b))]
-    try:
-        out += [float(v) for v in S._sell_side(ctx, sd, session, i, True, p).values()]
-    except Exception:
-        pass
+    out += [float(v) for v in S._sell_side(ctx, sd, session, i, True, p).values()]       # (review fix: no blanket except - a real error must surface)
     return out
 
 
@@ -847,8 +869,7 @@ def breaker_low_guard(sd, tags: dict, lvx: dict) -> None:
         return
     low = float(bb[1])
     lvx["breaker_low"] = (low, False)
-    if tags.get("cancel_close") is None or tags["cancel_close"] < low:
-        tags["cancel_close"] = low
+    tags["cancel_close"] = low          # review fix: the far extreme REPLACES the MT-based cancel (the MT rule is the one this switch relaxes), not only raises it
     hit("breaker_low")
 
 
@@ -1072,8 +1093,8 @@ def lunch_nwog_order(ctx, sd, i: int, p, risk_mult: float):
     buy-side above the NWOG high / the next FVG (the normal ladder). This branch alone bypasses the T8 lunch block (run_day arms it)."""
     S = _S()
     t = int(ctx.t[i])
-    if not (700 <= t < 730):
-        return None
+    if sd.sign < 0 or not (700 <= t < 730):
+        return None                                           # review fix: the spec is long-only (no mirrored short)
     k0 = S._idx_at(ctx, 570)
     if i <= k0 + 2 or not sd.c[i] < sd.o[k0]:
         return None
@@ -1083,6 +1104,11 @@ def lunch_nwog_order(ctx, sd, i: int, p, risk_mult: float):
         if (round(lo_s, 6)) in sent or not (lo_s <= sd.c[i] <= ce_s + MIN1) or sd.l[ctx.start:i + 1].min() < lo_s - MIN1:
             continue
         entry = ce_s
+        if p.lunch_nwog_entry == "ob":                        # [046 "or a down-close OB there"] the latest down-close candle whose body lies inside the zone: a limit at its body top
+            ob = [k for k in range(k0, i + 1) if sd.c[k] < sd.o[k] and lo_s - MIN1 <= sd.c[k] and sd.o[k] <= ce_s + MIN1]
+            if ob:
+                entry = float(sd.o[ob[-1]])
+                hit("lunch_nwog_ob")
         if entry >= sd.c[i] - MIN1:
             entry = float(min(sd.c[i] - p.tick, ce_s))
         stop = lo_s - p.pad
@@ -1209,7 +1235,7 @@ def complete_model_tag(ctx, sd, sw, i: int, p, tags: dict, lvt: list):
     top, bot = float(bb[0]), float(bb[1])
     ref_i = sw.get("ref_i")
     tiers = sd.tiers()
-    parent = ref_i is not None and any(q.i == ref_i for q in tiers["itl"][0] + tiers["ltl"][0])
+    parent = ref_i is not None and any(q.i == ref_i and q.known <= i for q in tiers["itl"][0] + tiers["ltl"][0])
     leg_hi = float(sd.h[sw["ext_i"]:i + 1].max())
     lo_b, hi_b, _ = L.ote_band(float(sw["ext"]), leg_hi)
     in_ote = bot <= hi_b + MIN1 and top >= lo_b - MIN1
@@ -1478,6 +1504,8 @@ def ndog_scalp(ctx, ev: pd.DataFrame, p, day, symbol: str, btag: dict) -> list:
     S = _S()
     if ev is None or not len(ev):
         return []
+    if p.day_filter and S.blocked(day, "ASIA", p, 1080):
+        return []                                                 # review fix: a blocked day (NFP / FOMC / CPI rules) has no evening scalp either
     tt = ev.index.hour * 60 + ev.index.minute
     pre, ev18 = ev[tt < 1020], ev[tt >= 1080]
     if not len(pre) or not len(ev18):

@@ -23,6 +23,7 @@ NEW_SWITCHES = (
     "pm_am_stops", "lh_array_short", "nwog_fill_long", "nwog_fill_tol_pts", "wick_ce_mode", "wick_ce_pad_pts", "wick_ce_tf", "wick_ce_need_pool", "entry_pick", "nwog_edge_ce",
     "org_fill_reverse", "ob_at_key", "ob_key_ticks", "breaker_low_invalidate", "breaker_block_counter", "sick_entry", "sick_units", "lunch_nwog_long", "ifvg_symmetry_skip", "ifvg_sym_bars",
     "ifvg_tf", "htf_fvg_top_short", "ndog_scalp", "asia_session", "smt_trend_ignore", "three_drives_htf", "complete_model", "lh_org_fill",
+    "lh_array_target", "lh_array_sd_k", "lh_array_iofed", "lh_array_need_draw", "lunch_nwog_entry", "wick_ce_precursor",
 )
 
 
@@ -549,7 +550,7 @@ def test_wick_ce_short_intrabar(cap):
     """028 ~00:18:38 (the short side, mirrored prices): the upper-wick CE of the reference candle (high 4108, body top 4100.5) = 4104.25; wick_ce_mode "intrabar" arms on the sweep candle's close
     a limit one tick under it (sell 4104.0) with the stop wick_ce_pad_pts over the CE (4105.25), no close confirmation; "close" (the built behaviour) arms nothing here; a close at / under the
     limit price is no order."""
-    p = Params(**BASE, wick_ce_entries=True, wick_ce_mode="intrabar")
+    p = Params(**BASE, wick_ce_entries=True, wick_ce_mode="intrabar", wick_ce_precursor=False)
     real = [(4100.0, 4108.0, 4099.0, 4100.5)] * 2
     ctx, (sl, ss) = mkctx(real, base=4100.0, hist=hist_close(close=4100.0, hi=4130.0, lo=3900.0))
     e = ib(ctx, "09:30")
@@ -565,6 +566,13 @@ def test_wick_ce_short_intrabar(cap):
     assert sm4.wick_ce_entry(ctx2, ss2, sw2, e, p, "AM", 1.0, 0.0) is None                                # a wick of two tenths: the limit would sit at / above the close - no limit under the market
     # the pre_break dispatch
     assert SM.pre_break(ctx, ss, dict(sw, wce_sent=False), e, p, "AM", 1.0, 0.0) is not None
+    # review fix (028 ~00:18:38): the wick follows a precursor that closed with the trade (a down-close for the short)
+    pp = replace(p, wick_ce_precursor=True)
+    ctx3, (sl3, ss3) = mkctx([(4106.0, 4106.5, 4098.0, 4099.0), (4100.0, 4108.0, 4099.0, 4100.5)], base=4100.0, hist=hist_close(close=4100.0, hi=4130.0, lo=3900.0))
+    e3 = ib(ctx3, "09:30") + 1
+    assert sm4.wick_ce_entry(ctx3, ss3, dict(sw, ext_i=e3, wce_sent=False), e3, pp, "AM", 1.0, 0.0) is not None
+    ctx4, (sl4, ss4) = mkctx([(4098.0, 4106.5, 4097.0, 4105.0), (4100.0, 4108.0, 4099.0, 4100.5)], base=4100.0, hist=hist_close(close=4100.0, hi=4130.0, lo=3900.0))
+    assert sm4.wick_ce_entry(ctx4, ss4, dict(sw, ext_i=e3, wce_sent=False), e3, pp, "AM", 1.0, 0.0) is None            # an up-close precursor for the short: no
 
 
 def test_wick_ce_retrace_no_fvg(cap):
@@ -687,7 +695,7 @@ def test_breaker_body_close_below_low_cancels():
     assert lvx["breaker_low"] == (4000.0, False) and tags["cancel_close"] == 4000.0
     tags2, lvx2 = dict(entry_kind="fvg", unicorn=True, bz_top=4010.0, bz_bottom=4001.0, cancel_close=4005.0), {}
     sm4.breaker_low_guard(sd, tags2, lvx2)
-    assert lvx2["breaker_low"] == (4001.0, False) and tags2["cancel_close"] == 4005.0
+    assert lvx2["breaker_low"] == (4001.0, False) and tags2["cancel_close"] == 4001.0
     tags3, lvx3 = dict(entry_kind="fvg"), {}
     sm4.breaker_low_guard(sd, tags3, lvx3)
     assert not lvx3 and "cancel_close" not in tags3

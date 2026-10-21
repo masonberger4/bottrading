@@ -1744,8 +1744,10 @@ _SM4_DECISIONS = {
     "M2-implied-range-eq-gate": dict(implied_range_gate=True, draw_lock="session", ob_entry="post_mss", htf_resist_cap=False),
     "M7-pm-short-after-lunch-run-of-am-stops": dict(pm_am_stops=True, pool_swings=True, **SM_POST),
     "M5-lasthour-short-sequence": dict(lh_array_short=True, **SM_POST),
+    "M5-lasthour-short-sequence_sd3": dict(lh_array_short=True, lh_array_target="sd3", lh_array_iofed=True, lh_array_need_draw=True, **SM_POST),      # review fix: -3 SD target, IOFED add, draw required
     "B16-nwog-gapup-return-then-mss": dict(nwog_fill_long=True, nwog_fill_tol_pts=2.0, **SM_POST),
     "M11-wick-ce-fade-short": dict(wick_ce_entries=True, wick_ce_mode="intrabar", wick_ce_pad_pts=1.0, **SM_POST),
+    "M11-wick-ce-fade-short_noprec": dict(wick_ce_entries=True, wick_ce_mode="intrabar", wick_ce_precursor=False, **SM_POST),
     "M11-wick-ce-fade-short_retrace": dict(wick_ce_mode="retrace", **SM_POST),
     "M5-lasthour-shallowest-unused-array": dict(entry_arrays=("ob", "vi", "breaker"), entry_pick="shallowest_unused", **SM_POST),
     "new-nwog-edge-to-ce-cookie-cutter": dict(nwog_edge_ce=True, **SM_POST),
@@ -1758,6 +1760,7 @@ _SM4_DECISIONS = {
     "M16-sick-sister-ob-open-entry": dict(sick_entry="ob_open", **SM_POST),          # (the sister needs a partner index: tested in the synthetic partner runs)
     "M16-sick-sister-discount-confluence": dict(sick_entry="ote_stack", sick_units=2, **SM_POST),
     "new-lunch-macro-long-nwog": dict(lunch_nwog_long=True, **SM_POST),
+    "new-lunch-macro-long-nwog_ob": dict(lunch_nwog_long=True, lunch_nwog_entry="ob", **SM_POST),
     "A8-symmetry-skip-ifvg-confirmation": dict(ifvg_entries=True, ifvg_hold=True, ifvg_symmetry_skip=True, **SM_POST),
     "A8-ifvg-5m-to-1m-handoff": dict(ifvg_entries=True, ifvg_tf=5, ifvg_hold=True, **SM_POST),
     "new-short-top-of-htf-discount-fvg": dict(htf_fvg_top_short=True, htf_bias="combo", **SM_POST),

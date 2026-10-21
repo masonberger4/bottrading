@@ -1621,7 +1621,7 @@ Counts: 36 specs - done 33, partial 0, already built 3 (levels_liquidity_targets
 - models_setups_entries#60 M5-lasthour-reversal-into-org | done | `lh_org_fill` | False | `sm4.org_fill_ctx` (today's ORG unfilled, the other direction delivered): run_day's delivered-draw gate is bypassed in the last-hour slot (`lh_org_open`), `sm4.lh_org_adjust` sets the ladder [near edge, CE, prior close] above the entry (`fixed4`).
 - models_setups_entries#62 D15-one-clean-gap-instrument | done | `smt_pick` value "clean" | "first" | tag `Trade.gap_count` (`sm4.gap_count`: the same-side FVGs of the leg between the EQ and the extreme) and `backtest._group_pick`: the fill with gap_count 1, else the first.
 
-Counts: 36 specs - done 35, partial 1 (#31), already built 0, skipped 0. 49 new Params fields (behaviour switches and tuning values), all default off / to the built behaviour; no existing default changed (9 configurations x 2 synthetic books and 4 configurations x 2 ES windows give identical trades before (HEAD 17a8d4c) and after, apart from the new `gap_count` column). 42 new study variants (name prefix = the gap id), all passing test_bias_htf_lookahead.
+Counts: 36 specs - done 36 (the #31 partial is built in the review pass below), already built 0, skipped 0. 49 new Params fields (behaviour switches and tuning values), all default off / to the built behaviour; no existing default changed (9 configurations x 2 synthetic books and 4 configurations x 2 ES windows give identical trades before (HEAD 17a8d4c) and after, apart from the new `gap_count` column). 42 new study variants (name prefix = the gap id), all passing test_bias_htf_lookahead.
 
 ### Owner questions (caption-gap pass, setups_models#4/7)
 
@@ -1637,8 +1637,30 @@ Counts: 36 specs - done 35, partial 1 (#31), already built 0, skipped 0. 49 new 
 10. `sick_entry="ote_stack"` (#56) needs `cur_bias == 0` (consolidation): with `draw_lock="session"` the lock almost always names a side, so it effectively needs `draw_lock="off"` (or a neutral lock). Intended?
 11. `lunch_nwog_long` (#48) ignores `p.lunch` (it arms through the run_day special hook, session label LUNCH): the T8 lunch block stays for every other setup. Confirm.
 12. `breaker_block_counter` (#40): 033 / 048 conflict resolved as "stand aside until a retrace into the inverted breaker and a close back under it"; both Sides are judged per session from `levels.breakers` (the latest zone only). Confirm.
-13. `lh_array_short` (#31) is partial: the -3 SD projection target and the IOFED add are not built; the normal ladder / lock is the target. Build them?
-14. `wick_ce_mode` (#33): the 084 context filter (an IFVG overhead doubts the weekly short draw) is not built (no weekly-draw object to hang it on). Skip?
+13. `lh_array_short` (#31): built in the review pass as switches (`lh_array_target="sd3"`, `lh_array_iofed`, `lh_array_need_draw`), all default off (the normal ladder stays the default target, the draw is not required). Which should become the default?
+14. `wick_ce_mode` (#33): the 084 context filter (an IFVG overhead doubts the weekly short draw) is still not built (no weekly-draw object to hang it on). Skip? (The down-close precursor IS built now: `wick_ce_precursor`, default True inside the non-default intrabar mode.)
+15. `implied_range_gate` (#26): the "cancel if H trades first" is built (our interpretation: a trade beyond H while waiting kills the sweep); the add cut = no high over the post-MSS leg after the fill (`setups.add_ok`). `x_implied_wait` still counts every waiting bar. OK?
+16. `m2_live_eq` (#22): `m2_order_dead` essentially never fires (the leg EQ only rises toward the order's side); kept as the spec's cancel. Drop it?
+17. `ndog_scalp` (#54): now skips blocked days (`day_filter`); still no day / week stops (see 6).
+
+### Review fixes (caption-gap pass, setups_models#4/7, chunk 4/7)
+
+- #59 `complete_model`: the parent-swing test now requires `Pivot.known <= i` (look-ahead: a swing classed ITL / LTL by a later swing). Test `test_complete_model_parent_swing_must_be_known`.
+- #55 `smt_trend_ignore`: `cur_lock` / `cur_bias` / `ctx_bias` of THIS side are set before the `smt_bias` filter (they were the previous side's); counter `trend_waive` at the waiver. Test `test_trend_day_sees_this_sides_lock_at_the_smt_filter` (a real run_day).
+- #31 `lh_array_short`: new switches `lh_array_target` ("ladder" | "sd3": the single target = leg high + `lh_array_sd_k` (3.0) x the leg, R's extreme .. the leg extreme, counter `lh_array_sd`), `lh_array_iofed` (an add of `lh_add2_mult` x the unit at the near edge of the FIRST gap after the fill, `sm4.manage`, counter `lh_array_iofed`), `lh_array_need_draw` (the draw must be set this way). Study variant `M5-lasthour-short-sequence_sd3`.
+- #26 `implied_range_gate`: "H traded first" cancels the waiting sweep (`implied_h_traded`, `x_implied_h_traded`); adds stop once a high over the post-MSS leg printed after the fill (`setups.add_ok`, `implied_add_cut`).
+- #12 / #43: `sm4.big_event_day` (FOMC / jobs / CPI tags, Fed-chair days of `calendar`, any `strategy.blocked` day except the NFP-week Thursday / Friday and the Monday rule) replaces the bare `fomc` tag.
+- #21 `leg_tfs`: the tuple is sorted (highest first) - the order does not matter (documented).
+- #13 `po3_ideal="require"`: unchanged on purpose - it filters every non-synthetic, non-`htf_array` sweep order in every session (the spec's "PO3 low" is an AM concept; use "tag" for other sessions). Owner question 18.
+- #15: the lh_old_low add arms on the FIRST gap formed after the fill (was the latest).
+- #33 intrabar: the down-close precursor is checked (`wick_ce_precursor`, default True; variant `M11-wick-ce-fade-short_noprec`); the 084 context filter stays unbuilt.
+- #48 `lunch_nwog_long`: long-only (no mirrored short); `lunch_nwog_entry="ob"` = a limit at the body top of a down-close OB inside the zone (default "ce"; variant `new-lunch-macro-long-nwog_ob`).
+- #39 `breaker_low_invalidate`: the far extreme REPLACES an MT-based `cancel_close` (it can relax it); #37 `key_levels`: the blanket `except` is gone.
+- #54 `ndog_scalp`: skips blocked days when `day_filter` is on.
+- Look-ahead coverage: `SWITCH_HIT` now names the OUTCOME counters (lh_array_short, lh_array_sd, nwog_fill, leg_tf, complete_model, trend_waive); new ES cases `es_nwog`, `es_leg`, `es_cm`, `es_lh_draw`. `htf_fvg_top_short`, `ifvg_symmetry_skip`, `lh_array_iofed` and `lunch_nwog_entry` could not be reached by any window tried (15 ES windows, 56 synthetic runs) and are in `EXCEPTIONS` with the reason; their unit tests cover the outcome.
+- Footer note: the first chunk-4 commit carries "Claude Sonnet 5.5" in its Co-Authored-By line (history is not rewritten); later commits use the required footer.
+- Owner question 18: `po3_ideal="require"` applies to every session's sweep orders; restrict it to the AM / PO3 window?
+- New tests: `tests/test_caption_gap_sm4c.py` (8).
 
 ### Tests (caption-gap pass, setups_models#4/7)
 

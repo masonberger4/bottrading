@@ -2188,6 +2188,10 @@ class Params:
     pm_am_stops: bool = False            # M7: the PM pool am_last_high (the last AM swing extreme before 12:00); a sweep of it enters at the FVG CE, ladder = the relative equal pools, then the AM session's far extreme
     # M5-lasthour-short-sequence (026 ~01:35:33; 047 ~00:09:56)
     lh_array_short: bool = False         # M5: the last-hour sequence array -> rejection -> early confirmation -> MSS -> the displacement VI / SIBI CE (both sides)
+    lh_array_target: str = "ladder"      # M5 (review fix): "ladder" = the normal ladder / lock; "sd3" = the -`lh_array_sd_k` SD projection of the MSS leg (R's extreme .. the leg extreme) is the single target [026]
+    lh_array_sd_k: float = 3.0
+    lh_array_iofed: bool = False         # M5: an add of `lh_add2_mult` x the unit at the near edge of the NEXT same-side gap (the SIBI) the rally forms after the fill (the IOFED add)
+    lh_array_need_draw: bool = False     # M5 step (1): the draw must be set this way (off: a neutral bias may trade it too)
     # B16-nwog-gapup-return-then-mss (028 ~01:22:36)
     nwog_fill_long: bool = False         # B16: in a gap-up week a long needs price to have traded back to the NWOG low (Friday close) and the sweep within nwog_fill_tol_pts of it
     nwog_fill_tol_pts: float = 2.0
@@ -2214,6 +2218,8 @@ class Params:
     sick_entry: str = "discount"         # M16.2: "discount" (built: the deep-discount gate) / "ob_open" (the forming down-close candle's open) / "ote_stack" (OTE band + OB + FVG overlap, consolidation only)
     sick_units: int = 1                  # ... ote_stack: up to this many resting limits over the overlap
     # new-lunch-macro-long-nwog (046 ~02:07:16; experimental, conflicts with T8)
+    wick_ce_precursor: bool = True       # M11 intrabar (028 ~00:18:38): the wick candle follows a precursor that closed with the trade (short: a down-close; side space: an up-close)
+    lunch_nwog_entry: str = "ce"         # T7 (review fix): "ce" = a limit at the NWOG CE; "ob" = at the body top of a down-close OB inside the zone (else the CE)
     lunch_nwog_long: bool = False        # T7: 11:40-12:10 inside [the NWOG low, the NWOG CE] after a down AM, nothing under the NWOG low: a limit at the CE (bypasses the lunch block)
     # A8-symmetry-skip-ifvg-confirmation (048 ~00:38:07)
     ifvg_symmetry_skip: bool = False     # A8: ES and NQ agree (the same higher high in the window): an opposing FVG is bought inside directly, the inversion steps are skipped
@@ -2320,10 +2326,10 @@ class Params:
         # caption-gap pass (setups_models #4/7)
         for name, ok in (("dagger_level", ("ce", "ltf")), ("po3_ideal", ("off", "tag", "require")), ("po3_rest_mgmt", ("none", "normal")), ("m2_anchor", ("leg", "runup")),
                          ("wick_ce_mode", ("close", "intrabar", "retrace")), ("entry_pick", ("first", "shallowest_unused")), ("ob_at_key", ("off", "tag", "require")),
-                         ("sick_entry", ("discount", "ob_open", "ote_stack")), ("complete_model", ("off", "tag", "require"))):
+                         ("sick_entry", ("discount", "ob_open", "ote_stack")), ("complete_model", ("off", "tag", "require")), ("lh_array_target", ("ladder", "sd3")), ("lunch_nwog_entry", ("ce", "ob"))):
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
-        if (self.po3_rest_off_pts < 0 or self.lh_add2_mult <= 0 or self.lh_old_low_stop_pts <= 0 or self.pm_old_high_bars < 1 or self.pm_after_room_pts < 0 or self.nwog_fill_tol_pts < 0
+        if (self.po3_rest_off_pts < 0 or self.lh_add2_mult <= 0 or self.lh_old_low_stop_pts <= 0 or self.lh_array_sd_k <= 0 or self.pm_old_high_bars < 1 or self.pm_after_room_pts < 0 or self.nwog_fill_tol_pts < 0
                 or self.wick_ce_pad_pts < 0 or self.wick_ce_tf not in (0, 5, 15, 30, 60) or self.ob_key_ticks < 0 or self.sick_units < 1 or self.ifvg_sym_bars < 1
                 or self.ifvg_tf not in (0, 5, 15) or any(int(m_) < 2 for m_ in self.leg_tfs) or any(int(m_) not in (5, 15, 30, 60) for m_ in self.stab_tfs) or not self.stab_tfs):
             raise ValueError("setups_models #4/7: sizes / distances >= 0 (lh_add2_mult, lh_old_low_stop_pts > 0), pm_old_high_bars / sick_units / ifvg_sym_bars >= 1, wick_ce_tf in (0, 5, 15, 30, 60), "
@@ -5548,13 +5554,17 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 continue                              # B8f stop_flip: the other side for the day
             if p.late_cutoff and t >= p.late_cutoff and _MG.is_fade(ctx, sd, lk, i):
                 continue                              # T11 (026 ~1:59:50): no fades in the last 15 minutes
-            smtb = _MG.smt_bias(ctx, i, p) if p.smt_bias != "off" else 0
-            if p.smt_bias == "filter" and smtb and sd.sign != smtb and not (p.smt_trend_ignore and _SM4.trend_day(ctx, sd, i, p)):    # (caption-gap M16-trending-divergence-continuation: on a trending day the divergence is continuation)
-                continue                              # B18.3: against the SMT bias
+            # (review fix setups_models #4/7 smt_trend_ignore: the lock / bias context of THIS side is set before the SMT filter so trend_day reads it)
             ctx.cur_lock = lk if (lk is not None and lk["side"] == sd.sign) else None
             ctx.cur_lock_any = lk                     # review fix (setups_models #3/7 breaker_need_bias_draw): the session lock of ANY side (a neutral lock must not fall back to the row draw)
             ctx.cur_bias = lk["side"] if (lk is not None and lk["side"]) else (w_ or 0)
             sd.ctx_bias = ctx.cur_bias                # A16 pb_def cc04_008 step (1): the bullish context of the propulsion block
+            smtb = _MG.smt_bias(ctx, i, p) if p.smt_bias != "off" else 0
+            if p.smt_bias == "filter" and smtb and sd.sign != smtb:
+                if p.smt_trend_ignore and _SM4.trend_day(ctx, sd, i, p):    # (caption-gap M16-trending-divergence-continuation: on a trending day the divergence is continuation)
+                    _SM2.hit("trend_waive")
+                else:
+                    continue                          # B18.3: against the SMT bias
             ctx.counter_now = counter_
             o_ = _scan(ctx, sd, i, p, session, w0, pctx, psides, ppos, _risk_mult(state, session, p))
             ctx.counter_now = False
@@ -6384,6 +6394,10 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     imp_eq, m2_live = None, False
     if p.implied_range_gate:           # caption-gap M2-implied-range-eq-gate: H is valid only after price traded from premium into discount; then only the gaps at / under the implied EQ
         imp_eq, gaps = _SM4.implied_gate(ctx, sd, sw, gaps, i, p, session)
+        if imp_eq == "dead":
+            sd.sweep = None
+            _f("x_implied_h_traded")
+            return None
         if imp_eq == "wait" or (imp_eq is not None and not gaps):
             _f("x_implied_wait")
             return None
