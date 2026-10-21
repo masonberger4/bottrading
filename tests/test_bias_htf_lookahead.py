@@ -24,7 +24,9 @@ WIN = {
     "def": [("2024-01-22", "2024-02-16"), ("2023-11-27", "2023-12-15")],
     "wide": [("2023-09-05", "2023-11-10")],
     "long": [("2023-06-01", "2024-01-31")],            # wpr (14 weeks), the monthly MWD state, the quarterly shift
-}
+    "rare": [("2024-08-19", "2024-09-13")],            # B9 objective_neutral='both' after the caption-gap levels pass: 0 trades in
+}                                                      # the other windows, 2 here (2024-08-26 / 09-09)
+RARE = ("B9_objective_neutral",)
 LONG_HISTORY = ("wpr", "qshift", "mwd", "B22", "B20.3", "B10")
 LA_COLS = ["entry_time", "entry", "stop", "t1", "side", "day_tags", "dw_tags"]
 
@@ -79,6 +81,7 @@ def _check(name, tf, windows, p, need=None, max_cuts=3):
 @pytest.mark.parametrize("name", _variants())
 def test_no_look_ahead_each_variant_5m(name):
     wins = (WIN["long"] if any(k in name for k in LONG_HISTORY) else []) + WIN["def"] + WIN["wide"] + WIN["long"]
+    wins += WIN["rare"] if any(k in name for k in RARE) else []
     _check(name, 5, wins, _params(name))
 
 
