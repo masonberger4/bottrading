@@ -44,7 +44,7 @@ def _real(job):
     a = B.run(spy, tf, "SPY", p, qqq)
     b = B.run(qqq, tf, "QQQ", replace(p, es_pt=q_pt), spy)
     out = {"SPY": a, "QQQ": b, "combined": B.combine(a, b, pick=study_pick(p.smt_pick), laggard_consol_only=p.laggard_consol_only, one_market=p.one_market,
-                                                     sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done)}
+                                                     sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done, dual_deal=p.dual_deal)}
     for k, v in out.items():
         if len(v):
             v["variant"], v["tf"], v["book"] = name, tf, k
@@ -1773,6 +1773,55 @@ _SM4_DECISIONS = {
     "D15-one-clean-gap-instrument": dict(smt_pick="clean"),
 }
 DECISIONS.update(_SM4_DECISIONS)
+
+# --- caption-gap pass, setups_models #5/7 (models_setups_entries.md): one variant per gap id (name prefix = the gap id) ---
+_SM5_DECISIONS = {
+    "M10-ifvg-fvg-signature-full": dict(ifvg_entries=True, ifvg_061=True, ifvg_061_entry="iofed", **SM_POST),
+    "new-false-bull-flag-short": dict(false_flag="tag", **SM_POST),
+    "new-false-bull-flag-short_require": dict(false_flag="require", flag_min_bars=4, flag_max_frac=0.6, **SM_POST),
+    "M9-news-judas-full-sequence": dict(news_two_sided=True, **SM_POST),
+    "new-15m-candle-po3-upper-half": dict(po3_15m=True, po3_15m_n=3, **SM_POST),
+    "M12-new-trader-no-turtle-soup": dict(turtle_soup="2023", **SM_POST),                     # (no switch: the Trade.entry_style tag splits raid / confirmed results; this variant produces the raid style)
+    "M12-turtle-soup-prev-pm-low": dict(turtle_soup="prev_pm", htf_bias="combo", **SM_POST),
+    "M7-second-dip-into-rejection-block": dict(rb_second_dip=True, **SM_POST),
+    "M8-org-repricing-full-conditions": dict(org_reprice=True, org_reprice_full=True, stop_mode="ce2", **SM_POST),
+    "M0-all-nearby-pools-run-first": dict(all_pools_first="tag", **SM_POST),
+    "M0-all-nearby-pools-run-first_require": dict(all_pools_first="require", all_pools_pts=30.0, **SM_POST),
+    "M7-lunch-reprice-org-ce-moc": dict(lunch_org_ce_short=True, htf_bias="combo"),
+    "D15-dual-dealing": dict(dual_deal="split", **SM_POST),
+    "D15-dual-dealing_full": dict(dual_deal="full", **SM_POST),
+    "M4-1m-last-upclose-finetune": dict(breaker_entry="fallback", breaker_tf=5, breaker_pref="last_1m", **SM_POST),
+    "M4-two-pool-breaker-near-miss": dict(near_miss_pts=3.0, breaker_entry="fallback", **SM_POST),
+    "M4-unfinished-high-keep-ab-leg": dict(adv_breaker=True, ab_anchor_lock=True, **SM_POST),
+    "M11-cisd-ob-stop-skip-rearm": dict(cisd_ob_entries=True, cisd_need_htf=True, cisd_rearm=True, max_stop_pts=10.0, **SM_POST),
+    "M10-ifvg-footholds-buy-program": dict(ifvg_entries=True, ifvg_targets=True, ifvg_need_hunt=True, **SM_POST),
+    "A4-bodies-hold-prev-day-50": dict(pd50_bodies=True, **SM_POST),
+    "A4-bodies-hold-prev-day-50_5m": dict(pd50_bodies=True, pd50_tf=5, **SM_POST),
+    "new-overshoot-ltf-fvg-into-htf-level": dict(htf_overshoot_short=True, overshoot_pts=3.0, **SM_POST),
+    "new-open-returns-into-bearish-ob": dict(open_ob_min=10, ob_entry="pre_break"),
+    "B5-ltf-at-htf-array": dict(htf_entry_array="tag", entry_arrays=("htf",), **SM_POST),
+    "B5-ltf-at-htf-array_require": dict(htf_entry_array="require", **SM_POST),
+    "M2-htf-ob-precondition": dict(allow_htf_array_premise=True, premise_tfs=(15, 60, 1440), **SM_POST),
+    "M2-three-drives-breaker-fallback": dict(three_drives="tag", td_same_level=True, td_level_pts=2.0, td_fallback=True, ifvg_entries=True, **SM_POST),
+    "A15-mitigation-block-entry_array": dict(entry_arrays=("mitigation",), htf_bias="combo", **SM_POST),
+    "A15-mitigation-block-entry_daily": dict(entry_arrays=("mitigation",), mit_entry_tf="D", htf_bias="combo", **SM_POST),
+    "A15-stair-step-mitigation": dict(mit_stair=True, adds=(0.5, 0.5), htf_bias="combo", **SM_POST),
+    "A15-stair-step-mitigation_stop": dict(mit_stair=True, mb_order="stop", htf_bias="combo", **SM_POST),
+    "new-next-day-or-reh-short": dict(prev_reh_plan=True, **SM_POST),
+    "M2-skip-filter": dict(stop_zone_pool=True, fvg_pick="2022", **SM_POST),
+    "A14-unicorn-standalone": dict(unicorn_standalone=True, unicorn_tf=5, **SM_POST),
+    "A14-unicorn-standalone_60m": dict(unicorn_standalone=True, unicorn_tf=60, **SM_POST),
+    "M13-max-depth-79": dict(max_retrace=0.79, fvg_pick="2022", **SM_POST),
+    "M10-ifvg-open-dependent": dict(ifvg_open_mode=True, ifvg_gap_pts=5.0, ifvg_depth=True, htf_bias="combo", **SM_POST),
+    "M0-htf-array-not-reached": dict(array_fallback_breaker=True, draw_lock="session", htf_resist_cap=False, ob_entry="post_mss"),
+    "M1-original-consolidation-entry": dict(mm_oc_entry=True, mmxm_ctx=True, orig_consol=True, **SM_POST),
+    "M1-consolidate-at-discount-array": dict(mm_accum_bars=3, mm_accum_frac=0.8, mmxm_ctx=True, **SM_POST),
+    "M1-accumulation-stages": dict(mm_stages=True, mmxm_ctx=True, adds=(0.5, 0.5), **SM_POST),
+    "M1-distribution-stages-lowrisk-short": dict(mm_lowrisk=True, mm_oc_frac=0.8, mm_stages=True, mmxm_ctx=True, **SM_POST),
+    "A18-curve-arrays-reverse-ladder": dict(reclaimed_ladder=True, reclaim_bounce_bars=2, reclaimed_ob=True, adds=(0.5, 0.5), **SM_POST),
+    "M1-one-segment": dict(mm_flip=True, mm_stages=True, mmxm_ctx=True, draw_lock="session", htf_resist_cap=False, ob_entry="post_mss"),
+}
+DECISIONS.update(_SM5_DECISIONS)
 SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): their look-ahead tests are in test_silver_bullet.py
 
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
@@ -1838,14 +1887,14 @@ def _dec_job(job):
               partner2=p2, ref_df=ref,
               bias_table=_bias_cache(tf, 570, p.vi_arrays, p.flip_triggers, B.table_kw(p)), meta=B.load_meta(SYMS[0], tf, SRC),
               lock_cuts=_lock_cache(tf, p))
-    if p.smt_pick != "first" or p.one_market or p.sb_one_market or p.sb_am_done or len(p.markets) > 1:    # SB package: M3.9 / gap 7 need the second market too (BH-M3-scan-all-indices: markets)
+    if p.smt_pick != "first" or p.one_market or p.sb_one_market or p.sb_am_done or p.dual_deal or len(p.markets) > 1:    # SB package: M3.9 / gap 7 need the second market too (BH-M3-scan-all-indices: markets)
         # Ep03.11 (review fix): smt_pick only acts when two instruments are combined - run the
         # partner as its own book (es_pt scaled by the price ratio, as main_index) and combine
         q = replace(p, es_pt=round(p.es_pt * float(pa.close.median() / df.close.median()), 2))
         tb = B.run(pa[(pa.index >= lo) & (pa.index < b)], tf, SYMS[1], q, df[(df.index >= lo) & (df.index < b)],
                    meta=B.load_meta(SYMS[1], tf, SRC) if SRC == "databento" else None, lock_cuts={} if p.draw_lock == "off" else None)
         t = B.combine(t, tb, pick=study_pick(p.smt_pick), laggard_consol_only=p.laggard_consol_only, one_market=p.one_market,
-                      sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done)   # SB package
+                      sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done, dual_deal=p.dual_deal)   # SB package (+ setups_models #5/7 D15-dual-dealing)
     if len(t):
         t = t[pd.to_datetime(t.entry_time.astype(str).str[:10]) >= f"{year}-01-01"].copy()
         t["tf"], t["year"], t["variant"] = tf, year, name

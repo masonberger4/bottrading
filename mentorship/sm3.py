@@ -34,7 +34,7 @@ def _want(ctx) -> int:
 
 
 def _arr_tf(m: int) -> str:
-    return {15: "15m", 30: "30m", 60: "1h", 240: "4h"}[m]
+    return {15: "15m", 30: "30m", 60: "1h", 240: "4h", 1440: "D"}[m]       # (1440: caption-gap M2-htf-ob-precondition - the daily arrays, order blocks included)
 
 
 # --- 1h buckets of a Side (A23 wick depth) -----------------------------------------------------------------------------------------------------

@@ -649,7 +649,56 @@ def _group_pick(t: pd.DataFrame, pick: str) -> pd.DataFrame:
 
 
 def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, sb_one_market: bool = False,
-            sb_am_done: bool = False, laggard_consol_only: bool = False) -> pd.DataFrame:
+            sb_am_done: bool = False, laggard_consol_only: bool = False, dual_deal: str = "") -> pd.DataFrame:
+    """Caption-gap D15-dual-dealing (069 ~00:19:09; setups_models #5/7): `dual_deal` "" (the default) = the one-instrument-per-session pick below; "split" / "full" = when BOTH instruments (two or more
+    symbols) filled the same side in the same session slot of one day (the same Judas / MSS / FVG window on ES and NQ), keep every one of those trades instead of the pick - "split" at HALF risk each
+    (gross / costs / net / risk columns x 0.5, column dual_risk 0.5), "full" at full risk (dual_risk 1.0); everything else goes through the ordinary pick. ICT states neither the conditions nor the
+    allocation: the two variants are the test. Conflicts with Ep 05 "watch one market only" and with D15.
+    """
+    if dual_deal:
+        return _combine_dual(runs, dual_deal, dict(pick=pick, one_market=one_market, sb_one_market=sb_one_market, sb_am_done=sb_am_done, laggard_consol_only=laggard_consol_only))
+    return _combine(*runs, pick=pick, one_market=one_market, sb_one_market=sb_one_market, sb_am_done=sb_am_done, laggard_consol_only=laggard_consol_only)
+
+
+def _slot(r: pd.DataFrame) -> pd.Series:
+    """The session slot of a book's trades (a Silver Bullet window is its own slot, as in combine)."""
+    if "setup" not in r.columns:
+        return r.session
+    return r.session.where(~r.setup.astype(str).str.startswith("sb_"), r.setup)
+
+
+def _combine_dual(runs, mode: str, kw: dict) -> pd.DataFrame:
+    if mode not in ("split", "full"):
+        raise ValueError(f"dual_deal {mode!r}: expected '', 'split' or 'full'")
+    books = [r for r in runs if len(r)]
+    if not books:
+        return runs[0] if runs else pd.DataFrame()
+    keys = pd.concat([pd.DataFrame({"date": r.date.values, "slot": _slot(r).values, "side": r.side.values, "symbol": r.symbol.values}) for r in books], ignore_index=True)
+    multi = set(map(tuple, keys.groupby(["date", "slot", "side"]).symbol.nunique().loc[lambda x: x >= 2].index))
+    rest, dual = [], []
+    for r in runs:
+        if not len(r):
+            rest.append(r)
+            continue
+        m = pd.Series([(d, sl, sd) in multi for d, sl, sd in zip(r.date, _slot(r), r.side)], index=r.index)
+        rest.append(r[~m])
+        dual.append(r[m])
+    out = _combine(*rest, **kw) if any(len(r) for r in rest) else (rest[0] if rest else pd.DataFrame())
+    d = pd.concat([x for x in dual if len(x)], ignore_index=True) if any(len(x) for x in dual) else None
+    if d is None:
+        return out.assign(dual_risk=1.0) if len(out) else out
+    f = 0.5 if mode == "split" else 1.0
+    for col in ("gross", "costs", "net", "entry_risk_pct", "peak_risk_pct"):
+        if col in d.columns and f != 1.0:
+            d[col] = d[col] * f
+    d["dual_risk"] = f
+    out = out.assign(dual_risk=1.0) if len(out) else out
+    res = pd.concat([x for x in (out, d) if len(x)], ignore_index=True)
+    return res.sort_values("entry_time", kind="stable").reset_index(drop=True) if "entry_time" in res.columns else res
+
+
+def _combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, sb_one_market: bool = False,
+             sb_am_done: bool = False, laggard_consol_only: bool = False) -> pd.DataFrame:
     """Trade one instrument per session (watch one market, rules Ep 05): of the setups the
     instruments produced, keep the first to fill. On a tie, keep the one whose SMT check
     didn't show its partner holding stronger. Uses only what was known at the fill.

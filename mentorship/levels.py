@@ -977,17 +977,21 @@ def ote_band(ext: float, hi: float) -> tuple[float, float, float]:
     return hi - OTE_HI * leg, hi - OTE_LO * leg, hi - OTE_SWEET * leg
 
 
-def three_drives(lows: list, ext: float, ext_i: int, i: int, min_i: int = 0) -> bool:
+def three_drives(lows: list, ext: float, ext_i: int, i: int, min_i: int = 0, level: float | None = None, tol: float = 0.0) -> bool:
     """M2.7 three drives ("three Indians", 093 ~10:37; 074 ~32:49) [our interpretation of the bar
     test]: the last two confirmed swing lows (Pivot list `lows`, known by bar i, before the sweep
     extreme ext_i, at or after bar min_i) and the extreme are three successively LOWER lows, and
     the pushes fail - the third drive extends below the second by less than the second extended
-    below the first. Bullish: drives down into the swept level."""
+    below the first. Bullish: drives down into the swept level.
+    Caption-gap M2-three-drives-breaker-fallback (093 ~00:11:14; `td_same_level`): with `level` given all three drives (the two swings and the extreme) must lie within `tol` of that level -
+    the same sensitive level driven into three times."""
     pl = [q for q in lows if min_i <= q.i < ext_i and q.known <= i]
     if len(pl) < 2:
         return False
     a, b = pl[-2], pl[-1]
     if not (a.price > b.price > ext):
+        return False
+    if level is not None and not (abs(a.price - level) <= tol and abs(b.price - level) <= tol and abs(ext - level) <= tol):
         return False
     return (b.price - ext) < (a.price - b.price)
 

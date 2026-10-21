@@ -1342,7 +1342,7 @@ def order_gate4(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str,
         if r:
             return r
     if p.three_drives_htf and not synth:
-        td = L.three_drives(sd.pl, sw["ext"], sw["ext_i"], i, max(0, ctx.start - 1))
+        td = L.three_drives(sd.pl, sw["ext"], sw["ext_i"], i, max(0, ctx.start - 1), sw["level"] if p.td_same_level else None, p.td_level_pts * p.es_pt)     # (setups_models #5/7: td_same_level)
         if td:
             hit("td_htf_eval")
             ok = _want(ctx) == sd.sign or S._SM.htf_done_sign(ctx, -sd.sign, i)

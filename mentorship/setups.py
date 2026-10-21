@@ -418,6 +418,8 @@ def ifvg_061(ctx, sd, sw, i, p, session, risk_mult):
         if not (f.mid <= c[i] <= f.top + tol and min(sd.o[i], c[i]) >= f.mid - 1e-12):
             continue
         stop = f.bottom - p.pad
+        if p.ifvg_061_entry == "iofed":       # caption-gap M10-ifvg-fvg-signature-full (061 ~02:18:22): the IOFED limit instead of the market entry
+            return S._SM5.ifvg_061_iofed(ctx, sd, sw, f, i, p, session, risk_mult)
         tags = dict(unicorn=False, fvg_bottom=f.bottom, fvg_ce=f.mid, entry_kind="ifvg_061", mitigation=False,
                     propulsion=False, market=True, no_leg_wait=True)
         return S._finish_order(ctx, sd, i, p, session, sw, float(c[i]), stop, risk_mult,
@@ -484,6 +486,12 @@ def array_cands(ctx, sd, sw, i, p, bz) -> list:
         if r is not None:
             S._SM2.hit("ob_post")
             out.append(r)
+    if "htf" in ea:                                          # caption-gap B5-ltf-at-htf-array (082 ~00:06:22): the 15m / 60m arrays carried onto the execution chart
+        out += S._SM5.htf_cands(ctx, sd, sw, i, p)
+    if "mitigation" in ea:                                   # caption-gap A15-mitigation-block-entry (098 ~00:45:55)
+        r_ = S._SM5.mit_cand(ctx, sd, sw, i, p)
+        if r_ is not None:
+            out.append(r_)
     if "vi" in ea:
         vs = [z for z in sd.vis("bull") if e <= z.i <= i and not (p.vi_breakaway and S._LD3.vi_is_breakaway(sd, sw, z, i))]   # A9 vi_breakaway
         if vs:
@@ -587,12 +595,19 @@ def adv_breaker_order(ctx, sd, sw, i, p, session, risk_mult, ref_i, ref, real_re
     if q is None or not real_ref or not sw["ext"] < q.price:
         return None
     A, B = q.price, ref
+    note5 = None
+    if p.ab_anchor_lock:             # caption-gap M4-unfinished-high-keep-ab-leg (070 ~00:52:42): a filled order's A-B leg stays the anchor while the locked target is untaken
+        ses_ = getattr(ctx, "cur_session", "") or session
+        A, B = S._SM5.ab_anchor(ctx, sd, A, B, i, p, ses_)
+        note5 = S._SM5.ab_note(ctx, sd, A, B, ses_)
     mt = (A + B) / 2
     tk = 0.25 * p.es_pt
     tgt = B + (B - A)
     fixed = [(S._exit_px(tgt, "array", p), "array")]
     tags = dict(unicorn=False, fvg_bottom=A, fvg_ce=mt, entry_kind="adv_breaker", mitigation=False,
                 propulsion=False, through=tk, no_leg_wait=True)
+    if note5 is not None:
+        tags["sm5"] = note5
     return S._finish_order(ctx, sd, i, p, session, sw, mt, sw["ext"] - p.pad, risk_mult,
                            sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True, fixed=fixed)
 
@@ -682,7 +697,7 @@ def pre_break(ctx, sd, sw, i, p, session, risk_mult, ref):
         o_ = _smt_order(ctx, sd, sw, i, p, session, risk_mult)
         if o_ is not None:
             return o_
-    if p.cisd_ob_entries and not sw.get("cisd_sent"):
+    if p.cisd_ob_entries and (not sw.get("cisd_sent") or p.cisd_rearm):
         o_ = _cisd_ob(ctx, sd, sw, i, p, session, risk_mult)
         if o_ is not None:
             return o_
@@ -748,9 +763,17 @@ def _cisd_ob(ctx, sd, sw, i, p, session, risk_mult):
     ob = L.order_block_blend(o, h, l, c, e - 5, e, "bull")
     if ob is None:
         return None
+    if p.cisd_need_htf and not S._SM5.cisd_htf_ok(ctx, sd, sw, i, p):
+        return None                                 # caption-gap M11-cisd-ob-stop-skip-rearm: the sweep must sit in a same-side HTF array
     top, _ = _ob_body(o, c, ob, e)
-    hit = np.flatnonzero(h[e + 1:i + 1] > top)
-    if not len(hit) or e + 1 + int(hit[0]) != i:
+    fl = S._SM5.cisd_floor(sw, e, ob.bottom, sd, i, p)       # caption-gap M11-cisd-ob-stop-skip-rearm: a trade under the OB low voids the setup; the next CISD must come after it
+    if sw.get("cisd_sent") and not fl > sw.get("cisd_floor", e):
+        return None
+    if fl > sw.get("cisd_floor", e):
+        S._SM2.hit("cisd_rearm")
+    sw["cisd_floor"] = fl
+    hit = np.flatnonzero(h[fl + 1:i + 1] > top)
+    if not len(hit) or fl + 1 + int(hit[0]) != i:
         return None                                 # arm on the CISD bar itself, once
     sw["cisd_sent"] = True
     rng_hi = float(h[e:i + 1].max())
@@ -1239,7 +1262,7 @@ def finish_gates(ctx, sd, sw, i, p, session, entry, tags: dict, lvt: list, lvx: 
         S._f("x_nest_tfs")
         return False
     if p.three_drives != "off":
-        td = L.three_drives(sd.pl, sw["ext"], sw["ext_i"], i, max(0, ctx.start - 1))
+        td = L.three_drives(sd.pl, sw["ext"], sw["ext_i"], i, max(0, ctx.start - 1), sw["level"] if p.td_same_level else None, p.td_level_pts * p.es_pt)     # (caption-gap M2-three-drives-breaker-fallback: td_same_level)
         if td:
             lvt.append("three_drives")
         elif p.three_drives == "require":
