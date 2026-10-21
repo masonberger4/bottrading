@@ -72,6 +72,8 @@ def extra_pools(ctx, sd, session, i, p, out: dict) -> None:
             ref = sd.x(o13)
             kb = ctx.idx[i - 1] + _tf(ctx)
             tops = [a for a, b, _ in S._ts_arrays(ctx, sd, i - 1, kb) if a < ref]
+            if p.pm_lunch_fvg_array:             # caption-gap M7-pm-1330-judas-full (010 ~57:47): the 5m FVGs formed in the lunch hour are arrays too
+                tops += S._SM3.lunch_fvg_tops(ctx, sd, i - 1, ref)
             if tops:
                 out["pm_judas_array"] = float(max(tops))
 
@@ -481,6 +483,8 @@ def array_cands(ctx, sd, sw, i, p, bz) -> list:
         if rs:
             z = max(rs, key=lambda z: z.top)
             out.append((z.top, z.bottom, "reclaimed_ob"))
+    if p.org_entry_array:                                  # caption-gap L7-org-later-day-entry-array (080 ~13:20; 092 ~1:59:32): the unfilled part of a prior ORG, never alone
+        out += S._SM3.org_cands(ctx, sd, sw, i, p, out)
     return [x for x in out if ext < x[0] < sd.c[i]]
 
 
@@ -1054,17 +1058,24 @@ def _candle_side(ctx, i, p) -> int:
     return 1 if hi - ref < ref - lo else (-1 if ref - lo < hi - ref else 0)
 
 
-def _discount_array(ctx, sd, sw, tol) -> bool:
+def _discount_array(ctx, sd, sw, tol, p=None) -> bool:
     """M1: the sweep extreme sits in a same-side 1m BISI (open by closes until the extreme) or a
     5m OB known by the extreme's bar."""
     e, x = sw["ext_i"], sw["ext"]
-    for g in sd.gaps:
-        if g.i > e:
-            break
-        if g.bottom - tol <= x <= g.top + tol and sd.c[g.i + 1:e].min(initial=np.inf) >= g.bottom:
-            return True
-    for z in sd.zones_tf(ctx.idx, ctx.tf, max(5, ctx.tf)):
-        if z.mt == z.mt and z.i <= e and z.bottom - tol <= x <= z.top + tol:
+    types = p.mm_turn_types if p is not None else ("ob", "fvg")       # caption-gap M1-turning-level-types (cc04_007 ~1:04)
+    if "fvg" in types:
+        for g in sd.gaps:
+            if g.i > e:
+                break
+            if g.bottom - tol <= x <= g.top + tol and sd.c[g.i + 1:e].min(initial=np.inf) >= g.bottom:
+                return True
+    if "ob" in types:
+        for z in sd.zones_tf(ctx.idx, ctx.tf, max(5, ctx.tf)):
+            if z.mt == z.mt and z.i <= e and z.bottom - tol <= x <= z.top + tol:
+                return True
+    if types and set(types) & {"old_high", "old_low", "void"}:
+        if S._SM3.turn_level_ok(ctx, sd, sw, tol, p):
+            S._SM2.hit("mm_turn_type")
             return True
     return False
 
@@ -1181,7 +1192,7 @@ def finish_gates(ctx, sd, sw, i, p, session, entry, tags: dict, lvt: list, lvx: 
             return False
     if session == "AM" and (p.am_htf_draw or p.am_discount_array or p.mm_context != "off"):
         hd = _htf_draw(ctx, sd, entry)
-        da = _discount_array(ctx, sd, sw, tol)
+        da = _discount_array(ctx, sd, sw, tol, p)
         if (p.am_htf_draw and not hd) or (p.am_discount_array and not da) or \
                 (p.mm_context == "require" and not (hd and da)):
             S._f("x_mm_context")
@@ -1304,6 +1315,9 @@ def sick_sister(ctx, sd, i, p, session, entry):
     tg = [v for v in me[1] if v > entry]
     if not tg:
         return None
+    if p.ss_ladder:                          # caption-gap M16-sick-sister-exit-ladder (053 ~6:21): T1 just above the nearer high, T2 the midpoint, the farther high no rung
+        S._SM2.hit("ss_ladder")
+        return S._SM3.ss_ladder(tg, p)
     return [(S._exit_px(v, "array", p), "array") for v in tg]
 
 
@@ -1397,6 +1411,8 @@ def add_ok(sd, pos, px, i, p) -> bool:
         top, bot = pos["bz_side"]
         if not (bot - 1e-12 <= px <= top + 1e-12):
             return False
+    if p.breaker_need_bias_draw and pos.get("bz_side") and not (pos.get("sm3") or {}).get("bd_ok", True):
+        return False                              # caption-gap M4-accumulate-in-breaker-needs-bias-draw (007 ~21:34): no add inside the breaker without the bias + a named draw
     return True
 
 

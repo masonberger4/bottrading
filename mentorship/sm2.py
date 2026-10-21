@@ -1214,6 +1214,11 @@ def late_tags(ctx, sd, sw, i: int, p, session: str, entry: float, lv: list, tags
 
 # --- mitigation-block entry (A15) -----------------------------------------------------------------------------------------------------------
 
+def _SM3():
+    from . import sm3
+    return sm3
+
+
 def mit_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     """A15-mitigation-block-entry (033 ~1:04:05; cc04_004 ~4:37, ~13:51) and X3-a15-mitblock-bear-context (cc04_004 ~6:44): with the order flow and
     narrative our way (the bias side), a resting limit in the day's alive mitigation block (the full range of the last down-close candle at the failed
@@ -1249,12 +1254,28 @@ def mit_order(ctx, sd, i: int, p, session: str, risk_mult: float):
                 S._f("x_mit_no_daily_beyond")
                 continue
             fixed = [(S._exit_px(tgt, "pool", p), "pool")]
+        mtags = {}
+        if p.mb_targets:                                # caption-gap A15-mitigation-block-targets (cc04_004 ~8:13): the post-break extreme (just beyond), then the nearest HTF level as the final rung
+            C = float(sd.h[z.i:i + 1].max())
+            r1 = S._exit_px(C, "pool", p)
+            if r1 > entry:
+                fixed = [(r1, "pool")]
+                nxt = _SM3().htf_level_beyond(ctx, sd, i, p, entry, session, r1)
+                if nxt is not None:
+                    fixed.append((S._exit_px(nxt, "array", p), "array"))
+                    if p.mb_done_at_htf:
+                        mtags["sm3"] = {"mb_done": True}
+                hit("mb_targets")
+        if p.mb_body_exit:                              # caption-gap A15-mitigation-block-body-hold (cc04_004 ~14:29) [our interpretation]: a body close beyond the candle's body before T1 exits
+            mtags["lvx"] = {"mb_body": (float(min(sd.o[z.src], sd.c[z.src])), True)}
+            hit("mb_body_exit")
         sent[(z.i, z.src)] = i
         hit("mit_order")
         sw = dict(session=session, name="mitigation", level=float(z.top), key="mitigation", ext=float(z.bottom), ext_i=int(z.src), broke=int(z.i),
                   sweep_i=int(z.src), smt=None, smt2=None, **{S._SM.SYNTH: True})
         tags = dict(unicorn=False, fvg_bottom=float(z.bottom), fvg_ce=float((z.top + z.bottom) / 2), entry_kind="mitigation_entry", mitigation=True,
                     propulsion=False, no_leg_wait=True, lv_tags=["mitigation_entry"] + (["mit_preopen"] if (z.i, z.src) in pre else []))
+        tags.update(mtags)
         return S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, float(sd.h[z.src:i + 1].max()), tags, skip_leg_pd=True, fixed=fixed)
     return None
 
@@ -2589,6 +2610,11 @@ def ir_gates_ok(ctx, sd, i: int, p, session: str, use_want: bool = True) -> bool
     """A7-immediate-rebalance-gates (059 ~4:50: "the immediate rebalance isn't going to help you all that much"): an immediate rebalance is a continuation trigger only
     if (a) the draw / HTF bias was known beforehand and points its way (ir_need_draw) and (b) it prints in a window where volatility is expected (ir_need_window:
     [our interpretation] the macro window, the am / pm sessions or a Silver Bullet window - by the clock, see ir_window_ok). Used by the opt-in IR paths (ir_entries, sb_rebalance_ext)."""
+    if p.ir_filters:                          # caption-gap M11-immediate-rebalance-management (092 ~1:41:37; 100 ~1:36:14): no IR on a Friday or ahead of a pending 10:00 release
+        from claude_hf.daytypes import events as _ev
+        if ctx.day.weekday() == 4 or (_ev(ctx.day) & _S().NEWS_1000 and int(ctx.t[i]) < 600):
+            hit("ir_filters")
+            return False
     if p.ir_need_draw and bias_at(ctx, p, session, i, use_want) != sd.sign:
         return False
     if p.ir_need_window and not ir_window_ok(p, int(ctx.t[i])):

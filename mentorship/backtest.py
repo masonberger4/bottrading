@@ -170,7 +170,7 @@ def lock_cuts(p: Params) -> set:
     if p.sb_model and p.sb_draw_first and (p.sb_last_hour or p.sb_moc_extra):
         cuts.add(870)                             # SB package: the 15:00 / 15:15 windows' own draw lock
     if (p.last_hour_own_slot or p.last_hour_setup) and not p.lh_no_lock:
-        cuts.add(p.last_hour[0])                  # setups_models: the own last-hour slot's 15:00 lock
+        cuts.add(p.lh_freeze_t if p.lh_draw_freeze else p.last_hour[0])      # setups_models: the own last-hour slot's 15:00 lock (caption-gap M5: the frozen noon lock)
     from . import newscal as _NC
     cuts |= _NC.lock_cuts_extra(p)                # news_calendar_times: PRE8 08:20, LON, the 08:30 AM
     return cuts

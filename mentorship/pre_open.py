@@ -178,14 +178,18 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
         _f("md_x_room")
         return []
     levels = [target]
-    if p.md_ladder:
+    if p.md_ladder or p.ma_deuce_ladder:
         # M15 ladder: CE, lower quadrant, the 1h BISI low. Review fix: no longer switched off under
         # the #9 lock / #7 cap - every rung is capped at the locked draw (one exact target, owner
         # #9) and at the HTF resistance (#7); the cap itself is the last rung when it cuts the
         # ladder [our interpretation]
         quad = sign * (z.bottom + 0.25 * (z.top - z.bottom) if sign < 0 else z.top - 0.25 * (z.top - z.bottom))
         h1 = _h1_gap_edge(ctx, sign, k8, max(quad, sign * z.mid))
-        raw = sorted({v for v in (sign * z.mid, quad, h1) if v is not None and v > entry})
+        far_ = None
+        if p.ma_deuce_ladder and h1 is None:              # caption-gap M15-ma-deuce-ladder (091 ~23:31): without a 1h BISI the daily BISI's low is the best-case final rung
+            from .sm3 import md_far_edge
+            far_ = md_far_edge(sign, z)
+        raw = sorted({v for v in (sign * z.mid, quad, h1, far_) if v is not None and v > entry})
         levels = [v for v in raw if v < cap - p.es_pt]
         if np.isfinite(cap) and (not levels or max(raw) >= cap - p.es_pt):
             levels.append(float(cap))

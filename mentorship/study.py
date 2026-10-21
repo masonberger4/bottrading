@@ -1675,6 +1675,50 @@ _SM2_DECISIONS = {
     "B18-smt-three-point-swing": dict(smt_mode="three_point", smt_pre=True, smt_windows=((570, 660),), **SM_POST),
 }
 DECISIONS.update(_SM2_DECISIONS)
+
+# --- caption-gap pass, setups_models #3/7 (levels_liquidity_targets.md, management_partials_trailing_exits.md, models_setups_entries.md): one variant per gap id (name prefix = the gap id) ---
+_SM3_DECISIONS = {
+    "A23-1h-wick-ce-sweep-depth": dict(wick_sweep_depth=True, **SM_POST),
+    "new-shallow-rel-sweep-one-more-drive": dict(shallow_sweep_wait=True, **SM_POST),
+    "new-leg-grading-quadrants": dict(leg_grade_gate="require", **SM_POST),
+    "new-leg-grading-quadrants_tag": dict(leg_grade_gate="tag", leg_origin="session_low", **SM_POST),
+    "L7-org-later-day-entry-array": dict(org_entry_array=True, org_entry_confl=False, htf_bias="combo", **SM_POST),
+    "new-eq-stop-hunt-entry": dict(eq_hunt="prefer", pool_swings=True, **SM_POST),
+    "new-prev-day-range-eq-long": dict(prev_eq_long=True, **SM_POST),
+    "new-retrace-to-recapitalized-ob": dict(recap_ob_entry=True, htf_bias="combo", **SM_POST),
+    "M1-turning-level-types": dict(am_discount_array=True, mm_turn_types=("ob", "fvg", "old_high", "old_low", "void"), **SM_POST),
+    "new-vb-target": dict(vb_trade=True, vb_min_gap_pts=0.5, **SM_POST),
+    "L2-raid-level-rolls": dict(turtle_soup="cc_limit", raid_roll=True, ts_cc_below_pts=0.25, htf_bias="combo", **SM_POST),
+    "B1-nearby-unrun-high-trap": dict(near_pool_block=True, **SM_POST),
+    "L13-weekly-high-london-swing": dict(wk_high_proj=True, weekly_bias=True, **SM_POST),
+    "M4-swept-low-age": dict(turtle_soup="2023", ts_age_rank="prefer", ts_linger_bars=2, **SM_POST),
+    "LLT3-equal-highs-fade-condition": dict(reh_fade_gate=True, htf_bias="combo", **SM_POST),
+    "LLT3-judas-depth-third-adr": dict(judas_max_adr=0.33),                                       # already built (judas_max_adr)
+    "LLT3-consolidation-lunch-vs-am-extreme": dict(profile_consol_pm=True),                       # already built (profile_consol_pm)
+    "LLT3-lunch-hl-raid-not-target": dict(pm_lunch_raid=True, htf_bias="combo"),
+    "X3-hs-fade-targets": dict(hs_fade=True, htf_bias="combo", hs_tf=15, hs_stop_pts=10.0),       # already built (levels_detectors#3: hs_fade)
+    "M11-immediate-rebalance-management": dict(ir_entries=True, ir_filters=True, ir_accel_hold=True, htf_bias="combo"),
+    "M14-tgif-draw-hit-first-sd-depth": dict(tgif_model=True, tgif_need_draw=True, tgif_sd_exit=True),
+    "M15-ma-deuce-ladder": dict(ma_deuce=True, ma_deuce_ladder=True, md_second=True),
+    "M16-sick-sister-exit-ladder": dict(ss_ladder=True),                                           # (the ladder acts under sick_sister, which needs the partner index: tested in the synthetic partner runs)
+    "A15-mitigation-block-targets": dict(mitigation_entry=True, mb_targets=True, mb_done_at_htf=True, htf_bias="combo"),
+    "A15-mitigation-block-body-hold": dict(mitigation_entry=True, mb_body_exit=True, htf_bias="combo"),
+    "new-vb-post-fill-management": dict(vb_trade=True, vb_min_gap_pts=0.5, **SM_POST),
+    "new-counter-bias-scalp-exit": dict(counter_scalp=True, htf_bias="combo", **SM_POST),
+    "M4-immediate-response-swept-extreme": dict(sweep_max_linger=2, **SM_POST),
+    "X9-repeated-array-taps": dict(breaker_max_taps_for_entry=2, breaker_entry="fallback", **SM_POST),
+    "M5-lasthour-draw-frozen-noon": dict(last_hour_own_slot=True, lh_draw_freeze=True),
+    "M1-three-entry-plans": dict(mm_plan="full", mmxm_ctx=True),
+    "M1-three-entry-plans_mss_scalp": dict(mm_plan="mss_scalp"),
+    "M1-three-entry-plans_pyramid": dict(mm_plan="pyramid", adds=(0.5, 0.5)),
+    "M4-unicorn-sequence-preopen-breaker": dict(unicorn_preopen=True, unicorn_pref=True, breaker_entry="fallback", **SM_POST),
+    "M4-accumulate-in-breaker-needs-bias-draw": dict(breaker_need_bias_draw=True, breaker_entry="fallback", adds_in_breaker=True, htf_bias="combo", **SM_POST),
+    "M1-sell-model-fail-to-reach-CE": dict(ce_fail_entry=True, htf_bias="combo", **SM_POST),
+    "M1-inside-fvg-expansion-only": dict(expansion_ce_entry=True, draw_lock="session", htf_resist_cap=False, ob_entry="post_mss"),
+    "M7-pm-1330-judas-full": dict(pm_judas_array=True, pm_need_htf_target=True, pm_lunch_fvg_array=True, **SM_POST),
+    "M1M2-htf-array-replaces-sweep": dict(allow_htf_array_premise=True, **SM_POST),
+}
+DECISIONS.update(_SM3_DECISIONS)
 SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): their look-ahead tests are in test_silver_bullet.py
 
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
