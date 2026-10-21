@@ -2101,6 +2101,37 @@ def head_shoulders(h, l, n: int, tol: float, end: int | None = None) -> dict | N
     return None
 
 
+def compressed_run(pivots, adr: float, k: float, n: int, eq: float | None = None, end: int | None = None) -> list:
+    """Caption-gap BH-compressed-higher-highs (028 ~1:26:02: "it's just constantly reaching for liquidity"): the latest run of at least `n`
+    CONSECUTIVE pivot highs (the Pivots of `pivots`, known by bar `end`), each higher than the previous one by less than `k` x `adr` (marginal,
+    compressed extensions), all of them above the dealing-range equilibrium `eq` (None = no location test). A run is as long as it stays
+    compressed: a bigger jump (or a lower high) ends it and a new one starts at that pivot. Returns the pivots of the latest qualifying run
+    (the whole run, newest last) or []. [our interpretation: the source gives no numbers; k = 0.1, n = 3 are Params.]"""
+    if adr is None or adr <= 0:
+        return []
+    ps = [q for q in pivots if end is None or q.known <= end]
+    best, run = [], []
+    for q in ps:
+        if run and 0 < q.price - run[-1].price < k * adr and (eq is None or q.price > eq):
+            run.append(q)
+        else:
+            run = [q] if (eq is None or q.price > eq) else []
+        if len(run) >= n:
+            best = list(run)
+    return best
+
+
+def compressed_highs(h, pivots, adr: float, k: float, n: int, eq: float | None = None, end: int | None = None):
+    """The bar index of the LAST high of the latest compressed run (`compressed_run`), or None. `h` (the bar highs) is only read to
+    confirm each pivot's price (h[q.i]); pass None to trust the Pivot prices."""
+    run = compressed_run(pivots, adr, k, n, eq, end)
+    if not run:
+        return None
+    if h is not None and any(abs(float(h[q.i]) - q.price) > 1e-9 for q in run):
+        return None
+    return int(run[-1].i)
+
+
 def ipda_forward(days: list, d_idx: int, size: int = 20) -> dict:
     """Caption-gap B21-open-float-forward-windows (cc05_004 ~25:15: "you look back 60 and you look forward 60"): the FORWARD intervals of
     the data range anchored at session `d_idx` of `days` ([(high, low)] of the completed sessions, oldest first). Each COMPLETED interval

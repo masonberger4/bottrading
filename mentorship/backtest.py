@@ -13,7 +13,7 @@ import pandas as pd
 from claude_hf.daytypes import JOBS, is_trading_day
 from . import htf
 from .entries import new_risk_state
-from .strategy import ROUND_STEP, Params, resolve_session_close, run_day
+from .strategy import ROUND_STEP, SMT_PICKS, Params, resolve_session_close, run_day
 
 DATA = Path("data/mentorship")
 NY = "America/New_York"
@@ -546,8 +546,71 @@ def consolidation_day(row) -> bool:
     return any(m in s for m in marks)
 
 
+ES_SYMBOLS = ("ES", "MES")           # D15 pick="fixed_es" (cc10_012 / cc10_014: the crack in any index signals the trade in ES)
+
+
+def objective_met_filter(t: pd.DataFrame, consol_only: bool = False) -> pd.DataFrame:
+    """BH-D15-sick-sister-laggard (056 ~9:10; 070 ~18:41; 099 ~26:53): once one instrument's objective is met - one of its trades reached its last ladder
+    level (`final_hit`, the locked draw) and exited at time T - its own later fills go and only the OTHER instruments' fills from T on stay (the unmet
+    one, the 'sick sister', routed to its own analogous target). Fills before T are untouched (the rule needs the leader to have met it: causal,
+    T is a past exit at every later entry). `consol_only` (the 053 statement, D15 option B's narrow form): only on consolidation days (`consolidation_day`);
+    every other day keeps all fills, ready for the plain first-fill pick."""
+    if not {"final_hit", "exit_time", "symbol", "entry_time"} <= set(t.columns) or not len(t):
+        return t
+    keep = pd.Series(True, index=t.index)
+    done = t[t.final_hit.eq(True) & t.exit_time.notna()]
+    for d, g in done.groupby("date"):
+        day = t[t.date == d]
+        if consol_only and not day.apply(consolidation_day, axis=1).any():
+            continue
+        first = g.sort_values("exit_time", kind="stable").iloc[0]
+        late = day.entry_time >= first.exit_time
+        keep.loc[day[late & (day.symbol == first.symbol)].index] = False
+        keep.loc[day[late & (day.symbol != first.symbol)].index] = True
+    return t[keep]
+
+
+def _fixed_es(t: pd.DataFrame) -> pd.DataFrame:
+    """BH D15-which-index-contradiction: only ES fills stay; an ES fill is SMT-qualified when EITHER instrument's SMT tag of its slot (date + session)
+    shows a divergence at the sweep (the other index's tag counts: the crack in any index signals the trade in ES)."""
+    if "smt" not in t.columns:
+        return t[t.symbol.isin(ES_SYMBOLS)]
+    div = t.assign(_d=t.smt.eq(True)).groupby(["date", "_sk"])._d.transform("any")
+    t = t.assign(smt=t.smt.where(~div, True).astype(object))
+    return t[t.symbol.isin(ES_SYMBOLS)]
+
+
+def _group_pick(t: pd.DataFrame, pick: str) -> pd.DataFrame:
+    """D15 picks that choose among the instruments' fills of one slot (date + session): "middle" (the middle of three by `move_pct`, the move from the
+    session open in the trade direction; a slot without three instruments' fills keeps the first), "clean_swing" (a fill with a 15m pivot between its
+    entry and T1; none = the first), "depth" (the larger `array_depth`, ties by `array_respect`, then the earlier fill)."""
+    rows = []
+    t = t.sort_values("entry_time", kind="stable")
+    for _, g in t.groupby(["date", "_sk"], sort=False):
+        if pick == "middle":
+            gg = g.drop_duplicates("symbol")
+            if len(gg) >= 3 and "move_pct" in gg and gg.move_pct.notna().all():
+                r = gg.sort_values("move_pct", kind="stable").iloc[len(gg) // 2]
+            else:
+                r = g.iloc[0]
+        elif pick == "clean_swing":
+            c = g[g.clean_swing.eq(True)] if "clean_swing" in g else g.iloc[:0]
+            r = (c if len(c) else g).iloc[0]
+        else:
+            if "array_depth" not in g or g.array_depth.isna().all():
+                r = g.iloc[0]
+            else:
+                gg = g.assign(_d=g.array_depth.fillna(-1.0), _r=(g.array_respect.fillna(-1.0) if "array_respect" in g else -1.0))
+                r = gg.sort_values(["_d", "_r", "entry_time"], ascending=[False, False, True], kind="stable").iloc[0]
+        rows.append(r)
+    if not rows:
+        return t.iloc[:0]
+    out = pd.DataFrame(rows)
+    return out.drop(columns=[c for c in ("_d", "_r") if c in out.columns]).sort_values("entry_time")
+
+
 def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, sb_one_market: bool = False,
-            sb_am_done: bool = False) -> pd.DataFrame:
+            sb_am_done: bool = False, laggard_consol_only: bool = False) -> pd.DataFrame:
     """Trade one instrument per session (watch one market, rules Ep 05): of the setups the
     instruments produced, keep the first to fill. On a tie, keep the one whose SMT check
     didn't show its partner holding stronger. Uses only what was known at the fill.
@@ -558,12 +621,19 @@ def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, 
     the larger (leader) / smaller (laggard) relative leg (leg_hi_px - ext_px) / ext_px.
     bias_htf D15: pick="trend" = "leader" on trend days and "laggard" on consolidation days (ICT's reconciliation: the sick sister
     only in consolidation, 053 ~08:20; consolidation_day reads the trades' day tags); one_market=True (Ep 05 "watch one market
-    only"): once the day's first fill is chosen, the other instrument's trades of that date are dropped."""
+    only"): once the day's first fill is chosen, the other instrument's trades of that date are dropped.
+    Caption-gap pass (setups_models #1/7) D15 picks: "laggard_objective" (once an instrument's objective is met - a trade reached its last ladder
+    level - only the other, unmet instrument's later fills stay; `laggard_consol_only`: only on consolidation days), "middle" (three runs: the
+    instrument whose move from the session open to the fill is the middle one; fewer than three runs raise ValueError), "clean_swing" (the fill with a
+    15m pivot between its entry and T1), "depth" (the fill that ran deeper into its HTF array), "swept" (= "laggard": the index whose sweep made the
+    new extreme, cc10_011), "fixed_es" (only ES fills; SMT-qualified when either instrument's tag diverged at that slot, cc10_012 / cc10_014)."""
+    if pick not in SMT_PICKS:
+        raise ValueError(f"pick {pick!r}")
+    if pick == "middle" and len(runs) < 3:
+        raise ValueError("pick 'middle' needs three runs (ES / NQ / YM): rank the instruments by their move and keep the middle one")
     t = pd.concat([r for r in runs if len(r)], ignore_index=True)
     if not len(t):
         return t
-    if pick not in ("first", "leader", "laggard", "trend"):
-        raise ValueError(f"pick {pick!r}")
     out = None
     # SB package (M3.9): a Silver Bullet window is its own slot - the key was (date, session), so an SB trade of the
     # London / AM window (session "AM") shut the main engine's AM trade of the other market out and vice versa.
@@ -582,7 +652,21 @@ def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, 
             done = won.groupby("date").exit_time.min()
             later = (t.session == "AM") & (t.setup != "sb_am") & (t.entry_time > t.date.map(done))
             t = t[~later]
-    if pick != "first":
+    if pick == "laggard_objective":                    # D15 (caption-gap BH-D15-sick-sister-laggard): the unmet instrument after a leader met its objective
+        t = objective_met_filter(t, laggard_consol_only)
+        pick = "first"
+    elif pick == "swept":                              # D15 (BH D15-which-index-contradiction): the swept index (turtle soup) = the SMT tag True: "laggard"
+        pick = "laggard"
+    elif pick == "fixed_es":
+        t = _fixed_es(t)
+        pick = "first"
+        if not len(t):
+            return t.drop(columns="_sk")
+    if pick in ("middle", "clean_swing", "depth"):
+        out = _group_pick(t, pick)
+        if "_sk" in out:
+            out = out.drop(columns="_sk")
+    elif pick != "first":
         lag = t.smt.eq(True)
         if pick == "trend":
             cons = t.apply(consolidation_day, axis=1)

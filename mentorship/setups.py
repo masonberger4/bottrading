@@ -924,6 +924,18 @@ def pm_reversal(ctx, sd, i, p, risk_mult):
                                      # draw the other way traded today is the "objective met"
     k_pm = S._idx_at(ctx, 810)
     am_x = sd.x(ctx.am_hl[1] if sd.sign > 0 else ctx.am_hl[0])
+    if p.pm_reversal_pool == "lunch_or_am" and "lunch" in ctx.sess:
+        # caption-gap DS2-am-move-pm-reversal-templates (cc10_013 ~6:36): a sweep of the LUNCH extreme (a failure swing vs the AM extreme) also counts
+        lx = sd.x(ctx.sess["lunch"][1] if sd.sign > 0 else ctx.sess["lunch"][0])
+        am_x = max(am_x, lx)
+    if p.pm_reversal_ltf_only:
+        # ... the reversal carries through only when the AM move started off a 60m / 15m array: a 4h+ origin (the AM extreme's array) blocks it
+        cf = getattr(ctx, "conf", None)
+        if cf is not None:
+            org = float(ctx.am_hl[1] if sd.sign < 0 else ctx.am_hl[0])       # real price of the AM move's origin (its low for an AM rally = b > 0)
+            if any(t_ in ("4h", "D", "W", "M") for t_ in cf.at(ctx.idx[k_pm], org, b)):
+                S._f("x_pm_reversal_htf_origin")
+                return None
     seg = sd.l[k_pm:i + 1]
     if not len(seg) or seg.min() >= am_x:
         return None
@@ -1093,6 +1105,13 @@ def finish_gates(ctx, sd, sw, i, p, session, entry, tags: dict, lvt: list, lvx: 
     if p.require_judas and not S._judas(ctx, sd, sw, session, p.judas_window):
         S._f("x_require_judas")
         return False
+    if p.require_judas_news or p.judas_news_tag:      # caption-gap T13-judas-news-driver (cc01_002 ~15:16): the Judas is triggered by a news driver
+        jn = S._SM2.judas_news(ctx, sw, p)
+        if jn:
+            lvt.append("judas_news")
+        elif p.require_judas_news and p.require_judas:
+            S._f("x_require_judas_news")
+            return False
     if p.po3_require_bias and getattr(ctx, "cur_bias", 0) != sd.sign:
         S._f("x_po3_bias")
         return False
@@ -1101,7 +1120,12 @@ def finish_gates(ctx, sd, sw, i, p, session, entry, tags: dict, lvt: list, lvx: 
             S._f("x_nfp_sd")
             return False
         lvt.append("nfp_sd")
-    if p.news_profile != "off":
+    if p.news_profile == "pool_test":                 # caption-gap N6-nfp-first-move-fake-if-liquidity (105 ~7:58): the first move is the fake only if it ran a pool
+        why = S._SM2.news_pool_gate(ctx, sd, sw, i, p, session, lvt)
+        if why:
+            S._f(why)
+            return False
+    elif p.news_profile != "off":
         fl = _news_first_leg(ctx, i)
         if fl == -sd.sign:
             lvt.append("news_profile")

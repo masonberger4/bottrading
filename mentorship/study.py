@@ -16,6 +16,12 @@ import pandas as pd
 from . import backtest as B
 from .strategy import PRESET_EP07, Params
 
+def study_pick(pick: str, runs: int = 2) -> str:
+    """D15 smt_pick "middle" needs three instruments' books (ES / NQ / YM): with the two books these studies run it is inert ("first") until a third series
+    is loaded (caption-gap BH-D15-middle-index; backtest.combine itself raises on fewer than three runs)."""
+    return "first" if (pick == "middle" and runs < 3) else pick
+
+
 VARIANTS = {
     "base": {},
     "require_htf": dict(require_htf=True),
@@ -37,7 +43,7 @@ def _real(job):
     p = replace(Params(), **VARIANTS[name])
     a = B.run(spy, tf, "SPY", p, qqq)
     b = B.run(qqq, tf, "QQQ", replace(p, es_pt=q_pt), spy)
-    out = {"SPY": a, "QQQ": b, "combined": B.combine(a, b, pick=p.smt_pick, one_market=p.one_market,
+    out = {"SPY": a, "QQQ": b, "combined": B.combine(a, b, pick=study_pick(p.smt_pick), laggard_consol_only=p.laggard_consol_only, one_market=p.one_market,
                                                      sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done)}
     for k, v in out.items():
         if len(v):
@@ -124,7 +130,8 @@ def main_index(out="runs/mentorship", variants=None, tfs=(5, 1), workers=6):
     books = []
     for (tf, v), g in t.groupby(["tf", "variant"]):
         books.append(B.combine(g[g.symbol == "SPX"], g[g.symbol == "NDX"],
-                               pick=IVARIANTS.get(v, {}).get("smt_pick", "first"),
+                               pick=study_pick(IVARIANTS.get(v, {}).get("smt_pick", "first")),
+                               laggard_consol_only=bool(IVARIANTS.get(v, {}).get("laggard_consol_only", False)),
                                one_market=bool(IVARIANTS.get(v, {}).get("one_market", False)),
                                sb_one_market=IVARIANTS.get(v, {}).get("sb_one_market", False),     # SB package
                                sb_am_done=IVARIANTS.get(v, {}).get("sb_am_done", False)).assign(book="combined"))
@@ -1564,6 +1571,55 @@ _LD3C_DECISIONS = {
     "new-reactionary-high-liquidity_precond": dict(reactionary_pools=True, reactionary_precond=True),
 }
 DECISIONS.update(_LD3C_DECISIONS)
+# caption-gap pass, setups_models #1/7 (36 specs of rulebook_gaps/bias_htf_intermarket.md, day_selection_news_calendar.md, definitions_pd_arrays_structure.md): one
+# variant per behaviour switch, named by the gap id (name prefix = the id). Switches that need an MSS or a bias carry them.
+_SM1_DECISIONS = {
+    "BH-B12-midnight-open-tolerance": dict(open_tol_pts=3.0, **SM_POST),
+    "BH-B12-midnight-open-tolerance_wk_open": dict(wk_open_side=True),
+    "BH-B12-po3-sequence": dict(po3_seq="tag", **SM_POST),
+    "BH-B12-po3-sequence_filter": dict(po3_seq="filter", **SM_POST),
+    "BH-A8-opposing-FVG-inversion-confirms": dict(ifvg_narrative="block", htf_bias="combo", **SM_POST),
+    "BH-A8-opposing-FVG-inversion-confirms_require": dict(ifvg_narrative="require", htf_bias="combo", **SM_POST),
+    "BH-B12-gap-up-short-below-0930": dict(gap_premium_arm=True),
+    "BH-compressed-higher-highs": dict(compressed_hh=True, htf_bias="combo"),
+    "BH-D15-sick-sister-laggard": dict(smt_pick="laggard_objective"),
+    "BH-D15-sick-sister-laggard_consol_only": dict(smt_pick="laggard_objective", laggard_consol_only=True),
+    "BH-D15-middle-index": dict(smt_pick="middle"),           # inert with the two books these studies run (needs a third series, study_pick)
+    "BH-D15-clean-swing-point": dict(smt_pick="clean_swing"),
+    "D15-short-index-by-premium-depth": dict(smt_pick="depth"),
+    "BH-M3-scan-all-indices": dict(markets=("ES", "NQ")),
+    "BH-three-pool-runs-exhaustion": dict(pool_runs_max=3),
+    "BH-premium-FVG-CE-vs-far-edge-trap": dict(far_edge_trap=True),
+    "B18-am-smt-window-points": dict(smt_pre=True, smt_windows=((570, 660),), smt_win_a=120, smt_win_b=660, smt_open_points=True),
+    "NEW-low-of-day-zone-tag-first": dict(lod_zone_first=True),
+    "B18-smt-only-with-bias": dict(smt_with_bias=True, htf_bias="combo"),
+    "B5-mature-trend-continuation": dict(mature_flag_block=True),
+    "M12-classic-patterns-fade": dict(hs_fade=True, htf_bias="combo", hs_tf=15, hs_stop_pts=10.0),      # already built (levels_detectors#3: hs_fade)
+    "X3-a15-mitblock-bear-context": dict(mitigation_entry=True, mit_needs_bias=True, htf_bias="combo"),
+    "X3-graduated-pricing-second-touch": dict(touch_tag=True),
+    "B12-judas-depth-adr": dict(judas_max_adr=0.4),
+    "T3-london-close-multiday-reversal": dict(lc_tag=True, lc_reentry=True),
+    "D15-which-index-contradiction": dict(smt_pick="swept"),
+    "D15-which-index-contradiction_fixed_es": dict(smt_pick="fixed_es"),
+    "B18-pm-smt-reference-points": dict(smt_pm_points=True),
+    "N1-nfp-release-4h-fvg": dict(nfp_release_fvg=True, htf_bias="combo"),
+    "N6-nfp-first-move-fake-if-liquidity": dict(news_profile="pool_test"),
+    "N5-entry-at-release": dict(post_news_continuation=True, htf_bias="combo"),
+    "N5-entry-at-release_release_ob": dict(release_ob_entry=True, htf_bias="combo"),
+    "T13-judas-news-driver": dict(require_judas_news=True, judas_news_tag=True),            # the tag (require_judas_news gates only together with require_judas)
+    "T13-judas-news-driver_require": dict(require_judas=True, judas_window=600, require_judas_news=True, judas_news_min=600),     # wide windows: some days keep a news-backed Judas
+    "DS2-two-session-close-templates": dict(profile_two_session=True, htf_bias="combo", extra_pools=True),
+    "DS2-am-move-pm-reversal-templates": dict(pm_reversal=True, pm_reversal_pool="lunch_or_am", pm_reversal_ltf_only=True, extra_pools=True),
+    "DS2-consolidation-profiles": dict(profile_consol_pm=True),
+    "A13-breaker-needs-rebalance-and-fvg": dict(breaker_needs_disp=True, breaker_break_ref="body_high", **SM_POST),
+    "A13-breaker-close-vs-wick": dict(breaker_by_close=True, mss_mode="wick", breaker_ll=False, **SM_POST),
+    "A13-breaker-lifetime": dict(breaker_day_life=True, breaker_keep_original=True, **SM_POST),
+    "A19-break-against-htf-stop-run": dict(mss_requires_htf_agreement=True, stoprun_rearm=True, htf_bias="combo", **SM_POST),
+    "A5-short-into-htf-sibi": dict(htf_sibi_short_zone=True, htf_sibi_need_smt=True, **SM_POST),
+    "A15-mitigation-block-entry": dict(mitigation_entry=True, htf_bias="combo"),
+    "A15-mitigation-block-entry_mid": dict(mitigation_entry=True, mit_entry_px="mid", htf_bias="combo"),
+}
+DECISIONS.update(_SM1_DECISIONS)
 SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): their look-ahead tests are in test_silver_bullet.py
 
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
@@ -1629,13 +1685,14 @@ def _dec_job(job):
               partner2=p2, ref_df=ref,
               bias_table=_bias_cache(tf, 570, p.vi_arrays, p.flip_triggers, B.table_kw(p)), meta=B.load_meta(SYMS[0], tf, SRC),
               lock_cuts=_lock_cache(tf, p))
-    if p.smt_pick != "first" or p.one_market or p.sb_one_market or p.sb_am_done:    # SB package: M3.9 / gap 7 need the second market too
+    if p.smt_pick != "first" or p.one_market or p.sb_one_market or p.sb_am_done or len(p.markets) > 1:    # SB package: M3.9 / gap 7 need the second market too (BH-M3-scan-all-indices: markets)
         # Ep03.11 (review fix): smt_pick only acts when two instruments are combined - run the
         # partner as its own book (es_pt scaled by the price ratio, as main_index) and combine
         q = replace(p, es_pt=round(p.es_pt * float(pa.close.median() / df.close.median()), 2))
         tb = B.run(pa[(pa.index >= lo) & (pa.index < b)], tf, SYMS[1], q, df[(df.index >= lo) & (df.index < b)],
                    meta=B.load_meta(SYMS[1], tf, SRC) if SRC == "databento" else None, lock_cuts={} if p.draw_lock == "off" else None)
-        t = B.combine(t, tb, pick=p.smt_pick, one_market=p.one_market, sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done)   # SB package
+        t = B.combine(t, tb, pick=study_pick(p.smt_pick), laggard_consol_only=p.laggard_consol_only, one_market=p.one_market,
+                      sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done)   # SB package
     if len(t):
         t = t[pd.to_datetime(t.entry_time.astype(str).str[:10]) >= f"{year}-01-01"].copy()
         t["tf"], t["year"], t["variant"] = tf, year, name
