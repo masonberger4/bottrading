@@ -1,7 +1,7 @@
 """Push the mentorship branch to GitHub after each build-workflow stage finishes.
 
 Watches the workflow journal; when a "test:<package>" agent (the last step of a stage) has a
-result, waits for a clean working tree, runs the secrets / data check on every commit not yet
+result that reports a green suite ("SUITE GREEN: <n> passed"), waits for a clean working tree, runs the secrets / data check on every commit not yet
 on origin, and pushes only if the check passes. Otherwise it stops and leaves a note in
 runs/push_after_stages.log for the owner.
 
@@ -52,7 +52,9 @@ def finished_tests(journal: Path) -> set[str]:
         if e.get("type") == "started":
             labels[e["key"]] = e.get("label", "")
         elif e.get("type") == "result" and labels.get(e.get("key"), "").startswith("test:"):
-            done.add(labels[e["key"]])
+            # push only a stage whose test step reports a finished green suite ("SUITE GREEN: <n> passed")
+            if "SUITE GREEN:" in str(e.get("result", "")):
+                done.add(labels[e["key"]])
     return done
 
 
