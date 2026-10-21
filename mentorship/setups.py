@@ -379,6 +379,7 @@ def ifvg_stop(sd, g, entry: float, stop: float, p, i: int | None = None):
         entry = ce
     elif p.ifvg_entry == "quadrant":         # caption-gap A8-ifvg-narrative-liquidity-run (078 ~51:00): long entries at H, the upper quadrant or the CE
         entry = g.q(0.75)
+        S._SM2.hit("ifvg_quadrant")
     if p.ifvg_depth == "w_cap":              # caption-gap A8-ifvg-depth-tolerances (102 ~1:11:04): cases a / b / c with the W cap; None = the retrace went too deep
         r_ = S._SM2.ifvg_w_cap(sd, g, entry, stop, i, p)
         if r_ is None:
@@ -1338,7 +1339,9 @@ def draw_prefs(ctx, sd, sw, i, p, session, entry, risk, keep) -> list:
             v, k = (eqp or pools)[0]
             out.append((v, k, "m2"))
     if p.mmxm_ctx:
-        q = leg_origin(sd, sw["ext_i"], i) if p.mm_ssl_target else None      # caption-gap A2-delivery-vs-liquidity (104 ~11:24): the far end of the delivery leg that engineered the pool (the origin of the decline into a long's sweep)
+        q = leg_origin(sd, sw["ext_i"], i) if p.mm_ssl_target else None
+        if q is not None:
+            S._SM2.hit("mm_ssl")      # caption-gap A2-delivery-vs-liquidity (104 ~11:24): the far end of the delivery leg that engineered the pool (the origin of the decline into a long's sweep)
         if q is None:
             q = parent_high(sd, sw["ext_i"], i)
         else:

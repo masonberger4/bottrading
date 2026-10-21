@@ -2299,7 +2299,7 @@ def delivery_state(o, h, l, c, i: int, adr: float, consol_bars: int = 20, consol
       EXPANSION     - a bar within the last 3 closed beyond the preceding range, or a displacement bar (body >= disp_mult x the mean body of the 10 before) in the last 3
       RETRACEMENT   - anything else: back inside the recently created range."""
     n = int(consol_bars)
-    if not adr or i < n + 1:
+    if not adr or i < n + 2:                                                  # (the EXPANSION loop reads the n bars before bar i-2)
         return ""
     w_h, w_l = np.asarray(h[i - n + 1:i + 1]), np.asarray(l[i - n + 1:i + 1])
     if float(w_h.max() - w_l.min()) < consol_adr * adr:

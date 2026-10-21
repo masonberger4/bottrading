@@ -599,15 +599,12 @@ def mss_htf_reject(ctx, sd, sw, i: int, p, session: str, ref_i: int, ref: float)
         return False
     hit("mss_htf_reject")
     if p.stoprun_rearm and not sw.get("sr_armed"):
-        sw["sr_armed"] = True
         sm = getattr(ctx, "sides_map", None)
         o = sm.get(-sd.sign) if sm else None
         if o is not None and o.sweep is None:
             hit("stoprun_rearm")
-            seg = o.l[sw["ext_i"]:i + 1]
-            ext_i = sw["ext_i"] + int(np.argmin(seg))
-            o.sweep = dict(session=session, name="stoprun", level=float(o.x(sd.x(ref))), key="stoprun", ext=float(o.l[ext_i]), ext_i=ext_i,
-                           broke=None, sweep_i=i, smt=None, smt2=None)
+        arm_bias_side(ctx, sd, sw, i, session, float(o.x(sd.x(ref))) if o is not None else 0.0, sw["ext_i"])
+        sw["sr_armed"] = True
     return True
 
 
@@ -717,6 +714,64 @@ def breaker_retest_order(ctx, sd, i: int, p, session: str, risk_mult: float):
         sw = dict(e["sw"], session=session)
         sw.pop("bz_sent", None)
         return S._breaker_order(ctx, sd, sw, bz, i, p, session, risk_mult)
+    return None
+
+
+def breaker_dealing_range(sd, e: dict, i: int):
+    """A21-pre-trigger-dealing-range (048 ~1:20:40): the dealing range of a remembered bullish breaker `e` once price TAPPED it (a low at or under its top after it
+    formed): (low = the tap bar's low, high = the highest high between the breaker's birth and the tap = the swing high before the retrace [our interpretation of
+    "the latest 3-candle swing high before the retrace"], tap bar), or None before the tap, when the tap bar or any later bar traded deeper than the breaker's
+    bottom (invalid - time never invalidates), or without a range."""
+    tap = next((j for j in range(e["born"] + 1, i + 1) if sd.l[j] <= e["top"]), None)
+    if tap is None or sd.l[tap:i + 1].min() < e["bottom"] - 1e-9:
+        return None
+    hi = float(sd.h[e["born"]:tap].max(initial=-np.inf))
+    lo = float(sd.l[tap])
+    return (lo, hi, tap) if hi > lo + 1e-9 else None
+
+
+def breaker_trigger_order(ctx, sd, i: int, p, session: str, risk_mult: float):
+    """A21-pre-trigger-dealing-range, the explicit trigger (048 ~1:20:40: "I don't care how much time it spends inside"): inside the breaker's dealing range
+    nothing is done however long it chops. The TRIGGER is an up-close candle whose body closes above a bearish FVG sitting in the upper half of the range while also
+    closing above the internal highs (the swing highs formed since the tap) - the MSS. Then the first bullish FVG at / after the trigger bar gets a limit at its top
+    (the 1m FVG of the spec; the 10:00-11:00 preference is not enforced), stop under the range low, once per breaker. Side space."""
+    S = _S()
+    ws = other_side(ctx, sd, p)
+    for e in sorted(_c(ctx).get(("brk", sd.sign), []), key=lambda e: -e["born"]):
+        if i <= e["born"] or e.get("trig_sent") or not brk_alive(sd, e, i, p):
+            continue
+        rng = breaker_dealing_range(sd, e, i)
+        if rng is None:
+            continue
+        lo, hi, tap = rng
+        mid = (lo + hi) / 2
+        if e.get("trig") is None:
+            ph = [q.price for q in sd.ph if tap < q.i and q.known <= i - 1 and q.price < hi]
+            bears = [(-g.bottom, -g.top) for g in ws.gaps if e["born"] <= g.i <= i and -g.top >= mid]        # (top, bottom) in side space, upper half
+            if (sd.c[i] > sd.o[i] and ph and sd.c[i] > max(ph) + 1e-9
+                    and any(sd.c[i] > t_ for t_, b_ in bears)):
+                e["trig"] = i
+                hit("breaker_trigger")
+        if e.get("trig") is None:
+            continue
+        if i - e["trig"] > max(3, p.pending_minutes // ctx.tf):
+            e["trig_sent"] = True
+            continue
+        gs = [g for g in sd.gaps if e["trig"] <= g.i <= i and sd.c[g.i + 1:i + 1].min(initial=np.inf) >= g.bottom - 1e-9]
+        if not gs:
+            continue
+        g = min(gs, key=lambda g: g.i)
+        entry, stop = float(g.top), float(lo - p.pad)
+        if entry - stop < p.min_risk_pts * p.es_pt or entry >= sd.c[i] + 1e-9:
+            continue
+        e["trig_sent"] = True
+        hit("breaker_trigger_order")
+        sw = _synth_sw(S, session, "breaker_range", hi, lo, tap, e["trig"])
+        tags = dict(unicorn=False, fvg_bottom=float(g.bottom), fvg_ce=float(g.mid), entry_kind="breaker_range", mitigation=False, propulsion=False,
+                    no_leg_wait=True, lv_tags=["breaker_range_trigger"])
+        o = S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, hi, tags, skip_leg_pd=True)
+        if o is not None:
+            return o
     return None
 
 
@@ -1805,10 +1860,9 @@ def org_state(ctx, i: int, p):
             if hi_s[j] > op_s + near:
                 step, h1 = 1, float(hi_s[j])
         elif step == 1:
+            h1 = max(h1, float(hi_s[j]))                  # (the dip bar's own high counts toward the first extreme)
             if lo_s[j] <= op_s + near:
                 step = 2
-            else:
-                h1 = max(h1, float(hi_s[j]))
         elif step == 2 and hi_s[j] > h1:
             step = 3
             break
@@ -1921,12 +1975,32 @@ def micro_active(ctx, sd, i: int, p) -> bool:
     return True
 
 
-def reh_trap_gate(ctx, sd, i: int, p):
-    """A19-reh-short-term-low-trap (029 ~48:29: "what do they see that as a market structure shift"): bias long, the HTF objective above not yet reached and the
-    last two swing highs relatively equal (A3 eq_tol) and still untaken: a break of the short-term low under them is bait that builds buy-side above the REH,
-    not a bearish MSS - the AGAINST-bias order is rejected (the long on the next bullish FVG is the ordinary flow). Mirror for shorts."""
+def arm_bias_side(ctx, sd, sw, i: int, session: str, ref_in_o_space: float, ext_from: int) -> bool:
+    """Arm the OPPOSITE Side's sweep once (the stops the against-bias break ran): level = the broken swing (in that Side's space), extreme = its lowest low since
+    bar `ext_from` (shared by A19-break-against-htf-stop-run and A19-reh-short-term-low-trap). False when it was armed before / that Side is busy / unknown."""
+    if sw.get("sr_armed"):
+        return False
+    sm = getattr(ctx, "sides_map", None)
+    o = sm.get(-sd.sign) if sm else None
+    if o is None or o.sweep is not None:
+        return False
+    sw["sr_armed"] = True
+    seg = o.l[ext_from:i + 1]
+    ext_i = ext_from + int(np.argmin(seg))
+    o.sweep = dict(session=session, name="stoprun", level=float(ref_in_o_space), key="stoprun", ext=float(o.l[ext_i]), ext_i=ext_i, broke=None, sweep_i=i, smt=None, smt2=None)
+    return True
+
+
+def reh_trap_gate(ctx, sd, sw, i: int, p, session: str = "AM"):
+    """A19-reh-short-term-low-trap (029 ~48:29: "what do they see that as a market structure shift"): bias long (the htf.table / loop reading, `bias_at`), the HTF
+    objective above not yet reached and the last two swing highs relatively equal (A3 eq_tol) and still untaken: a MSS-path break of a short-term low under them
+    (a swing low formed after the first of the two highs and closed through by bar i) is bait that builds buy-side above the REH, not a bearish MSS - the
+    AGAINST-bias order (a break/MSS-based one: sw["broke"] set) is rejected and the bias Side's sweep is armed once at that low (the stops the break ran; its
+    long then follows the ordinary next-bullish-FVG flow). Mirror for shorts. Other order kinds (no MSS break) are not this gate's business."""
     S = _S()
-    w = want(ctx)
+    if sw.get("broke") is None:
+        return None
+    w = bias_at(ctx, p, session, i)
     if not w or w == sd.sign:
         return None
     ws = other_side(ctx, sd, p)
@@ -1938,7 +2012,13 @@ def reh_trap_gate(ctx, sd, i: int, p):
         return None                                       # the REH was taken: the run is spent
     if S._SM.htf_done_sign(ctx, w, i):
         return None                                       # the HTF objective was reached
+    lows = [q for q in ws.pl if hs[-2].i < q.i and q.known <= i and ws.c[q.known:i + 1].min(initial=np.inf) < q.price - 1e-9]
+    if not lows:
+        return None                                       # no short-term low under the REH was actually broken
     hit("reh_trap")
+    q = lows[-1]
+    if arm_bias_side(ctx, sd, sw, i, session, q.price, q.i):
+        hit("reh_trap_arm")
     return "x_reh_trap"
 
 
@@ -1948,7 +2028,7 @@ def reswept(ctx, sd, sw, i: int, p) -> bool:
     """M12-second-takeout-turtle-soup (046 ~1:01:58: "I don't think it's something to build a framework on"): the swept pool was ALREADY traded through earlier (after
     it formed) and a later close came back above it (a rally) before this sweep - a second, shallow break and recovery is a likely deeper retracement, no turtle
     long. The rally must NOT have taken the opposing high (the highest high from the pool's creation to the first break); one that did starts a new range. The pool
-    exists from its natural creation (the last swing of a relative-equal cluster; strategy._level_created with the AM clock), never from before."""
+    exists from its natural creation (the last swing of a relative-equal cluster; strategy._level_created with the sweep's own session clock), never from before."""
     S = _S()
     key = sw.get("key", "")
     if not key or sw.get(S._SM.SYNTH):
@@ -1960,7 +2040,7 @@ def reswept(ctx, sd, sw, i: int, p) -> bool:
         a = (max(q.i for q in qs) + 1) if qs else s_i
     else:
         try:
-            a = max(ctx.start, int(S._level_created(ctx, key, "AM")))
+            a = max(ctx.start, int(S._level_created(ctx, key, str(sw.get("session") or "AM"))))
         except Exception:
             a = ctx.start
     if a >= s_i:
@@ -2001,6 +2081,9 @@ def second_break_partial(ctx, sd, pos, tr, ts, i: int, p) -> None:
             return
 
 
+ITL_KEYS = ("pdl2", "pdl3", "pdh2", "pdh3", "pwl", "pwh", "pml", "pmh", "ipda", "week_", "parent_lo", "parent_hi", "tfp")     # the pool keys older than yesterday (strategy._sell_side / ld4 pools)
+
+
 def itl_ok(ctx, sd, sw, i: int, p) -> bool:
     """new-intermediate-term-hl-fade (cc09_005 ~23:14: "it's beyond just yesterday"): a turtle-soup fade of an INTERMEDIATE-TERM pool (older than yesterday: pdl2 / pdl3,
     last week, last month, IPDA) needs context: an HTF array at the extreme, or a range-bound market (the last 10 sessions' whole range <= 3 x ADR5), or a long
@@ -2008,7 +2091,7 @@ def itl_ok(ctx, sd, sw, i: int, p) -> bool:
     are n/a (True)."""
     S = _S()
     key = str(sw.get("key", ""))
-    if not key.startswith(("pdl2", "pdl3", "pdh2", "pdh3", "pwl", "pwh", "pml", "pmh", "ipda")):
+    if not key.startswith(ITL_KEYS):
         return True
     hit("itl_context")
     if S._htf_tag(ctx, sd, i, sw["ext"], p.eq_tol_pts * p.es_pt):
@@ -2065,11 +2148,11 @@ def ifvg_zone(sd, tags: dict):
 
 
 def _taken_pools(ctx, sd, i: int, p, session: str, a: int, b: int) -> list:
-    """The sell-side pools (side space) traded through by a bar in a..b (this session's named pools and relative equal lows)."""
+    """The sell-side pools (side space) traded through by a bar in a..b: this session's named pools and the relative equal lows standing at bar a-1."""
     S = _S()
     lv = S._sell_side(ctx, sd, session, i, p.extra_pools, p)
-    for k, eq in enumerate(S._eq_levels(sd, i - 1, p.eq_tol_pts * p.es_pt, lows=True, p=p)):
-        lv[f"rel_eq_lows{k}"] = eq
+    for k, eq in enumerate(S._eq_levels(sd, max(a, 1) - 1, p.eq_tol_pts * p.es_pt, lows=True, p=p)):
+        lv[f"rel_eq_lows{k}"] = eq               # the relative equal lows standing when the window STARTS (one taken inside it is dropped from a later list)
     low = sd.l[a:b + 1].min(initial=np.inf)
     return sorted(v for v in lv.values() if low < v - 1e-12)
 
@@ -2092,6 +2175,7 @@ def ifvg_run_gate(ctx, sd, sw, i: int, p, session: str, z, lvt: list):
     if any(z.bottom - 1e-9 <= v <= z.top + 1e-9 for v in pools):
         lvt.append("ifvg_pool_inside")
     elif p.ifvg_over_pool_pref:
+        hit("ifvg_pool_pref")
         for z2 in sd.ifvgs():
             if z2 is z or z2.i > i or z2.i < ctx.start:
                 continue
@@ -2123,6 +2207,21 @@ def ifvg_tails_gate(ctx, sd, i: int, p, z):
     return "x_ifvg_tails"
 
 
+def ifvg_far_edge_unlikely(sd, i: int, z) -> bool:
+    """A8-ifvg-narrative-liquidity-run (078, the bearish-mirror remark: the far edge H "is unlikely to be reached if an FVG just beyond it is still open"), side
+    space [our interpretation]: an FVG still untouched directly beyond the inversion zone's far edge (its top within one gap height under z.bottom) is a support the
+    retrace stops at - the zone's far edge is not expected to be reached (tag ifvg_far_edge_unlikely). The 'balanced range beyond' half of the remark is the
+    htf.table's own business (balance_tf decides which arrays are still alive); nothing is added for it."""
+    ht = z.top - z.bottom
+    for g in sd.gaps:
+        if g.i > i or not (z.bottom - ht - 1e-9 <= g.top <= z.bottom + 1e-9) or g.i >= z.i:
+            continue
+        if sd.l[g.i + 1:i + 1].min(initial=np.inf) > g.top + 1e-9:
+            hit("ifvg_far_edge")
+            return True
+    return False
+
+
 def ifvg_pool_gate(ctx, sd, i: int, p, z):
     """A8-ifvg-before-pool (102 ~1:08:45: "because that sell side's still there"): the IFVG is armed only while the nearest swing extreme beyond it (the draw: side space the
     nearest swing high above its top, known at the inversion) has not been traded through; once taken before the return the draw is spent - cancel."""
@@ -2142,6 +2241,7 @@ def ifvg_w_cap(sd, g, entry: float, stop: float, i: int | None, p):
       (b) NOT re-traded: the retrace may go to the far edge (bottom), stop beyond it;
       (c) traded through and back: valid only while the lows stay >= CE - 1 tick, stop just under the CE.
     Returns (entry, stop) or None (skip)."""
+    hit("ifvg_w_cap")
     ce = (g.top + g.bottom) / 2
     orig = g.src + 1
     ps = L.ifvg_passes(sd.h, sd.l, g.top, g.bottom, orig, g.i)
@@ -2165,7 +2265,9 @@ def ifvg_w_cap(sd, g, entry: float, stop: float, i: int | None, p):
 def poke_cancel(ctx, sd, i: int, p, session: str):
     """A4-wick-poke-vi-invalidation (090 ~1:05:53: "if it goes back above this high here ... I'm not interested"): an AM idea whose HTF level (a same-side 4h / daily array)
     was only POKED by a wick (no body close beyond) records the poke extreme H; a later trade beyond H (after the poke cluster ended) cancels the AM orders of
-    that side (the PM is re-evaluated at 13:30). Side space: a poke below the array's bottom image. Returns a reject key or None."""
+    that side (the PM is re-evaluated at 13:30), a pending one included (strategy's pending block asks again on every bar). WICK-only means no body at all since
+    09:30 reached beyond the array's far edge (a day that already closed beyond it is no poke). Side space: a poke below the array's bottom image. Returns a reject
+    key or None."""
     cf = getattr(ctx, "conf", None)
     if cf is None or session == "PM":
         return None
@@ -2177,8 +2279,8 @@ def poke_cancel(ctx, sd, i: int, p, session: str):
     for top, bot, tf, src, known in cf.valid(now_ts(ctx, i), sd.sign, ("4h", "D"), (0, 1, 3)):
         zb = min(sd.x(top), sd.x(bot))
         poke = (sd.l[k0:i + 1] < zb - 1e-9) & (body_lo >= zb - 1e-9)
-        if not poke.any():
-            continue
+        if not poke.any() or body_lo.min() < zb - 1e-9:
+            continue                                        # no poke / a body already closed beyond the array: not a wick-only poke
         hit("poke_cancel")
         j = int(np.argmax(poke))
         ext, m = sd.l[k0 + j], j + 1
@@ -2201,6 +2303,20 @@ def body_qualified(ctx, sd, g, i: int, p) -> bool:
             if first[k] > g.i and min(o[k], c[k]) < g.bottom - 1e-9:
                 return False
     hit("htf_body_qual")
+    return True
+
+
+def body_qual_zone(ctx, sd, bottom: float, from_i: int, i: int) -> bool:
+    """A4-ltf-body-qualification for a zone given by its bottom (the turtle-soup external array): the 15m and 5m BODIES since bar `from_i` stayed on the near side of
+    it (no body low below `bottom`, side space), whatever the wicks did."""
+    for m in (5, 15):
+        if m < ctx.tf:
+            continue
+        o, h, l, c, last, first = bars_tf(ctx, sd, m, i)
+        for k in range(len(c)):
+            if first[k] > from_i and min(o[k], c[k]) < bottom - 1e-9:
+                return False
+    hit("htf_body_qual_zone")
     return True
 
 
@@ -2261,8 +2377,9 @@ def three_point_smt(ctx, sd, i: int, pctx, ps, j: int, p):
 
 def nested_at_am(ctx, sd, i: int, p) -> bool:
     """A22-htf-definition-nested-arrays (cc10_013 ~8:17, ~13:44; cc10_014 ~11:08: "nested ideas of premium array would be our catalyst"): the AM extreme of the PM
-    reversal's side lies in a NESTED array - a 15m / 1h array overlapping a 4h / D array of the same polarity (any price overlap [our interpretation]). Real
-    prices; False without a Confluence object."""
+    reversal's side lies in an HTF array - the reversal set {4h, D, W} of the spec - or in a NESTED one: a 15m / 1h array overlapping an HTF array of the same
+    polarity (any price overlap [our interpretation]). An extreme inside an HTF array alone counts too (that array is itself the higher-timeframe level the nested
+    pair is made of); one only inside an un-nested 15m / 1h array does not (continuation). Real prices; False without a Confluence object."""
     cf = getattr(ctx, "conf", None)
     if cf is None or not ctx.am_hl:
         return False
@@ -2270,8 +2387,10 @@ def nested_at_am(ctx, sd, i: int, p) -> bool:
     now = now_ts(ctx, i)
     tol = p.eq_tol_pts * p.es_pt
     low = [(min(t_, b_), max(t_, b_)) for t_, b_, *_ in cf.valid(now, sd.sign, ("15m", "1h"), (0,))]
-    high = [(min(t_, b_), max(t_, b_)) for t_, b_, *_ in cf.valid(now, sd.sign, ("4h", "D"), (0,))]
+    high = [(min(t_, b_), max(t_, b_)) for t_, b_, *_ in cf.valid(now, sd.sign, ("4h", "D", "W"), (0,))]
     hit("pm_rev_nested")
+    if any(a - tol <= ext_r <= b + tol for a, b in high):
+        return True
     return any(a - tol <= ext_r <= b + tol and any(c <= b and d >= a for c, d in high) for a, b in low)
 
 
@@ -2346,6 +2465,21 @@ def consol_fade_order(ctx, sd, i: int, p, session: str, risk_mult: float):
 
 # --- A11: BPR CE entries, A17: opening-range rejection block -------------------------------------------------------------------------------------
 
+def bpr_dead(sd, z, i: int, p) -> bool:
+    """A11-bpr-levels-ce-rejection: the CE entry is void once a body closed below the CE since the BPR formed; bpr_left_far_edge (062: "once price has left, the far
+    edge is the invalidation"): after the first close beyond the near edge (above the top, side space) only a close below the FAR edge (the bottom) voids it."""
+    seg = sd.c[z.i + 1:i + 1]
+    if not len(seg):
+        return False
+    if p.bpr_left_far_edge:
+        left = np.flatnonzero(seg > z.top)
+        if len(left):
+            hit("bpr_far_edge")
+            k = int(left[0])
+            return bool(seg[:k].min(initial=np.inf) < z.mid - 1e-9 or seg[k:].min() < z.bottom - 1e-9)
+    return bool(seg.min() < z.mid - 1e-9)
+
+
 def bpr_ce_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     """A11-bpr-levels-ce-rejection (062 ~3:47: "hits it like a brick wall"): a balanced price range (also a single-candle BISI / SIBI pair: bpr_def) is a reaction
     zone - high, CE, low, extended right: a limit at the CE on EVERY revisit from above (side space), stop below the BPR low, valid while no body closes below the
@@ -2353,7 +2487,7 @@ def bpr_ce_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     S = _S()
     sent = sd.__dict__.setdefault("_bpr_ce", {})
     for z in sorted([z for z in sd.bprs(p.bpr_max_gap_bars) if z.kind == "bull"], key=lambda z: -z.i):
-        if z.i > i or z.i < ctx.start or sd.c[z.i + 1:i + 1].min(initial=np.inf) < z.mid - 1e-9 or not sd.c[i] > z.top:
+        if z.i > i or z.i < ctx.start or bpr_dead(sd, z, i, p) or not sd.c[i] > z.top:
             continue
         key = (z.i, z.src)
         last = sent.get(key)
@@ -2444,13 +2578,20 @@ def extra2(ctx, sd, i: int, p, session: str, risk_mult: float):
 
 # --- IR gates ---------------------------------------------------------------------------------------------------------------------------------------
 
+def ir_window_ok(p, t: int) -> bool:
+    """A7-immediate-rebalance-gates (b): minute-of-day t lies in a window where volatility is expected [our interpretation]: the macro window, the AM / PM sessions
+    (p.am / p.pm) or a Silver Bullet window (p.sb_windows). By the clock - not by the caller's session label, which the Silver Bullet path only maps to AM / PM."""
+    wins = [tuple(p.macro), tuple(p.am), tuple(p.pm)] + [tuple(w) for w in (p.sb_windows or ())]
+    return any(a <= t < b for a, b in wins)
+
+
 def ir_gates_ok(ctx, sd, i: int, p, session: str, use_want: bool = True) -> bool:
     """A7-immediate-rebalance-gates (059 ~4:50: "the immediate rebalance isn't going to help you all that much"): an immediate rebalance is a continuation trigger only
     if (a) the draw / HTF bias was known beforehand and points its way (ir_need_draw) and (b) it prints in a window where volatility is expected (ir_need_window:
-    [our interpretation] the macro window or an am / pm session). Used by the opt-in IR paths (ir_entries, sb_rebalance_ext)."""
+    [our interpretation] the macro window, the am / pm sessions or a Silver Bullet window - by the clock, see ir_window_ok). Used by the opt-in IR paths (ir_entries, sb_rebalance_ext)."""
     if p.ir_need_draw and bias_at(ctx, p, session, i, use_want) != sd.sign:
         return False
-    if p.ir_need_window and not (session in ("AM", "PM") or p.macro[0] <= ctx.t[i] < p.macro[1]):
+    if p.ir_need_window and not ir_window_ok(p, int(ctx.t[i])):
         return False
     hit("ir_gates")
     return True
@@ -2461,6 +2602,7 @@ def ir_gates_ok(ctx, sd, i: int, p, session: str, use_want: bool = True) -> bool
 def range_lock_set(sd, sw, i: int, inval: float, lo: float) -> None:
     """A12-range-internal-ignore (064 ~56:17; 066 ~32:01: "all of these candles in between are all time distortion"): remember the dealing range an armed order defines -
     low `lo` (the OB low / the sweep extreme), high = the leg high so far, invalid on a body close below `inval` (the OB MT / the low) or an expansion beyond the high."""
+    hit("range_lock")
     sd.__dict__["_rlock"] = dict(lo=float(lo), hi=float(sd.h[sw["ext_i"]:i + 1].max()), inval=float(inval), since=i)
 
 
@@ -2493,7 +2635,7 @@ def order_gate2(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str,
         if r:
             return r
     if p.reh_trap:
-        r = reh_trap_gate(ctx, sd, i, p)
+        r = reh_trap_gate(ctx, sd, sw, i, p, session)
         if r:
             return r
     if p.org_two_rally:
@@ -2508,9 +2650,14 @@ def order_gate2(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str,
         r = state_gate(ctx, sd, i, p, tags)
         if r:
             return r
-    if tags.get("entry_kind") == "ifvg" and (p.ifvg_need_run or p.ifvg_tails_block or p.ifvg_pool_intact):
+    if p.daily_first_ltf and _c(ctx).get("dfr") == -sd.sign:
+        hit("dfr_against")
+        return "x_dfr_against"                       # cc02_007: at a daily first-return zone the LTF ignores the continuation against the accumulation
+    if tags.get("entry_kind") == "ifvg" and (p.ifvg_need_run or p.ifvg_tails_block or p.ifvg_pool_intact or p.ifvg_far_edge_tag):
         z = ifvg_zone(sd, tags)
         if z is not None:
+            if p.ifvg_far_edge_tag and ifvg_far_edge_unlikely(sd, i, z):
+                lvt.append("ifvg_far_edge_unlikely")
             r = ifvg_run_gate(ctx, sd, sw, i, p, session, z, lvt)
             if not r and p.ifvg_tails_block:
                 r = ifvg_tails_gate(ctx, sd, i, p, z)
@@ -2518,6 +2665,10 @@ def order_gate2(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str,
                 r = ifvg_pool_gate(ctx, sd, i, p, z)
             if r:
                 return r
-    if p.daily_first_return and str(sw.get("key", "")).startswith("rel_eq") and daily_first_return(ctx, sd, sw, i, p):
+    if (p.daily_first_return or p.daily_first_ltf) and str(sw.get("key", "")).startswith("rel_eq") and daily_first_return(ctx, sd, sw, i, p):
         lvt.append("daily_first_return")
+        _c(ctx)["dfr"] = sd.sign
+        if p.daily_first_ltf and sw.get("broke") is None:
+            hit("dfr_need_break")
+            return "x_dfr_need_break"                # buy only AFTER the swing high is broken (an MSS-path order), not the bare sweep / OB-before-break
     return None

@@ -219,26 +219,38 @@ def test_mss_eq_wait_waived_with_a_locked_draw():
 
 
 def test_reh_trap_gate():
-    """029 ~48:29: bias long, equal swing highs 4020.0 / 4020.5 untaken, HTF draw above untaken: the short (a break of the low under them) is rejected."""
-    rows = [(4000.0, 4010.0, 3999.0, 4009.0), (4009.0, 4012.0, 4006.0, 4007.0), (4007.0, 4020.0, 4006.0, 4018.0), (4018.0, 4019.0, 4010.0, 4011.0), (4011.0, 4013.0, 4005.0, 4006.0),
+    """029 ~48:29: bias long, equal swing highs 4020.0 / 4020.5 untaken, HTF draw above untaken: the short (a MSS-path break of the low under them) is rejected and the
+    long Side's sweep is armed once at that low (so the ordinary next-bullish-FVG flow follows); a non-MSS order, a taken REH, no broken short-term low are not the trap."""
+    rows = [(4000.0, 4010.0, 3999.0, 4009.0), (4009.0, 4012.0, 4006.0, 4007.0), (4007.0, 4020.0, 4006.0, 4018.0), (4018.0, 4019.0, 4010.0, 4011.0), (4011.0, 4013.0, 4003.0, 4006.0),
             (4006.0, 4020.5, 4005.0, 4017.0), (4017.0, 4018.0, 4009.0, 4010.0), (4010.0, 4011.0, 4007.0, 4008.0), (4008.0, 4009.0, 4001.0, 4002.0)]
     p = Params(**BASE, reh_trap=True, pivot_n=1)
     ctx, (sl, ss) = mkctx(rows, base=4000.0, bias=1, p=p)
     i = ib(ctx, "09:30") + 8
+    sw = dict(broke=i, ext_i=i - 1, ext=4001.0, key="x", session="AM")
     assert [q.price for q in sl.ph if q.known <= i and q.i >= ctx.start][-2:] == [4020.0, 4020.5]
-    assert sm2.reh_trap_gate(ctx, ss, i, p) == "x_reh_trap"                                  # the short is bait
-    assert sm2.reh_trap_gate(ctx, sl, i, p) is None                                          # the long is the ordinary flow
+    assert sm2.reh_trap_gate(ctx, ss, dict(sw, broke=None), i, p) is None                      # no MSS break: not this gate's business
+    assert sl.sweep is None
+    assert sm2.reh_trap_gate(ctx, ss, sw, i, p) == "x_reh_trap"                              # the short is bait
+    assert sl.sweep is not None and sl.sweep["key"] == "stoprun" and sw["sr_armed"]          # ... and the long Side is armed at the broken short-term low (once)
+    first = sl.sweep
+    assert sm2.reh_trap_gate(ctx, ss, sw, i, p) == "x_reh_trap" and sl.sweep is first
+    assert sm2.reh_trap_gate(ctx, sl, dict(sw), i, p) is None                                # the long is the ordinary flow
     ctx.cur_bias = 0
-    assert sm2.reh_trap_gate(ctx, ss, i, p) is None                                          # no bias
+    assert sm2.reh_trap_gate(ctx, ss, dict(sw), i, p) is None                                # no bias
     ctx.cur_bias = 1
     ctx.bias_row = dict(draw_up=4015.0)                                                      # the HTF objective was reached (4020.5 traded)
-    assert sm2.reh_trap_gate(ctx, ss, i, p) is None
+    assert sm2.reh_trap_gate(ctx, ss, dict(sw), i, p) is None
     ctx.bias_row = dict(draw_up=4100.0)
-    assert sm2.reh_trap_gate(ctx, ss, i, p) == "x_reh_trap"
+    assert sm2.reh_trap_gate(ctx, ss, dict(sw), i, p) == "x_reh_trap"
     unequal = [r for r in rows]
     unequal[5] = (4006.0, 4030.0, 4005.0, 4017.0)                                            # the second high is not "equal"
     ctx2, (sl2, ss2) = mkctx(unequal, base=4000.0, bias=1, p=p)
-    assert sm2.reh_trap_gate(ctx2, ss2, i, p) is None
+    assert sm2.reh_trap_gate(ctx2, ss2, dict(sw), i, p) is None
+    held = list(rows)
+    held[8] = (4008.0, 4009.0, 4004.0, 4007.5)                                               # no close under the short-term low 4003: nothing was broken
+    ctx3, (sl3, ss3) = mkctx(held, base=4000.0, bias=1, p=p)
+    ctx3.bias_row = dict(draw_up=4100.0)
+    assert sm2.reh_trap_gate(ctx3, ss3, dict(sw), i, p) is None
 
 
 def test_micro_regime_reads_the_5m_structure():
@@ -867,8 +879,8 @@ def test_range_lock_keeps_the_order_through_a_chop():
     assert tr == []                                                                    # expired during the chop
     tr, *_ = rf_run(day(base), hist, replace(p, range_lock=True), {})
     assert len(tr) == 1 and tr[0].entry == 101.3
-    # (a body close under the invalidation always trades through the limit first - the cancel_close test is the plumbing in run_day, asserted on the source)
-    assert 'pending.get("cancel_close")' in open(S.__file__, encoding="utf-8").read()
+    # (a long limit always trades through its entry before any body can close under the OB MT / range low below it: the cancel_close / cancel_low lines are post-fill
+    #  guards in effect; the hold itself is what run_day shows above)
     # the lock record
     sd = sd_of([(100.0, 101.0, 99.0, 100.5), (100.5, 102.0, 100.0, 101.5), (101.5, 101.8, 100.8, 101.2), (101.2, 102.5, 101.0, 102.0), (102.0, 102.2, 98.0, 98.5)])
     sm2.range_lock_set(sd, dict(ext_i=0), 1, 99.5, 99.0)
@@ -889,9 +901,7 @@ def test_breaker_range_hold_tags_the_order():
     assert o is not None and o["no_expire"] is True and o["cancel_low"] == pytest.approx(100.1)
     o2 = S._breaker_order(ctx, sl, dict(sw), bz, i, Params(**B_POST), "AM", 1.0)
     assert o2 is not None and "no_expire" not in o2
-    # run_day: the pending cancel / no-expiry plumbing (a pending order with no_expire survives the 30-minute lifetime)
-    src = open(S.__file__, encoding="utf-8").read()
-    assert 'pending.get("no_expire")' in src and 'pending.get("cancel_close")' in src
+    # (the run_day behaviour - the order outliving a chop - is test_breaker_range_hold_survives_a_chop_and_the_dealing_range_trigger_fires)
 
 
 def test_mss_rearm_after_a_lower_high_keeps_the_side_armed():
@@ -947,16 +957,18 @@ def test_ir_gates_and_switches():
     p = Params(**BASE)
     i = ib(ctx, "09:35")
     assert sm2.ir_gates_ok(ctx, sl, i, p, "AM") is True
-    assert sm2.ir_gates_ok(ctx, sl, i, p, "LUNCH") is False                                  # outside the windows
-    assert sm2.ir_gates_ok(ctx, sl, i, replace(p, ir_need_window=False), "LUNCH") is True
+    ctx_l, (sl_l, _) = mkctx([(100.0, 100.3, 99.9, 100.1)] * 4, base=100.0, bias=1, start="12:00")
+    il = ib(ctx_l, "12:05")
+    assert sm2.ir_gates_ok(ctx_l, sl_l, il, p, "AM") is False                                # by the CLOCK: 12:05 is outside the macro / am / pm / Silver Bullet windows, whatever label the caller gives
+    assert sm2.ir_gates_ok(ctx_l, sl_l, il, replace(p, ir_need_window=False), "LUNCH") is True
+    ctx_s, (sl_s, _) = mkctx([(100.0, 100.3, 99.9, 100.1)] * 4, base=100.0, bias=1, start="14:00")
+    assert sm2.ir_gates_ok(ctx_s, sl_s, ib(ctx_s, "14:05"), replace(p, pm=(0, 1)), "PM") is True      # a Silver Bullet window counts
     assert sm2.ir_gates_ok(ctx, ss, i, p, "AM") is False                                      # the draw points the other way
     assert sm2.ir_gates_ok(ctx, ss, i, replace(p, ir_need_draw=False), "AM") is True
     ctx.cur_bias = 0
     assert sm2.ir_gates_ok(ctx, sl, i, p, "AM") is False and sm2.ir_gates_ok(ctx, sl, i, p, "AM", use_want=False) is False
     assert sm2.HITS.get("ir_gates")
-    # the engine path: ir_entry reads both switches
-    src = open(SM.__file__, encoding="utf-8").read()
-    assert "ir_need_draw" in src and "ir_gates_ok" in src
+    # (the engine path - setups.ir_entry - is exercised by test_ir_entry_window_is_by_the_clock_and_the_org_dip_bar_counts)
 
 
 def test_mm_ssl_target_is_the_far_end_of_the_delivery_leg():
@@ -969,8 +981,11 @@ def test_mm_ssl_target_is_the_far_end_of_the_delivery_leg():
     out = SM.draw_prefs(ctx, sl, dict(ext_i=e, ext=3990.0, key="pdl1", session="AM"), i, p, "AM", 3995.0, 5.0, [])
     far = float(sl.h[q.i:e + 1].max())
     assert any(kd == "pool" and nm == "mmxm" and v >= far - 1.0 for v, kd, nm in out)
+    n_on = sm2.HITS.get("mm_ssl", 0)
+    assert n_on >= 1
     out0 = SM.draw_prefs(ctx, sl, dict(ext_i=e, ext=3990.0, key="pdl1", session="AM"), i, replace(p, mm_ssl_target=False), "AM", 3995.0, 5.0, [])
-    assert isinstance(out0, list)
+    assert sm2.HITS.get("mm_ssl", 0) == n_on                                                  # off: the switch's branch is not taken (the parent-high rule answers)
+    assert [x for x in out0 if x[1] == "pool" and x[2] == "mmxm"]
 
 
 def test_reaper_ob_overlap(monkeypatch):
@@ -992,20 +1007,6 @@ def test_reaper_ob_overlap(monkeypatch):
     monkeypatch.setattr(S, "_breaker", lambda *a, **k: (_ for _ in ()).throw(AssertionError("fvg def must not build a breaker")))
     r = SM.reaper_order(ctx, sl, dict(sw), i, replace(p, reaper_def="fvg"), "AM", 1.0, k0 + 3, True, 5)       # (the original A24.2 branch: never builds a breaker)
     assert r is None or isinstance(r, (dict, str))
-
-
-def test_htf_pm_reversal_nested_gate_flag():
-    """The PM reversal gate flag is read by setups.pm_reversal (a nested AM array); without a Confluence object it blocks."""
-    src = open(SM.__file__, encoding="utf-8").read()
-    assert "p.pm_rev_nested and not S._SM2.nested_at_am" in src
-
-
-def test_turtle_gates_wired(monkeypatch):
-    """ts_skip_reswept (default on), ts_need_smt and ts_itl_context are read by strategy._turtle."""
-    src = open(S.__file__, encoding="utf-8").read()
-    for needle in ("p.ts_skip_reswept and _SM2.reswept", "p.ts_need_smt and not _SM2.ts_smt_ok", "p.ts_itl_context and not _SM2.itl_ok", "p.ts_next_array"):
-        assert needle in src
-    assert Params().ts_skip_reswept is True
 
 
 def test_mss_ref_reads_the_5m_swing_inside_a_micro_regime(monkeypatch):
@@ -1038,19 +1039,358 @@ def test_mss_ref_reads_the_5m_swing_inside_a_micro_regime(monkeypatch):
 
 def test_order_gate2_wires_the_gates_and_always_on_tags():
     """The gates reach the orders through sm2.order_gate2 (called by strategy._finish_order after order_gate), and the always-on tags are set on every order."""
-    rows = [(4000.0, 4010.0, 3999.0, 4009.0), (4009.0, 4012.0, 4006.0, 4007.0), (4007.0, 4020.0, 4006.0, 4018.0), (4018.0, 4019.0, 4010.0, 4011.0), (4011.0, 4013.0, 4005.0, 4006.0),
+    rows = [(4000.0, 4010.0, 3999.0, 4009.0), (4009.0, 4012.0, 4006.0, 4007.0), (4007.0, 4020.0, 4006.0, 4018.0), (4018.0, 4019.0, 4010.0, 4011.0), (4011.0, 4013.0, 4003.0, 4006.0),
             (4006.0, 4020.5, 4005.0, 4017.0), (4017.0, 4018.0, 4009.0, 4010.0), (4010.0, 4011.0, 4007.0, 4008.0), (4008.0, 4009.0, 4001.0, 4002.0)]
     p = Params(**BASE, reh_trap=True, pivot_n=1)
     ctx, (sl, ss) = mkctx(rows, base=4000.0, bias=1, p=p)
     i = ib(ctx, "09:30") + 8
     tags = {}
-    assert sm2.order_gate2(ctx, ss, dict(key="pdh1", ext=-4001.0, ext_i=i - 1), i, p, -4002.0, -4010.0, "AM", [], {}, tags) == "x_reh_trap"
+    assert sm2.order_gate2(ctx, ss, dict(key="pdh1", ext=-4001.0, ext_i=i - 1, broke=i), i, p, -4002.0, -4010.0, "AM", [], {}, tags) == "x_reh_trap"
     assert tags["setup_model"] == "OD" and "delivery" in tags                                 # tagged before any gate can reject
     tags = {}
     assert sm2.order_gate2(ctx, sl, dict(key="pdl1", ext=3999.0, ext_i=i - 1), i, p, 4002.0, 3995.0, "AM", [], {}, tags) is None and tags["setup_model"] == "OA"
     # poke / dfvg / state / ifvg / org wiring is by the same function: the switches off leave the order untouched
     off = Params(**BASE)
     assert sm2.order_gate2(ctx, ss, dict(key="pdh1", ext=-4001.0, ext_i=i - 1), i, off, -4002.0, -4010.0, "AM", [], {}, {}) is None
-    src = open(S.__file__, encoding="utf-8").read()
-    for needle in ("_SM2.order_gate2(", "p.second_break_partial", "_SM2.second_break_partial(", "_SM2.extra2(", "_SM2.range_locked(", "_SM2.range_lock_set(", "_SM2.body_qualified("):
-        assert needle in src, needle
+
+
+# =================================================================================================================================
+# Review fixes (setups_models #2/7): behavioural tests for the guard, the pending poke cancel, the breaker hold / trigger, the second leg,
+# the nested definition, the turtle gates and the IR window; the not-built remainders of the specs.
+# =================================================================================================================================
+
+def test_delivery_state_guard_at_n_plus_1():
+    """Review fix: delivery_state read h[j-n:j] with j = i-2 and crashed (an empty slice) at i == consol_bars + 1; it answers '' until the windows exist, on any data."""
+    n = 20
+    for seed in range(12):
+        rng = np.random.default_rng(seed)
+        c = 100.0 + np.cumsum(rng.normal(0.0, 1.0, 80))
+        o = np.r_[c[0], c[:-1]]
+        h = np.maximum(o, c) + rng.random(80)
+        l = np.minimum(o, c) - rng.random(80)
+        for i in range(80):
+            out = L.delivery_state(o, h, l, c, i, 5.0, n, 0.3)
+            assert out in ("", "CONSOLIDATION", "REVERSAL", "EXPANSION", "RETRACEMENT")
+            if i < n + 2:
+                assert out == ""
+    assert L.delivery_state(o, h, l, c, n + 2, 5.0, n, 0.3) != ""
+
+
+def test_poke_cancel_needs_a_wick_only_day_and_cancels_the_pending_order(monkeypatch):
+    """090 ~1:05:53: (1) 'wick-only' means NO body since 09:30 closed beyond the array's far edge - a day that already closed beyond it has no poke to cancel on; (2) the
+    trade beyond the poke extreme cancels the AM order of that side that is already PENDING (run_day asks again on every bar)."""
+    arr = StubConf(arrays={-1: [(4020.0, 4015.0, "D", 0, 0)]})
+    p = Params(**BASE, poke_high_cancel=True)
+    early = [(4010.0, 4025.0, 4009.0, 4022.0), (4022.0, 4023.0, 4010.0, 4012.0), (4012.0, 4021.0, 4009.0, 4011.0), (4011.0, 4012.0, 4009.0, 4010.0), (4010.0, 4026.0, 4009.0, 4011.0)]
+    ctx, (sl, ss) = mkctx(early, base=4010.0, conf=arr)
+    k0 = ib(ctx, "09:30")
+    assert sm2.poke_cancel(ctx, ss, k0 + 4, p, "AM") is None                         # bar 0 closed (body) above 4020: not a wick-only poke
+    wick = [(4010.0, 4021.0, 4009.0, 4012.0), (4012.0, 4013.0, 4009.0, 4010.0), (4010.0, 4022.0, 4009.0, 4011.0)]
+    ctx2, (sl2, ss2) = mkctx(wick, base=4010.0, conf=arr)
+    assert sm2.poke_cancel(ctx2, ss2, k0 + 2, p, "AM") == "x_poke_high_cancel"
+    # run_day: scenario B arms its limit (101.3) at 10:05 and fills at 10:15; when poke_cancel says the poke high traded after the order was armed, the PENDING order dies
+    base = B_ROWS + _chop_rows(3) + AFTER                                                 # the limit rests 3 bars before the dip
+    hist = history(hi=112.0, lo=88.0)
+    pp = Params(**{**B_POST, "adds": (0.5,), "poke_high_cancel": True})
+    sm2.HITS.pop("poke_pending", None)
+    tr, *_ = rf_run(day(base), hist, pp, {})
+    assert len(tr) == 1                                                                # no HTF array here: nothing is poked, the fill happens
+    real = sm2.poke_cancel
+    armed_at = {}
+
+    def fake(ctx_, sd_, i_, p_, session_):
+        armed_at.setdefault("first", i_)
+        return "x_poke_high_cancel" if i_ > armed_at["first"] else None            # the creation call passes; every later call (the pending order's) is a poke above H
+
+    monkeypatch.setattr(sm2, "poke_cancel", fake)
+    tr2, *_ = rf_run(day(base), hist, pp, {})
+    assert tr2 == [] and sm2.HITS.get("poke_pending")
+    monkeypatch.setattr(sm2, "poke_cancel", real)
+
+
+def test_breaker_range_hold_survives_a_chop_and_the_dealing_range_trigger_fires(monkeypatch):
+    """048 ~1:20:40 (A21): (1) run_day - the breaker's resting limit (101.0) outlives a 35-minute chop above it only under breaker_range_hold, and then fills on the dip;
+    (2) the dealing range (the swing high before the retrace .. the tap bar's low) is invalid once price trades deeper than the breaker; (3) the explicit trigger - an up-close
+    body above a bearish FVG in the upper half of the range that also takes the internal highs - arms the first bullish FVG (limit at its top, stop under the range low)."""
+    chop = [(102.6, 103.0, 102.2, 102.7)] * 7
+    hist = history(hi=112.0, lo=88.0)
+    p = Params(**{**B_POST, "adds": (), "breaker_entry": "prefer"})
+    off, *_ = rf_run(day(B_ROWS + chop + AFTER), hist, p, {})
+    on, *_ = rf_run(day(B_ROWS + chop + AFTER), hist, replace(p, breaker_range_hold=True), {})
+    assert off == [] and len(on) == 1 and on[0].entry == 101.0 and on[0].entry_kind == "breaker"
+    assert len(rf_run(day(B_ROWS + AFTER), hist, p, {})[0]) == 1                               # without the chop the ordinary breaker order fills at 10:15
+    # the dealing range and the trigger (long = side space itself)
+    rows = [(100.0, 100.4, 99.8, 100.2), (100.2, 103.0, 100.1, 102.8), (102.8, 103.5, 102.6, 102.9), (102.4, 102.4, 100.9, 101.0), (101.0, 102.5, 100.95, 102.2),
+            (102.2, 102.2, 101.7, 101.9), (101.9, 103.0, 101.8, 102.9), (102.9, 103.4, 102.7, 103.3)]
+    ctx, (sl, ss) = mkctx(rows, base=100.0, p=Params(**BASE, breaker_range_trigger=True, pivot_n=1))
+    k0 = ib(ctx, "09:30")
+    e = dict(top=101.2, bottom=100.5, mt=100.85, src=k0, born=k0 + 1, sw=dict(), armed_i=None)
+    ctx.__dict__.setdefault("_sm2", {})[("brk", 1)] = [e]
+    assert sm2.breaker_dealing_range(sl, e, k0 + 2) is None                                  # not tapped yet
+    lo, hi, tap = sm2.breaker_dealing_range(sl, e, k0 + 7)
+    assert (lo, hi, tap) == (100.9, 103.5, k0 + 3)
+    deeper = [r for r in rows]
+    deeper[4] = (101.0, 102.5, 100.3, 102.2)                                                 # a later bar trades under the breaker bottom 100.5: the setup is dead
+    ctxd, (sld, _) = mkctx(deeper, base=100.0, p=Params(**BASE, pivot_n=1))
+    assert sm2.breaker_dealing_range(sld, e, k0 + 7) is None
+    got = {}
+    monkeypatch.setattr(S, "_finish_order", lambda ctx_, sd_, i_, p_, ses_, sw_, entry_, stop_, rm_, lh_, tags_, **kw: got.update(entry=entry_, stop=stop_, leg=lh_, tags=tags_) or "ORDER")
+    p = Params(**BASE, breaker_range_trigger=True, pivot_n=1)
+    for j in range(k0 + 2, k0 + 6):
+        assert sm2.breaker_trigger_order(ctx, sl, j, p, "AM", 1.0) is None                    # inside the range: nothing, however long it chops
+    assert sm2.breaker_trigger_order(ctx, sl, k0 + 6, p, "AM", 1.0) is None and e.get("trig") == k0 + 6      # the MSS bar: triggered, but no bullish FVG yet
+    assert sm2.breaker_trigger_order(ctx, sl, k0 + 7, p, "AM", 1.0) == "ORDER"
+    assert got["entry"] == pytest.approx(102.7) and got["stop"] < 100.9 and got["leg"] == 103.5 and got["tags"]["entry_kind"] == "breaker_range"
+    assert sm2.breaker_trigger_order(ctx, sl, k0 + 7, p, "AM", 1.0) is None                    # once per breaker
+    assert sm2.HITS.get("breaker_trigger_order")
+    # a trigger candle under the internal high is no MSS
+    weak = [r for r in rows]
+    weak[6] = (101.9, 102.45, 101.8, 102.4)
+    ctxw, (slw, _) = mkctx(weak, base=100.0, p=p)
+    ew = dict(e, trig=None)
+    ew.pop("trig_sent", None)
+    ctxw.__dict__.setdefault("_sm2", {})[("brk", 1)] = [ew]
+    sm2.breaker_trigger_order(ctxw, slw, k0 + 6, p, "AM", 1.0)
+    assert ew.get("trig") is None
+
+
+def test_mss_rearm_enters_on_the_second_leg_with_the_two_fvg_stop():
+    """069 ~14:41: the first order (limit 101.3) is never filled and the retrace never pierces the sweep extreme; a later displacement leg leaving TWO FVGs arms an
+    entry that exists only under mss_rearm_lower_high, with the stop just under the CE of the lower of the two (not under the OB MT)."""
+    second = [(102.3, 102.9, 101.6, 102.8), (102.8, 106.0, 102.7, 105.8), (105.8, 107.5, 104.0, 107.0), (107.0, 110.0, 106.5, 109.8), (109.8, 110.5, 109.0, 110.2),
+              (110.2, 110.3, 106.4, 106.8), (106.8, 113.0, 106.7, 112.8)]
+    rows = B_ROWS + second
+    hist = history(hi=140.0, lo=88.0)
+    p = Params(**{**B_POST, "adds": ()})
+    off, *_ = rf_run(day(rows), hist, p, {})
+    on, *_ = rf_run(day(rows), hist, replace(p, mss_rearm_lower_high=True), {})
+    assert off == [] and len(on) == 1
+    assert on[0].entry == 109.0 and on[0].stop == pytest.approx((102.9 + 104.0) / 2 - p.pad)         # CE of the lower FVG (102.9-104.0) minus the pad
+    assert sm2.HITS.get("mss_rearm_ce2")
+
+
+def test_nested_extreme_in_an_htf_array_alone_and_the_pm_reversal_gate(monkeypatch):
+    """cc10_013 ~8:17 / cc10_014 ~11:08 (A22): the PM fade needs the AM extreme at an HTF array (4h / D / W) or a 15m / 1h array nested in one; an extreme inside an HTF array
+    alone counts, the weekly one too; one only inside an un-nested 15m / 1h array (continuation) blocks the fade. Behaviour through setups.pm_reversal."""
+    rows = [(100.0 + 0.4 * k, 100.5 + 0.4 * k, 99.9 + 0.4 * k, 100.4 + 0.4 * k) for k in range(25)]
+    rows += [(110.0, 110.2, 105.0, 106.0)] * 5 + [(106.0, 106.0, 105.0, 105.5)] * 18
+    rows += [(105.8, 111.0, 105.5, 110.5)] * 4                                                                  # the PM sweeps the AM high (~110)
+    base = Params(**BASE, pm_reversal=True, pm_rev_nested=True)
+    sentinel = RuntimeError("reached the IFVG search")
+
+    def go(arrays):
+        ctx, (sl, ss) = mkctx(rows, base=100.0, w=0.0, hist=hist_close(close=100.0, hi=108.0, lo=90.0), conf=StubConf(arrays={-1: arrays}))
+        ctx.lock = {"AM": dict(side=1, delivered_i=ib(ctx, "11:30"), target=109.0)}
+        monkeypatch.setattr(ss, "ifvgs", lambda: (_ for _ in ()).throw(sentinel))
+        i = ib(ctx, "13:45")
+        try:
+            r = SM.pm_reversal(ctx, ss, i, base, 1.0)
+        except RuntimeError:
+            return "passed"
+        return r
+
+    hi = 110.0
+    assert go([(hi + 3, hi - 3, "4h", 0, 0)]) == "passed"                                          # inside a 4h array alone
+    assert go([(hi + 3, hi - 3, "W", 0, 0)]) == "passed"                                           # inside a weekly array alone
+    assert go([(hi + 3, hi - 3, "1h", 0, 0), (hi + 9, hi - 9, "D", 0, 0)]) == "passed"             # a 1h array nested in a daily one
+    assert go([(hi + 3, hi - 3, "1h", 0, 0)]) is None                                              # an un-nested 1h array: continuation
+    assert go([(hi + 30, hi + 20, "4h", 0, 0)]) is None                                            # the extreme is in no array
+    assert go([]) is None
+
+
+def test_turtle_gates_through_the_order_path():
+    """M12 / B18 / new-intermediate-term: strategy._turtle rejects a sweep whose pool was already swept (ts_skip_reswept), one without the SMT (ts_need_smt) and an
+    intermediate-term pool without context (ts_itl_context), and with ts_next_array places the limit at the next array beyond the pool."""
+    import collections
+    rows = [(4003.0, 4004.0, 4002.0, 4003.0), (4003.0, 4003.5, 3999.0, 4001.0), (4001.0, 4003.0, 4000.5, 4002.5), (4002.5, 4003.5, 4001.0, 4003.0)]
+    hist = hist_close(close=4003.0, hi=4040.0, lo=3990.0)
+
+    def mk(key="pdl1", **pk):
+        p = Params(**BASE, turtle_soup="2023", ts_skip_reswept=False, **pk)
+        ctx, (sl, ss) = mkctx(rows, base=4003.0, hist=hist, p=p)
+        ctx.pd[key] = 4000.0
+        k0 = ib(ctx, "09:30")
+        sw = dict(session="AM", name=key, level=4000.0, key=key, ext=3999.0, ext_i=k0 + 1, sweep_i=k0 + 1, broke=None, smt=None, smt2=None)
+        return ctx, sl, sw, p, k0
+
+    def reasons(ctx, sl, sw, p, i):
+        S.FUNNEL = collections.Counter()
+        try:
+            o = S._turtle(ctx, sl, sw, i, p, "AM", 1.0)
+            return o, dict(S.FUNNEL)
+        finally:
+            S.FUNNEL = None
+
+    ctx, sl, sw, p, k0 = mk(ts_need_smt=True)
+    o, f = reasons(ctx, sl, sw, p, k0 + 2)
+    assert o is None and f.get("x_ts_no_smt") == 1                                                # no SMT at the swept level
+    o, f = reasons(ctx, sl, dict(sw, smt=True), p, k0 + 2)
+    assert "x_ts_no_smt" not in f and o is not None                                               # the SMT of the sweep: the turtle long is armed
+    ctx, sl, sw, p, k0 = mk(key="pdl2", ts_itl_context=True)
+    o, f = reasons(ctx, sl, sw, p, k0 + 2)
+    assert f.get("x_ts_itl_context") == 1 or o is not None                                         # pdl2 is an intermediate-term pool (context asked)
+    assert sm2.HITS.get("itl_context")
+    ctx, sl, sw, p, k0 = mk(key="pdl1", ts_itl_context=True)
+    o, f = reasons(ctx, sl, sw, p, k0 + 2)
+    assert "x_ts_itl_context" not in f and o is not None                                          # yesterday's low is not intermediate-term
+    # ts_next_array: the next gap beyond the pool (NWOG 3995-3993) takes the limit and the stop
+    ctx, sl, sw, p, k0 = mk(ts_next_array=True, ts_min_beyond_pts=1.0)
+    ctx.gaps = [("nwog", 3995.0, 3993.0, 3994.0)]
+    o, f = reasons(ctx, sl, sw, p, k0 + 2)
+    assert o is not None and o["entry"] == pytest.approx(3995.0) and o["stop"] < 3993.0
+    ctx, sl, sw, p, k0 = mk()
+    ctx.gaps = [("nwog", 3995.0, 3993.0, 3994.0)]
+    o, f = reasons(ctx, sl, sw, p, k0 + 2)
+    assert o is not None and o["entry"] == pytest.approx(4000.0)                                   # the old rule: at the pool
+    # ts_skip_reswept through the same path (default on): the pool traded earlier, rallied, swept again
+    rows2 = [(4003.0, 4004.0, 4002.0, 4003.0), (4003.0, 4003.5, 3999.0, 4001.0), (4001.0, 4003.0, 4000.5, 4002.5), (4002.5, 4003.5, 4001.0, 4003.0),
+             (4003.0, 4003.2, 4000.8, 4001.0), (4001.0, 4001.5, 3999.5, 4000.5), (4000.5, 4002.0, 4000.2, 4001.5)]
+    p = Params(**BASE, turtle_soup="2023")
+    ctx2, (sl2, ss2) = mkctx(rows2, base=4003.0, hist=hist, p=p)
+    ctx2.pd["pdl1"] = 4000.0
+    k0 = ib(ctx2, "09:30")
+    sw2 = dict(session="AM", name="pdl1", level=4000.0, key="pdl1", ext=3999.5, ext_i=k0 + 5, sweep_i=k0 + 5, broke=None, smt=None, smt2=None)
+    o, f = reasons(ctx2, sl2, sw2, p, k0 + 6)
+    assert o is None and f.get("x_ts_reswept") == 1
+
+
+def test_itl_keys_cover_the_real_pool_names():
+    """new-intermediate-term-hl-fade: the pool keys of the engine (week_lo / week_hi / week_lo_*, parent_lo*, tfp*, ipda_*, pdl2/3, the week / month lows) are intermediate-term;
+    yesterday's low, relative equal lows, session pools and rounds are not."""
+    ctx, (sl, ss) = mkctx([(4003.0, 4004.0, 4002.0, 4003.0)] * 4, base=4003.0, hist=hist_close(close=4003.0, hi=4040.0, lo=3990.0))
+    p = Params(**BASE, ts_itl_context=True)
+    k0 = ib(ctx, "09:30")
+    for key in ("pdl2", "pdh3", "pwl", "pml_month", "week_lo", "week_hi", "week_lo_1", "parent_lo120", "tfp60_1", "ipda_20_lo", "ipda20"):
+        before = sm2.HITS.get("itl_context", 0)
+        sm2.itl_ok(ctx, sl, dict(key=key, ext=4002.0, ext_i=k0), k0 + 2, p)
+        assert sm2.HITS["itl_context"] == before + 1, key
+    for key in ("pdl1", "rel_eq_lows0", "round", "premarket", "opening_range", "am_session"):
+        before = sm2.HITS.get("itl_context", 0)
+        assert sm2.itl_ok(ctx, sl, dict(key=key, ext=4002.0, ext_i=k0), k0 + 2, p) is True
+        assert sm2.HITS.get("itl_context", 0) == before, key
+
+
+def test_ir_entry_window_is_by_the_clock_and_the_org_dip_bar_counts(monkeypatch):
+    """A7 (059 ~4:50): setups.ir_entry stops outside the volatility windows (by the clock - a 12:05 immediate rebalance is not acted on, a 14:05 one is: Silver Bullet window)
+    and without the draw; the switches off lift the gates. L7 (042): the dip bar's own high counts toward the first extreme, so a bar between the old and the new first
+    high is not the second rally."""
+    rows = [(100.0, 100.3, 99.9, 100.1)] * 3 + [(100.1, 100.6, 100.0, 100.5)]
+    monkeypatch.setattr(S, "_finish_order", lambda *a, **k: "ORDER")
+    for start, hhmm, want_ in (("09:30", "09:45", "ORDER"), ("12:00", "12:15", None), ("14:00", "14:15", "ORDER")):
+        ctx, (sl, ss) = mkctx(rows, base=100.0, bias=1, start=start)
+        i = ib(ctx, hhmm)
+        monkeypatch.setattr(sl, "ir_info", lambda tol, _i=i: {_i: (100.0, _i - 1)}, raising=False)
+        p = Params(**BASE, ir_entries=True)
+        assert SM.ir_entry(ctx, sl, i, p, "AM", 1.0) == want_, hhmm
+    ctx, (sl, ss) = mkctx(rows, base=100.0, bias=1, start="12:00")
+    i = ib(ctx, "12:15")
+    monkeypatch.setattr(sl, "ir_info", lambda tol: {i: (100.0, i - 1)}, raising=False)
+    assert SM.ir_entry(ctx, sl, i, Params(**BASE, ir_entries=True, ir_need_window=False), "AM", 1.0) == "ORDER"
+    ctx.cur_bias = 0
+    assert SM.ir_entry(ctx, sl, i, Params(**BASE, ir_entries=True, ir_need_window=False), "AM", 1.0) is None
+    assert SM.ir_entry(ctx, sl, i, Params(**BASE, ir_entries=True, ir_need_window=False, ir_need_draw=False), "AM", 1.0) == "ORDER"
+    # org_state: the dip bar's own high is part of the first extreme
+    hs = hist_close(close=4000.0, hi=4030.0, lo=3990.0)
+    op = 4015.0
+    seq = [(op, op + 4.0, op - 0.2, op + 3.5), (op + 3.5, op + 9.0, op + 3.0, op + 8.0),
+           (op + 8.0, op + 11.0, op - 0.5, op + 0.5),                                          # the dip to the open that ALSO prints a new high (4026)
+           (op + 0.5, op + 10.0, op + 0.2, op + 5.0),                                           # 4025: above the old first high 4024, below the dip bar's high
+           (op + 5.0, op + 12.0, op + 4.0, op + 11.0)]                                          # 4027: the real second rally
+    p = Params(**BASE, org_two_rally=True)
+    ctx, (sl, ss) = mkctx(seq, base=op, hist=hs, p=p)
+    ctx.org, ctx.org_today = [(4000.0, op)], True
+    k0 = ib(ctx, "09:30")
+    assert sm2.org_state(ctx, k0 + 3, p)[3] == 2 and sm2.org_state(ctx, k0 + 4, p)[3] == 3
+
+
+def test_taken_pools_counts_a_relative_equal_low_taken_inside_the_window():
+    """078 (A8): 'an old low L carrying sell-side is taken' - a relative-equal low (two swing lows 4000.0 / 4000.2) that the window's bar 5 traded under counts although it has
+    left the standing list by then (the list is read as of the window start); a window that does not reach it finds nothing."""
+    rows = [(4005.0, 4006.0, 4003.0, 4004.0), (4004.0, 4005.0, 4000.0, 4002.0), (4002.0, 4006.0, 4001.0, 4005.0), (4005.0, 4006.0, 4000.2, 4003.0), (4003.0, 4007.0, 4002.0, 4006.0),
+            (4006.0, 4006.5, 3999.0, 4000.5), (4000.5, 4008.0, 4000.2, 4007.0), (4007.0, 4009.0, 4006.0, 4008.0)]
+    p = Params(**BASE, pivot_n=1)
+    ctx, (sl, ss) = mkctx(rows, base=4005.0, p=p, hist=hist_close(close=4005.0, hi=4040.0, lo=3900.0))
+    k0 = ib(ctx, "09:30")
+    got = sm2._taken_pools(ctx, sl, k0 + 7, p, "AM", k0 + 5, k0 + 6)
+    assert any(abs(v - 4000.2) < 0.31 or abs(v - 4000.0) < 0.31 for v in got), got              # the rel-eq lows (the line sits at the lowest of the cluster)
+    assert [v for v in sm2._taken_pools(ctx, sl, k0 + 7, p, "AM", k0 + 6, k0 + 7) if v < 4001.0] == []     # nothing traded under them in this window
+
+
+def test_bpr_left_far_edge_invalidation():
+    """062 ~3:47 (A11): the CE entry is void after a body closes under the CE; with bpr_left_far_edge, once price has LEFT the range (a close above its top) only a close
+    under the far edge voids it."""
+    z = L.Zone("bull", 4010.0, 4000.0, 0, -1, 4005.0)
+    sd = sd_of([(4008.0, 4011.0, 4007.0, 4009.0), (4009.0, 4013.0, 4008.0, 4012.0), (4012.0, 4012.5, 4002.0, 4003.0), (4003.0, 4006.0, 4001.0, 4004.0), (4004.0, 4005.0, 3996.0, 3998.0)])
+    p0, p1 = Params(**BASE), Params(**BASE, bpr_left_far_edge=True)
+    assert sm2.bpr_dead(sd, z, 3, p0) is True                                                 # 4003 closed under the CE 4005
+    assert sm2.bpr_dead(sd, z, 3, p1) is False                                                # it had left (4012) and stayed over the far edge 4000
+    assert sm2.bpr_dead(sd, z, 4, p1) is True                                                 # a close under the far edge
+    assert sm2.bpr_dead(sd, z, 1, p1) is False and sm2.bpr_dead(sd, z, 0, p0) is False
+    assert sm2.HITS.get("bpr_far_edge")
+
+
+def test_ifvg_far_edge_tag_and_the_ltf_body_zone():
+    """078 (A8, the bearish-mirror remark): an untouched FVG directly beyond the zone's far edge marks the edge as unlikely to be reached; cc02 / 104 (A4): 15m / 5m bodies
+    that stay on the near side of a zone's bottom qualify it however far the wicks pierced."""
+    z = SimpleNamespace(top=4012.0, bottom=4010.0, i=10)
+    lows = np.array([4015.0] * 12 + [4013.0] * 4)
+    g_ok = SimpleNamespace(i=3, top=4009.0)
+    sd = SimpleNamespace(gaps=[g_ok], l=np.r_[lows[:4], np.full(14, 4012.0)])
+    assert sm2.ifvg_far_edge_unlikely(sd, 12, z) is True
+    sd2 = SimpleNamespace(gaps=[g_ok], l=np.r_[lows[:4], np.full(14, 4008.0)])                  # the FVG was traded into since
+    assert sm2.ifvg_far_edge_unlikely(sd2, 12, z) is False
+    sd3 = SimpleNamespace(gaps=[SimpleNamespace(i=3, top=4000.0)], l=sd.l)                      # too far beyond (more than one gap height)
+    assert sm2.ifvg_far_edge_unlikely(sd3, 12, z) is False
+    rows = [(4008.0, 4009.0, 4005.0, 4006.0), (4006.0, 4007.0, 3996.0, 4003.0), (4003.0, 4008.0, 4001.5, 4007.0), (4007.0, 4009.0, 4005.0, 4008.0)]
+    ctx, (sl, ss) = mkctx(rows, base=4008.0)
+    k0 = ib(ctx, "09:30")
+    assert sm2.body_qual_zone(ctx, sl, 4000.0, k0, k0 + 3) is True
+    bad = [rows[0], (4006.0, 4007.0, 3996.0, 3998.0), rows[2], rows[3]]
+    ctx2, (sl2, _) = mkctx(bad, base=4008.0)
+    assert sm2.body_qual_zone(ctx2, sl2, 4000.0, k0, k0 + 3) is False
+
+
+def test_external_turtle_soup_accepts_a_body_qualified_array(monkeypatch):
+    """104 ~21:53 (A4) on the turtle-soup external path: the HTF array (3990-3995) was already pierced by a WICK (bar 3, low 3994) with every 5m body above it - the default
+    needs the array 'not reached since' and finds nothing; with htf_body_qual bar 4's run into it arms the limit at the array top."""
+    rows = [(4003.0, 4004.0, 4002.0, 4003.0), (4003.0, 4003.5, 4000.0, 4001.0), (4001.0, 4003.0, 4001.0, 4002.5), (4002.5, 4003.5, 3994.0, 4001.0), (4001.0, 4002.0, 3993.5, 4000.5)]
+    monkeypatch.setattr(S, "_finish_order", lambda ctx_, sd_, i_, p_, ses_, sw_, entry_, stop_, *a, **k: dict(entry=entry_, stop=stop_))
+    for qual, want_ in ((False, None), (True, 3995.0)):
+        p = Params(**BASE, pivot_n=1, turtle_soup="external", htf_body_qual=qual)
+        ctx, (sl, ss) = mkctx(rows, base=4003.0, p=p, hist=hist_close(close=4003.0, hi=4040.0, lo=3990.0), conf=StubConf(arrays={1: [(3995.0, 3990.0, "4h", 0, 0)]}))
+        k0 = ib(ctx, "09:30")
+        o = S._external(ctx, sl, k0 + 4, p, "AM", 1.0)
+        assert (o is None) if want_ is None else (o is not None and o["entry"] == want_), qual
+    assert sm2.HITS.get("htf_body_qual_zone")
+
+
+def test_daily_first_ltf_buys_only_after_the_swing_high_breaks(monkeypatch):
+    """cc02_007 ~21:51 (A4): at a daily first-return zone the LTF buys only after a swing high is broken (an MSS-path order, not the bare sweep) and ignores the bearish
+    continuation (the short Side's orders are rejected for the rest of the day)."""
+    ctx, (sl, ss) = mkctx([(4000.0, 4001.0, 3999.0, 4000.5)] * 4, base=4000.0, bias=1)
+    k0 = ib(ctx, "09:30")
+    i = k0 + 3
+    monkeypatch.setattr(sm2, "daily_first_return", lambda *a, **k: True)
+    p = Params(**BASE, daily_first_ltf=True)
+    sw = dict(key="rel_eq_lows0", ext=3999.0, ext_i=k0 + 1)
+    assert sm2.order_gate2(ctx, sl, dict(sw), i, p, 4001.0, 3998.0, "AM", [], {}, {}) == "x_dfr_need_break"        # the bare sweep: wait for the break
+    lvt = []
+    assert sm2.order_gate2(ctx, sl, dict(sw, broke=k0 + 2), i, p, 4001.0, 3998.0, "AM", lvt, {}, {}) is None
+    assert lvt == ["daily_first_return"]
+    assert sm2.order_gate2(ctx, ss, dict(key="pdh1", ext=-4001.0, ext_i=k0 + 1), i, p, -4001.0, -4005.0, "AM", [], {}, {}) == "x_dfr_against"
+    assert sm2.order_gate2(ctx, ss, dict(key="pdh1", ext=-4001.0, ext_i=k0 + 1), i, replace(p, daily_first_ltf=False), -4001.0, -4005.0, "AM", [], {}, {}) is None
+    assert sm2.HITS.get("dfr_need_break") and sm2.HITS.get("dfr_against")
+
+
+def test_new_review_switches_defaults_and_plumbing():
+    p = Params()
+    assert (p.bpr_left_far_edge, p.ifvg_far_edge_tag, p.breaker_range_trigger, p.daily_first_ltf) == (False,) * 4
+    for k in ("A21-pre-trigger-dealing-range_trigger", "A8-ifvg-narrative-liquidity-run_quadrant", "A7-immediate-rebalance-gates_ungated", "A11-bpr-levels-ce-rejection_both",
+              "A4-sweep-body-cluster_ltf"):
+        q = Params(**study.DECISIONS[k])
+        assert q is not None
+    assert Params(**study.DECISIONS["A8-ifvg-narrative-liquidity-run_quadrant"]).ifvg_entry == "quadrant"
+    assert Params(**study.DECISIONS["A11-bpr-levels-ce-rejection_both"]).bpr_def == "both"
+    assert Params(**study.DECISIONS["A7-immediate-rebalance-gates_ungated"]).ir_need_draw is False
+    d = study.DECISIONS["A19-mss-no-rel-sweep-with-htf-draw"]
+    assert d.get("draw_lock", "session") != "off"                                              # the waiver needs the locked draw (the variant is no longer inert)

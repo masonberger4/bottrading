@@ -9,7 +9,7 @@ import pytest
 from mentorship import backtest as B, sm2, study
 from mentorship.strategy import Params
 
-from test_levels_detectors import ES
+from test_levels_detectors import ES, NY
 from test_caption_gap_ld1 import ENTRY, EXIT, SYN
 from test_caption_gap_sm2a import NEW_SWITCHES
 
@@ -61,10 +61,10 @@ REQUIRED_HITS = {
     "gates": ("raid_ref", "div_tag", "state", "ir_gates", "eq_wait_waived"),
     "arrays": ("bpr_ce", "reaper_ob", "htf_body_qual", "reclaimed_loose"),
     "turtle": (),
-    "turtle_cc": ("reswept", "ts_next_array", "itl_context"),
+    "turtle_cc": ("ts_next_array", "itl_context"),
     "setups": ("state", "consol_fade", "gap_edge"),
 }
-SEED_REQUIRED_HITS = {("turtle", 3): ("reswept",), ("turtle", 5): ("smt_three_point",)}        # (the random walks differ: each seed reaches one of the two paths)
+SEED_REQUIRED_HITS = {("turtle", 5): ("smt_three_point",)}        # (the random walks differ: each seed reaches one of the two paths)
 ES_REQUIRED_HITS = {
     "gates": ("raid_ref", "dfvg_half", "org_two_rally", "poke_cancel", "div_tag", "ir_gates"),
     "arrays": ("bpr_ce", "reaper_ob", "htf_body_qual", "reclaimed_loose"),
@@ -131,12 +131,118 @@ def test_look_ahead_es_switches(group):
     assert not missing, (group, missing, added)                                                              # the new code ran
 
 
-def test_every_new_switch_is_in_a_look_ahead_run():
-    """Every behaviour switch of this chunk is on in one of the no-look-ahead runs (the synthetic / ES groups)."""
-    cover = str(GROUPS)
-    tuning = {"dfvg_large_pts", "nwog_sr_stop_pts", "ts_min_beyond_pts", "org_sig_adr", "raid_level", "micro_range_adr", "tails_tol_ticks", "consol_bars", "consol_adr",
-              "daily_first_days", "or_rb_from", "or_rb_bear", "reclaimed_def"}
-    for s_ in NEW_SWITCHES:
-        if s_ in tuning:
+# --- executed-path cases: every switch of the chunk has a no-look-ahead run in which its code RAN, or an explicit reason it cannot be reached by data -----------------
+# (as test_caption_gap_sm1c): each case names the sm2.HITS counters that must have RUN in its full run, the run must hold a trade, and the truncated runs must agree.
+SYN_S = dict(SYN)
+SYN_CASES = {
+    "tails": (7, dict(ifvg_entries=True, ifvg_tails_block=True, tails_tol_ticks=6), ("ifvg_tails",)),
+    "range": (5, dict(range_lock=True), ("range_lock", "range_locked")),
+    "reswept": (4, dict(turtle_soup="2023", ts_skip_reswept=True), ("reswept",)),
+    "ts_smt": (4, dict(turtle_soup="2023", ts_need_smt=True, smt_min=0), ("ts_need_smt",)),
+    "ts_next": (4, dict(turtle_soup="2023", ts_next_array=True), ("ts_next_array_turtle",)),
+    "brk_hold": (5, dict(breaker_range_hold=True, breaker_entry="fallback"), ("breaker_hold",)),
+    "sweep_body": (3, dict(sweep_ref="body"), ("sweep_body",)),
+    "w_cap": (5, dict(ifvg_entries=True, ifvg_depth="w_cap", ifvg_entry="quadrant"), ("ifvg_w_cap", "ifvg_quadrant")),
+    "ifvg_run": (5, dict(ifvg_entries=True, ifvg_need_run=True), ("ifvg_run",)),
+    "ifvg_pool": (5, dict(ifvg_entries=True, ifvg_pool_intact=True), ("ifvg_pool",)),
+}
+ES_B = dict(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, ob_entry="post_mss", leg_pd=0, min_draw_pts=0, htf_resist_cap=False, draw_lock="off", htf_bias="combo")
+ES_NB = dict(ES_B, htf_bias="off", use_bias=False)                       # (no bias filter: more trades)
+W_A, W_D, W_C, W_L = ("2023-10-02", "2023-10-23"), ("2024-05-13", "2024-06-03"), ("2024-02-19", "2024-03-11"), ("2024-09-16", "2024-10-07")
+ES_CASES = {
+    "rearm": (W_A, 5, ES_B, dict(mss_rearm_lower_high=True, mmxm_ctx=True, mm_ssl_target=True, entry_arrays=("bpr_ce",), bpr_left_far_edge=True, turtle_soup="external",
+                                 htf_body_qual=True), ("mss_rearm", "mm_ssl", "bpr_far_edge", "htf_body_qual_zone")),
+    "late": (W_L, 5, ES_NB, dict(mss_rearm_lower_high=True, ifvg_entries=True, ifvg_far_edge_tag=True), ("mss_rearm_ce2", "ifvg_far_edge")),
+    "trigger": (W_D, 5, ES_B, dict(breaker_range_trigger=True, breaker_entry="fallback"), ("breaker_trigger_order",)),
+    "waive": (W_C, 5, dict(ES_B, draw_lock="session"), dict(mss_eq_wait=True, mss_eq_wait_unless_draw=True), ("eq_wait_waived",)),
+    "micro": (("2023-11-06", "2023-11-22"), 1, ES_NB, dict(micro_regime=True, micro_range_adr=0.5), ("micro_regime",)),
+}
+_ESC = {}
+
+
+def _es_tf(tf, a, b):
+    if tf not in _ESC:
+        _ESC[tf] = (B.load("ES", tf, source="databento"), B.load_meta("ES", tf))
+    raw, meta = _ESC[tf]
+    return raw[(raw.index >= pd.Timestamp(a, tz=NY)) & (raw.index < pd.Timestamp(b, tz=NY))], meta
+
+
+def _check_ran(name, full, added, need):
+    assert len(full) >= 1, f"{name}: the window made no trade"
+    missing = [h for h in need if not added.get(h)]
+    assert not missing, f"{name}: these paths did not run: {missing} (ran: {sorted(added)})"
+
+
+@pytest.mark.parametrize("case", sorted(SYN_CASES))
+def test_look_ahead_synthetic_executed_paths(case):
+    seed, kw, need = SYN_CASES[case]
+    x, y = B.synthetic(start="2026-04-06", end="2026-05-08", tf=5, seed=seed)
+    p = Params(**{**SYN_S, **SYN_BASE, **kw})
+    full, added = _la(x, 5, "RW", p, ENTRY + TAG_COLS, every=3, partner=y)
+    _check_ran(case, full, added, need)
+
+
+@pytest.mark.skipif(not ES, reason="no ES data")
+@pytest.mark.parametrize("case", sorted(ES_CASES))
+def test_look_ahead_es_executed_paths(case):
+    (a, b), tf, base, kw, need = ES_CASES[case]
+    df, meta = _es_tf(tf, a, b)
+    p = Params(**{**base, **kw})
+    full, added = _la(df, tf, "ES", p, ENTRY + ["draw_px"] + TAG_COLS, every=4, meta=meta, lag=1 if tf == 1 else 2)
+    _check_ran(case, full, added, need)
+
+
+NEW_SWITCHES_B = ("bpr_left_far_edge", "ifvg_far_edge_tag", "breaker_range_trigger", "daily_first_ltf")
+# the sm2.HITS counter that proves a switch's code path RAN
+SWITCH_HIT = {
+    "dfvg_half": "dfvg_half", "nwog_sr_entries": "nwog_sr", "ts_next_array": "ts_next_array_turtle", "gap_quarter_retrace": "gap_quarter", "gap_edge_entry": "gap_edge",
+    "org_two_rally": "org_two_rally", "reclaimed_def": "reclaimed_loose", "mss_ref_raid": "raid_ref", "mss_eq_wait_unless_draw": "eq_wait_waived", "micro_regime": "micro_regime",
+    "ts_skip_reswept": "reswept", "breaker_range_hold": "breaker_hold", "ifvg_need_run": "ifvg_run", "ifvg_tails_block": "ifvg_tails", "range_lock": "range_locked",
+    "mss_rearm_lower_high": "mss_rearm", "reaper_def": "reaper_ob", "poke_high_cancel": "poke_cancel", "ifvg_pool_intact": "ifvg_pool", "mm_ssl_target": "mm_ssl",
+    "htf_body_qual": "htf_body_qual", "state_tool_map": "state", "state_machine": "state", "sweep_ref": "sweep_body", "ts_need_smt": "ts_need_smt", "div_tag": "div_tag",
+    "or_rb": "or_rb", "pm_rev_nested": "pm_rev_nested", "consol_fade": "consol_fade", "ts_itl_context": "itl_context", "smt_mode": "smt_three_point",
+    "bpr_left_far_edge": "bpr_far_edge", "ifvg_far_edge_tag": "ifvg_far_edge", "breaker_range_trigger": "breaker_trigger_order", "ifvg_depth": "ifvg_w_cap",
+    "ir_need_draw": "ir_gates", "ir_need_window": "ir_gates",
+}
+# no data window reaches these (the test of each is a unit test in test_caption_gap_sm2a.py, the gates' wiring is checked by the order_gate2 / run_day fixtures there)
+EXCEPTIONS = {
+    "reh_trap": "the gate needs an AGAINST-bias order to reach order completion; the main loop's side filter drops those sides in every bias-filtered run, and without a bias reading the gate is n/a",
+    "second_break_partial": "targets are untraded pools by construction: a target pool already traded before the fill does not occur in real or random data (unit + run_day tests)",
+    "daily_first_return": "needs a rel-eq sweep that is the first return to a daily body cluster in 30+ sessions: ~50 sweeps over 2022-2024 ES never met the cluster test",
+    "daily_first_ltf": "as daily_first_return",
+    "daily_first_days": "tuning of daily_first_return",
+    "ifvg_over_pool_pref": "the preference branch needs two IFVGs after one sweep with a taken pool outside the first: 12 random-walk seeds never produced it",
+}
+TUNING = {"dfvg_large_pts", "nwog_sr_stop_pts", "ts_min_beyond_pts", "org_sig_adr", "raid_level", "micro_range_adr", "tails_tol_ticks", "consol_bars", "consol_adr", "or_rb_from",
+          "or_rb_bear", "state_machine_helper"}
+
+
+def _ran_by(name_switch):
+    """The cases / groups whose run puts `name_switch` ON and whose REQUIRED hits include the counter that proves its code path ran."""
+    hit_ = SWITCH_HIT[name_switch]
+    out = []
+    for g, kw in GROUPS.items():
+        need = set(REQUIRED_HITS.get(g, ())) | set(ES_REQUIRED_HITS.get(g, ())) | {h for (gg, _), hs in SEED_REQUIRED_HITS.items() if gg == g for h in hs}
+        if name_switch in kw and hit_ in need:
+            out.append(g)
+    for c, (_, kw, need) in SYN_CASES.items():
+        if name_switch in kw and hit_ in need:
+            out.append(c)
+    for c, (_, _, _, kw, need) in ES_CASES.items():
+        if name_switch in kw and hit_ in need:
+            out.append(c)
+    return out
+
+
+def test_every_switch_of_the_chunk_has_an_executed_path_case():
+    """Every behaviour switch of the chunk is ON in a no-look-ahead run that must have EXECUTED its code path (its sm2.HITS counter is in that run's required hits), or it
+    is listed in EXCEPTIONS with the reason data cannot reach it (not a string search of the group dicts)."""
+    missing = []
+    for s_ in NEW_SWITCHES + NEW_SWITCHES_B + ("ifvg_depth", "ir_need_draw", "ir_need_window"):
+        if s_ in TUNING or s_ in EXCEPTIONS:
             continue
-        assert s_ in cover, s_
+        if s_ not in SWITCH_HIT or not _ran_by(s_):
+            missing.append(s_)
+    assert not missing, missing
+    assert not set(EXCEPTIONS) & {s_ for s_ in SWITCH_HIT}, "an excepted switch has a hit mapping"
+    assert all(len(v) > 15 for v in EXCEPTIONS.values())

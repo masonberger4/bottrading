@@ -2054,6 +2054,11 @@ class Params:
     ts_itl_context: bool = False         # new: a turtle-soup fade of an intermediate-term pool (older than yesterday: pdl2 / pdl3 / week / month / IPDA) needs context: an HTF array tag or a range-bound day
     # B18-smt-three-point-swing (cc11_004 ~27:39)
     smt_mode: str = "pair"               # B18: "pair" (the partner did not take the swept level) / "three_point" (this index low - lower low - higher low against the partner's low - lower low - lower low)
+    # setups_models #2/7 review fixes (the not-built remainders of the specs; all default off)
+    bpr_left_far_edge: bool = False      # A11-bpr-levels-ce-rejection (062 ~3:47): once price has LEFT the BPR (a close beyond its near edge) the far edge, not the CE, is the invalidation of the CE entry
+    ifvg_far_edge_tag: bool = False      # A8-ifvg-narrative-liquidity-run (078): tag an IFVG whose far edge H is unlikely to be reached - an FVG just beyond it is still open [our interpretation]
+    breaker_range_trigger: bool = False  # A21-pre-trigger-dealing-range (048 ~1:20:40): the dealing range (swing high before the retrace .. the breaker-tap bar's low) + the MSS trigger (an up-close body above the bearish FVG in the upper half that takes the internal highs) arms the first bullish FVG; needs the breaker registry (breaker_day_life or this switch)
+    daily_first_ltf: bool = False        # A4-sweep-body-cluster (cc02_007 ~21:51): at a daily first-return zone the LTF ignores the bearish continuation (the against-side is rejected) and buys only after the swing high is broken (an MSS-path order)
 
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
@@ -3315,6 +3320,8 @@ def _eq_levels(sd: Side, i: int, tol: float, lows: bool, p: "Params | None" = No
     piv = _LD.pool_piv(sd, lows)          # caption-gap B5 pool_tf: the pools' pivots may come from 15m bars
     body_ref = p is not None and p.sweep_ref == "body"      # caption-gap A4-sweep-body-cluster: the pool is the cluster of BODIES (the line = the lowest body), the sweep needs a low below it
     bodies = p is not None and (p.eq_bodies or body_ref)
+    if body_ref:
+        _SM2.hit("sweep_body")
     rank = p is not None and p.eq_rank
     out, wick, bar = [], [], []
     bt = np.minimum(sd.o, sd.c) if lows else np.maximum(sd.o, sd.c)
@@ -5054,6 +5061,10 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             elif ("release_open" in (pending.get("lvx") or {}) and i - 1 > pending["i"]
                   and sd.c[i - 1] < pending["lvx"]["release_open"][0]):
                 pending = None                       # T2 (review fix): bar i-1 closed below the 08:30 open
+            elif (p.poke_high_cancel and pending["session"] != "PM" and i - 1 > pending["i"]
+                  and _SM2.poke_cancel(ctx, sd, i - 1, p, pending["session"]) is not None):
+                pending = None                       # caption-gap A4-wick-poke-vi-invalidation: the trade beyond the poke high cancels the PENDING AM order too
+                _SM2.hit("poke_pending")
             elif (pending.get("cancel_low") is not None and i - 1 > pending["i"]
                   and sd.l[i - 1] < pending["cancel_low"]):
                 pending = None                       # setups_models M11b: the OB low traded
@@ -5708,6 +5719,8 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         o_ = _SM.extra_setups(ctx, sd, i, p, session, risk_mult)   # setups_models non-sweep setups
     if o_ is None and p.breaker_day_life and sd.sweep is None:
         o_ = _SM2.breaker_retest_order(ctx, sd, i, p, session, risk_mult)    # caption-gap A13-breaker-lifetime: repeat retests of the day's breakers
+    if o_ is None and p.breaker_range_trigger and sd.sweep is None:
+        o_ = _SM2.breaker_trigger_order(ctx, sd, i, p, session, risk_mult)   # caption-gap A21-pre-trigger-dealing-range: the MSS trigger inside the breaker's dealing range
     if o_ is None and p.mitigation_entry and sd.sweep is None:
         o_ = _SM2.mit_order(ctx, sd, i, p, session, risk_mult)               # caption-gap A15-mitigation-block-entry: ranks below the breakers
     if o_ is None and sd.sweep is None and (p.nwog_sr_entries or p.gap_edge_entry or p.gap_quarter_retrace or "bpr_ce" in p.entry_arrays or p.or_rb or p.consol_fade):
@@ -5779,7 +5792,7 @@ def _breaker(ctx, sd, sw, ref_i, real_ref, i, p):
     if bz is not None and (p.breaker_needs_disp or p.breaker_break_ref != "wick") and not _SM2.breaker_confirmed(ctx, sd, sw, bz, i, p):
         _f("x_breaker_unconfirmed")
         return None                    # caption-gap A13-breaker-needs-rebalance-and-fvg: no fast repricing / the candle's body high not left
-    if bz is not None and p.breaker_day_life:
+    if bz is not None and (p.breaker_day_life or p.breaker_range_trigger):
         _SM2.breaker_register(ctx, sd, sw, bz, i, p)       # caption-gap A13-breaker-lifetime
     return bz
 
@@ -5796,6 +5809,7 @@ def _breaker_order(ctx, sd, sw, bz, i, p, session, risk_mult):
                 bz_mt=bz.mt if p.breaker_mt_respect else None)
     if p.breaker_range_hold:                      # caption-gap A21-pre-trigger-dealing-range (048 ~1:20:40): time does not invalidate - the order rests until a trade goes deeper than the breaker
         tags.update(no_expire=True, cancel_low=float(bz.bottom))
+        _SM2.hit("breaker_hold")
     return _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult,
                          sd.h[sw["ext_i"]:i + 1].max(), tags, pctx_free=True)
 
@@ -6060,8 +6074,11 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
             return o3
     if not gaps:
         if sw.get("ev_g") is not None:      # E5: alive until the order lifetime passed since the last gap
-            if i - sw["ev_i"] > max(1, p.pending_minutes // ctx.tf) and not p.mss_rearm_lower_high:
-                sd.sweep = None
+            if i - sw["ev_i"] > max(1, p.pending_minutes // ctx.tf):
+                if p.mss_rearm_lower_high:
+                    _SM2.hit("mss_rearm")
+                else:
+                    sd.sweep = None
             return None
         wait = p.fvg_wait * (p.setup_minutes // ctx.tf if p.entry_tf == "5m" and ctx.tf < p.setup_minutes else 1)
         if i - _fvg_wait_from(sw) >= wait:
@@ -6241,6 +6258,12 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     elif p.stop_mode in ("sweep", "ob_mt_pure"):   # E6c / M2.5
         s_ = _EN.gap_stop(sd, g, sw, i, p, ob, p.stop_mode)
         stop = stop if s_ is None else s_
+    if p.mss_rearm_lower_high and not is_ifvg:      # caption-gap A19-second-mss-no-new-low (069 ~14:41): "stop just above the CE of the higher FVG when there are two" (mirror: under the lower one's CE)
+        prev_ = [m_ for gi_, m_ in sw.get("rg", []) if 0 < g.i - gi_ <= 3]       # the gap the previous order of THIS displacement leg used (consecutive gaps of one leg [our interpretation])
+        if rearm and prev_ and p.stop_mode in ("ob_mt", "fvg") and min(prev_ + [g.mid]) - p.pad < entry - p.min_risk_pts * p.es_pt:
+            stop = min(prev_ + [g.mid]) - p.pad
+            _SM2.hit("mss_rearm_ce2")
+        sw.setdefault("rg", []).append((g.i, float(g.mid)))
     if is_ifvg and (p.ifvg_entry != "edge" or p.ifvg_depth or p.ifvg_stop_pts):   # M10 / A8
         r_ = _SM.ifvg_stop(sd, g, entry, stop, p, i)
         if r_ is None:
@@ -6535,6 +6558,8 @@ def _turtle(ctx, sd, sw, i, p, session, risk_mult):
     if p.ts_need_smt and not _SM2.ts_smt_ok(sw):
         _f("x_ts_no_smt")                # caption-gap B18-smt-accum-distrib (cc03_005): the correlated asset must refuse the break
         return None
+    if p.ts_need_smt:
+        _SM2.hit("ts_need_smt")
     if p.ts_itl_context and not _SM2.itl_ok(ctx, sd, sw, i, p):
         _f("x_ts_itl_context")           # caption-gap new-intermediate-term-hl-fade (cc09_005): an older-than-yesterday pool is faded only with context
         return None
@@ -6560,6 +6585,7 @@ def _turtle(ctx, sd, sw, i, p, session, risk_mult):
         nx = _SM2.next_array_level(ctx, sd, i, sw["level"], p, kb) if p.ts_next_array else None     # caption-gap new-stop-run-overshoot-next-array (025 ~1:05:16)
         if nx is not None:
             entry, stop = nx
+            _SM2.hit("ts_next_array_turtle")
         else:
             stop = _ts_stop(ctx, sd, sw, i, p, arr, entry)
     else:                                                # or60: target the OR60 high
@@ -6681,6 +6707,9 @@ def _external(ctx, sd, i, p, session, risk_mult):
             k0 = max(0, int(ctx.idx.searchsorted(kn)))
             if l[k0:i].min(initial=np.inf) > top >= l[i] and c[i] >= bot:
                 arrs.append((top, bot, kn))
+            elif (p.htf_body_qual and top >= l[i] and c[i] >= bot and l[k0:i].min(initial=np.inf) <= top
+                  and _SM2.body_qual_zone(ctx, sd, bot, k0, i)):
+                arrs.append((top, bot, kn))      # caption-gap A4-ltf-body-qualification: wicks reached the array before, the 15m / 5m bodies never closed beyond it
         if not arrs:
             continue
         used.add(q.i)
