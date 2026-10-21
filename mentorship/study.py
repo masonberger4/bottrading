@@ -1818,6 +1818,9 @@ _SM5_DECISIONS = {
     "M1-consolidate-at-discount-array": dict(mm_accum_bars=3, mm_accum_frac=0.8, mmxm_ctx=True, **SM_POST),
     "M1-accumulation-stages": dict(mm_stages=True, mmxm_ctx=True, adds=(0.5, 0.5), **SM_POST),
     "M1-distribution-stages-lowrisk-short": dict(mm_lowrisk=True, mm_oc_frac=0.8, mm_stages=True, mmxm_ctx=True, **SM_POST),
+    "M1-distribution-stages-lowrisk-short_reentry": dict(mm_lowrisk=True, mm_lowrisk_reentry="wick_ce", mm_stages=True, mm_stage2=True, mm_oc_frac=0.8, mmxm_ctx=True, **SM_POST),
+    "M1-consolidate-at-discount-array_gate": dict(mm_accum_bars=3, mm_accum_frac=0.8, mm_accum_gate=True, mm_oc_entry=True, mm_stages=True, mmxm_ctx=True, **SM_POST),
+    "A14-unicorn-standalone_independent": dict(unicorn_standalone=True, unicorn_independent=True, unicorn_tf=5, ob_entry="pre_break"),
     "A18-curve-arrays-reverse-ladder": dict(reclaimed_ladder=True, reclaim_bounce_bars=2, reclaimed_ob=True, adds=(0.5, 0.5), **SM_POST),
     "M1-one-segment": dict(mm_flip=True, mm_stages=True, mmxm_ctx=True, draw_lock="session", htf_resist_cap=False, ob_entry="post_mss"),
 }

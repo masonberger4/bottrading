@@ -90,7 +90,12 @@ ES_CASES = {
     "fb": (W3, 5, ES_B, dict(array_fallback_breaker=True, draw_lock="session"), ("array_fallback_breaker",)),
     "prem": (W1, 5, ES_B, dict(allow_htf_array_premise=True, premise_tfs=(1440,)), ("premise_array",)),
     "accum": (W3, 5, ES_B, dict(mm_accum_bars=1, mm_accum_frac=6.0, mmxm_ctx=True), ("mm_accum",)),
-    "zone": (W4, 5, ES_B, dict(stop_zone_pool=True, stop_mode="sweep"), ("stop_zone_pool",)),
+    "zone": (("2023-01-16", "2023-02-06"), 5, ES_B, dict(stop_zone_pool=True, stop_mode="sweep"), ("stop_zone_pool",)),
+    # review round (chunk 5/7): the windows were found by scanning 21-day windows of 2022-2025 for the counters
+    "hunt": (("2023-01-16", "2023-02-06"), 5, ES_B, dict(ifvg_entries=True, ifvg_need_hunt=True), ("ifvg_hunt",)),
+    "mm_s2": (("2022-07-11", "2022-08-01"), 5, ES_B, dict(G_MM, mm_stage2=True, mm_lowrisk_reentry="extreme"), ("mm_stage2", "mm_lowrisk_reentry")),
+    "uni_ind": (("2022-01-03", "2022-01-24"), 5, dict(ES_B, ob_entry="pre_break"), dict(unicorn_standalone=True, unicorn_independent=True, unicorn_tf=5), ("unicorn_standalone",)),
+    "gate": (W3, 5, ES_B, dict(mm_accum_bars=1, mm_accum_frac=6.0, mm_accum_gate=True, mm_stages=True, mm_oc_entry=True, mmxm_ctx=True, adds=(0.5, 0.5)), ("mm_accum_gate_open",)),
 }
 SYN_CASES = {
     # name: (seed, switches, the HITS counters the full run must have bumped)
@@ -155,15 +160,15 @@ SWITCH_HIT = {
     "htf_entry_array": "htf_entry_array", "td_same_level": "td_note", "td_fallback": "td_fallback", "mit_entry_tf": "mit_entry_array", "mit_stair": "mit_stair", "stop_zone_pool": "stop_zone_pool",
     "unicorn_standalone": "unicorn_standalone", "max_retrace": "max_retrace_drop", "ifvg_open_mode": "ifvg_open_limit", "array_fallback_breaker": "array_fallback_breaker",
     "mm_oc_entry": "mm_oc_entry", "mm_stages": "mm_stage_bisi", "mm_lowrisk": "mm_lowrisk", "mm_flip": "mm_flip", "reclaimed_ladder": "reclaim_ladder", "mm_accum_bars": "mm_accum",
+    "ifvg_need_hunt": "ifvg_hunt", "mm_lowrisk_reentry": "mm_lowrisk_reentry", "mm_stage2": "mm_stage2", "mm_accum_gate": "mm_accum_gate_open", "unicorn_independent": "unicorn_standalone",
 }
 # the values of EXISTING Params fields this chunk added: (field, value) -> the counter
 EXTRA_VALUES = {("turtle_soup", "prev_pm"): "prev_pm_limit", ("entry_arrays", "htf"): "htf_cands", ("entry_arrays", "mitigation"): "mit_entry_array", ("premise_tfs", 1440): "premise_array"}
 EXCEPTIONS = {
     "dual_deal": "a backtest.combine option (two books), not an engine path: test_combine_dual_deal_split covers it",
     "ifvg_061_entry": "needs an IFVG with a normal FVG below it and a body close at the FVG CE-top zone after a sweep: no ES window / synthetic seed reached the outcome; test_ifvg_061_iofed_limit covers it",
-    "ifvg_need_hunt": "needs an IFVG order whose stop hunt (a pivot low run, no body under the CE) happened: no window reached it; test_ifvg_needs_stop_hunt covers the gate",
-    "prev_reh_plan": "needs the prior session to close in the lower half of a daily FVG of the Confluence object while the overnight held the prior low (a 3-week window hits the context on about one day in ten, and then no REH pool was swept); the context gate ran in 18 side-days of two windows (prev_reh_pools never bumped); test_prev_day_reh_plan covers pools, targets and the cancels",
-    "ab_anchor_lock": "needs a FILLED advanced-breaker order followed by another one in the same session: no window did; test_ab_leg_not_reanchored covers it",
+    "prev_reh_plan": "needs the prior session to close in the lower half of a daily FVG of the Confluence object while the overnight held the prior low (a 3-week window hits the context on about one day in ten, and then no REH pool was swept); the context gate ran in 18 side-days of two windows; a review-round scan of all 21-day windows 2022-2025 (ES 5m) never bumped prev_reh_pools either; test_prev_day_reh_plan covers pools, targets and the cancels and test_prev_reh_levels_truncation (sm5c) checks the full-vs-truncated day at every bar",
+    "ab_anchor_lock": "needs a FILLED advanced-breaker order followed by another one in the same session: no window did (a review-round scan of all 21-day windows 2022-2025 never bumped ab_anchor_kept); test_ab_leg_not_reanchored covers it and test_ab_anchor_truncation (sm5c) checks the full-vs-truncated day at every bar",
 }
 _RUN_KW = {}
 for _c, (_s, _kw, _need) in SYN_CASES.items():

@@ -2420,7 +2420,7 @@ def nested_at_am(ctx, sd, i: int, p) -> bool:
 STATE_TOOLS = {
     "RETRACEMENT": ("fvg", "ifvg", "implied_fvg", "vi", "void", "ifvg_061", "nfp_release_fvg", "arr_vi"),
     "EXPANSION": ("ob_pre", "ob_anchor", "arr_ob", "arr_cons_ob_open", "cisd_ob", "release_ob", "ts_cc_1h_ob"),
-    "REVERSAL": ("turtle_soup", "ts_or60", "ts_cc_limit", "ts_external", "hs_fade", "consol_fade"),
+    "REVERSAL": ("turtle_soup", "ts_or60", "ts_cc_limit", "ts_external", "prev_pm_turtle", "hs_fade", "consol_fade"),
     "CONSOLIDATION": (),
 }
 _MAPPED = frozenset(k for v in STATE_TOOLS.values() for k in v)

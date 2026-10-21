@@ -24,6 +24,7 @@ NEW_SWITCHES = (
     "ifvg_need_hunt", "pd50_bodies", "pd50_tf", "htf_overshoot_short", "overshoot_pts", "open_ob_min", "htf_entry_array", "td_same_level", "td_level_pts", "td_fallback", "mit_entry_tf",
     "mit_stair", "mb_order", "prev_reh_plan", "stop_zone_pool", "unicorn_standalone", "unicorn_tf", "max_retrace", "ifvg_open_mode", "ifvg_gap_pts", "array_fallback_breaker", "mm_oc_entry",
     "mm_accum_bars", "mm_accum_frac", "mm_stages", "mm_lowrisk", "mm_oc_frac", "mm_flip", "reclaimed_ladder", "reclaim_bounce_bars",
+    "mm_lowrisk_reentry", "mm_stage2", "mm_accum_gate", "unicorn_independent",
 )
 
 
@@ -815,25 +816,31 @@ def test_prev_day_reh_plan():
 # --- 102 M2-skip-filter ------------------------------------------------------------------------------------------------------------------------------
 
 def test_skip_when_pool_inside_stop(monkeypatch):
-    """100 ~01:07:20: the order is dropped when an unraided pool (no wick through) or a level probed by >= 2 wicks with no body close beyond it lies between the entry and the stop (side space: under
-    the entry, above the stop); a pool whose bodies closed beyond, the swept pool itself and pools outside the zone do not count."""
-    rows = [(4020.0, 4021.0, 4019.0, 4020.0)] * 3 + [(4019.0, 4020.0, 4002.8, 4010.0), (4010.0, 4012.0, 4002.9, 4011.0), (4011.0, 4012.0, 4009.0, 4010.0)]
+    """100 ~01:07:20: the order is dropped when an unraided pool lies between the entry and the stop. (a) a pool in the stop zone beyond the sweep extreme that no bar traded; (b) in a multi-bar
+    sweep a level the sweep's FIRST bar did not take (it lies between the first bar's low and the final extreme), probed by >= 2 wicks BEFORE the sweep with no body close beyond it. A pool the
+    sweep took, one whose bodies closed beyond, the swept pool itself and pools outside the zone do not count (review fix: the sweep bar's own wick is not a probe)."""
+    rows = [(4020.0, 4021.0, 3996.8, 4020.0), (4020.0, 4021.0, 3996.9, 4020.0), (4020.0, 4021.0, 4019.0, 4020.0), (4019.0, 4020.0, 3998.8, 4010.0), (4010.0, 4012.0, 3995.0, 4011.0),
+            (4011.0, 4012.0, 4009.0, 4010.0)]
     ctx, (sl, ss) = mkctx(rows, base=4020.0, hist=hist_close(close=4020.0, hi=4130.0, lo=3900.0))
-    i = ib(ctx, "09:30") + 5
+    e0 = ib(ctx, "09:30")
+    i = e0 + 5
     p = Params(**BASE, stop_zone_pool=True)
-    sw = dict(session="AM", key="pdl1", level=3999.0, ext=3997.0, ext_i=ib(ctx, "09:30") + 3)
-    monkeypatch.setattr(S, "_sell_side", lambda *a, **k: {"lunch": 4003.0})
-    assert sm5.stop_zone_gate(ctx, sl, sw, i, p, "AM", 4011.0, 3995.0) == "x_stop_zone_pool"            # 4003 was poked twice by wicks (4002.8 / 4002.9) with no close under it
-    assert sm5.stop_zone_gate(ctx, sl, sw, i, p, "AM", 4001.0, 3995.0) is None                         # the pool is above the entry: not in the stop zone
-    assert sm5.stop_zone_gate(ctx, sl, sw, i, p, "AM", 4011.0, 4004.0) is None                         # ... or under the stop
+    sw = dict(session="AM", key="pdl1", level=3999.0, ext=3995.0, ext_i=e0 + 4, sweep_i=e0 + 3)
+    monkeypatch.setattr(S, "_sell_side", lambda *a, **k: {"x": 3990.0})
+    assert sm5.stop_zone_gate(ctx, sl, sw, i, p, "AM", 4011.0, 3985.0) == "x_stop_zone_pool"            # (a) 3990 sits between the stop and the sweep extreme, no bar went through it
+    assert sm5.stop_zone_gate(ctx, sl, sw, i, p, "AM", 4011.0, 3992.0) is None                         # ... a tighter stop is above it: outside the zone
+    monkeypatch.setattr(S, "_sell_side", lambda *a, **k: {"x": 3997.0})
+    assert sm5.stop_zone_gate(ctx, sl, sw, i, p, "AM", 4011.0, 3985.0) == "x_stop_zone_pool"            # (b) 3997: wicks of bars 0 / 1 probed it before the sweep, no body under it, the first sweep bar stopped above it
+    assert sm5.stop_zone_gate(ctx, sl, dict(sw, sweep_i=e0 + 4), i, p, "AM", 4011.0, 3985.0) is None    # a single-bar sweep (the bar that went through it is the sweep bar): taken by the sweep
     monkeypatch.setattr(S, "_sell_side", lambda *a, **k: {"x": 3999.0})
-    assert sm5.stop_zone_gate(ctx, sl, dict(sw, level=3999.0), i, p, "AM", 4011.0, 3995.0) is None     # the swept pool itself
-    bad = rows[:4] + [(4010.0, 4012.0, 4002.0, 4002.5)] + rows[5:]
-    monkeypatch.setattr(S, "_sell_side", lambda *a, **k: {"lunch": 4003.0})
+    assert sm5.stop_zone_gate(ctx, sl, sw, i, p, "AM", 4011.0, 3985.0) is None                         # the swept pool itself
+    monkeypatch.setattr(S, "_sell_side", lambda *a, **k: {"x": 3997.0})
+    bad = [(4020.0, 4021.0, 3996.8, 3996.0)] + rows[1:]
     ctx2, (sl2, _) = mkctx(bad, base=4020.0, hist=hist_close(close=4020.0, hi=4130.0, lo=3900.0))
-    assert sm5.stop_zone_gate(ctx2, sl2, sw, i, p, "AM", 4011.0, 3995.0) is None                       # a body closed under 4003: it was raided
-    monkeypatch.setattr(S, "_sell_side", lambda *a, **k: {"lunch": 4005.0})
-    assert sm5.stop_zone_gate(ctx, sl, sw, i, p, "AM", 4011.0, 3995.0) == "x_stop_zone_pool"           # two wicks went through 4005 (lows 4002.8 / 4002.9), no body closed under it: still unraided
+    assert sm5.stop_zone_gate(ctx2, sl2, sw, i, p, "AM", 4011.0, 3985.0) is None                       # a body closed under 3997 before the sweep: it was raided
+    one = [rows[0], (4020.0, 4021.0, 4019.0, 4020.0)] + rows[2:]
+    ctx3, (sl3, _) = mkctx(one, base=4020.0, hist=hist_close(close=4020.0, hi=4130.0, lo=3900.0))
+    assert sm5.stop_zone_gate(ctx3, sl3, sw, i, p, "AM", 4011.0, 3985.0) is None                       # one probe only
 
 
 # --- 103 A14-unicorn-standalone -----------------------------------------------------------------------------------------------------------------------
@@ -846,7 +853,7 @@ def test_unicorn_standalone_60m(cap):
     """101 ~01:24:37 (side space; 5m bars here, the 60m case uses the same code on the completed buckets): a retrace into a same-side array forms the swing low 3998, a later close (4011) above
     the swing high before it (4010) is the MSS, the breaker (the leg's up-close candle 4000-4010) and a bullish FVG (4003-4007) overlap: a limit at the overlap's top (4007), the stop under the
     lower edge (4000), the single target = the nearest swing high above (4010), no adds, done key UNI; nothing without the array premise, once per swing, and not again once UNI is done."""
-    p = Params(**BASE, unicorn_standalone=True, unicorn_tf=5)
+    p = Params(**BASE, unicorn_standalone=True, unicorn_tf=5, ob_entry="post_mss")
     conf = StubConf(arrays={1: [(4000.0, 3996.0, "1h", 0, 0)]})
     ctx, (sl, ss) = mkctx(UNI_ROWS, base=4000.0, hist=hist_close(close=4000.0, hi=4130.0, lo=3900.0), conf=conf)
     ctx.done_ref = {}
@@ -854,7 +861,13 @@ def test_unicorn_standalone_60m(cap):
     assert sm5.unicorn_order(ctx, sl, i, p, "AM", 1.0) is not None
     assert cap["entry"] == pytest.approx(4007.0) and cap["stop"] == pytest.approx(4000.0 - p.pad) and cap["tags"]["done_key"] == "UNI" and cap["tags"]["single_exit"] is True
     assert cap["tags"]["no_adds"] is True and cap["fixed"] == [(S._exit_px(4010.0, "pool", p), "pool")] and cap["tags"]["entry_kind"] == "unicorn_standalone"
+    assert cap["tags"]["cancel_close"] == pytest.approx(4000.0)                                        # a body close under the breaker / FVG bottom cancels the pending order
     assert sm5.unicorn_order(ctx, sl, i, p, "AM", 1.0) is None                                          # once per swing
+    sl.__dict__.pop("_uni_sent")
+    assert sm5.unicorn_order(ctx, sl, i, replace(p, ob_entry="pre_break"), "AM", 1.0) is None          # spec: needs ob_entry post_mss / both ...
+    assert sm5.unicorn_order(ctx, sl, i, replace(p, ob_entry="both"), "AM", 1.0) is not None
+    sl.__dict__.pop("_uni_sent")
+    assert sm5.unicorn_order(ctx, sl, i, replace(p, ob_entry="pre_break", unicorn_independent=True), "AM", 1.0) is not None    # ... unless the owner switch lets it run alone
     sl.__dict__.pop("_uni_sent")
     ctx.done_ref["UNI"] = True
     assert sm5.unicorn_order(ctx, sl, i, p, "AM", 1.0) is None                                          # the idea is done

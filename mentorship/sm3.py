@@ -166,7 +166,7 @@ def sweep_step(ctx, sd, sw, i: int, p):
             return "wait"                                  # one more drive is still to come
         sw["shallow"] = False
         hit("shallow_cleared")
-    if sw.get("broke") is None and sw.get("key") != "htf_array" and (p.sweep_max_linger or (p.ts_linger_bars and p.turtle_soup)):
+    if sw.get("broke") is None and sw.get("key") != "htf_array" and (p.sweep_max_linger or (p.ts_linger_bars and p.turtle_soup not in ("", "prev_pm"))):
         # [our interpretation] "lingers" = the COUNT of closes beyond the swept level since the sweep (not necessarily consecutive: a bounce and a re-break still mean it hung around)
         n = int(np.count_nonzero(sd.c[sw["sweep_i"]:i + 1] < sw["level"] - MIN1))
         if p.sweep_max_linger and n > p.sweep_max_linger:
@@ -174,7 +174,7 @@ def sweep_step(ctx, sd, sw, i: int, p):
             S._f("x_linger")
             hit("sweep_linger")
             return "drop"
-        if p.ts_linger_bars and p.turtle_soup and n > p.ts_linger_bars:
+        if p.ts_linger_bars and p.turtle_soup not in ("", "prev_pm") and n > p.ts_linger_bars:      # review fix: "prev_pm" is a resting limit, not a sweep-driven turtle variant
             sw["ob_void"] = True                           # levels#141 "cancel the sweep" (review fix: the whole sweep, not only its turtle order): its pending OB order dies with it
             hit("ts_linger")
             return "drop"

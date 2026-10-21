@@ -35,7 +35,7 @@ def _want(ctx) -> int:
 
 # the entry kinds that RAID a pool and enter before the MSS / without confirmation (item 69: the experienced-trader "turtle soup" style); every other kind waits for the displacement
 RAID_KINDS = frozenset({"ob_pre", "turtle_soup", "ts_or60", "ts_cc_1h_ob", "ts_cc_limit", "ts_external", "htf_stab", "wick_ce", "smt_turtle", "smt_stop", "dagger_entry", "prev_pm_turtle",
-                        "lh_old_low", "po3_rest", "false_flag"})
+                        "lh_old_low", "po3_rest"})            # (false_flag is a tag, not an entry kind: review fix)
 
 
 def entry_style(entry_kind: str) -> str:
@@ -109,11 +109,12 @@ def flag_info(ctx, sd, sw, i: int, p):
     """new-false-bull-flag-short (061 ~01:41:32; cc02_007 ~00:16:23): in side space a BEAR flag over the swept pool - a rapid one-sided drop (the flagpole) followed by a consolidation of at least
     `flag_min_bars` bars whose range is no wider than `flag_max_frac` x the pole (the pole origin high .. the flag's low), ending at the bar before the sweep extreme. The flag is the last
     `flag_min_bars` bars before the sweep (a longer flag qualifies through its last bars; a window that still holds pole bars is too wide and fails the range test). The pole origin is the highest
-    high of the 60 bars before the flag. Returns dict(s, low, high, origin_i, origin) or None."""
-    e = int(sw["ext_i"])
+    high of the `6 x flag_min_bars` bars before the flag (the impulse that made the flag, not an older high - review fix). The flag is anchored on the FIRST sweep bar (`sweep_i`, like
+    near_miss_tag): a multi-bar sweep moves `ext_i` to every new lower low, which would pull sweep bars into the flag window. Returns dict(s, low, high, origin_i, origin) or None."""
+    e = int(sw.get("sweep_i", sw["ext_i"]))
     n = int(p.flag_min_bars)
     s = e - n
-    o0 = max(0, s - 60)
+    o0 = max(0, s - 6 * n)
     if s - o0 < 2:
         return None
     top, low = float(sd.h[s:e].max()), float(sd.l[s:e].min())
@@ -291,7 +292,7 @@ def second_dip_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     k0 = k810 + int(seg[0])
     e = k0 + int(np.argmin(sd.l[k0:i]))
     L_ = float(sd.l[e])
-    ph = [q for q in sd.ph if q.i < e and q.known <= e + p.pivot_n]
+    ph = [q for q in sd.ph if q.i < e and q.known <= i]            # known by the judged bar (review fix: `e + pivot_n` could be after i)
     a = ph[-1].i if ph else max(k0 - 5, 0)
     RB = float(sd.c[a:e + 1].min())
     j0 = next((j for j in range(e + 2, i + 1) if L_ + MIN1 < sd.l[j] < RB - MIN1 and (sd.c[e + 1:j] > RB).any()), None)
@@ -383,7 +384,7 @@ def all_pools_gate(ctx, sd, sw, i: int, p, session: str, lvt: list):
 
 
 def org_reprice_gate(ctx, sd, sw, i: int, p, session: str, entry: float, tags: dict):
-    """M8-org-repricing-full-conditions (069 ~00:14:49): an order whose ladder starts at the ORG (targets.refine tagged it `org_reprice`) is kept only when ALL hold - the Judas ran beyond the
+    """M8-org-repricing-full-conditions (069 ~00:14:49): an order whose ladder starts at the ORG (targets.refine tagged it `org_reprice`) is REJECTED unless ALL hold - the Judas ran beyond the
     midnight open and took both the London and the prior-day NY pools (item 76's helper, no distance limit); a same-side premium array sits at the sweep (`_htf_tag`); it is armed 10:00-11:00 (fill
     by 11:00: tags cut 660); the ORG lies between the entry and the htf.table draw ([our interpretation], the owner-side filter). Returns a reject key or None."""
     S = _S()
@@ -398,6 +399,8 @@ def org_reprice_gate(ctx, sd, sw, i: int, p, session: str, entry: float, tags: d
         return "x_org_reprice_pools"
     if not S._htf_tag(ctx, sd, i, float(sw["ext"]), _tol(p)):
         return "x_org_reprice_array"
+    if not (getattr(ctx, "org_today", False) and ctx.org):
+        return "x_org_reprice_org"                                # review fix: no ORG today - nothing to price toward
     a, b = ctx.org[-1]
     near = float(min(sd.x(a), sd.x(b)))
     dr = sm3.row_draw(ctx, sd, i, session)
@@ -610,8 +613,21 @@ def pd50_gate(ctx, sd, sw, i: int, p, tags: dict):
         return "x_pd50_bodies"
     if m <= ctx.tf:
         tags["cancel_close"] = max(float(tags.get("cancel_close", -np.inf)), mid)
+    elif m % ctx.tf == 0:
+        tags["cancel_close_tf"] = (float(mid), m)               # review fix: a pending order is cancelled by a completed `pd50_tf` bar closing under the 50% (tf_close_cancel)
     hit("pd50_hold")
     return None
+
+
+def tf_close_cancel(ctx, sd, pending: dict, j: int) -> bool:
+    """True when a COMPLETED `m`-minute bar (its last base bar <= j, started after the order was armed) closed under the level of `pending["cancel_close_tf"]` = (level, m)."""
+    lvl, m = pending["cancel_close_tf"]
+    first, last, done, o, hh, ll, cc = sm4.buckets(ctx, sd, int(m))
+    ok = np.flatnonzero(done & (last <= j) & (first > int(pending["i"])))
+    if len(ok) and float(cc[ok].min()) < lvl - MIN1:
+        hit("pd50_pending_cancel")
+        return True
+    return False
 
 
 # --- 87 new-overshoot-ltf-fvg-into-htf-level --------------------------------------------------------------------------------------------------------
@@ -740,7 +756,7 @@ def mit_cand(ctx, sd, sw, i: int, p):
     midnight open's mirror); the stop beyond the block's MT and the adjacent FVG's far edge (the 3-PD-array shield: MB MT, OB MT, the FVG's high). Returns (entry, stop reference, "mitigation") or None."""
     S = _S()
     mo = S._open_known(ctx, "midnight", i)
-    if mo is not None and not float(sd.c[i]) < float(sd.x(mo)):
+    if mo is None or not float(sd.c[i]) < float(sd.x(mo)):         # an unknown midnight open rejects (review fix: it used to let the entry through unfiltered)
         return None
     tol = _tol(p)
     best = None
@@ -801,7 +817,7 @@ def mit_stair_order(ctx, sd, i: int, p, session: str, risk_mult: float):
         stop = entry - p.min_risk_pts * p.es_pt
     sent.add(b["j"])
     hit("mit_stair")
-    return sm4._order(ctx, sd, i, p, session, risk_mult, "mit_stair", entry, stop, level=b["top"], ext=b["bottom"], ext_i=b["j"], fvg_bottom=b["bottom"], no_expire=True,
+    return sm4._order(ctx, sd, i, p, session, risk_mult, "mit_stair", entry, stop, level=b["top"], ext=b["bottom"], ext_i=b["j"], fvg_bottom=b["bottom"], no_expire=True, cancel_close=b["bottom"],
                       sm5=dict(kind="mit_stair", j=int(b["j"])), lv=("mit_stair",), **extra)
 
 
@@ -865,23 +881,33 @@ def reh_target(ctx, sd, sw, i: int, p, entry: float, tags: dict) -> None:
 # --- 102 M2-skip-filter ------------------------------------------------------------------------------------------------------------------------------
 
 def stop_zone_gate(ctx, sd, sw, i: int, p, session: str, entry: float, stop: float):
-    """M2-skip-filter (100 ~01:07:20): drop the order when an unraided same-side pool lies between the entry and the stop (side space: a sell-side level under the entry above the stop) - a pool
-    no wick traded through, or a level probed by >= 2 wicks since it formed with no body close beyond it (a squeeze can run it first). The swept pool itself is excluded. Returns a reject key or None."""
+    """M2-skip-filter (100 ~01:07:20): drop the order when an unraided same-side pool lies between the entry and the stop (side space: a sell-side level under the entry above the stop). Two
+    cases (review fix - the first one is the real "unraided" case): (a) a pool in the stop zone BEYOND the sweep extreme (stop < v < ext) that no bar has traded since it formed - the stop would
+    sit past a pool the market has not yet run; (b) a level between the extreme and the entry that the sweep's first bar did not take, probed by >= 2 wicks BEFORE the sweep (the sweep bar's
+    own wick does not count) with no body close beyond it - a squeeze can run it first. The swept pool itself is excluded. Returns a reject key or None."""
     S = _S()
     tol = _tol(p)
     ext = float(sw["ext"])
+    sw_i = int(sw.get("sweep_i", sw["ext_i"]))
     lv = S._sell_side(ctx, sd, session, i, True, p)
     cands = [(v, ctx.start) for v in lv.values()]
-    cands += [(float(q.price), int(q.i)) for q in sd.pl if q.known <= i and ctx.start <= q.i < sw["ext_i"]]
+    cands += [(float(q.price), int(q.i)) for q in sd.pl if q.known <= i and ctx.start <= q.i < sw_i]
     for v, a in cands:
         v = float(v)
-        if not (stop + MIN1 < v < entry - MIN1) or abs(v - float(sw["level"])) <= tol or v <= ext + tol:
+        if not (stop + MIN1 < v < entry - MIN1) or abs(v - float(sw["level"])) <= tol:
             continue
-        seg_l, seg_c = sd.l[a + 1:i + 1], sd.c[a + 1:i + 1]
-        closed = bool(len(seg_c) and float(seg_c.min()) < v - MIN1)
-        untaken = bool(not len(seg_l) or float(seg_l.min()) > v)
-        touches = int((seg_l <= v + tol).sum())
-        if not closed and (untaken or touches >= 2):
+        if v < ext - tol:                                                       # (a) beyond the sweep extreme: raided only if a bar since then went through it
+            seg_l = sd.l[a + 1:i + 1]
+            if not len(seg_l) or float(seg_l.min()) > v:
+                hit("stop_zone_pool")
+                return "x_stop_zone_pool"
+            continue
+        if v <= ext + tol or v >= float(sd.l[sw_i]) - MIN1:                    # (b) inside the sweep's own range: the sweep bar took it
+            continue
+        pre_l, pre_c = sd.l[a + 1:sw_i], sd.c[a + 1:sw_i]
+        if len(pre_c) and float(pre_c.min()) < v - MIN1:
+            continue
+        if int((pre_l <= v + tol).sum()) >= 2:
             hit("stop_zone_pool")
             return "x_stop_zone_pool"
     return None
@@ -926,9 +952,12 @@ def unicorn_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     retraces into a same-side array (a Confluence 15m / 1h / 4h / daily array, or the upper quadrant of an NWOG - the mirrored lower quadrant for shorts) forming a swing low S; a later bar
     closes above the swing high H before S (the MSS), leaving a bullish breaker (the breaker_zone of that leg) and an FVG that overlaps it: a limit at the overlap's top, the stop under the lower
     of the two, the single target = the nearest swing high above the entry, full exit there and the idea is done (`done` UNI). No pool sweep and no 09:30 requirement (owner #5 / #11: needs
-    ob_entry "post_mss" or "both" for the engine's own unicorn to coexist; this setup is independent of it)."""
+    ob_entry "post_mss" or "both" for the engine's own unicorn to coexist: the setup trades only then, unless `unicorn_independent` (owner choice) lets it run under the pre-break default).
+    A body close under the breaker / FVG bottom before the fill cancels the order (cancel_close)."""
     S = _S()
     if ctx.done_ref.get("UNI") or _want(ctx) not in (0, sd.sign):
+        return None
+    if p.ob_entry == "pre_break" and not p.unicorn_independent:
         return None
     m = int(p.unicorn_tf)
     if m == ctx.tf:
@@ -985,7 +1014,7 @@ def unicorn_order(ctx, sd, i: int, p, session: str, risk_mult: float):
         sent.add(int(first[Sv.i]))
         hit("unicorn_standalone")
         return sm4._order(ctx, sd, i, p, session, risk_mult, "unicorn_standalone", entry, bottom - p.pad, level=entry, ext=float(Sv.price), ext_i=int(first[Sv.i]), fvg_bottom=bottom,
-                          fvg_ce=float((g.top + g.bottom) / 2), fixed=[(float(S._exit_px(min(tg), "pool", p)), "pool")], single_exit=True, no_adds=True, done_key="UNI", lv=("unicorn_standalone",))
+                          fvg_ce=float((g.top + g.bottom) / 2), fixed=[(float(S._exit_px(min(tg), "pool", p)), "pool")], single_exit=True, no_adds=True, done_key="UNI", cancel_close=bottom, lv=("unicorn_standalone",))
     return None
 
 
@@ -1115,11 +1144,33 @@ def orig_consolidation(sd, m, i: int, p):
     return U, low, (U + low) / 2
 
 
+def accum_ok(ctx, sd, m, i: int, p) -> bool:
+    """The accumulation test of M1-consolidate-at-discount-array as a GATE (`mm_accum_gate`): some discount array of the move after the MSS (an FVG whose top is at or under the leg's EQ, no body
+    close under it) holds the last `mm_accum_bars` closed bars' closes inside it with a total range under `mm_accum_frac` x its height. Without `mm_accum_bars` the gate is open."""
+    n = int(p.mm_accum_bars)
+    if n <= 0:
+        return True
+    hit("mm_accum_gate_eval")
+    e = int(m["ext_i"])
+    if i - e < n + 2:
+        return False
+    eq = sm4.m2_eq(sd, m, i)
+    seg = slice(i - n + 1, i + 1)
+    for g in [g for g in sd.gaps if g.i - 2 > e and g.i <= i and g.top <= eq + MIN1]:
+        if float(sd.c[g.i + 1:i + 1].min(initial=np.inf)) < g.bottom - MIN1 or i - n + 1 <= g.i:
+            continue
+        cl = sd.c[seg]
+        if ((cl >= g.bottom - MIN1) & (cl <= g.top + MIN1)).all() and float(sd.h[seg].max() - sd.l[seg].min()) < p.mm_accum_frac * float(g.top - g.bottom) - MIN1:
+            hit("mm_accum_gate_open")
+            return True
+    return False
+
+
 def mm_oc_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     """M1-original-consolidation-entry (104 ~00:32:10): once a body closed above the original consolidation's high (wicks do not count) after the sweep, a limit at that high - the first return only;
     the stop under the consolidation's midpoint [our interpretation]. If price never returns, the next stage entries (`mm_stages`) are the entries."""
     m = _mm(sd, ctx, session)
-    if m is None:
+    if m is None or (p.mm_accum_gate and not accum_ok(ctx, sd, m, i, p)):
         return None
     oc = orig_consolidation(sd, m, i, p)
     if oc is None:
@@ -1136,7 +1187,7 @@ def mm_oc_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     stop = _min_stop(p, U, mid - p.pad)
     sent.add((e, kb))
     hit("mm_oc_entry")
-    return sm4._order(ctx, sd, i, p, session, risk_mult, "mm_oc_entry", U, stop, level=U, ext=float(m["ext"]), ext_i=e, fvg_bottom=low, no_expire=True, sm5=dict(kind="mm"), lv=("mm_oc_entry",))
+    return sm4._order(ctx, sd, i, p, session, risk_mult, "mm_oc_entry", U, stop, level=U, ext=float(m["ext"]), ext_i=e, fvg_bottom=low, no_expire=True, cancel_close=low, sm5=dict(kind="mm"), lv=("mm_oc_entry",))
 
 
 def mm_accum_order(ctx, sd, i: int, p, session: str, risk_mult: float):
@@ -1176,13 +1227,17 @@ def mm_stage_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     the CE of the newest alive FVG formed since the MSS (the BISI retraced only to its CE: the next stage). Valid while the HTF target above is not delivered. One per object."""
     S = _S()
     m = _mm(sd, ctx, session)
-    if m is None or S._SM.htf_done(ctx, sd, i) or m.get("ref_i") is None:
+    if m is None or S._SM.htf_done(ctx, sd, i) or m.get("ref_i") is None or (p.mm_accum_gate and not accum_ok(ctx, sd, m, i, p)):
         return None
     if not m.get("bz_sent"):
         bz = S._breaker(ctx, sd, m, int(m["ref_i"]), True, i, p)
         if bz is not None and bz.top < sd.c[i] - MIN1:
             hit("mm_stage_breaker")
             return S._breaker_order(ctx, sd, m, bz, i, p, session, risk_mult)
+    if p.mm_stage2:                                             # stage 2 (redistribution) - the OB retrace; a missed one is never chased
+        o = stage2_order(ctx, sd, m, i, p, session, risk_mult)
+        if o is not None:
+            return o
     sent = sd.__dict__.setdefault("_mmst_sent", set())
     for g in reversed([g for g in sd.gaps if g.i - 2 > m["broke"] and g.i <= i and g.i not in sent]):
         if float(sd.c[g.i + 1:i + 1].min(initial=np.inf)) < g.bottom - MIN1 or g.mid >= sd.c[i] - MIN1:
@@ -1194,6 +1249,33 @@ def mm_stage_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     return None
 
 
+def stage2_order(ctx, sd, m, i: int, p, session: str, risk_mult: float):
+    """M1-distribution-stages-lowrisk-short (104 ~00:49:45), `mm_stage2`, side space: the stage-2 (re)distribution / reaccumulation entry = a retrace into an order block of the move after the MSS
+    (a down-close candle the next bar closed above: a limit at its mean threshold, the body midpoint) or into the BODY of a reclaimed block on the other side of the curve (a limit at the body's
+    near edge, the reclaimed_obs of the left leg); the stop under the block. "This leg is expected to be the fastest; if it is missed, do not chase": a block whose entry price has already been
+    traded since it formed is never armed (price came back to it and left without us). Each block once. [our interpretation: the OB definition and the missed-leg test.]"""
+    sent = sd.__dict__.setdefault("_mmst2_sent", set())
+    cands = []
+    for k in range(int(m["broke"]) + 1, i - 1):
+        if sd.c[k] < sd.o[k] and sd.c[k + 1] > sd.h[k]:
+            cands.append(("ob_mt", k, float((sd.o[k] + sd.c[k]) / 2), float(sd.l[k]), k + 1))
+    for z in reclaim_blocks(ctx, sd, m, i, p):
+        k = int(z.src)
+        cands.append(("ob_body", k, float(max(sd.o[k], sd.c[k])), float(z.bottom), int(z.i)))
+    for kind, k, entry, bottom, known in sorted(cands, key=lambda c: -c[4]):
+        if (kind, k) in sent or known >= i:
+            continue
+        if float(sd.l[known + 1:i + 1].min(initial=np.inf)) <= entry + MIN1:
+            continue                                            # traded already: the leg was missed (or it is the idea of a later stage) - do not chase
+        if float(sd.c[known:i + 1].min(initial=np.inf)) < bottom - MIN1 or entry >= sd.c[i] - MIN1:
+            continue
+        sent.add((kind, k))
+        hit("mm_stage2")
+        return sm4._order(ctx, sd, i, p, session, risk_mult, "mm_stage2", entry, _min_stop(p, entry, bottom - p.pad), level=entry, ext=float(m["ext"]), ext_i=int(m["ext_i"]),
+                          fvg_bottom=bottom, cancel_close=bottom, sm5=dict(kind="mm"), lv=("mm_stage2", kind))
+    return None
+
+
 def mm_stage_add(ctx, sd, pos, tr, i: int, p, st: dict) -> None:
     """M1-accumulation-stages, after the first MM fill: arm the add at the next stage - the (not yet used) bullish breaker's top, then the CE of each later FVG (reaccumulation) - with the E12
     sizes; none once the HTF target is delivered or the add is not above the stop."""
@@ -1201,7 +1283,7 @@ def mm_stage_add(ctx, sd, pos, tr, i: int, p, st: dict) -> None:
     if pos["add"] is not None or S._nadds(pos, tr) >= len(p.adds) or S._SM.htf_done(ctx, sd, i):
         return
     m = st.get("sw")
-    if m is None:
+    if m is None or m.get("broke") is None:                     # (an mm_lowrisk fill may carry a remembered sweep that has not broken yet: no stage ladder then)
         return
     if not st.get("bz") and m.get("ref_i") is not None:
         bz = S._breaker(ctx, sd, m, int(m["ref_i"]), True, i, p)
@@ -1223,12 +1305,18 @@ def mm_stage_add(ctx, sd, pos, tr, i: int, p, st: dict) -> None:
 def mm_lowrisk_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     """M1-distribution-stages-lowrisk-short (104 ~00:45:30), side space: a 60m FVG (the 60m SIBI of the real short) whose bottom was wicked UNDER while the bodies stayed inside it (closes at or
     above its bottom), then an LTF MSS (a close above the swing high before the wick); a limit at the FVG's CE, the stop under the wick extreme; `mm_oc_frac` of the position comes off at the
-    original consolidation (fracs; the rest to the next HTF level). One per FVG. [our interpretation: the re-entry after a stop-out of the spec is not built.]"""
+    original consolidation (fracs; the rest to the next HTF level). One per FVG. The wick pattern does not need a remembered same-side sweep (review fix: only the original-consolidation
+    partial reads the sweep, and is skipped without one). `mm_lowrisk_reentry` ("extreme" / "wick_ce"): after the first order's stop was run (a later bar traded under it) and price is back
+    above the FVG's near edge, ONE re-entry limit at that edge ("a later touch of the FVG low"), the stop under the new extreme ("extreme": the highest high of the real short) or under the
+    wick candle's CE ("wick_ce": the midpoint of the extreme bar's low and its body low) [our interpretation of "the highest high or the CE of the higher wick"]."""
     S = _S()
     m = _mm(sd, ctx, session)
-    if m is None:
-        return None
     sent = sd.__dict__.setdefault("_mmlr_sent", set())
+    first = sd.__dict__.setdefault("_mmlr_first", {})
+    if p.mm_lowrisk_reentry:
+        o = lowrisk_reentry(ctx, sd, i, p, session, risk_mult, first)
+        if o is not None:
+            return o
     for z in sorted(sm4._tf_fvgs(ctx, sd, 60), key=lambda z: -z.i):
         if z.i >= i or z.i in sent or z.mid >= sd.c[i] - MIN1:
             continue
@@ -1241,7 +1329,7 @@ def mm_lowrisk_order(ctx, sd, i: int, p, session: str, risk_mult: float):
         hs = [q for q in sd.ph if q.i < k and q.known <= k]
         if not hs or not (sd.c[k:i + 1] > hs[-1].price).any():
             continue                                            # the LTF MSS has not happened
-        oc = orig_consolidation(sd, m, i, p)
+        oc = orig_consolidation(sd, m, i, p) if m is not None else None
         fx, tags = None, {}
         if oc is not None and oc[0] > z.mid:
             fx = [(float(S._exit_px(oc[0], "pool", p)), "pool")]
@@ -1250,9 +1338,38 @@ def mm_lowrisk_order(ctx, sd, i: int, p, session: str, risk_mult: float):
                 fx.append((float(S._exit_px(nxt, "array", p)), "array"))
                 tags["fracs"] = (float(p.mm_oc_frac), 1.0 - float(p.mm_oc_frac))
         sent.add(z.i)
+        stop1 = low - p.pad
+        first[z.i] = dict(k=int(k), stop=float(stop1), top=float(z.top), bottom=float(z.bottom), placed=int(i), done=False)
         hit("mm_lowrisk")
-        return sm4._order(ctx, sd, i, p, session, risk_mult, "mm_lowrisk", float(z.mid), low - p.pad, level=float(z.top), ext=low, ext_i=int(k), fvg_bottom=float(z.bottom), fvg_ce=float(z.mid),
-                          fixed=fx, lv=("mm_lowrisk",), **tags)
+        return sm4._order(ctx, sd, i, p, session, risk_mult, "mm_lowrisk", float(z.mid), stop1, level=float(z.top), ext=low, ext_i=int(k), fvg_bottom=float(z.bottom), fvg_ce=float(z.mid),
+                          fixed=fx, sm5=dict(kind="mm", lowrisk=True), lv=("mm_lowrisk",), **tags)
+    return None
+
+
+def lowrisk_reentry(ctx, sd, i: int, p, session: str, risk_mult: float, first: dict):
+    """The re-entry of `mm_lowrisk_reentry` (see mm_lowrisk_order): once per first order."""
+    for zi, f in first.items():
+        if f["done"] or i <= f["placed"] + 1:
+            continue
+        k = int(f["k"])
+        run = np.flatnonzero(sd.l[f["placed"] + 1:i + 1] < f["stop"] - MIN1)
+        if not len(run):
+            continue                                            # the first order's stop was not run: no re-entry
+        entry = float(f["top"])
+        if entry >= sd.c[i] - MIN1 or sd.c[i] <= f["stop"]:
+            continue
+        seg = slice(k, i + 1)
+        j = k + int(np.argmin(sd.l[seg]))
+        low = float(sd.l[j])
+        if p.mm_lowrisk_reentry == "wick_ce":
+            stop = (low + float(min(sd.o[j], sd.c[j]))) / 2 - p.pad
+        else:
+            stop = low - p.pad
+        stop = _min_stop(p, entry, stop)
+        f["done"] = True
+        hit("mm_lowrisk_reentry")
+        return sm4._order(ctx, sd, i, p, session, risk_mult, "mm_lowrisk_re", entry, stop, level=entry, ext=low, ext_i=int(j), fvg_bottom=float(f["bottom"]), fvg_ce=entry,
+                          sm5=dict(kind="mm", lowrisk=True), lv=("mm_lowrisk_re",))
     return None
 
 
@@ -1280,18 +1397,22 @@ def reclaim_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     if m is None:
         return None
     sent = sd.__dict__.setdefault("_rcl_sent", set())
+    dead = sd.__dict__.setdefault("_rcl_dead", set())
+    if int(m["ext_i"]) in dead:
+        return None                                             # the ladder was killed (persistent: review fix)
     for z in reclaim_blocks(ctx, sd, m, i, p):
         if (m["ext_i"], z.src) in sent:
             continue
         if float(sd.c[z.i + 1:i + 1].min(initial=np.inf)) < z.bottom - MIN1:
             sent.add((m["ext_i"], z.src))
+            dead.add(int(m["ext_i"]))
             break                                               # a body close back through a block cancels the rest of the ladder
         if z.top >= sd.c[i] - MIN1:
             continue
         sent.add((m["ext_i"], z.src))
         hit("reclaim_ladder")
         return sm4._order(ctx, sd, i, p, session, risk_mult, "reclaim_ladder", float(z.top), float(z.bottom) - p.pad, level=float(z.top), ext=float(m["ext"]), ext_i=int(m["ext_i"]),
-                          fvg_bottom=float(z.bottom), no_expire=True, sm5=dict(kind="reclaim"), lv=("reclaim_ladder",))
+                          fvg_bottom=float(z.bottom), no_expire=True, cancel_close=float(z.bottom), sm5=dict(kind="reclaim"), lv=("reclaim_ladder",))
     return None
 
 

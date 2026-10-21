@@ -2257,7 +2257,7 @@ class Params:
     # M7-second-dip-into-rejection-block (067 ~01:05:38)
     rb_second_dip: bool = False          # M7: after the lunch low is swept (wick L, RB = the lowest close of that swing), a later dip under RB that holds above L buys the LTF array there; stop under L (the X8 / M1.3 body-low cancel does not apply)
     # M8-org-repricing-full-conditions (069 ~00:14:49)
-    org_reprice_full: bool = False       # M8 (needs org_reprice): the ORG-first ladder only when the Judas took the London + prior-NY pools beyond the midnight open, a premium array sits at the sweep, it is armed 10:00-11:00 and the ORG lies between the entry and the htf.table draw
+    org_reprice_full: bool = False       # M8 (needs org_reprice): an order with the ORG-first ladder is REJECTED unless the Judas took the London + prior-NY pools beyond the midnight open, a premium array sits at the sweep, it is armed 10:00-11:00 and the ORG lies between the entry and the htf.table draw
     # M0-all-nearby-pools-run-first (069 ~00:16:49)
     all_pools_first: str = "off"         # M0: before a counter-Judas entry every listed pool of the Judas side within all_pools_pts of the open must be run - "tag" (lv_tag all_pools) / "require"
     all_pools_names: tuple = ("london", "prev_ny")   # ... london / prev_ny / lunch / prev_pm
@@ -2321,7 +2321,12 @@ class Params:
     mm_stages: bool = False              # M1: stage entries / adds - the bullish breaker's order, then the CE of each later BISI (both sides); none once the lock is delivered
     mm_lowrisk: bool = False             # M1: the low-risk short at the CE of a 60m SIBI wicked through with bodies inside, armed after an LTF MSS; mm_oc_frac off at the original consolidation
     mm_oc_frac: float = 0.8
-    mm_flip: bool = False                # M1: after an MM trade hit the lock the session may reverse into the MM leg of the other side (advanced, off)
+    mm_flip: bool = False                # M1: after an MM trade hit the lock the session may reverse into the MM leg of the other side - MM-kind orders only (sm5 kind "mm") (advanced, off)
+    # setups_models #5/7 review fixes (chunk 5/7): the parts of the specs the first build left out, as switches (all off)
+    mm_lowrisk_reentry: str = ""         # M1-distribution-stages-lowrisk-short (104 ~00:45:30): after the low-risk order's stop was run, ONE re-entry at the FVG's near edge; "extreme" = stop beyond the new extreme, "wick_ce" = beyond the wick candle's CE
+    mm_stage2: bool = False              # M1-distribution-stages-lowrisk-short (104 ~00:49:45): stage-2 entry = the retrace into an OB's MT / the body of a reclaimed block; a stage-2 leg already traded is never chased
+    mm_accum_gate: bool = False          # M1-consolidate-at-discount-array (104 ~00:23:42): the MM-model orders (original consolidation, stages) arm only after the mm_accum_bars accumulation test passed (a gate, not only the standalone order)
+    unicorn_independent: bool = False    # A14-unicorn-standalone (101 ~01:24:37): owner choice - run the standalone unicorn under the pre-break ob_entry default too (the spec needs ob_entry "post_mss" / "both")
     # A18-curve-arrays-reverse-ladder (104 ~00:52:18; cc04_007 ~00:04:46)
     reclaimed_ladder: bool = False       # A18: every reclaimed block of the curve's left leg, lowest first, is the next entry / add (each once; a close back through a block cancels the rest)
     reclaim_bounce_bars: int = 2         # ... only blocks followed by a bounce of at least this many up-close bars
@@ -2427,7 +2432,7 @@ class Params:
         if (self.flag_min_bars < 2 or not 0 < self.flag_max_frac <= 1 or self.po3_15m_n < 1 or self.all_pools_pts < 0 or not set(self.all_pools_names) <= {"london", "prev_ny", "lunch", "prev_pm"}
                 or self.breaker_tf < 0 or self.near_miss_pts < 0 or self.max_stop_pts < 0 or self.pd50_tf < 1 or self.overshoot_pts < 0 or self.open_ob_min < 0 or self.td_level_pts < 0
                 or self.unicorn_tf not in (1, 5, 15, 60) or not 0 <= self.max_retrace < 1 or self.ifvg_gap_pts < 0 or self.mm_accum_bars < 0 or self.mm_accum_frac <= 0
-                or not 0 < self.mm_oc_frac <= 1 or self.reclaim_bounce_bars < 1):
+                or not 0 < self.mm_oc_frac <= 1 or self.reclaim_bounce_bars < 1 or self.mm_lowrisk_reentry not in ("", "extreme", "wick_ce")):
             raise ValueError("setups_models #5/7: flag_min_bars >= 2, 0 < flag_max_frac <= 1, po3_15m_n / pd50_tf / reclaim_bounce_bars >= 1, distances >= 0, all_pools_names a subset of "
                              "(london, prev_ny, lunch, prev_pm), unicorn_tf in (1, 5, 15, 60), 0 <= max_retrace < 1, mm_accum_frac > 0, 0 < mm_oc_frac <= 1")
         if self.ndog_scalp and not self.asia_session:
@@ -5405,6 +5410,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             elif (pending.get("cancel_close") is not None and i - 1 > pending["i"]
                   and sd.c[i - 1] < pending["cancel_close"]):
                 pending = None                       # caption-gap A12-range-internal-ignore: a body close below the OB MT / the range low
+            elif pending.get("cancel_close_tf") is not None and i - 1 > pending["i"] and _SM5.tf_close_cancel(ctx, sd, pending, i - 1):
+                pending = None                       # caption-gap A4-bodies-hold-prev-day-50 (pd50_tf > base): a completed m-minute bar closed under the previous day's 50%
             elif pending.get("m2_live") and i - 1 > pending["i"] and _SM4.m2_order_dead(sd, pending, i - 1):
                 pending = None                       # caption-gap M2-leg-eq-after-low-prints: the leg EQ moved above the order's gap
             elif (pending.get("no_new_extreme") and i - 1 > pending["i"] and sd.l[i - 1] < pending["ext"]):
@@ -5679,6 +5686,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             ctx.counter_now = counter_
             o_ = _scan(ctx, sd, i, p, session, w0, pctx, psides, ppos, _risk_mult(state, session, p))
             ctx.counter_now = False
+            if o_ is not None and flip_ and state["only_side"].get(session) == sd.sign and (o_.get("sm5") or {}).get("kind") != "mm":
+                _f("x_mm_flip_kind")
+                o_ = None                             # caption-gap M1-one-segment review fix: the flipped leg is an MM leg (mm_lowrisk / mm stage / OC / accum orders carry sm5 kind "mm"), not any setup
             if o_ is not None and rc_ is not None and rc_.get("pending") and not _MG.reentry_order_ok(o_, sd, rc_, p):
                 _f("x_reentry_gate")
                 o_ = None                             # X13b: no restored sweep / FVG after the stop
@@ -7220,6 +7230,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     liquidity list; the #7 cap still trims them, the #9 lock gates the side only."""
     l, h, c = sd.l, sd.h, sd.c
     tol = p.eq_tol_pts * p.es_pt
+    sw.pop("_wide_stop", None)                       # caption-gap item 44 review fix: a stale too-wide-stop flag of an earlier call must not restore the sweep after an unrelated None return
     tags = dict(tags)
     lvt = list(tags.pop("lv_tags", []) or [])        # levels_detectors tags (Trade.lv_tags)
     lvx = dict(tags.pop("lvx", {}) or {})            # levels_detectors exit levels (side space)

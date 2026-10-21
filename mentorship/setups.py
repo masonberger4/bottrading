@@ -1486,7 +1486,7 @@ def _breakers(sd, p):
                                                                              p.breaker_zone) if z.kind == "bull"])
 
 
-TS_KINDS = ("turtle_soup", "ts_or60", "ts_cc_1h_ob", "ts_cc_limit", "ts_external", "smt_turtle")
+TS_KINDS = ("turtle_soup", "ts_or60", "ts_cc_1h_ob", "ts_cc_limit", "ts_external", "smt_turtle", "prev_pm_turtle")
 
 
 def more_adds(ctx, sd, pos, tr, i, p) -> None:

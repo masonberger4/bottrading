@@ -654,6 +654,9 @@ def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, 
     symbols) filled the same side in the same session slot of one day (the same Judas / MSS / FVG window on ES and NQ), keep every one of those trades instead of the pick - "split" at HALF risk each
     (gross / costs / net / risk columns x 0.5, column dual_risk 0.5), "full" at full risk (dual_risk 1.0); everything else goes through the ordinary pick. ICT states neither the conditions nor the
     allocation: the two variants are the test. Conflicts with Ep 05 "watch one market only" and with D15.
+    POST-HOC APPROXIMATION (review note): "split" is decided AFTER the books are finished - a trade is halved once the other symbol is seen filling the same date / slot / side, which at the first
+    fill's entry time is not yet knowable (and the slot is the date / session / side, not the same entry window). The dual rows carry `dual_alloc` = "posthoc" and the result must be read as an
+    allocation study, not a causal live rule; the engine does not size a second leg (owner question).
     """
     if dual_deal:
         return _combine_dual(runs, dual_deal, dict(pick=pick, one_market=one_market, sb_one_market=sb_one_market, sb_am_done=sb_am_done, laggard_consol_only=laggard_consol_only))
@@ -692,6 +695,7 @@ def _combine_dual(runs, mode: str, kw: dict) -> pd.DataFrame:
         if col in d.columns and f != 1.0:
             d[col] = d[col] * f
     d["dual_risk"] = f
+    d["dual_alloc"] = "posthoc"
     out = out.assign(dual_risk=1.0) if len(out) else out
     res = pd.concat([x for x in (out, d) if len(x)], ignore_index=True)
     return res.sort_values("entry_time", kind="stable").reset_index(drop=True) if "entry_time" in res.columns else res
