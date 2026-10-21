@@ -21,7 +21,7 @@ NEW_SWITCHES = (
     "curve_short", "consol_eq_entry", "consol_max_pts", "consol_eq_mode", "void_trades", "void_idle_bars", "ote_need_trigger", "ote_parent_pd", "ts_ote_ok", "ts_cont", "ts_cont_bars", "cc_ob_tf",
     "ts_r_preset", "refine_tfs", "cc_ob_offset_ticks", "entry_discipline", "pmh_contrarian", "ob_below_open", "eq_fresh_ob", "sym_swing_ts", "ts_level_src", "breaker_retests", "breaker_leave_pts",
     "rb_entry", "prop_second", "vb_react_bars", "offer_run", "offer_step_pts", "two_chance", "cc_near_ob", "entry_arrays_order", "clarity", "clarity_overlap", "ny_london_range", "sweep_15m_array",
-    "sweep_leave_bars", "sweep_leave_pts", "consol_edge_fade", "consol_tf", "consol_width_adr", "consol_eq_band", "reversal_tag", "reversal_need_htf", "reversal_score", "pdl_expansion",
+    "sweep_leave_bars", "sweep_leave_pts", "consol_edge_fade", "consol_edge_entry", "cc_ob_validate", "entry_discipline_only", "consol_tf", "consol_width_adr", "consol_eq_band", "reversal_tag", "reversal_need_htf", "reversal_score", "pdl_expansion",
 )
 
 
@@ -41,7 +41,7 @@ def test_new_switch_defaults_and_validation():
         ("off", 4.0, False, "off", 0, 2.0, "off", 60, 0.5, 0.15)
     assert (p.reversal_tag, p.reversal_need_htf, p.reversal_score, p.pdl_expansion, p.vb_entry, p.ote) == (False, False, False, False, "fill_limit", "off")
     for kw in (dict(consol_eq_mode="x"), dict(entry_discipline="x"), dict(ts_level_src="x"), dict(rb_entry="x"), dict(ts_r_preset="x"), dict(clarity="x"), dict(sweep_15m_array="x"),
-               dict(consol_edge_fade="x"), dict(vb_entry="x"), dict(ote="x"), dict(void_trades=("nope",)), dict(entry_arrays=("nope",)), dict(entry_arrays_order=("nope",)), dict(consol_max_pts=0),
+               dict(consol_edge_fade="x"), dict(consol_edge_entry="x"), dict(vb_entry="x"), dict(ote="x"), dict(void_trades=("nope",)), dict(entry_arrays=("nope",)), dict(entry_arrays_order=("nope",)), dict(consol_max_pts=0),
                dict(void_idle_bars=0), dict(ts_cont_bars=0), dict(cc_ob_tf=7), dict(refine_tfs=(3,)), dict(cc_ob_offset_ticks=-1), dict(breaker_retests=0), dict(breaker_leave_pts=-1),
                dict(vb_react_bars=0), dict(offer_run=1), dict(offer_step_pts=-1), dict(clarity_overlap=0), dict(sweep_leave_bars=-1), dict(consol_tf=7), dict(consol_width_adr=0),
                dict(consol_eq_band=0.5)):
@@ -152,7 +152,10 @@ def test_void_range_trade(cap):
     sl.sweep = dict(level=1.0)
     assert sm6.void_order(ctx, sl, i, p, "AM", 1.0) is None                                 # a pool run is in view: no range trade
     sl.sweep = None
-    assert sm6.void_order(ctx, sl, i, replace(p, void_idle_bars=2), "AM", 1.0) is None      # the leg is too old
+    sl.__dict__["_sweep_seen6"] = i - 3                                                     # review fix: a pool was swept 3 bars ago, inside the 20-bar lookback
+    assert sm6.void_order(ctx, sl, i, p, "AM", 1.0) is None
+    assert sm6.void_order(ctx, sl, i, replace(p, void_idle_bars=2), "AM", 1.0) is not None   # ... but not inside a 2-bar lookback
+    sl.__dict__.pop("_sweep_seen6"); sl.__dict__.pop("_void6_sent")
     assert sm6.void_order(ctx, sl, i, replace(p, void_trades=()), "AM", 1.0) is None
     assert sm6.void_order(ctx, sl, i, replace(p, void_trades=("fill",)), "AM", 1.0) is None
 
@@ -166,7 +169,7 @@ def test_void_cont_and_fill(cap):
     k = ib(ctx, "09:30")
     assert sm6.void_order(ctx, sl, k + 5, p, "AM", 1.0) is None                              # not yet touched the origin
     assert sm6.void_order(ctx, sl, k + 9, p, "AM", 1.0) is not None
-    assert cap["entry"] == pytest.approx(4006.0) and cap["stop"] == pytest.approx(3999.5 - p.pad) and cap["fixed"][0][0] == pytest.approx(S._exit_px(4020.0, "pool", p))
+    assert cap["entry"] == pytest.approx(4006.0) and cap["stop"] == pytest.approx(3999.5 - p.pad) and cap["fixed"][0][0] == pytest.approx(4020.0 + max(p.pool_beyond_pts * p.es_pt, p.tick))      # beyond the leg extreme
     # fill: a down-leg void
     down = [(4020.0, 4021.0, 4019.0, 4019.5), (4012.0, 4013.0, 4005.0, 4006.0), (3999.0, 3999.5, 3995.0, 3996.0), (3996.0, 4000.0, 3995.5, 3999.0), (3999.0, 3999.5, 3997.0, 3998.0),
             (4001.0, 4008.0, 4001.0, 4007.0)]
@@ -257,6 +260,7 @@ def test_turtle_soup_in_ote_band(cap):
     sw = dict(session="AM", key="pdl1", name="pdl1", level=3999.0, ext=3996.0, ext_i=k + 3, broke=None, sweep_i=k + 3, smt=None, smt2=None)
     p = Params(**BASE, turtle_soup="2023", ts_need_htf=True, ts_ote_ok=True)
     assert sm6.ts_ote(ctx, sl, sw, k + 4, p) and not sm6.ts_ote(ctx, sl, dict(sw, level=4012.0), k + 4, p)
+    assert not sm6.ts_ote(ctx, sl, dict(sw, level=3980.0), k + 4, p)                        # review fix: beyond the leg's origin (ratio > 1) is a new leg, not a retracement
     o = S._turtle(ctx, sl, dict(sw), k + 4, p, "AM", 1.0)
     assert o is not None and cap["tags"]["lv_tags"] == ["premium_ts"]
     assert S._turtle(ctx, sl, dict(sw), k + 4, replace(p, ts_ote_ok=False), "AM", 1.0) is None            # the HTF-array requirement alone
@@ -313,7 +317,8 @@ def test_cc_1h_ob_waits_trade_through(cap):
     assert S._cc_1h_ob(ctx, sl, dict(sw), k + 13, p, "AM", 1.0) is not None
     risk = cap["entry"] - cap["stop"]
     assert cap["entry"] == pytest.approx(4005.0) and [round(v, 6) for v, _ in cap["fixed"]] == [round(4005.0 + r * risk, 6) for r in (1.0, 5.0)] and cap["tags"]["be_at"] == pytest.approx(4005.0 + 2 * risk)
-    assert S._cc_1h_ob(ctx, sl, dict(sw), k + 13, replace(p, cc_ob_offset_ticks=2), "AM", 1.0) is not None and cap["entry"] == pytest.approx(4005.0 - 2 * p.tick)
+    assert S._cc_1h_ob(ctx, sl, dict(sw), k + 13, replace(p, cc_ob_offset_ticks=2), "AM", 1.0) is not None and 4005.0 < cap["entry"] <= 4005.0 + 2 * p.tick + 1e-9      # review fix: the spread moves the buy limit TOWARD the market (never away), capped under the close
+    assert S._cc_1h_ob(ctx, sl, dict(sw), k + 12, replace(p, cc_ob_validate=False), "AM", 1.0) is not None      # cc_ob_validate off: no wait for the trade-through
     assert S._cc_1h_ob(ctx, sl, dict(sw), k + 13, replace(p, ts_r_preset="cc02_003"), "AM", 1.0) is not None
     risk = cap["entry"] - cap["stop"]
     assert [round(v, 6) for v, _ in cap["fixed"]] == [round(4005.0 + r * risk, 6) for r in (3.0, 9.0, 15.0)] and cap["tags"]["fracs"] == (0.5, 0.25, 0.25) and cap["tags"]["be_at"] == pytest.approx(4005.0 + 3 * risk)
@@ -404,9 +409,10 @@ def test_pmh_sweep_contrarian_short():
     assert sm6.pm_level(ctx, ss) == pytest.approx(-4100.0) and sm6.pm_level(ctx, sl) == pytest.approx(3900.0)
     assert sm6.pm_swept(ctx, ss, i) and not sm6.pm_swept(ctx, sl, i)
     assert sm6.counter_kind(ctx, ss, i, p, 1) == "pmh" and sm6.counter_kind(ctx, ss, i, replace(p, pmh_contrarian=False), 1) == "" and sm6.counter_kind(ctx, sl, i, p, -1) == ""
+    assert "pml_month" not in S._sell_side(ctx, ss, "AM", i, False, p)                    # review fix: an ordinary (with-bias) scan does not sweep the month pool
+    ctx.curve_now = "pmh"
     assert S._sell_side(ctx, ss, "AM", i, False, p).get("pml_month") == pytest.approx(-4100.0)
     assert "pml_month" not in S._sell_side(ctx, ss, "AM", i, False, replace(p, pmh_contrarian=False))
-    ctx.curve_now = "pmh"
     o = sm4._order(ctx, ss, i, p, "AM", 1.0, "x", -4098.0, -4104.0, ext=-4106.0, ext_i=i - 2, broke=i, lv=())
     assert o is None                                                                       # the synthetic sweep's key is not the month pool: x_pmh_key
 
@@ -519,12 +525,31 @@ def test_breaker_second_retest_entry():
     p1 = Params(**BASE)
     p3 = Params(**BASE, breaker_retests=3, breaker_leave_pts=3.0)
     assert sm6.retest_ok(sd, e, 3, p1) is True                                              # the default: the existing flow decides
-    assert sm6.retest_ok(sd, e, 3, p3) is True                                              # a high of 4014 (>= 4003) before the touch at bar 2
-    assert sm6.retest_ok(sd, e, 3, replace(p3, breaker_leave_pts=20.0)) is False            # never left by 20 points
+    assert sm6.retest_ok(sd, e, 3, replace(p3, breaker_leave_pts=20.0)) is True             # review fix: the first return of the path needs no departure
+    e2 = dict(e, armed_i=1, n_ret=1)
+    assert sm6.retest_ok(sd, e2, 3, p3) is True                                             # a high of 4014 (>= 4003) before the touch at bar 2
+    assert sm6.retest_ok(sd, e2, 3, replace(p3, breaker_leave_pts=20.0)) is False           # never left by 20 points
     assert sm6.retest_ok(sd, dict(e, n_ret=2), 3, p3) is False                              # two retest orders are the cap of breaker_retests=3
     assert sm6.retest_ok(sd, dict(e, armed_i=3), 3, p3) is False                            # no touch after the last order
-    # the engine hook (sm2.breaker_retest_order) counts the orders
-    assert "breaker_retests" in Params.__dataclass_fields__
+
+
+def test_breaker_retest_hook_counts_orders_and_caps(monkeypatch):
+    """Engine hook (sm2.breaker_retest_order), review fix: with breaker_retests=3 the second and third returns each create an order after a departure of breaker_leave_pts; a fourth is capped; a retest whose
+    order the gates reject does not use up the cap."""
+    rows = [(4002.0, 4003.0, 4001.0, 4002.0), (4002.0, 4010.0, 4001.0, 4009.0), (4009.0, 4009.0, 3999.0, 4003.0), (4003.0, 4012.0, 4002.0, 4011.0), (4011.0, 4011.0, 3999.5, 4004.0),
+            (4004.0, 4006.0, 4003.0, 4005.0), (4005.0, 4014.0, 4004.0, 4013.0), (4013.0, 4013.0, 3999.5, 4005.0)]
+    ctx, (sl, ss) = mkctx(rows, base=4002.0)
+    k = ib(ctx, "09:30")
+    sent, answers = [], iter([{"o": 1}, None, {"o": 3}])
+    monkeypatch.setattr(S, "_breaker_order", lambda *a, **kw: (sent.append(a[4]) or next(answers, None)))
+    sm2._c(ctx).setdefault(("brk", 1), []).append(dict(top=4000.0, bottom=3995.0, mt=3997.0, src=k, born=k + 1, sw=dict(session="AM", key="x", ext=3990.0, ext_i=k, level=3995.0, broke=k + 1), armed_i=None))
+    p = Params(**BASE, breaker_retests=3, breaker_leave_pts=3.0)
+    got = [sm2.breaker_retest_order(ctx, sl, k + j, p, "AM", 1.0) for j in range(2, 8)]
+    assert got == [{"o": 1}, None, None, None, None, {"o": 3}] and sent == [k + 2, k + 4, k + 7]      # the rejected order at bar 4 is not counted
+    e = sm2._c(ctx)[("brk", 1)][0]
+    assert e["n_ret"] == 2
+    e.update(armed_i=k + 4)
+    assert sm2.breaker_retest_order(ctx, sl, k + 7, p, "AM", 1.0) is None and len(sent) == 3         # the cap (breaker_retests - 1 = 2 orders) is reached
 
 
 # --- 143 rejection block ------------------------------------------------------------------------------------------------------------------------------
@@ -568,11 +593,18 @@ def test_propulsion_entry_and_second(cap):
     sl._prop = [L.Zone("bull", 4010.0, 4006.0, k + 2, k + 2, 4008.0)]
     sw = dict(session="AM", key="x", ext=3990.0, ext_i=k, level=3995.0, broke=k + 1, smt=None)
     p = Params(**BASE, entry_arrays=("propulsion",))
-    assert sm6.prop_cands(ctx, sl, sw, k + 2, p) == [(4010.0, 4008.0, "propulsion")]
-    assert sm6.prop_cands(ctx, sl, sw, k + 4, p) == []                                      # the block's high (4010) was already broken (4012): the first return is gone
+    assert sm6.prop_cands(ctx, sl, sw, k + 2, p) == []                                      # no close above the block's high yet: no departure
+    assert sm6.prop_cands(ctx, sl, sw, k + 3, p) == [(4010.0, 4008.0, "propulsion")]        # the first close above 4010 (4011): the first-return limit is armed
+    assert sm6.prop_cands(ctx, sl, sw, k + 4, p) == []                                      # bar k+4 traded back down to 4010 (low 4008): the first return is gone
     assert sm6.prop_cands(ctx, sl, sw, k + 4, replace(p, prop_second=True)) == [(4010.0, 4008.0, "propulsion")]
-    assert SM.array_order(ctx, sl, dict(sw), k + 4, replace(p, prop_second=True), "AM", 1.0, None, None) is not None
+    # review fix: through the array path with prop_second OFF an order IS produced for the first return, and the counter counts the order
+    h0 = dict(sm2.HITS)
+    assert SM.array_order(ctx, sl, dict(sw), k + 3, p, "AM", 1.0, None, None) is not None
     assert cap["entry"] == pytest.approx(4010.0) and cap["stop"] == pytest.approx(4008.0 - p.pad) and cap["tags"]["cancel_close"] == pytest.approx(4008.0)
+    assert sm2.HITS.get("propulsion", 0) == h0.get("propulsion", 0) + 1
+    assert SM.array_order(ctx, sl, dict(sw), k + 4, p, "AM", 1.0, None, None) is None
+    assert SM.array_order(ctx, sl, dict(sw), k + 4, replace(p, prop_second=True), "AM", 1.0, None, None) is not None
+    assert sm2.HITS.get("prop_second", 0) == h0.get("prop_second", 0) + 1
     dead = list(rows)
     dead[4] = (4011.0, 4012.0, 4005.0, 4007.0)                                              # a close under the MT (4008)
     ctx2, (sl2, _) = mkctx(dead, base=3992.0)
@@ -801,7 +833,7 @@ def test_consolidation_edge_fade_to_eq(cap):
     pre = [(4004.0, 4008.0, 4003.8, 4006.0), (4006.0, 4010.0, 4005.0, 4009.0), (4009.0, 4009.5, 4003.5, 4004.0), (4004.0, 4008.0, 4004.0, 4007.0), (4007.0, 4009.0, 4006.0, 4008.0),
            (4008.0, 4009.0, 4000.0, 4001.0)]
     rows = pre + [(4001.0, 4002.0, 3997.0, 3999.0), (3999.0, 4003.0, 3998.5, 4002.0)]
-    p = Params(**BASE, consol_edge_fade="edge", consol_tf=5, consol_bars=6, consol_width_adr=0.5)
+    p = Params(**BASE, consol_edge_fade="edge", consol_tf=5, consol_bars=6, consol_width_adr=0.5, consol_edge_entry="market")
     ctx, (sl, ss) = mkctx(rows, base=4004.0, bias=1, hist=hist_close(close=4000.0, hi=4130.0, lo=3900.0))
     k = ib(ctx, "09:30")
     assert sm6.consol_fade_order(ctx, sl, k + 7, p, "AM", 1.0) is not None
@@ -817,13 +849,36 @@ def test_consolidation_edge_fade_to_eq(cap):
     assert sm6.consol_fade_order(ctx, sl, k + 7, replace(p, consol_bars=5000), "AM", 1.0) is None      # fewer bars than the range needs
 
 
+def test_consol_edge_fade_arms_a_resting_limit(cap):
+    """Review fix (193 / 194): the default consol_edge_entry "limit" arms a resting order, not a market order: "edge" - a limit just under the intact range low (4000), stop ts_max_pts under it, the single
+    target the EQ; once the low was swept (traded a tick under) the limit is no longer armed. "inner" - a limit just under the swing low near the EQ, stop under the range low, target the range high."""
+    pre = [(4004.0, 4008.0, 4003.8, 4006.0), (4006.0, 4010.0, 4005.0, 4009.0), (4009.0, 4009.5, 4003.5, 4004.0), (4004.0, 4008.0, 4004.0, 4007.0), (4007.0, 4009.0, 4006.0, 4008.0),
+           (4008.0, 4009.0, 4000.0, 4001.0)]
+    rows = pre + [(4001.0, 4004.0, 4000.5, 4002.0), (4002.0, 4003.0, 3997.0, 3999.0)]
+    p = Params(**BASE, consol_edge_fade="edge", consol_tf=5, consol_bars=6, consol_width_adr=0.5)
+    assert p.consol_edge_entry == "limit"
+    ctx, (sl, ss) = mkctx(rows, base=4004.0, bias=1, hist=hist_close(close=4000.0, hi=4130.0, lo=3900.0))
+    k = ib(ctx, "09:30")
+    assert sm6.consol_fade_order(ctx, sl, k + 6, p, "AM", 1.0) is not None
+    assert cap["entry"] == pytest.approx(4000.0 - max(p.ts_cc_below_pts * p.es_pt, p.tick)) and cap["stop"] == pytest.approx(4000.0 - p.ts_max_pts * p.es_pt - p.pad)
+    assert not cap["tags"].get("market") and cap["fixed"][0][0] == pytest.approx(S._exit_px(4005.0, "array", p))
+    sl.__dict__.pop("_cfade6_sent")
+    assert sm6.consol_fade_order(ctx, sl, k + 7, p, "AM", 1.0) is None                      # the low was swept on bar k+7: the resting limit was due before
+    pi = replace(p, consol_edge_fade="inner")
+    rows2 = [(4004.0, 4008.0, 4000.0, 4006.0), (4006.0, 4010.0, 4005.0, 4009.0), (4009.0, 4009.5, 4003.5, 4004.0), (4004.0, 4008.0, 4004.0, 4007.0), (4007.0, 4009.0, 4006.0, 4008.0),
+             (4008.0, 4009.0, 4005.0, 4006.0), (4006.0, 4008.0, 4004.5, 4005.0), (4005.0, 4005.5, 4004.6, 4005.0)]
+    ctx2, (sl2, _) = mkctx(rows2, base=4004.0, bias=1, hist=hist_close(close=4000.0, hi=4130.0, lo=3900.0))
+    assert sm6.consol_fade_order(ctx2, sl2, k + 7, pi, "AM", 1.0) is not None
+    assert cap["entry"] == pytest.approx(4003.5 - p.tick) and cap["stop"] == pytest.approx(4000.0 - p.pad) and not cap["tags"].get("market") and cap["fixed"][0][0] == pytest.approx(S._exit_px(4010.0, "pool", p))
+
+
 def test_inner_range_eq_high_fade(cap):
     """cc09_004 ~00:15:37 (side space, the buy mirror): consol_edge_fade "inner" - a 3-bar swing low just under the EQ (4003.5; the EQ is 4005, band 15% of the 10-point range) is traded through on an
     expansion away from the EQ inside the range: an entry at that close, the stop under that bar's low, the target the range high less the exit buffer. A pivot outside the band, or a break beyond the
     range, does nothing."""
     rows = [(4004.0, 4008.0, 4000.0, 4006.0), (4006.0, 4010.0, 4005.0, 4009.0), (4009.0, 4009.5, 4003.5, 4004.0), (4004.0, 4008.0, 4004.0, 4007.0), (4007.0, 4009.0, 4006.0, 4008.0),
             (4008.0, 4009.0, 4005.0, 4006.0), (4006.0, 4008.0, 4004.5, 4005.0), (4005.0, 4005.5, 4002.0, 4003.0)]
-    p = Params(**BASE, consol_edge_fade="inner", consol_tf=5, consol_bars=6, consol_width_adr=0.5)
+    p = Params(**BASE, consol_edge_fade="inner", consol_tf=5, consol_bars=6, consol_width_adr=0.5, consol_edge_entry="market")
     ctx, (sl, ss) = mkctx(rows, base=4004.0, bias=1, hist=hist_close(close=4000.0, hi=4130.0, lo=3900.0))
     k = ib(ctx, "09:30")
     assert sm6.consol_fade_order(ctx, sl, k + 7, p, "AM", 1.0) is not None

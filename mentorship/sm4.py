@@ -467,6 +467,7 @@ def ob_post_cand(ctx, sd, sw, i: int, p):
         return None                                              # a body closed through the MT: invalid
     ob = dict(j=k, k=k, body_top=float(sd.o[k]), body_low=float(sd.c[k]), mt=mt, hi=float(sd.h[k]), lo=float(sd.l[k]))
     sw["_ob_post_mt"] = mt
+    sw["_ob_post_k"] = k                                         # caption-gap setups_models #6/7 review fix: ob_below_open / eq_fresh_ob judge THIS candle
     return (float(S._EN.ob_entry_price(ob, sd, p, i)), float(sd.c[k]), "ob_post")
 
 

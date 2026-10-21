@@ -531,8 +531,11 @@ def array_order(ctx, sd, sw, i, p, session, risk_mult, fvg_entry, bz):
         tags["cancel_close"] = float(sw["_ob_post_mt"])           # a body close under the candle's MT invalidates (A12)
     if kind == "reclaimed_ob" and p.reclaimed_def != "strict":
         tags["lv_tags"] = ["reclaimed_" + p.reclaimed_def]         # caption-gap A18-reclaimed-ob-codeable: which definition was used (the strict default stays untagged, as built)
-    return S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult,
-                           sd.h[sw["ext_i"]:i + 1].max(), tags, pctx_free=True)
+    o_ = S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult,
+                         sd.h[sw["ext_i"]:i + 1].max(), tags, pctx_free=True)
+    if o_ is not None:
+        S._SM6.chosen(sw, kind, entry)                # caption-gap setups_models #6/7 review fix: the counters of the new array kinds count an order that was built
+    return o_
 
 
 def _l1(sd, ref_i, i):

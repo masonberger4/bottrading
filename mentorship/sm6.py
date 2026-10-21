@@ -40,6 +40,30 @@ def _tol(p) -> float:
     return p.eq_tol_pts * p.es_pt
 
 
+_DEFER: list = []
+
+
+def _dh(name: str) -> None:
+    """Defer a counter until the function returns an order (review fix: the counters prove an ORDER was produced, not that a candidate builder ran)."""
+    _DEFER.append(name)
+
+
+def _counted(fn):
+    import functools
+
+    @functools.wraps(fn)
+    def w(*a, **k):
+        del _DEFER[:]
+        r = fn(*a, **k)
+        if r is not None:
+            for n in _DEFER:
+                hit(n)
+        del _DEFER[:]
+        return r
+    return w
+
+
+
 # --- timeframe bars of the day frame -------------------------------------------------------------------------------------------------------------------
 
 def tf_groups(ctx, sd, m: int):
@@ -118,6 +142,7 @@ def counter_kind(ctx, sd, i: int, p, w_: int) -> str:
 
 # --- 114 / 116 consolidation EQ / origin OB -------------------------------------------------------------------------------------------------------------
 
+@_counted
 def consol_eq_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     """A12-ob-at-consolidation-eq-and-eq-retest (cc01_001 ~00:11:11, ~00:18:01) + new-retrace-to-origin-ob (cc01_002 ~00:18:12), side space: a consolidation defined by candle BODIES (the bars before
     the breakout, >= consol_bars of them, body range <= consol_max_pts) and the first close above its body high (the impulse). consol_eq_mode: "ob" = a limit at the open of the last down-close candle of the
@@ -164,7 +189,7 @@ def consol_eq_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     if not entry < sd.c[i] - MIN1 or entry - stop < p.min_risk_pts * p.es_pt or imp <= entry:
         return None
     sent.add(key)
-    hit("consol_eq")
+    _dh("consol_eq")
     fixed = [(float(S._exit_px(imp, "pool", p)), "pool")]
     return sm4._order(ctx, sd, i, p, session, risk_mult, "consol_eq", float(entry), float(stop), level=hi, ext=lo, ext_i=a, broke=j, fixed=fixed, lv=("consol_" + mode,), **extra)
 
@@ -196,12 +221,13 @@ def _voids(ctx, sd):
     return c[key]
 
 
+@_counted
 def void_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     """A10-void-retrace-trades (cc01_001 ~00:15:21; cc03_001 ~00:47:58) + new-post-void-fill-gap-sell (cc04_010 ~00:12:41), side space. A void = `levels.voids` (a true price gap between two
     candles, no overlap). Bull void (an up-leg L -> H):
-      "range"  - no sweep armed, the leg at most void_idle_bars old, price above the void CE, the CE not yet touched: a limit at the CE, stop under the leg origin L (the lowest low of the 3 bars
+      "range"  - no sweep armed and none in the last void_idle_bars bars, price above the void CE, the CE not yet touched: a limit at the CE, stop under the leg origin L (the lowest low of the 3 bars
                  before the void), the single target = the leg extreme H (the known range, no runner);
-      "cont"   - price traded back to the void origin (its bottom) and the normal MSS + FVG followed: the FVG top, stop under the origin, the target past the leg extreme;
+      "cont"   - price traded back to the void origin (its bottom) and the normal MSS + FVG followed: the FVG top, stop under the origin, the target BEYOND the leg extreme (review fix: H + pool_beyond_pts);
       "void_fill_gap" - the void's bottom was touched and two up-close bars with a gap between their bodies print 1-2 bars after it: a limit at the CE of that body gap, stop under the fill low,
                  the ladder = the relative equal highs formed before the fill (else the normal targets).
     Bear void (a down-leg): "fill" - an MSS up after the leg's low: the FVG top, stop under the low, the target = the void's top edge. One order per void and kind."""
@@ -218,10 +244,10 @@ def void_order(ctx, sd, i: int, p, session: str, risk_mult: float):
             H = float(sd.h[z.i:i + 1].max())
             L0 = float(sd.l[max(0, z.i - 3):z.i].min())
             ce = (float(z.top) + float(z.bottom)) / 2
-            if "range" in vt and ("r", z.i) not in sent and sd.sweep is None and i - z.i <= p.void_idle_bars and sd.c[i] > ce + tk \
+            if "range" in vt and ("r", z.i) not in sent and sd.sweep is None and i - sd.__dict__.get("_sweep_seen6", -10 ** 9) > p.void_idle_bars and sd.c[i] > ce + tk \
                     and float(sd.l[z.i + 1:i + 1].min(initial=np.inf)) > ce and H > ce + p.min_risk_pts * p.es_pt and ce - (L0 - p.pad) >= p.min_risk_pts * p.es_pt:
                 sent.add(("r", z.i))
-                hit("void_range")
+                _dh("void_range")
                 return sm4._order(ctx, sd, i, p, session, risk_mult, "void_range", ce, L0 - p.pad, level=float(z.top), ext=L0, ext_i=max(0, z.i - 3), broke=z.i,
                                   fixed=[(float(S._exit_px(H, "pool", p)), "pool")], lv=("void_range",))
             kf = next((k for k in range(z.i + 1, i + 1) if sd.l[k] <= z.bottom + MIN1), None)
@@ -234,15 +260,15 @@ def void_order(ctx, sd, i: int, p, session: str, risk_mult: float):
                     stop = min(L0, float(sd.l[kf:i + 1].min())) - p.pad
                     if entry - stop >= p.min_risk_pts * p.es_pt and H > entry:
                         sent.add(("c", z.i))
-                        hit("void_cont")
+                        _dh("void_cont")
                         return sm4._order(ctx, sd, i, p, session, risk_mult, "void_cont", entry, stop, level=float(z.bottom), ext=float(sd.l[kf:i + 1].min()), ext_i=kf, broke=b,
-                                          fixed=[(float(S._exit_px(H, "pool", p)), "pool")], lv=("void_cont",), fvg_bottom=fb)
+                                          fixed=[(float(H + max(p.pool_beyond_pts * p.es_pt, tk)), "pool")], lv=("void_cont",), fvg_bottom=fb)
             if "void_fill_gap" in vt and ("g", z.i) not in sent and kf + 1 <= i - 1 <= kf + 2 and sd.c[i - 1] > sd.o[i - 1] and sd.c[i] > sd.o[i] and sd.o[i] > sd.c[i - 1] + MIN1:
                 entry = float((sd.c[i - 1] + sd.o[i]) / 2)
                 stop = float(sd.l[kf:i + 1].min()) - p.pad
                 if entry < sd.c[i] and entry - stop >= p.min_risk_pts * p.es_pt:
                     sent.add(("g", z.i))
-                    hit("void_fill_gap")
+                    _dh("void_fill_gap")
                     eq = [v for v in S._eq_levels(sd, kf, tol, False, p) if v > entry + p.min_risk_pts * p.es_pt]
                     fixed = [(float(S._exit_px(v, "pool", p)), "pool") for v in sorted(eq)] or None
                     return sm4._order(ctx, sd, i, p, session, risk_mult, "void_fill_gap", entry, stop, level=float(z.bottom), ext=float(sd.l[kf:i + 1].min()), ext_i=kf, broke=i,
@@ -258,7 +284,7 @@ def void_order(ctx, sd, i: int, p, session: str, risk_mult: float):
                 stop = float(sd.l[kl]) - p.pad
                 if entry - stop >= p.min_risk_pts * p.es_pt and z.top > entry:
                     sent.add(("f", z.i))
-                    hit("void_fill")
+                    _dh("void_fill")
                     return sm4._order(ctx, sd, i, p, session, risk_mult, "void_fill", entry, stop, level=float(z.top), ext=float(sd.l[kl]), ext_i=kl, broke=b,
                                       fixed=[(float(S._exit_px(float(z.top), "array", p)), "array")], lv=("void_fill",), fvg_bottom=fb)
     return None
@@ -266,6 +292,7 @@ def void_order(ctx, sd, i: int, p, session: str, risk_mult: float):
 
 # --- 121 failed turtle soup -> continuation ------------------------------------------------------------------------------------------------------------
 
+@_counted
 def ts_cont_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     """M12-quick-rejection-required (cc01_006 ~00:14:24; cc04_002 ~00:25:05), side space = the run goes UP: an old high V (a pool of the opposite side's sweep machine) was run by bar j today, and the
     price did not reverse - the >= ts_cont_bars bars after j all CLOSED above V (less one tolerance), a sideways range holding the run: that is no turtle soup, it is a continuation. The entry
@@ -298,13 +325,14 @@ def ts_cont_order(ctx, sd, i: int, p, session: str, risk_mult: float):
         if not entry < sd.c[i] - MIN1 or entry - stop < p.min_risk_pts * p.es_pt:
             continue
         sent.add((k, j))
-        hit("ts_cont")
+        _dh("ts_cont")
         return sm4._order(ctx, sd, i, p, session, risk_mult, "ts_cont", entry, stop, level=V, ext=rl, ext_i=j, broke=i, lv=("ts_cont",))
     return None
 
 
 # --- 143 rejection block entries ---------------------------------------------------------------------------------------------------------------------------
 
+@_counted
 def rb_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     """A17-rejection-block-entries (cc04_006 ~00:10:39, ~00:11:19), side space (a long off the rejection block of a swing LOW; the short is its mirror): the trigger = the block's body extreme (the lowest
     open / close of the swing, `levels.rejection_blocks`), the wick low W under it. rb_entry "limit" = the aggressive limit AT the trigger (price above it, not yet touched), stop under W; "stop" = the
@@ -330,7 +358,7 @@ def rb_order(ctx, sd, i: int, p, session: str, risk_mult: float):
             if not trig < sd.c[i] - MIN1 or low_since <= trig + MIN1 or trig - stop < p.min_risk_pts * p.es_pt:
                 continue
             sent.add(z.i)
-            hit("rb_limit")
+            _dh("rb_limit")
             return sm4._order(ctx, sd, i, p, session, risk_mult, "rb_entry", trig, stop, level=trig, ext=wick, ext_i=int(z.src), broke=i, lv=("rb_limit",), fvg_bottom=wick)
         if not (low_since < trig - tk + MIN1 and sd.c[i] < trig - MIN1):
             continue
@@ -338,7 +366,7 @@ def rb_order(ctx, sd, i: int, p, session: str, risk_mult: float):
         if entry - stop < p.min_risk_pts * p.es_pt:
             continue
         sent.add(z.i)
-        hit("rb_stop")
+        _dh("rb_stop")
         return sm4._order(ctx, sd, i, p, session, risk_mult, "rb_entry", entry, stop, level=trig, ext=wick, ext_i=int(z.src), broke=i, lv=("rb_stop",), fvg_bottom=wick,
                           stop_entry=True, cancel_low=wick)
     return None
@@ -367,41 +395,63 @@ def consol_ranges(ctx, sd, i: int, p) -> list:
     return out
 
 
+@_counted
 def consol_fade_order(ctx, sd, i: int, p, session: str, risk_mult: float):
-    """new-consolidation-outer-edge-fade (cc09_004 ~00:12:08) + new-inside-range-expansion-fade (~00:15:37), side space, the bias must be this side (a breakout against the HTF bias is never taken):
-    "edge" - price traded under the range low (a sweep: the low printed >= 1 tick under it) and bar i is the first close back above it: a market entry at that close [our interpretation of "on the
-    reversal back inside"], the stop under the sweep extreme, the single target = the range EQ (not the opposite end);
-    "inner" - a 3-bar swing low just under the EQ (within consol_eq_band of the range height) is traded through on bar i, the range still intact: an entry at that close, stop under that bar's low, the
-    target the far end of the range (its high, less the exit buffer). The break is not an MSS. One per range / pivot."""
+    """new-consolidation-outer-edge-fade (cc09_004 ~00:12:08) + new-inside-range-expansion-fade (~00:15:37), side space, the bias must be this side (a breakout against the HTF bias is never taken).
+    Review fix: the sweep arms a RESTING LIMIT (consol_edge_entry "limit", default - the rulebook has no market entries for the reversal models); the first build's market order at the close back inside
+    stays as the value "market".
+    "edge" - the range is intact (nothing traded a tick under its low yet): limit just under the range low (ts_cc_below_pts, at least a tick, under it = the "buy those sell stops" fill), stop
+             ts_max_pts under the low (a deeper run is a real break, as the cc_limit raid), the single target = the range EQ (not the opposite end). "market": the first close back above the
+             low after a sweep, entered at that close, stop under the sweep extreme;
+    "inner" - a 3-bar swing low just under the EQ (within consol_eq_band of the range height) not yet traded through, the range still intact: limit just under that pivot (the expansion away from the
+             EQ fills it), stop just outside the range (under its low), the target the far end of the range (its high, less the exit buffer). "market": the close of the bar that traded through it.
+    The break is not an MSS. One per range / pivot."""
     S = _S()
     if _want(ctx) != sd.sign:
         return None
     sent = sd.__dict__.setdefault("_cfade6_sent", set())
     tk = float(p.tick)
+    lim = p.consol_edge_entry == "limit"
     for lo, hi, eq, fa, la in consol_ranges(ctx, sd, i, p):
         if sd.h[la + 1:i + 1].max(initial=-np.inf) > hi + tk:
             continue
         if p.consol_edge_fade in ("edge", "both") and ("e", round(lo, 4), la) not in sent:
-            k0 = next((k for k in range(la + 1, i + 1) if sd.l[k] < lo - tk + MIN1), None)
-            if k0 is not None and sd.c[i] > lo + MIN1 and not (sd.c[k0:i] > lo).any():
-                stop = float(sd.l[k0:i + 1].min()) - p.pad
-                entry = float(sd.c[i])
-                if entry - stop >= p.min_risk_pts * p.es_pt and eq > entry:
+            if lim:
+                entry = lo - max(p.ts_cc_below_pts * p.es_pt, tk)
+                stop = lo - p.ts_max_pts * p.es_pt - p.pad
+                if sd.l[la + 1:i + 1].min(initial=np.inf) >= lo - tk + MIN1 and entry + MIN1 < sd.c[i] and eq > entry + MIN1 and entry - stop >= p.min_risk_pts * p.es_pt:
                     sent.add(("e", round(lo, 4), la))
-                    hit("consol_edge")
-                    return sm4._order(ctx, sd, i, p, session, risk_mult, "consol_edge", entry, stop, level=lo, ext=float(sd.l[k0:i + 1].min()), ext_i=k0, broke=i, market=True,
+                    _dh("consol_edge")
+                    return sm4._order(ctx, sd, i, p, session, risk_mult, "consol_edge", entry, stop, level=lo, ext=stop + p.pad, ext_i=i, broke=i,
                                       fixed=[(float(S._exit_px(eq, "array", p)), "array")], lv=("consol_edge",))
+            else:
+                k0 = next((k for k in range(la + 1, i + 1) if sd.l[k] < lo - tk + MIN1), None)
+                if k0 is not None and sd.c[i] > lo + MIN1 and not (sd.c[k0:i] > lo).any():
+                    stop = float(sd.l[k0:i + 1].min()) - p.pad
+                    entry = float(sd.c[i])
+                    if entry - stop >= p.min_risk_pts * p.es_pt and eq > entry:
+                        sent.add(("e", round(lo, 4), la))
+                        _dh("consol_edge")
+                        return sm4._order(ctx, sd, i, p, session, risk_mult, "consol_edge", entry, stop, level=lo, ext=float(sd.l[k0:i + 1].min()), ext_i=k0, broke=i, market=True,
+                                          fixed=[(float(S._exit_px(eq, "array", p)), "array")], lv=("consol_edge",))
         if p.consol_edge_fade in ("inner", "both") and sd.l[la + 1:i + 1].min(initial=np.inf) >= lo - MIN1:
             for q in sd.pl:
                 if not (fa <= q.i <= la and q.known <= i - 1) or ("i", q.i) in sent:
                     continue
                 if not (eq - p.consol_eq_band * (hi - lo) - MIN1 <= q.price < eq) or sd.l[q.i + 1:i].min(initial=np.inf) < q.price - MIN1:
                     continue
-                if sd.l[i] < q.price - tk + MIN1:
+                if lim:
+                    entry, stop = float(q.price) - tk, lo - p.pad
+                    if sd.l[q.i + 1:i + 1].min(initial=np.inf) >= q.price - MIN1 and entry + MIN1 < sd.c[i] and entry - stop >= p.min_risk_pts * p.es_pt and hi > entry:
+                        sent.add(("i", q.i))
+                        _dh("consol_inner")
+                        return sm4._order(ctx, sd, i, p, session, risk_mult, "consol_inner", entry, stop, level=float(q.price), ext=lo, ext_i=i, broke=i,
+                                          fixed=[(float(S._exit_px(hi, "pool", p)), "pool")], lv=("consol_inner",))
+                elif sd.l[i] < q.price - tk + MIN1:
                     entry, stop = float(sd.c[i]), float(sd.l[i]) - p.pad
                     if entry - stop >= p.min_risk_pts * p.es_pt and hi > entry:
                         sent.add(("i", q.i))
-                        hit("consol_inner")
+                        _dh("consol_inner")
                         return sm4._order(ctx, sd, i, p, session, risk_mult, "consol_inner", entry, stop, level=float(q.price), ext=float(sd.l[i]), ext_i=i, broke=i, market=True,
                                           fixed=[(float(S._exit_px(hi, "pool", p)), "pool")], lv=("consol_inner",))
     return None
@@ -409,6 +459,7 @@ def consol_fade_order(ctx, sd, i: int, p, session: str, risk_mult: float):
 
 # --- 145 vacuum block entries ----------------------------------------------------------------------------------------------------------------------------
 
+@_counted
 def vb_order6(ctx, sd, i: int, p, session: str, risk_mult: float):
     """L8-vacuum-block-entries (cc04_009 ~00:07:24, ~00:10:12, ~00:14:37), bullish terms (the short mirrors): at the close of the gap bar k (or the next two) the vacuum block (pre-gap close .. gap
     open) with the buy-side liquidity above the gap candle's high still untaken (a swing high above it that no bar traded): vb_entry "partial" = a limit at the TOP of the highest down-close candle of the
@@ -428,12 +479,14 @@ def vb_order6(ctx, sd, i: int, p, session: str, risk_mult: float):
         mode = p.vb_entry
         if mode == "auto":
             mode = "full" if int(ctx.t[k]) < 600 else "partial"
+        ups = [x for x in range(r0, k) if sd.c[x] > sd.o[x]]
+        vbl = float(sd.c[ups[-1]]) if ups else float(bot)          # review fix: VB_low = the close of the LAST pre-gap UP candle (not simply the previous bar's close)
         gh = float(sd.h[k])
         liq = [q.price for q in sd.ph if q.known <= i and q.price > gh + MIN1 and float(sd.h[k:i + 1].max()) < q.price - MIN1]
         if not liq:
             continue
         if mode == "full":
-            entry = float(bot)
+            entry = vbl
         else:
             dn = [x for x in range(r0, k) if sd.c[x] < sd.o[x]]
             if not dn:
@@ -443,10 +496,10 @@ def vb_order6(ctx, sd, i: int, p, session: str, risk_mult: float):
         if not entry < sd.c[i] - MIN1 or entry - stop < p.min_risk_pts * p.es_pt:
             continue
         sent.add(k)
-        hit("vb_" + mode)
+        _dh("vb_" + mode)
         sw = sm3._synth(S, session, "vb", bot, run_low, r0, k)
         tags = dict(unicorn=False, fvg_bottom=run_low, fvg_ce=(entry + run_low) / 2, entry_kind="vb", mitigation=False, propulsion=False, no_leg_wait=True, skip_po3=not p.synth_po3,
-                    lv_tags=["vb_" + mode], sm6=dict(kind="vb", mode=mode, vb_low=float(bot), top=float(top), reach=False))
+                    lv_tags=["vb_" + mode], sm6=dict(kind="vb", mode=mode, vb_low=vbl, top=float(top), reach=False))
         return S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, float(sd.h[k:i + 1].max()), tags, skip_leg_pd=True)
     return None
 
@@ -463,20 +516,22 @@ def secondary_cand(ctx, sd, sw, i: int, p):
         return None
     tol = _tol(p)
     for j in range(ob["k"] + 1, i + 1):
-        if sd.c[j] < sd.o[j] and sd.o[j] <= ob["hi"] + tol and sd.l[j] <= ob["hi"] + tol:
+        # review fix: the candle must OPEN inside the primary zone (between its low and its high), and a dead candidate (a body closed under its MT) does not end the search
+        if sd.c[j] < sd.o[j] and ob["lo"] - tol <= sd.o[j] <= ob["hi"] + tol and sd.l[j] <= ob["hi"] + tol:
             mt = float((sd.o[j] + sd.c[j]) / 2)
             if sd.c[j + 1:i + 1].min(initial=np.inf) < mt:
-                return None
+                continue
             sw["_ob_sec_mt"] = mt
-            hit("ob_secondary")
+            sw["_ob_sec_k"] = j
             return (mt if p.ob_entry_px == "mt" else float(sd.o[j]), float(sd.l[j]), "ob_secondary")
     return None
 
 
 def prop_cands(ctx, sd, sw, i: int, p) -> list:
     """A16-propulsion-entries (cc04_008 ~00:01:49, ~00:06:53): a propulsion block formed after the sweep (`Side.propulsions`, both sides by mirroring): a limit at the block's high (the deepest fill is
-    its MT: the stop sits just beyond the MT, a body close under it cancels). The first return only; with prop_second a block whose far extreme (its high) was already broken is entered again on the next
-    return. [(entry, bottom = MT, kind)]."""
+    its MT: the stop sits just beyond the MT, a body close under it cancels). The FIRST return only: the departure is the first close above the block's high after it formed; the order is armed from that
+    close until a bar has traded back down to the block's high (the return, filled or not). With prop_second a block that was already returned to is entered again on the next return (review fix: the first
+    return used to count as "broken" before any order could arm, so only prop_second ever produced one). [(entry, bottom = MT, kind)]; `sw["_prop_2nd"]` marks the second-entry candidates."""
     out = []
     for z in sd.propulsions():
         if z.i > i or z.i < sw["ext_i"]:
@@ -484,13 +539,26 @@ def prop_cands(ctx, sd, sw, i: int, p) -> list:
         mt = float(z.mt) if z.mt == z.mt else float(z.mid)
         if sd.c[z.i + 1:i + 1].min(initial=np.inf) < mt - MIN1:
             continue
-        broken = bool((sd.h[z.i + 1:i + 1] > z.top + MIN1).any())
-        if broken and not p.prop_second:
+        dep = next((j for j in range(z.i + 1, i + 1) if sd.c[j] > z.top + MIN1), None)
+        if dep is None:
+            continue                                                  # no departure yet: nothing to return to
+        returned = bool((sd.l[dep + 1:i + 1] <= z.top + MIN1).any())
+        if returned and not p.prop_second:
             continue
         sw["_prop_mt"] = mt
-        hit("prop_second" if broken else "propulsion")
+        sw.setdefault("_prop_2nd", {})[float(z.top)] = returned
         out.append((float(z.top), mt, "propulsion"))
     return out
+
+
+def chosen(sw, kind: str, entry: float) -> None:
+    """The counters of the new array kinds are bumped here - when the kind WON the pick and an order is built - not where the candidate is listed (review fix: they proved only that a candidate builder ran)."""
+    if kind == "propulsion":
+        hit("prop_second" if (sw.get("_prop_2nd") or {}).get(float(entry)) else "propulsion")
+    elif kind in ("ob_secondary", "last_offer"):
+        hit(kind)
+    elif kind == "ob62":
+        hit("ote_ob62")
 
 
 def offer_cand(ctx, sd, sw, i: int, p):
@@ -504,7 +572,6 @@ def offer_cand(ctx, sd, sw, i: int, p):
         if all(sd.c[x] > sd.o[x] for x in range(k + 1, k + 1 + n)) and k + n <= i:
             Lv = float(sd.h[k])
             if sd.c[i] > Lv + MIN1:
-                hit("last_offer")
                 return (min(Lv + p.offer_step_pts * p.es_pt, float(sd.c[i]) - p.tick), float(sd.l[k]), "last_offer")
             return None
     return None
@@ -522,7 +589,6 @@ def ob62_cand(ctx, sd, sw, i: int, p):
     for j in range(i, e, -1):
         bb = float(min(sd.o[j], sd.c[j]))
         if sd.c[j] < sd.o[j] and abs(bb - lvl) <= tk + MIN1 and sd.l[j] < bb - MIN1:
-            hit("ote_ob62")
             return (float(sd.o[j]), float(base), "ob62")
     return None
 
@@ -595,8 +661,11 @@ def ts_ote(ctx, sd, sw, i: int, p) -> bool:
     L0 = float(sd.l[a:jH + 1].min())
     if H - L0 <= MIN1:
         return False
+    adr = sm2.adr5(ctx)
+    if adr and H - L0 < 0.25 * adr:
+        return False                                        # review fix: a sliver is no impulse leg (a one-way down day leaves a tiny L0 -> H leg and huge ratios)
     r = (H - float(sw["level"])) / (H - L0)
-    return r >= 0.5 - MIN1
+    return 0.5 - MIN1 <= r <= 1.0 + MIN1                    # review fix: bounded - a level beyond the leg's origin is a new leg, not a 50-100% retracement of this one
 
 
 # --- 139 body level -----------------------------------------------------------------------------------------------------------------------------------------
@@ -627,13 +696,16 @@ def prev_pm_body(ctx, sd, lvl: float, p) -> float:
 # --- 142 breaker retests -----------------------------------------------------------------------------------------------------------------------------------
 
 def retest_ok(sd, e: dict, i: int, p) -> bool:
-    """A13-breaker-reentries-and-wait (cc04_005 ~00:04:51, ~00:01:08): with breaker_retests > 1 a breaker may create at most breaker_retests - 1 retest orders after the first (the ordinary flow's)
-    return, and each needs price to have LEFT the zone by breaker_leave_pts (a high that far above the top) since the previous order / the breaker's birth, before the retest touches it."""
+    """A13-breaker-reentries-and-wait (cc04_005 ~00:04:51, ~00:01:08): with breaker_retests > 1 a breaker may create at most breaker_retests - 1 retest orders in the day-life path (the first return is
+    the ordinary flow's), and every order after the first of this path needs price to have LEFT the zone by breaker_leave_pts (a high that far above the top) since the previous order, before the
+    retest touches it. Review fix: the first return of the path needs no departure (it used to change the primary entry), and the order count is kept by the caller when an order is returned."""
     if p.breaker_retests <= 1:
         return True
     if e.get("n_ret", 0) >= p.breaker_retests - 1:
         return False
-    last = e["born"] if e["armed_i"] is None else e["armed_i"]
+    if e["armed_i"] is None:
+        return True
+    last = e["armed_i"]
     tj = next((j for j in range(last + 1, i + 1) if sd.l[j] <= e["top"]), None)
     if tj is None or tj <= last:
         return False
@@ -712,8 +784,8 @@ def manage(ctx, sd, pos, tr, i: int, ts, p) -> None:
 
 def apply_discipline(p):
     """M12-setup-selection-order (cc03_001 ~00:45:51; cc04_002 ~00:22:09): entry_discipline is a PRESET of the other path switches - "turtle_soup" -> turtle_soup="cc_limit", the OB path off, no
-    void trades; "ob_return" -> turtle_soup off, the pre_break OB, no void trades; "range_void" -> turtle_soup off, void_trades ("range",), the OB path off. The normal FVG model after the MSS is not a
-    discipline of this list and stays as configured [our interpretation: "only" counts the three disciplines]. "any" = the configuration as is."""
+    void trades; "ob_return" -> turtle_soup off, the pre_break OB, no void trades; "range_void" -> turtle_soup off, void_trades ("range",), the OB path off. Review fix: with entry_discipline_only (default) every
+    order of another kind is dropped at the end of the scan (`discipline_ok`), so the FVG model after the MSS and the extra setups are off too; "any" = the configuration as is."""
     from dataclasses import replace
     d = p.entry_discipline
     hit("entry_discipline_" + d)
@@ -724,6 +796,17 @@ def apply_discipline(p):
     if d == "range_void":
         return replace(p, turtle_soup="", ob_entry="post_mss", void_trades=("range",))
     return p
+
+
+def discipline_ok(o: dict, p) -> bool:
+    """M12-setup-selection-order (review fix): with entry_discipline_only an order passes only when its entry kind belongs to the chosen discipline - "turtle_soup": the turtle-soup kinds (turtle_soup /
+    ts_*); "ob_return": the order-block kinds (ob_pre / ob_anchor / arr_ob*); "range_void": the void trades (void_*)."""
+    k = str(o.get("entry_kind") or "")
+    d = p.entry_discipline
+    ok = (k == "turtle_soup" or k.startswith("ts_")) if d == "turtle_soup" else (k.startswith("ob_") or k.startswith("arr_ob")) if d == "ob_return" else k.startswith("void_") if d == "range_void" else True
+    if ok:
+        hit("discipline_only_ok")
+    return ok
 
 
 # --- non-sweep setups of the chunk ---------------------------------------------------------------------------------------------------------------------------
@@ -803,12 +886,22 @@ def reversal_types(ctx, sd, sw, i: int, p, session: str) -> tuple:
         tys.append("week")
     if key in ("pwl", "pml_month") or (it is not None and abs(lvl - it) <= tol):
         tys.append("iterm")
-    t = int(ctx.t[i])
+    t = int(ctx.t[int(sw.get("sweep_i", sw["ext_i"]))])      # review fix: the clock time of the SWEEP bar (not of the bar that completes the order)
     if 510 <= t < 600 and htf:
         tys.append("ny_rev")
     elif 600 <= t < 720 and htf:
         tys.append("lc_rev")
     return tuple(tys), htf
+
+
+def ob_candle(ctx, sd, sw, kind: str, i: int, p):
+    """The order-block candle an OB-kind entry actually trades: arr_ob_secondary / arr_ob_post / ob_anchor store their candle on the sweep dict; others use the primary OB at the sweep. {k, body_top} or None."""
+    S = _S()
+    key = {"arr_ob_secondary": "_ob_sec_k", "arr_ob_post": "_ob_post_k", "ob_anchor": "_ob_anchor_k"}.get(kind)
+    if key and sw.get(key) is not None:
+        k = int(sw[key])
+        return dict(k=k, body_top=float(max(sd.o[k], sd.c[k])))
+    return S._ob_at_low(sd, sw, i, p, ctx)
 
 
 def pdl_expansion_ok(ctx, sd, i: int, p) -> bool:
@@ -851,7 +944,7 @@ def order_gate6(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str,
             if entry > (phi + plo) / 2 + MIN1:
                 return "x_ote_parent_pd"
     if (p.ob_below_open or p.eq_fresh_ob) and not synth and kind in OB_KINDS:
-        ob = S._ob_at_low(sd, sw, i, p, ctx)
+        ob = ob_candle(ctx, sd, sw, kind, i, p)           # review fix: the candle that is actually traded (secondary / post-MSS / anchor OB), not always the primary OB at the sweep
         if p.ob_below_open and ob is not None:
             mo = S._open_known(ctx, "midnight", i)
             if mo is not None:
@@ -860,11 +953,17 @@ def order_gate6(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str,
                 if ob["body_top"] > o_s + MIN1 or entry > o_s + MIN1:
                     return "x_ob_above_open"
         if p.eq_fresh_ob and ob is not None:
-            phi, plo = float(sd.h[ctx.start:i + 1].max()), float(sd.l[ctx.start:i + 1].min())
-            eq = (phi + plo) / 2
+            hi_c = np.maximum.accumulate(sd.h[ctx.start:i + 1])
+            lo_c = np.minimum.accumulate(sd.l[ctx.start:i + 1])
+            eq = float((hi_c[-1] + lo_c[-1]) / 2)
             if abs(entry - eq) <= tol:
                 hit("eq_fresh_ob")
-                j0 = next((j for j in range(ctx.start, i + 1) if sd.l[j] <= eq + tol and sd.h[j] >= eq - tol), None)      # the first bar whose range touched the EQ band
+                # the EQ is anchored when price FIRST reached it: the first bar that touched the EQ band of the range known before it (the EQ moves while the range grows) and that EQ lies within the
+                # tolerance of today's EQ
+                eqp = (hi_c[:-1] + lo_c[:-1]) / 2
+                n_ = len(eqp)
+                hit_j = np.flatnonzero((np.abs(eqp - eq) <= tol) & (sd.l[ctx.start + 1:ctx.start + 1 + n_] <= eqp + tol) & (sd.h[ctx.start + 1:ctx.start + 1 + n_] >= eqp - tol))
+                j0 = ctx.start + 1 + int(hit_j[0]) if len(hit_j) else None
                 if j0 is not None and ob["k"] <= j0:
                     return "x_eq_stale_ob"
     if p.sym_swing_ts and not synth and sw.get("smt") is False:

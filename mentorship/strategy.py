@@ -2340,7 +2340,7 @@ class Params:
     consol_eq_mode: str = "ob"           # "ob" (the last opposite-close candle, only within 25% of the range height of the EQ) / "eq" (the EQ) / "origin_ob" (new-retrace-to-origin-ob: that candle at any location; cancelled on a body close through its MT)
     # A10-void-retrace-trades (cc01_001 ~00:15:21; cc03_001 ~00:47:58) / new-post-void-fill-gap-sell (cc04_010 ~00:12:41)
     void_trades: tuple = ()              # A10: "fill" (an MSS against a void leg targets the void), "range" (a limit at the void CE of an up-leg, target = the leg extreme), "cont" (the fill then an MSS back the leg's way), "void_fill_gap" (a body gap of two same-direction bars right after the void was filled)
-    void_idle_bars: int = 20             # ... "range": the void leg may be at most this many bars old [our interpretation]
+    void_idle_bars: int = 20             # ... "range": no pool may have been swept in the last this many bars (and none is armed) [review fix: the sweep lookback, not the leg's age]
     # M13-ote-needs-bias-trigger-structure (cc01_004 ~00:17:12; cc01_006 ~00:19:45)
     ote_need_trigger: bool = False       # M13: the 70.5% OTE limit arms only after an LTF MSS inside the band
     ote_parent_pd: bool = False          # M13: an entry in the OTE band of a small leg is dropped when it lies on the wrong side of the parent (day) range EQ (longs above it, shorts below it)
@@ -2354,9 +2354,11 @@ class Params:
     cc_ob_tf: int = 60                   # M12: the timeframe (60 / 15 / 5) of the down-close candle C in cc_1h_ob
     ts_r_preset: str = ""                # M12: "cc02_003" = half at 3R, then 9R / 15R, breakeven after 3R (the 5m refined switch B)
     refine_tfs: tuple = ()               # B5: e.g. (60, 15, 5): cc_1h_ob searches each timeframe from the lowest up for a validated down-close candle inside the daily OB and uses the lowest found; the stop stays below the sweep low
+    cc_ob_validate: bool = True          # M12 (cc02_001, 123): the order arms only after a later bar traded above the 1h / 15m / 5m candle's high (default on = as built; off = arm at once) (advanced)
     cc_ob_offset_ticks: int = 0          # M12 (cc02_001): the spread - the cc_1h_ob limit this many ticks toward the market (the E3 entry_offset_ticks switch belongs to another package)
     # A12-secondary-ob (cc02_004 ~00:03:14): entry_arrays "ob_secondary"
     # M12-setup-selection-order (cc03_001 ~00:45:51)
+    entry_discipline_only: bool = True   # M12-setup-selection-order (131): a discipline preset leaves ONLY that path (every other order kind - the FVG model after the MSS, the extra setups - is dropped); False = the preset only switches the named paths (as first built)
     entry_discipline: str = "any"        # M12: "turtle_soup" (cc_limit) / "ob_return" (the pre_break OB) / "range_void" (void_trades range) / "any" (as configured)
     # M12-contrarian-pmh (cc03_001 ~00:16:57)
     pmh_contrarian: bool = False         # M12 / M17: a sweep of the previous month's high / low arms the normal path against the bias; one exit at the nearest pool
@@ -2394,6 +2396,7 @@ class Params:
     sweep_leave_bars: int = 0            # M0: the sweep is dropped when price stays within sweep_leave_pts of its extreme for more than N bars (0 = off)
     sweep_leave_pts: float = 2.0
     # new-consolidation-outer-edge-fade (cc09_004 ~00:12:08) / new-inside-range-expansion-fade (~00:15:37): named consol_edge_fade (consol_fade is the delivery-state fade of an earlier chunk)
+    consol_edge_entry: str = "limit"     # 193 / 194 (review fix): "limit" = the sweep arms a resting limit just under the range low / the swing low near the EQ (mirrored for shorts); "market" = the first build's market order at the close back inside / the break bar's close
     consol_edge_fade: str = "off"        # new: "edge" (a sweep of a 1h / 15m range edge with the bias, target = the range EQ) / "inner" (a pivot just beyond the EQ is swept: target the far end) / "both"
     consol_tf: int = 60                  # ... the range's timeframe (minutes)
     consol_width_adr: float = 0.5        # ... the range is at most this x ADR5 wide
@@ -2473,7 +2476,7 @@ class Params:
                              "consol_bars >= 2, consol_adr > 0, daily_first_days >= 1, 0 <= or_rb_from < 1440")
         # caption-gap pass (setups_models #3/7)
         for name, ok in (("leg_grade_gate", ("off", "tag", "require")), ("leg_origin", ("mss_low", "session_low")), ("eq_hunt", ("off", "tag", "prefer")),
-                         ("ts_age_rank", ("off", "tag", "prefer")), ("mm_plan", ("", "full", "mss_scalp", "pyramid")), ("vb_entry", ("fill_limit", "close_above", "partial", "full", "auto")), ("consol_eq_mode", ("ob", "eq", "origin_ob")), ("entry_discipline", ("turtle_soup", "ob_return", "range_void", "any")), ("ts_level_src", ("wick", "body")), ("rb_entry", ("", "limit", "stop")), ("ts_r_preset", ("", "cc02_003")), ("clarity", ("off", "tag", "drop")), ("sweep_15m_array", ("off", "tag", "require")), ("consol_edge_fade", ("off", "edge", "inner", "both"))):
+                         ("ts_age_rank", ("off", "tag", "prefer")), ("mm_plan", ("", "full", "mss_scalp", "pyramid")), ("vb_entry", ("fill_limit", "close_above", "partial", "full", "auto")), ("consol_eq_mode", ("ob", "eq", "origin_ob")), ("entry_discipline", ("turtle_soup", "ob_return", "range_void", "any")), ("ts_level_src", ("wick", "body")), ("rb_entry", ("", "limit", "stop")), ("ts_r_preset", ("", "cc02_003")), ("clarity", ("off", "tag", "drop")), ("sweep_15m_array", ("off", "tag", "require")), ("consol_edge_fade", ("off", "edge", "inner", "both")), ("consol_edge_entry", ("limit", "market"))):
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
         if not set(self.mm_turn_types) <= {"ob", "fvg", "old_high", "old_low", "void"}:
@@ -5353,8 +5356,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 _SM4.manage(ctx, sd, pos, tr, i, ts, p)                          # caption-gap setups_models #4/7: last-hour second unit, PM old-high add, the reversal gap fully re-traded
             if pos["left"] and pos.get("sm5"):
                 _SM5.manage(ctx, sd, pos, tr, i, ts, p)                          # caption-gap setups_models #5/7: IFVG 061 CE exit, stair-step / MM stage / reclaimed-ladder adds
-                if pos.get("sm6"):
-                    _SM6.manage(ctx, sd, pos, tr, i, ts, p)                      # caption-gap setups_models #6/7: vacuum-block timeout / back under VB_low
+            if pos["left"] and pos.get("sm6"):
+                _SM6.manage(ctx, sd, pos, tr, i, ts, p)                          # caption-gap setups_models #6/7: vacuum-block timeout / back under VB_low
             if pos["left"]:
                 pos["best"] = max(pos["best"], h)
                 _MG.exits(ctx, sd, pos, tr, i, ts, p, state)       # management_exits: X6-X12, X9 time stops, D18, Ep07.5
@@ -6073,7 +6076,7 @@ def _sell_side(ctx: DayCtx, sd: Side, session: str, i: int | None = None,
             _SM2.open_pools(ctx, sd, i, p, out)          # caption-gap B18-am-smt-window-points: the opens as reference points
         return out
     if p is not None:
-        for name, on, hl in (("pwl", p.pool_prev_week, ctx.pw), ("pml_month", p.pool_prev_month or p.pmh_contrarian, ctx.pm_)):
+        for name, on, hl in (("pwl", p.pool_prev_week, ctx.pw), ("pml_month", p.pool_prev_month or (p.pmh_contrarian and getattr(ctx, "curve_now", "") == "pmh"), ctx.pm_)):
             if on and hl is not None:
                 out[name] = sd.x(hl[1] if sd.sign > 0 else hl[0])
         if p.pool_swings and i is not None:     # untaken short-term swing lows (side terms)
@@ -6217,6 +6220,9 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         o_ = _SM5.extra5(ctx, sd, i, p, session, risk_mult)                  # caption-gap setups_models #5/7: 15m PO3, second dip, overshoot, unicorn, IFVG open, MM stages, reclaimed ladder, ...
     if o_ is None and sd.sweep is None and _SM6.any_extra6(p) and not getattr(ctx, "curve_now", ""):
         o_ = _SM6.extra6(ctx, sd, i, p, session, risk_mult)                  # caption-gap setups_models #6/7: consolidation EQ, void trades, failed-turtle continuation, rejection block, range fades, vacuum block
+    if o_ is not None and p.entry_discipline != "any" and p.entry_discipline_only and not _SM6.discipline_ok(o_, p):
+        _f("x_discipline")                                                   # caption-gap M12-setup-selection-order (review fix): the preset leaves ONLY the chosen discipline
+        return None
     return o_
 
 
@@ -6377,6 +6383,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
             k, v = next(kv for kv in hit if kv[0] == "tl23")
         sw = sd.sweep = dict(session=session, name=("rel_eq_lows" if sd.sign > 0 else "rel_eq_highs") if k.startswith("rel_eq") else k,
                              level=v, key=k, ext=l[i], ext_i=i, broke=None, sweep_i=i)
+        sd.__dict__["_sweep_seen6"] = i                  # caption-gap A10-void-retrace-trades (review fix): the bar of the last pool sweep ("no pool swept in the last N bars")
         if p.nwog_edge_ce and str(k).startswith("gap_"):
             _SM2.hit("nwog_edge_sweep")                 # caption-gap new-nwog-edge-to-ce-cookie-cutter: a sweep of an NWOG far edge
         sw["smt"] = _smt(ctx, sd, i, k, v, session, pctx, psides, ppos, p)
@@ -6415,9 +6422,10 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
                 if not p.two_chance:             # caption-gap M4-two-chance-aggressive-vs-mss-retest: a failed / missed soup keeps the sweep alive for the MSS retest
                     sd.sweep = None              # too deep, or no close back above in time
                     _f("x_ts_gate")
-                else:
-                    _SM6.hit("two_chance_keep")
-            return None
+                    return None
+                _SM6.hit("two_chance_keep")      # chance 2 (review fix): the missed soup no longer returns here - the MSS / cc_swings breaking-point order below proceeds
+            else:
+                return None                      # the soup window is still open
     # reference: the swing high that led into the sweep extreme (A1 tiers: mss_ref)
     rr = _LD4.td_ref(ctx, sd, sw, i, p, _mss_ref(ctx, sd, sw, i, p))      # (caption-gap time_distortion: a swing formed in a masked bar is no reference)
     if rr is None:
@@ -7036,6 +7044,7 @@ def _ob_anchor(ctx, sd, sw, i, p, session, risk_mult):
     if ob is None:
         return None
     entry = float(sd.o[ob.src])
+    sw["_ob_anchor_k"] = int(ob.src)                   # caption-gap setups_models #6/7 review fix: ob_below_open / eq_fresh_ob judge this candle
     if p.ob_anchor_rule == "gap_presence" and _LD3.ob_anchor_choice(sd, ob.src, _LD3.ob_run_end(sd, ob.src), i, p) == "gap":
         entry = float(ob.top)                          # caption-gap A12: an untraded wick gap keeps the wick extreme as the anchor
     if entry >= sd.c[i]:
@@ -7229,7 +7238,7 @@ def _cc_1h_ob(ctx, sd, sw, i, p, session, risk_mult):
     if p.refine_tfs:                                     # caption-gap B5-topdown-entry-refinement: the lowest timeframe with a validated down-close candle INSIDE the daily OB (the stop stays below the sweep low)
         for m_ in sorted(int(x) for x in p.refine_tfs):
             hc = _hour_down_candle(ctx, sd, sw["ext_i"], i, m_)
-            if hc is None or not (ob[1] - tol <= hc[0] <= ob[0] + tol) or not (sd.h[hc[2] + 1:i + 1] > hc[1]).any():
+            if hc is None or not (ob[1] - tol <= hc[0] <= ob[0] + tol) or (p.cc_ob_validate and not (sd.h[hc[2] + 1:i + 1] > hc[1]).any()):
                 continue
             ho, hh, hlast = hc
             _SM6.hit("refine_tf_%d" % m_)
@@ -7241,12 +7250,14 @@ def _cc_1h_ob(ctx, sd, sw, i, p, session, risk_mult):
         if hc is None:
             return None
         ho, hh, hlast = hc
-        if not (sd.h[hlast + 1:i + 1] > hh).any():
-            return None                                  # not yet traded back up through it (the order arms only after a later bar trades above C.high)
+        if p.cc_ob_validate and not (sd.h[hlast + 1:i + 1] > hh).any():
+            return None                                  # (cc_ob_validate, review fix: the validation is a switch, default on = as built) not yet traded back up through it (the order arms only after a later bar trades above C.high)
     sw["ts_sent"] = True
     if p.cc_ob_tf != 60 or p.ts_r_preset or p.cc_ob_offset_ticks:
         _SM6.hit("cc_ob_variant")
-    entry = ho - p.cc_ob_offset_ticks * p.tick
+    entry = ho
+    if p.cc_ob_offset_ticks:                             # review fix (M12-cc-daily-ob-turtle-soup / E3): the spread moves the buy limit TOWARD the market (C.open + spread) so a touch fills; capped below the last close
+        entry = min(ho + p.cc_ob_offset_ticks * p.tick, float(sd.c[i]) - p.tick)
     stop = (ob[0] + ob[1]) / 2 - p.pad if p.ts_stop == "array" else sw["ext"] - p.pad
     if entry - stop < p.min_risk_pts * p.es_pt:
         stop = sw["ext"] - p.pad
