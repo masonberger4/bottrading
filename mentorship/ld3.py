@@ -512,6 +512,19 @@ def build_ipda_x(ctx, hist: list, dates: list, eth, p) -> tuple:
             later = slice(z.i + 1, None)
             if not (len(h[later]) and ((l[later] <= z.bottom) & (h[later] >= z.top)).any()):
                 gaps.append((float(z.top), float(z.bottom)))
+    if p.ipda_window_arrays:                              # review fix (B21-reference-points-in-windows): the daily OBs and liquidity voids inside the window too
+        from .ld4 import hit
+        hit("ipda_window_arrays")
+        from . import htf
+        for z in htf._arrays(o, h, l, c, "D", lambda k: k + 1):
+            if z.typ == "ob":
+                later = slice(z.known, None)
+                if not (len(h[later]) and ((l[later] <= z.bottom) & (h[later] >= z.top)).any()):
+                    gaps.append((float(z.top), float(z.bottom)))
+        for z in L.voids(h, l):
+            later = slice(z.i + 1, None)
+            if not (len(h[later]) and ((l[later] <= z.bottom) & (h[later] >= z.top)).any()):
+                gaps.append((float(z.top), float(z.bottom)))
     eqs = []
     if p.ipda_consol_eq:
         eqs = [(b["eq"], b["high"] - b["low"]) for b in L.daily_consolidations(o, h, l, c, eq_touches=p.consol_eq_touches)]

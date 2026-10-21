@@ -200,23 +200,40 @@ class Confluence:
                 z = self.z.get(tf)
                 self.z[tf] = add if z is None else {k: np.concatenate([z[k], add[k]]) for k in add}
 
+    def windowed(self, since: dict):
+        """A cheap copy of this object (the array tables are shared) whose queries keep only the FVG / OB / VI / breaker arrays of the timeframes in
+        `since` ({tf: ns}) that were KNOWN at or after that time - the B21 `ipda_arrays` window (caption-gap levels_detectors #3/3 review: every
+        merge of the engine - the main scan, the Silver Bullet, entries.py, targets.htf_levels - reads the same limited arrays). Opening gaps
+        are never limited."""
+        import copy
+        c = copy.copy(self)
+        c.window = dict(since)
+        return c
+
+    window = None
+
     def _ipda_mask(self, tf: str, z: dict, now: float) -> np.ndarray:
         """Caption-gap B21 (cc05_001 ~22:58; cc07_005 ~14:17: "for day trading you're going to operate in those last 20 days"): with
         ipda_arrays_first20 the DAILY FVG / OB / VI rows are limited to the 20 sessions after they formed until every one of
         them is traded through (dead), then 40, then 60 sessions - the age counts closed trading sessions since `known` (Sunday
-        sessions are not in htf.sessions). Other timeframes and the opening gaps are untouched."""
+        sessions are not in htf.sessions). Other timeframes and the opening gaps are untouched.
+        With `windowed` (ipda_arrays) the arrays of a listed timeframe must also have been known at or after the window start."""
         n = len(z["kind"])
+        ok = np.ones(n, bool)
+        w = self.window
+        if w and tf in w:
+            ok = ~(np.isin(z["src"], [0, 1, 3, 4]) & (z["known"] < w[tf]))
         if not getattr(self, "first20", False) or tf != "D" or not len(getattr(self, "dends", ())):
-            return np.ones(n, bool)
+            return ok
         sel = np.isin(z["src"], [0, 1, 3])
         age = np.searchsorted(self.dends, now, side="right") - np.searchsorted(self.dends, z["known"], side="right") + 1
         alive = sel & (z["known"] <= now) & (z["dead"] > now)
         win = 60
-        for w in (20, 40, 60):
-            if (alive & (age <= w)).any():
-                win = w
+        for w_ in (20, 40, 60):
+            if (alive & (age <= w_)).any():
+                win = w_
                 break
-        return ~sel | (age <= win)
+        return ok & (~sel | (age <= win))
 
     def at(self, t: pd.Timestamp, price: float, side: int, known_by: pd.Timestamp | None = None) -> list[str]:
         """Timeframes with a valid array of the trade's side containing `price` at time t,

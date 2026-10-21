@@ -58,6 +58,14 @@ def sessions(df: pd.DataFrame) -> pd.DataFrame:
     return d[d.n >= 60].drop(columns="n")            # drop stub sessions (holiday fragments)
 
 
+def months(d: pd.DataFrame) -> pd.DataFrame:
+    """Monthly candles of the sessions `d` (the analogue of `weeks`): open / high / low / close and `last` = the month's last session label. A month the
+    frame only partly covers at its start keeps the covered sessions (like the first week)."""
+    m = d.groupby(d.index.to_period("M"))
+    return pd.DataFrame({"open": m.open.first(), "high": m.high.max(), "low": m.low.min(),
+                         "close": m.close.last(), "last": m.apply(lambda x: x.index[-1])})
+
+
 def weeks(d: pd.DataFrame) -> pd.DataFrame:
     w = d.groupby(d.index.to_period("W-FRI"))
     out = pd.DataFrame({"open": w.open.first(), "high": w.high.max(), "low": w.low.min(),
@@ -67,7 +75,7 @@ def weeks(d: pd.DataFrame) -> pd.DataFrame:
 
 def _arrays(o, h, l, c, tf: str, known_of, vi: bool = False, c2_dir: bool = False,
             vi_min_gap: float = 0.0, vi_wick_overlap: bool = True, vi_multi: bool = False,
-            drill=None, spr: bool = False, void_rt: bool = False) -> list[Arr]:
+            drill=None, spr: bool = False, void_rt: bool = False, rb: bool = False, rb_level: str = "close") -> list[Arr]:
     """Daily / weekly arrays. levels_detectors: `c2_dir` (A5 fvg_c2_dir) keeps only FVGs whose
     middle candle closes their way; `vi_min_gap` (A9) drops narrower VIs; caption-gap A9 `vi_wick_overlap` /
     `vi_multi` (see levels.volume_imbalances).
@@ -81,7 +89,11 @@ def _arrays(o, h, l, c, tf: str, known_of, vi: bool = False, c2_dir: bool = Fals
       `spr`    new-single-candle-daily-inefficiency (091 ~25:37): single-pass ranges as typ "spr" arrays (levels.single_pass_ranges);
                `Arr.ce` = the candle's CE; the 25 / 75% levels come from the candle (`Arr.q`)
       `void_rt` A12-void-up-down-ob (cc02_007 ~13:33): a one-sided rally followed at once by a one-sided drop through the same range
-               = one OB (typ "ob", ce = 50%)."""
+               = one OB (typ "ob", ce = 50%).
+      `rb`     A17-rejection-block-short-protocol (035 ~23:08; levels_detectors #3/3 review): the CLOSE of the candle that made a swing high (low)
+               (levels.rejection_blocks, `rb_level`, 3-candle pivots) as typ "rb" arrays - top = bottom = ce = that close, `src_i` = the swing
+               candle. The bias table never counts them (they are levels, not reactions); `table(rb_closes=True)` lists the untaken ones as the
+               columns rb_up / rb_dn and the engine (ld4.rb_build) reads the same arrays."""
     out = []
     if vi:                       # shared VI wiring (Ep02.8 / Ep03.3 / B1): daily/weekly volume
         for z in L.volume_imbalances(o, h, l, c, vi_min_gap, vi_wick_overlap, vi_multi):   # imbalances as arrays and draws
@@ -104,6 +116,12 @@ def _arrays(o, h, l, c, tf: str, known_of, vi: bool = False, c2_dir: bool = Fals
     if void_rt:
         for z in L.void_round_trip_obs(o, h, l, c):
             out.append(Arr(z.kind, "ob", tf, z.top, z.bottom, z.mt, known_of(z.i)))
+    if rb:
+        for z in L.rejection_blocks(o, h, l, c, 1, 0.0, rb_level):
+            lvl = float(z.levels[0])
+            a = Arr(z.kind, "rb", tf, lvl, lvl, lvl, known_of(z.i))
+            a.src_i = z.src
+            out.append(a)
     if spr:
         for z in L.single_pass_ranges(o, h, l, c):
             a = Arr(z.kind, "spr", tf, z.top, z.bottom, z.mid, known_of(z.i))
@@ -243,7 +261,8 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
           vi_body_death: bool = False, bx: str = "", vi_wick_overlap: bool = True, vi_multi: bool = False,
           vi_dead_rule: str = "full_span", vi_two_sided: bool = False, ipda_first20: bool = False,
           nwog_cfd_src: str = "auto", single_pass_draw: bool = False, void_rt_ob: bool = False, htf_ob_ltf_drill: bool = False,
-          balance_tf: str = "own", tf_lookback: dict | None = None) -> pd.DataFrame:
+          balance_tf: str = "own", tf_lookback: dict | None = None, monthly_arrays: bool = False, rb_closes: bool = False,
+          ipda_window: str | None = None) -> pd.DataFrame:
     """One row per trading day: react / draw / pd / combo bias and the draw levels.
     `cut_min`: the row describes the market as known at that minute of the day - the overnight
     high/low/last use only bars that have CLOSED by cut_min (bar start + bar length <= cut_min).
@@ -262,7 +281,13 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     Caption-gap pass (levels_detectors #2/3): `nwog_cfd_src` (L5-cfd-nwog-mapping, see opening_gaps), `single_pass_draw` (a daily
     single-pass range is a draw: its CE below / above price until a later low / high trades through it), `void_rt_ob` (a one-sided
     rally + drop = one OB), `htf_ob_ltf_drill` (a wrong-coloured swing-extreme candle takes its OB from the 1h bars inside it), `balance_tf`
-    ("legacy" / "own" / "next_lower": which closes retire an array, see _arr_alive)."""
+    ("legacy" / "own" / "next_lower": which closes retire an array, see _arr_alive).
+    Caption-gap pass (levels_detectors #3/3 review): `monthly_arrays` (L3-htf-pd-arrays-intraday, cc05_015 ~19:55: monthly PD arrays beside the daily and
+    weekly ones; usable from the session after the month's last session, react weight 3 [our interpretation: higher timeframe counts more]),
+    `rb_closes` (A17: the untaken rejection-block closes of the daily swing candles as the columns rb_up / rb_dn - the nearest above / below the
+    price; they never enter the bias), `ipda_window` (B21-reference-points-in-windows, Params.ipda_arrays: the IPDA anchor - "rolling" / "month" /
+    "current_month" / "swing" - whose 60-session window limits the daily arrays and swing draws of each row to those formed inside the 60 sessions
+    ending at the anchor, `levels.ipda_end_index`; None = the lookback alone)."""
     from . import bias_htf as BH
     X = BH.parse(bx)
     d = sessions(df)
@@ -271,7 +296,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     drill = _ltf_provider(df, d, 60) if htf_ob_ltf_drill else None
     lcl = _ltf_closes(df, d, 240) if balance_tf == "next_lower" else None
     arrs = _arrays(o, h, l, c, "D", lambda i: i + 1, vi, c2_dir, vi_min_gap, vi_wick_overlap, vi_multi,
-                   drill=drill, spr=single_pass_draw, void_rt=void_rt_ob)
+                   drill=drill, spr=single_pass_draw, void_rt=void_rt_ob, rb=rb_closes)
     # weekly arrays become usable the day after the week's last session
     w = weeks(d)
     pos = {t: k for k, t in enumerate(d.index)}
@@ -280,6 +305,11 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     wh_, wlow_ = w.high.values.astype(float), w.low.values.astype(float)
     arrs += _arrays(*(w[k].values.astype(float) for k in ("open", "high", "low", "close")), "W",
                     lambda i: wl[i], vi, c2_dir, vi_min_gap, vi_wick_overlap, vi_multi, void_rt=void_rt_ob)
+    if monthly_arrays:
+        mth = months(d)
+        ml_ = [pos[t] + 1 for t in mth["last"]]
+        arrs += _arrays(*(mth[k].values.astype(float) for k in ("open", "high", "low", "close")), "M",
+                        lambda i: ml_[i], vi, c2_dir, vi_min_gap, vi_wick_overlap, vi_multi, void_rt=void_rt_ob)
     # opening gaps (ICT 039/051/052): NWOG Fri close -> Sun 18:00, NDOG 17:00 -> 18:00 Mon-Thu
     pos_of = {t: k for k, t in enumerate(d.index)}
     og_df = opening_gaps(df, es_pt, min_gap_pts, nwog_cfd_src)
@@ -305,6 +335,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     mid_open = BH.week_open_mon(df, d) if X.get("bc") == "midnight" else None     # M0.1 bias_candle_open="midnight": the 00:00 opens
     # caption-gap new-lookback-per-tf-topdown (cc01_003 ~13:38: "your daily chart needs to show 12 months"): tf_lookback["D"] = the daily arrays' life in sessions
     lb_d = int((tf_lookback or {}).get("D") or lookback)
+    dates_ = [t_.date() for t_ in d.index]
     rows = []
     wk_first = {}                                    # W-FRI period -> first session position (bias_htf: the week's open)
     for k_, t_ in enumerate(d.index):
@@ -316,11 +347,15 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         px = float(on.at[day, "last"])
         oh, ol = float(on.at[day, "high"]), float(on.at[day, "low"])
         lo_k = max(0, k - lb_d)
+        if ipda_window:                                  # B21 ipda_arrays: only arrays / swings formed inside the 60-session window ending at the anchor
+            lo_k = max(lo_k, L.ipda_end_index(dates_[:k], dates_[k], ipda_window, h[:k], l[:k], c[:k]) - 60)
         live = [a for a in arrs if lo_k <= a.known - 1 and a.known <= k and a.typ != "nwog"]
         live += [a for a in arrs if a.typ == "nwog" and k - lookback <= a.known <= k]   # 60 days (051)
         # NDOGs live through the week they form in (Mon-Fri)
         wk = day.to_period("W-FRI")
         live = [a for a in live if a.typ != "ndog" or d.index[a.known].to_period("W-FRI") == wk]
+        rb_live = [a for a in live if a.typ == "rb"]             # A17 rejection-block closes: levels only (columns rb_up / rb_dn), never the bias
+        live = [a for a in live if a.typ != "rb"]
         react = 0.0
         ru = rd = rw_up = rw_dn = 0.0
         draws_up, draws_dn = [], []
@@ -352,7 +387,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
                 continue
             if not _arr_alive(a, k, o, h, l, c, wo, wc, wl, vi_body_death, vi_dead_rule, bal=balance_tf, lcl=lcl):
                 continue
-            wt = 2.0 if a.tf == "W" else 1.0
+            wt = 2.0 if a.tf == "W" else 3.0 if a.tf == "M" else 1.0
             # reaction in the last react_days completed days or tonight
             rl = np.append(l[max(s, k - react_days):k], ol)
             rh = np.append(h[max(s, k - react_days):k], oh)
@@ -428,6 +463,14 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
                    draw_up=up[2] if up else np.nan, draw_up_name=up[1] if up else "",
                    draw_dn=dn[2] if dn else np.nan, draw_dn_name=dn[1] if dn else "",
                    vi_up=vu[2] if vu else np.nan, vi_dn=vd[2] if vd else np.nan)
+        if rb_closes:
+            rbu, rbd = [], []
+            for a in rb_live:                          # untaken: no later session's wick (nor tonight's) traded through the close
+                if a.kind == "bear" and np.append(h[a.src_i + 1:k], oh).max() < a.ce and a.ce > px:
+                    rbu.append(a.ce)
+                elif a.kind == "bull" and np.append(l[a.src_i + 1:k], ol).min() > a.ce and a.ce < px:
+                    rbd.append(a.ce)
+            row["rb_up"], row["rb_dn"] = (min(rbu) if rbu else np.nan), (max(rbd) if rbd else np.nan)
         if X:
             wk0 = wk_first.get(wk)
             d_open_ = float(o[k])
@@ -441,7 +484,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
                                      draws_up, draws_dn, pdb, ru, rd, rw_up, rw_dn, live, es_pt))
         rows.append(row)
     cols = ["date", "px", "react", "react_score", "draw", "pd", "combo", "draw_up", "draw_up_name",
-            "draw_dn", "draw_dn_name"] + (["vi_up", "vi_dn"] if vi else [])
+            "draw_dn", "draw_dn_name"] + (["vi_up", "vi_dn"] if vi else []) + (["rb_up", "rb_dn"] if rb_closes else [])
     if X:
         cols += [k_ for k_ in (rows[0] if rows else {}) if k_ not in cols]
     out = pd.DataFrame(rows, columns=cols or None).set_index("date")
@@ -730,7 +773,7 @@ def gaps_for_day(g: pd.DataFrame, day, nwog_keep: int = 5, nwog_days: int = 0, s
     wk = pd.Timestamp(day).to_period("W-FRI")
     skipped_now = [False]
 
-    def pick(nw):
+    def pick(nw, nwog_days=nwog_days):
         if skip_holiday and len(nw):
             from .calendar import is_trading_day
             full = np.asarray([sum(is_trading_day((w.start_time + pd.Timedelta(days=j)).date()) for j in range(7)) >= 5
@@ -757,15 +800,14 @@ def gaps_for_day(g: pd.DataFrame, day, nwog_keep: int = 5, nwog_days: int = 0, s
         def dist(r):
             d_rng = 0.0 if r.low <= ref_px <= r.high else min(abs(ref_px - r.low), abs(ref_px - r.high))
             return (d_rng, abs(ref_px - r.ce))
-        for nm in ("nw", "nr"):
-            fr = nw if nm == "nw" else nr
-            if len(fr):
-                best = min(fr.itertuples(), key=dist)
-                fr = fr[(fr.high == best.high) & (fr.low == best.low) & (fr.known == best.known)]
-            if nm == "nw":
-                nw = fr
-            else:
-                nr = fr
+        # the closest NORMAL NWOG "formed within the last 60 days" (046 ~16:23): the candidates are the 60 trading days (nwog_days when set), not nwog_keep
+        d60 = nwog_days or 60
+        nw = pick(k[k.kind == "nwog"], d60)
+        nr = pick(k[k.kind == "nwog_rth"], d60) if (k.kind == "nwog_rth").any() else k.iloc[:0]
+        both = pd.concat([nw, nr])                       # ONE NWOG: the ETH and RTH rows of the closest weekend (levels_detectors #3/3 review)
+        if len(both):
+            best = min(both.itertuples(), key=dist)
+            nw, nr = nw[(nw.week.values == best.week)], nr[(nr.week.values == best.week)]
     nd = k[(k.kind == "ndog") & (k.week == wk)]
     sel = pd.concat([nw, nr, nd])
     if with_dir:                      # caption-gap L5: (kind, high, low, ce, dir) - the labels as a tag, "up" / "down"

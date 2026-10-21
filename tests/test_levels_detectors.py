@@ -487,3 +487,20 @@ def test_look_ahead_es_levels_entry_filters_and_exits():
     assert full.lv_tags.str.contains("gap_stop").all() and (full.entry_kind == "breaker").any()
     _no_look_ahead(df, 5, "ES", replace(p4, eq_pref="require", ipda_eq_day="skip", monday_ce=True), ES_COLS,
                    meta=meta)
+
+
+# --- caption-gap pass, levels_detectors #3/3: the spec-named tests (their bodies live in test_caption_gap_ld3.py, next to the other tests of the package) ---
+
+def test_or20_pool():
+    import test_caption_gap_ld3 as M
+    M.test_or20_pool()
+
+
+def test_or_refs_expire():
+    import test_caption_gap_ld3 as M
+    M.test_or_refs_expire()
+
+
+def test_time_distortion_mask(monkeypatch):
+    import test_caption_gap_ld3 as M
+    M.test_time_distortion_mask(monkeypatch)

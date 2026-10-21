@@ -740,6 +740,15 @@ def _arm_all(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=
                     continue
                 tg.append("sb_lrc")
             cands.append(dict(kind="fvg", top=g.top, bottom=g.bottom, i=g.i, g=g, first_low=float(l[g.i - 2]), tags=tg))
+    if p.or_fvg_entries and "fvg" in p.sb_entry_arrays and not mss_fail:
+        # caption-gap L3-or-refs-expire-1100 (090 ~49:21; levels_detectors #3/3 review): the FVGs formed inside the opening range are Silver Bullet
+        # entry arrays too (10:00-11:00), between the sweep extreme and the close and still open
+        from . import ld4 as _LD4
+        have = {(round(x["top"], 9), round(x["bottom"], 9)) for x in cands}
+        for z in _LD4.or_fvg_zones(ctx, sd, dict(ext=float(l[li])), i, p):
+            if (round(float(z.top), 9), round(float(z.bottom), 9)) in have or z.i < 2:
+                continue
+            cands.append(dict(kind="fvg", top=z.top, bottom=z.bottom, i=z.i, g=z, first_low=float(l[z.i - 2]), tags=["or_fvg"]))
     if (p.sb_ifvg or p.sb_ifvg_reaper) and not mss_fail:
         ifs = _ifvg_cands(ctx, sd, k0, li, i, p, kb)
         ifs = [x for x in ifs if x["i"] >= k_fvg]

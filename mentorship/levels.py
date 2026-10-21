@@ -1526,6 +1526,29 @@ def ipda_month_end(dates: list, day) -> int | None:
     return None
 
 
+def ipda_end_index(dates: list, day, anchor: str, h=None, l=None, c=None) -> int:
+    """The number of completed sessions (of `dates`, all before `day`) the IPDA windows of `anchor` cover - their END (exclusive) - the shared rule of
+    ld2.ipda_windows and the htf.table array window (caption-gap B21 ipda_arrays): "rolling" = all of them (yesterday is day 1); "month" = the
+    session before the first trading day of the last CLOSED month; "current_month" = through the first trading day of the CURRENT month (fixed
+    all month; 0 when the history does not reach it, all of them on that first day itself); "swing" = through the last daily MSS (`h`, `l`, `c`
+    = the daily arrays of `dates`). 0 when the anchor cannot be placed."""
+    n = len(dates)
+    if anchor in ("rolling", "daily", None):
+        return n
+    if anchor == "month":
+        k = ipda_month_end(dates, day)
+        return k if k is not None else 0
+    if anchor == "current_month":
+        k = next((j for j, d in enumerate(dates) if (d.year, d.month) == (day.year, day.month)), None)
+        if k is None:
+            return n
+        return k + 1 if (k > 0 and (dates[k - 1].year, dates[k - 1].month) != (day.year, day.month)) else 0
+    if anchor == "swing" and n:
+        k = daily_mss_end(h, l, c)
+        return (k + 1) if k is not None else 0
+    return n
+
+
 def daily_mss_end(h, l, c, n: int = 2) -> int | None:
     """Caption-gap B21 "swing_date" anchor (cc05_001 ~26:56: "the intermediate high/low or MSS within the last 60
     days"): the index of the LAST daily MSS in the daily arrays (closed days only): the last day whose close breaks
@@ -2013,7 +2036,7 @@ def parent_pools(o, h, l, c, lows, n_min: int = 2, band: float = 0.0, end: int |
         if len(later) < n_min:
             continue
         known = int(sorted(q.known for q in later)[n_min - 1])
-        if known >= n or (n > q0.i + 1 and float(np.min(l[q0.i + 1:known + 1])) < q0.price):
+        if known >= n or (n > q0.i + 1 and float(np.min(l[q0.i + 1:n])) < q0.price):      # (review fix: untaken through `end`, not only up to `known`)
             continue
         out.append((float(q0.price), int(q0.i), known))
     return out
@@ -2097,6 +2120,24 @@ def ipda_forward(days: list, d_idx: int, size: int = 20) -> dict:
     return out
 
 
+def ipda_markers(days: list, d_idx: int, windows=(20, 40, 60), size: int = 20) -> dict:
+    """Caption-gap B21-open-float-forward-windows (cc05_004 ~25:15: "at each forward marker ... recompute the 20/40/60 look-backs ending there"): for
+    every forward marker M_j = D + 20 j (j = 1..3, the anchor session D = `d_idx` of `days` = [(high, low)] of the completed sessions) that has been
+    reached (M_j <= len(days): today is the marker day or later) the look-back windows of `windows` sessions ending the session BEFORE the marker.
+    Returns {"m<j>w<n>": (high, low)}; windows the history cannot fill are left out. Nothing here depends on sessions after the marker."""
+    out = {}
+    n = len(days)
+    for j in (1, 2, 3):
+        m = d_idx + size * j
+        if m > n:
+            break
+        for w in sorted(windows):
+            if m - w >= 0:
+                seg = days[m - w:m]
+                out[f"m{j}w{w}"] = (max(x[0] for x in seg), min(x[1] for x in seg))
+    return out
+
+
 def ipda_sequence(wins: dict, seen: float, tick: float, exhausted20: bool = False, beyond: float | None = None) -> list[tuple]:
     """Caption-gap B21-progression-20-40-60-beyond (cc05_004 ~26:38; cc06_008 ~12:50; cc07_004 ~7:43; cc05_003 ~28:40): the IPDA buy-side draw
     sequence. `wins` = {window: high} (e.g. 20 / 40 / 60); `seen` = the highest high traded (today's so far). The near-term draw is the 20-day
@@ -2141,6 +2182,20 @@ def monthly_candles(dates: list, o, h, l, c, day, n: int = 3, first_month_full: 
     for key, a, b in months[-n:]:
         out.append((key, float(o[a]), float(np.max(h[a:b + 1])), float(np.min(l[a:b + 1])), float(c[b])))
     return out
+
+
+def monthly_range_frame(mc: list) -> tuple | None:
+    """Caption-gap L3-monthly-ohlc-3m (cc03_004 ~2:30): frame the monthly range from the most recent DOWN-close monthly candle D and the up-close
+    candle above its high U [our interpretation: the most recent up-close candle whose high exceeds D's high]. `mc` = the completed monthly candles
+    [((year, month), open, high, low, close)], oldest first. Returns (D's low, U's high) or None when there is no such pair."""
+    dn = [k for k, (_, o, h, l, c) in enumerate(mc) if c < o]
+    if not dn:
+        return None
+    d = mc[dn[-1]]
+    ups = [k for k, (_, o, h, l, c) in enumerate(mc) if c > o and h > d[2]]
+    if not ups:
+        return None
+    return float(d[3]), float(mc[max(ups)][2])
 
 
 def time_distortion_mask(t, releases, td_lunch: bool = True, pre_release_min: int = 15, close_min: int = 960,

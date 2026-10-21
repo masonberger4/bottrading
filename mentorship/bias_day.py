@@ -61,9 +61,10 @@ def row_for(ctx, session: str, i: int):
     return cuts[max(ok)] if ok else None
 
 
-def tue_open_ref(ctx, i: int) -> tuple:
-    """Params.tue_open_ref: (monday_is_a_holiday, the Tuesday 09:30 open) of the current week. The open is known only once the Tuesday 09:30 bar
-    has closed (today's `_open_known`; later in the week it is read from the completed Tuesday session), else None. Index convention (09:30)."""
+def tue_open_ref(ctx, i: int, at: str = "0930") -> tuple:
+    """Params.tue_open_ref: (monday_is_a_holiday, the Tuesday opening price) of the current week - `at` "0930" (indices: the 09:30 open) or "midnight" (FX,
+    Params.tue_open_time: the 00:00 open). The open is known only once its bar has closed (today's `_open_known`; later in the week it is read from the
+    completed Tuesday session's frame - the midnight bar only if the frame holds it), else None."""
     from datetime import timedelta
     from .calendar import is_trading_day
     from .strategy import _open_known
@@ -75,10 +76,11 @@ def tue_open_ref(ctx, i: int) -> tuple:
     if d < tue:
         return True, None
     if d == tue:
-        return True, _open_known(ctx, "0930", i)
+        return True, _open_known(ctx, at, i)
     for x in reversed(getattr(ctx, "hist", [])):
         if x.index[0].date() == tue:
-            r = x[(x.index.hour * 60 + x.index.minute) >= 570]
+            m = x.index.hour * 60 + x.index.minute
+            r = x[m >= 570] if at == "0930" else x[m == 0]
             return True, (float(r.open.iloc[0]) if len(r) else None)
     return True, None
 
@@ -413,7 +415,7 @@ def side_ok(ctx, p, sign: int, session: str, i: int):
             ops = {"sun18": ("wo_sun",), "mon00": ("wo_mon",), "either": ("wo_sun", "wo_mon")}[p.weekly_open]
             vals = [float(row[k]) for k in ops if row.get(k) is not None and row[k] == row[k]]
             if p.tue_open_ref:                  # caption-gap L5-holiday-nwog (046 ~20:47-21:11): a holiday Monday - the week's reference is TUESDAY 09:30
-                hol, tv = tue_open_ref(ctx, i)
+                hol, tv = tue_open_ref(ctx, i, p.tue_open_time)
                 if hol:
                     vals = [] if tv is None else [tv]      # (before Tuesday's 09:30 bar has closed the reference is unknown: no filter)
             if vals:

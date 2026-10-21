@@ -257,6 +257,13 @@ def table_kw(p: Params) -> dict:
         kw["single_pass_draw"] = True
     if p.htf_ob_ltf_drill:
         kw["htf_ob_ltf_drill"] = True
+    # caption-gap pass (levels_detectors #3/3 review), htf.table only: monthly PD arrays (L3-htf-pd-arrays-intraday), the rejection-block closes (A17)
+    if p.htf_monthly_arrays:
+        kw["monthly_arrays"] = True
+    if p.rb_pools:
+        kw["rb_closes"] = True
+    if p.ipda_arrays:
+        kw["ipda_window"] = p.ipda_anchor     # B21 ipda_arrays: the table's daily arrays / swing draws only from the IPDA window of the anchor
     kw["balance_tf"] = p.balance_tf     # always explicit (review fix #75: the default is now "own", so the cache file of the old default must not be reused)
     return kw
 

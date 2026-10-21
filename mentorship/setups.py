@@ -45,11 +45,11 @@ def _ob_body(o, c, z, end: int) -> tuple[float, float]:
     return float(np.max(o[j:k + 1])), float(np.min(c[j:k + 1]))
 
 
-def ob_low(sd, e: int):
+def ob_low(sd, e: int, outside=None):
     """Review fix (A20 / M0.4 / M2.3): the order block AT the sweep low - the last down-close
     candle(s) in [e-3, e] (order_block_blend limited to the sweep extreme), never a pullback
     candle of the up-leg after the low. (zone, body top, body low) or None."""
-    ob = L.order_block_blend(sd.o, sd.h, sd.l, sd.c, e - 3, e, "bull")
+    ob = L.order_block_blend(sd.o, sd.h, sd.l, sd.c, e - 3, e, "bull", outside=outside)     # (caption-gap A12 ob_outside_fvg: candles inside the shaded zone are ignored)
     if ob is None:
         return None
     top, low = _ob_body(sd.o, sd.c, ob, e)
@@ -185,7 +185,7 @@ def break_ok(ctx, sd, sw, i, p, ref, lv: dict, tol: float, tk: float) -> bool:
         S._f("x_disp_through")
         return False
     if p.disp_mult or p.disp_body_mult:
-        r = ob_low(sd, sw["ext_i"])          # review fix: the OB at the sweep low, not the last
+        r = ob_low(sd, sw["ext_i"], S._LD4.disp_fvg_zone(sd, sw, i) if p.ob_outside_fvg else None)          # review fix: the OB at the sweep low, not the last
         if r is not None:                    # down-close candle before the break
             _, top, low = r
             body = top - low
@@ -327,7 +327,7 @@ def pick_2022(ctx, sd, sw, pick: list, i: int, p):
     leg_hi = h[e:i + 1].max()
     eq = sw["ext"] + 0.5 * (leg_hi - sw["ext"])
     vis = [z for z in sd.vis("bull") if z.i <= i]
-    r = ob_low(sd, e)                    # review fix: the OB at the sweep low (not a pullback candle)
+    r = ob_low(sd, e, S._LD4.disp_fvg_zone(sd, sw, i) if p.ob_outside_fvg else None)       # review fix: the OB at the sweep low (not a pullback candle)
     ob = None if r is None else r[0]
     tk = 0.25 * p.es_pt
     a = [g for g in pick if any(abs(z.i - g.src) <= 1 for z in vis)

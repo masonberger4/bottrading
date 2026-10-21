@@ -224,7 +224,10 @@ def test_wick_lod_tag():
     sw2 = dict(ext=95.9, ext_i=4, key="pdl1", level=96.0)
     assert L4.order_gate(ctx, sd, sw2, 8, p, 97.0, None, False, lvt) is None and "wick_lod" in lvt
     ctx.wick_ok = [(True, False)]
+    ctx.cur_bias = 1
     assert L4.order_gate(ctx, sd, sw2, 8, replace(p, wick_lod_tag="require"), 97.0, None, False, []) == "x_wick_lod"
+    ctx.cur_bias = 0                                                                           # review fix: "require" only where the LOD expectation applies (a day biased this way)
+    assert L4.order_gate(ctx, sd, sw2, 8, replace(p, wick_lod_tag="require"), 97.0, None, False, []) is None
     assert L4.order_gate(ctx, sd, sw2, 8, p, 97.0, None, False, []) is None
 
 
@@ -799,7 +802,10 @@ def test_head_shoulders_detector():
     assert r2 is None or r2["neck"] <= 0
 
 
-def _hs_world(bias=1, conf=None):
+_ARR_D = SimpleNamespace(at=lambda now, px, side: ["D"])
+
+
+def _hs_world(bias=1, conf=_ARR_D):
     o, h, l, c = [], [], [], []
     for hb, lb in zip(HS_H, HS_L):                                                             # each 15m bucket = three 5m bars holding its high and low
         mid = (hb + lb) / 2
@@ -969,16 +975,16 @@ def test_fvg_body_hold():
     assert not L.fvg_body_hold(o, np.minimum(h, 101.9), l, c, 100.0, 102.0, 0, 6)              # no wick poked out: nothing to hold
     # engine: only inside 10:00-12:00, only with td_fvg_hold
     p = Params(**BASE, td_fvg_hold=True)
-    ctx = SimpleNamespace(t=600 + 5 * np.arange(40))
+    ctx = SimpleNamespace(t=600 + 5 * np.arange(40), start=0)
     sd = SimpleNamespace(o=np.concatenate([[100.0] * 5, o]), h=np.concatenate([[101.0] * 5, h]), l=np.concatenate([[100.0] * 5, l]), c=np.concatenate([[100.0] * 5, c]))
     g = SimpleNamespace(i=4, bottom=100.0, top=102.0)
     assert L4.td_hold(ctx, sd, g, 11, p) and not L4.td_hold(ctx, sd, g, 11, replace(p, td_fvg_hold=False))
-    ctx2 = SimpleNamespace(t=715 + 5 * np.arange(40))                                           # 11:55 on: leaves the 10:00-12:00 window
+    ctx2 = SimpleNamespace(t=715 + 5 * np.arange(40), start=0)                                           # 11:55 on: leaves the 10:00-12:00 window
     assert not L4.td_hold(ctx2, sd, g, 20, p)
     # LD.gap_open honours it for a single-bar gap
     z = L.Zone("bull", 102.0, 100.0, 4, 3, tag="single_bar")
     sd2 = SimpleNamespace(o=sd.o, h=sd.h, l=np.concatenate([[100.0] * 5, [99.5] + list(l[1:])]), c=sd.c)
-    cx = SimpleNamespace(t=ctx.t, day=D0)
+    cx = SimpleNamespace(t=ctx.t, day=D0, start=0)
     q = replace(p, single_bar_fvg_strict=True)
     assert LD.gap_open(sd2, z, 11, cx, q) is True and LD.gap_open(sd2, z, 11, cx, replace(q, td_fvg_hold=False)) is False
 

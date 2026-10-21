@@ -54,6 +54,8 @@ def ipda_windows(ctx, p, dates: list) -> tuple[dict, object]:
         k = L.daily_mss_end(h, l, c)
         end = (k + 1) if k is not None else 0
         ctx.ipda_D = k
+    if p.ipda_forward and ctx.ipda_D is not None and end == ctx.ipda_D + 1:
+        end = ctx.ipda_D          # review fix (B21-open-float-forward-windows: "back pools = highs/lows BEFORE D"): the forward intervals start AT D, so the back windows end the session before it - as "month" always did
     ctx.ipda_end = end
     out = {}
     for n in sorted(p.ipda_windows):
@@ -309,7 +311,7 @@ def _gap_zones_real(ctx, p) -> list:
     if "nwog" in kinds:
         gl = getattr(ctx, "gaps", None)
         if gl is not None:
-            nw = [(lo, hi, 0) for kind, hi, lo, ce in gl if kind == "nwog"]
+            nw = [(lo, hi, 0) for kind, hi, lo, ce in gl if kind in ("nwog", "nwog_rth")]   # (gap_views "both": the RTH weekend gap follows the NWOG rules)
         else:
             nw = [(min(a, b), max(a, b), 0) for a, b in getattr(ctx, "nwog_prev", [])]
             if getattr(ctx, "nwog_today", False) and getattr(ctx, "nwog", None):
@@ -382,7 +384,10 @@ def converge_n(ctx, sd, g, i: int, p) -> int:
     VIs overlapping it, prior-day wick CEs inside it (twice when within 2 ticks of its CE)."""
     S = _S()
     others = [z for z in side_obs(sd) if z.kind == "bull" and z.i <= i] + [z for z in sd.vis("bull") if z.i <= i]
-    return L.converged_count(g, others, S._wick_ces(ctx, sd, True), 2 * p.tick)
+    refs = list(S._wick_ces(ctx, sd, True))
+    if p.monthly_ohlc:                                   # caption-gap L3-monthly-ohlc-3m (cc03_004 ~1:46): the monthly O / H / L / C count as converging levels (the scoring input)
+        refs += [float(sd.x(v)) for v in getattr(ctx, "m_ohlc", [])]
+    return L.converged_count(g, others, refs, 2 * p.tick)
 
 
 def pick_converged(ctx, sd, pick: list, i: int, p, last: bool):

@@ -1851,6 +1851,36 @@ class Params:
     td_lunch: bool = True                # [with time_distortion] the chop between the lunch macro and 14:00 counts
     td_fvg_hold: bool = False            # bodies holding inside an FVG for 5+ bars in 10:00-12:00 (wicks may poke out) keep it valid
 
+    # --- caption-gap pass, levels_detectors #3/3 REVIEW FIXES (the switches the review added; every one defaults off / to the built behaviour) ---
+    # L2-sr-needs-fvg (058 ~13:34; 076 ~21:21) - with daily_level_needs_array="fvg"
+    flip_retest_entry: bool = False      # L2: a broken old swing level with an FVG of the breaking leg within a tick of it is a flip-retest entry: a resting limit at that FVG's CE (needs the bias for the side)
+    # new-trendline-trap (cc03_007 ~8:18 / ~10:46)
+    tl_trap_entries: tuple = ()          # with trendline_trap: "ob" / "breaker" - a resting limit at the bullish OB / LTF breaker at L23 (price dips into the old low, no sweep needed); ladder H2 + 1 tick, then the daily draw
+    tl_tol_adr: float = 0.0              # [our interpretation, OWNER QUESTION 15] 0 = the trap's touch tolerance is tl_tol_ticks; > 0 = this fraction of ADR5 (trendline_pools always uses 0.1 x ADR5)
+    # new-hs-fade (cc03_008 ~7:11)
+    hs_rearm: bool = False               # "Re-sell if price runs the level again": after a run of the neckline lows and a close back above, the fade is armed again (once per run)
+    # L3-htf-pd-arrays-intraday (cc05_015 ~19:55)
+    htf_monthly_arrays: bool = False     # L3: htf.table also builds the monthly FVG / OB arrays (react weight 3) next to the daily and weekly ones
+    # new-lookback-per-tf-topdown (cc01_003 ~13:38 / ~18:23)
+    tf_pools: bool = False               # with tf_lookback keys "15m" / "1h" / "4h": the untaken swing highs / lows of those bars inside their window (older than the prior session) are pools tagged tf_<label>; pool_rank ranks them by timeframe
+    # B21-reference-points-in-windows (cc05_001 ~24:28)
+    ipda_window_arrays: bool = False     # B21: the daily OBs and liquidity voids formed inside the 60-session IPDA window are array targets too (next to ipda_fv's FVGs)
+    ipda_frame: bool = False             # B21: "frame off the window low when the market has been trading higher, off the window high when lower": tags frame_low / frame_high, ipda_disc / ipda_prem for the entry in that range
+    # B21-progression-20-40-60-beyond (cc05_004 ~26:38)
+    ipda_converge: bool = False          # B21: the window extreme that coincides with a daily PD array (within 0.25 x ADR5) is preferred as the draw (tag ipda_converge)
+    # B21-open-float-forward-windows (cc05_003 ~28:40; cc05_004 ~25:15)
+    ipda_recompute: bool = False         # B21 (with ipda_forward): the 20/40/60 look-backs recomputed ending at each forward marker D+20 / D+40 / D+60 reached are pools too (ipda_m<j>w<n>); the back windows then end BEFORE D
+    # L3-monthly-ohlc-3m (cc03_004 ~2:30)
+    monthly_frame: bool = False          # L3: the monthly range framed from the most recent down-close monthly candle's low to the high of the up-close candle above its high - tags m_frame_disc / m_frame_prem; monthly levels also count as converging arrays (converge_rank)
+    # LLT3-london-extreme-preny-range (cc08_007 ~2:37)
+    ny_hl_frame: bool = False            # L1: the prior NY session (09:30-16:00) high / low frame - a retracement inside it frames the next higher low / lower high (tag in_ny_range)
+    # L5-holiday-nwog (046 ~20:47-21:11)
+    tue_open_time: str = "0930"          # L5: the Tuesday opening reference of tue_open_ref - "0930" (indices) / "midnight" (FX)
+    # L7-org-lifetime-sr (092 ~1:59:32)
+    org_revisit_gate: bool = False       # L7 (with org_both_ways): today's revisit of an ORG high / 75% / CE counts only inside 10:00-11:00, 14:00-15:00, 15:00-16:00 with another PD array within 1 pt (NWOGs exempt)
+    # new-reactionary-high-liquidity (046 ~56:01)
+    reactionary_precond: bool = False    # the reactionary high is the draw only after a deep-discount move (>= 0.5 x ADR5 below it) with no FVG between price and it on the 15m bars [our interpretation]
+
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
         _sb_check(self)
@@ -1890,6 +1920,11 @@ class Params:
                 or self.consol_eq_touches < 0 or self.eq_min_sep_bars < 0 or self.ir_overshoot_ticks < 0 or self.ir_body_mult <= 0):
             raise ValueError("round_conf_pts, eng_short_pts, float_denied_adr, orig_consol_tol_pts, ir_overshoot_ticks >= 0; float_denied_bars, "
                              "ob_anchor_passes >= 1; orig_consol_touches >= 2; consol_eq_touches, eq_min_sep_bars >= 0; ir_body_mult > 0")
+        # caption-gap pass (levels_detectors #3/3 review fixes)
+        if not set(self.tl_trap_entries) <= {"ob", "breaker"} or self.tl_tol_adr < 0:
+            raise ValueError(f"tl_trap_entries {self.tl_trap_entries!r}: expected a subset of ('ob', 'breaker'); tl_tol_adr >= 0")
+        if self.tue_open_time not in ("0930", "midnight"):
+            raise ValueError(f"tue_open_time {self.tue_open_time!r}: expected '0930' or 'midnight'")
         # caption-gap pass (levels_detectors #3/3)
         if self.ipda_anchor == "daily":
             self.ipda_anchor = "rolling"       # B21-anchor-month-vs-daily: "daily" is the rolling count from yesterday
@@ -2234,7 +2269,8 @@ class Params:
     @property
     def dw_needs_eve(self) -> bool:
         """The switches that read the evening session (18:00-24:00) before the day (futures / CFDs with overnight bars)."""
-        return bool(self.sunday_scenario != "off" or self.eve_draw or self.pre_draw_pm or self.on_range_from == "globex")
+        return bool(self.sunday_scenario != "off" or self.eve_draw or self.pre_draw_pm or self.on_range_from == "globex"
+                    or self.week_pools)       # (caption-gap new-intra-week-extreme-raid: the Sunday evening is part of the week so far)
 
     @property
     def bx(self) -> str:
@@ -2571,10 +2607,12 @@ class Side:
         self.n = n
         self._ifvg = self._opp = self._mit = self._prop = None
         self._lz = {}                         # levels_detectors lazily built arrays
+        self.td_mask = None                   # caption-gap new-time-distortion: per-bar mask (ld4.attach_td) - zones / swings defined on a masked bar are dropped
 
     def _lazy(self, key, fn):
         if key not in self._lz:
-            self._lz[key] = fn()
+            v = fn()
+            self._lz[key] = v if self.td_mask is None else _LD4.td_filter(self.td_mask, v)
         return self._lz[key]
 
     def tiers(self):
@@ -2627,7 +2665,7 @@ class Side:
     # lazily built arrays (only the switches that use them pay for them)
     def ifvgs(self):
         if self._ifvg is None:
-            self._ifvg = [z for z in L.inversion_fvgs(self.h, self.l, self.c, self.min_gap) if z.kind == "bull"]
+            self._ifvg = _LD4.td_filter(self.td_mask, [z for z in L.inversion_fvgs(self.h, self.l, self.c, self.min_gap) if z.kind == "bull"])
         return self._ifvg
 
     def opposing(self):
@@ -2635,12 +2673,14 @@ class Side:
         if self._opp is None:
             self._opp = [z for z in L.fvgs(self.h, self.l, self.o, self.c, self.c2_dir) + L.voids(self.h, self.l)
                          if z.kind == "bear" and z.top - z.bottom >= self.min_gap]
+            self._opp = _LD4.td_filter(self.td_mask, self._opp)
         return self._opp
 
     def mitigations(self):
         if self._mit is None:
             self._mit = [z for z in L.mitigation_blocks(self.o, self.h, self.l, self.c, self.n, self.mit_legacy, self.mit_mt,
                                                         getattr(self, "mit_def", "a15")) if z.kind == "bull"]
+            self._mit = _LD4.td_filter(self.td_mask, self._mit)
         return self._mit
 
     def zones_tf(self, idx, base: int, m: int):
@@ -2670,6 +2710,7 @@ class Side:
             ob = L.order_block_blend(o, hh, ll, c, z.i - 4, z.i - 2, "bull")
             if ob is not None and c[z.i - 1] > ob.top:
                 out.append(L.Zone("bull", ob.top, ob.bottom, int(last[z.i]), int(first[ob.src]), ob.mt))
+        out = _LD4.td_filter(self.td_mask, out)
         cache[m] = out
         return out
 
@@ -2706,7 +2747,7 @@ class DayCtx:
 
     def __init__(self, df: pd.DataFrame, day: date, hist: list[pd.DataFrame], tf: int,
                  htf: tuple = (), closes: dict | None = None, or_minutes: int = 30,
-                 evening: pd.DataFrame | None = None):
+                 evening: pd.DataFrame | None = None, tf_lookback: dict | None = None):
         prev = hist[-1]
         self.day, self.tf = day, tf
         frame = pd.concat([prev, df])
@@ -2800,14 +2841,21 @@ class DayCtx:
         # higher-timeframe FVGs over the last 5 sessions, in real prices, with the time known
         self.hzones = []
         if htf:
-            full = pd.concat(hist[-5:] + [df])
+            # caption-gap new-lookback-per-tf-topdown (cc01_003 ~18:23): tf_lookback {"15m": 4, "1h": 15, "4h": 63} (trading days) replaces the 5-session
+            # window of the 15m / 60m / 4h FVGs - the zones are built on the longest window and each timeframe keeps the ones completed inside its own
+            lbm = {m_: int((tf_lookback or {}).get(lab_, 5)) for m_, lab_ in ((15, "15m"), (30, "30m"), (60, "1h"), (240, "4h"))}
+            nmax = max([5] + [lbm.get(m_, 5) for m_ in htf])
+            full = pd.concat(hist[-nmax:] + [df])
             self.full_c = full.close.values.astype(float)
             self.full_idx = full.index
             self.full_off = len(full) - len(frame)      # bar i of `frame` is full_off + i
             for m in htf:
+                n_m = lbm.get(m, 5)
+                cut = hist[-n_m].index[0] if n_m <= len(hist) else hist[0].index[0]
                 hb = htf_bars(full, m)
                 for z in L.fvgs(hb.high.values, hb.low.values):
-                    self.hzones.append((z, hb.end.iloc[z.i], m))
+                    if hb.end.iloc[z.i] >= cut:
+                        self.hzones.append((z, hb.end.iloc[z.i], m))
 
 
 def _htf_tag(ctx: DayCtx, sd: Side, i: int, price: float, tol: float) -> bool | None:
@@ -2988,11 +3036,11 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
             if reb_ is not None:
                 lv += [(v, "array") for v in reb_]
                 continue
-            if p.weekly_gap_ce_only and kind == "nwog":      # L9 (061 ~2:30:15): the CE is enough, the far edge a ringer
+            if p.weekly_gap_ce_only and kind in ("nwog", "nwog_rth"):      # L9 (061 ~2:30:15): the CE is enough, the far edge a ringer
                 lv.append((sd.x(ce), "array"))
             else:
                 lv += [(sd.x(hi), "array"), (sd.x(ce), "array"), (sd.x(lo), "array")]
-            if p.gap_quarters or (p.nwog_quarters and kind == "nwog"):   # L5 / D21 quarters
+            if p.gap_quarters or (p.nwog_quarters and kind in ("nwog", "nwog_rth")):   # L5 / D21 quarters
                 lv += [(sd.x(lo + 0.25 * (hi - lo)), "array"), (sd.x(lo + 0.75 * (hi - lo)), "array")]
     else:
         for a, b in _nwogs(ctx, i):
@@ -3019,7 +3067,7 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
         wk_ = "wick" if p.wick_read != "off" else "array"       # A23 wick_read: the rung is told apart
         lv.append((sd.x(ctx.wick["upper"] if sd.sign > 0 else ctx.wick["lower"]), wk_))
         if p.wick_untraded or p.wick_weeks > 1:      # caption-gap L10: only wick CEs no later daily bar traded through (weekly: the last wick_weeks)
-            lv += [(v, wk_) for v in _LD4.wick_ce_levels(ctx, sd, p, p.wick_both)]
+            lv += [(v, wk_) for v in _LD4.wick_ce_levels(ctx, sd, p, p.wick_both, i)]
         else:
             for w in getattr(ctx, "wicks", [])[1:] + getattr(ctx, "wick_wk", []):   # L10 wick_days / weekly
                 lv.append((sd.x(w["upper"] if sd.sign > 0 else w["lower"]), wk_))
@@ -3245,7 +3293,7 @@ def _extra_levels(ctx, df: pd.DataFrame, hist: list, p: "Params", eth: dict | No
     # caption-gap pass (levels_detectors #2/3): L1 RTH pools spent by RTH prints only, L3 session opening ranges, B21 daily gaps / consolidation EQs
     ctx.rth_spent = p.rth_pool_spent
     ctx.sors = _LD3.build_sors(ctx, p) if _LD3.sor_windows(p) else []
-    ctx.ipda_gaps, ctx.ipda_ceq = _LD3.build_ipda_x(ctx, hist, dates, eth, p) if (p.ipda_fv or p.ipda_consol_eq) else ([], [])
+    ctx.ipda_gaps, ctx.ipda_ceq = _LD3.build_ipda_x(ctx, hist, dates, eth, p) if (p.ipda_fv or p.ipda_consol_eq or p.ipda_window_arrays) else ([], [])
     # caption-gap pass (levels_detectors #3/3): previous-day London, wick CEs still untraded, ORG state, monthly O/H/L/C, rejection-block closes, week pools, LR zone, OR FVGs
     _LD4.build(ctx, df, hist, p, dates, cand, eth)
 
@@ -3298,7 +3346,7 @@ def _lv_target_arrays(ctx, sd, i: int, p) -> list:
         out += [(v, "array") for v, _ in _LD.cons_ob_levels(ctx, sd, i, p)]
     if p.vi_flip_support:                                  # caption-gap A9: reached daily VIs flipped to support / resistance
         out += [(v, "array") for v in _LD.vi_flip_target_levels(ctx, sd, i, p)]
-    if p.ipda_fv or p.ipda_consol_eq:                      # caption-gap B21: the data range's open daily gaps and consolidation EQs
+    if p.ipda_fv or p.ipda_consol_eq or p.ipda_window_arrays:   # caption-gap B21: the data range's open daily gaps and consolidation EQs
         out += _LD3.ipda_arrays(ctx, sd, p)
     out += _LD4.target_arrays(ctx, sd, i, p)               # caption-gap levels_detectors #3/3 (rejection-block closes, IPDA wick runners)
     return out
@@ -3465,7 +3513,7 @@ def _nwog_half(ctx, sd, i: int) -> float | None:
     space), once today's high reached 50% of the space between A's and B's near edges, B's near
     edge is the next draw. Returns it (side space) or None."""
     if getattr(ctx, "gaps", None) is not None:
-        zs = [(sd.x(hi), sd.x(lo)) for kind, hi, lo, _ in ctx.gaps if kind == "nwog"]
+        zs = [(sd.x(hi), sd.x(lo)) for kind, hi, lo, _ in ctx.gaps if kind in ("nwog", "nwog_rth")]
     else:
         zs = [(sd.x(a), sd.x(b)) for a, b in _nwogs(ctx, i)]
     zs = [(max(a, b), min(a, b)) for a, b in zs]
@@ -4084,7 +4132,7 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
                 prefs.append((pc_, "array", "org_half", 0, k570))
     if p.nwog_halfway and kl - 1 >= S:                                     # L5 halfway rule
         if getattr(ctx, "gaps", None) is not None:
-            zs = [(hi_, lo_) for kind, hi_, lo_, _ in ctx.gaps if kind == "nwog"]
+            zs = [(hi_, lo_) for kind, hi_, lo_, _ in ctx.gaps if kind in ("nwog", "nwog_rth")]
         else:
             zs = [(max(a, b), min(a, b)) for a, b in _nwogs(ctx, None if t_lock < 570 else at(570))]
         bel = [z for z in zs if z[0] <= px]
@@ -4207,7 +4255,8 @@ def _ob_at_low(sd, sw, i, p=None, ctx=None):
     e = sw["ext_i"]
     zone = _LD4.disp_fvg_zone(sd, sw, i) if (p is not None and p.ob_outside_fvg) else None     # caption-gap A12 ob_outside_fvg: candles inside the shaded zone are ignored
     cand = [k for k in range(max(0, e - 3), min(i - 1, e + 2) + 1) if sd.c[k] < sd.o[k]
-            and not (zone is not None and sd.l[k] >= zone[0] - 1e-9 and sd.h[k] <= zone[1] + 1e-9)]
+            and not (zone is not None and sd.l[k] >= zone[0] - 1e-9 and sd.h[k] <= zone[1] + 1e-9)
+            and not (p is not None and ctx is not None and _LD4.td_masked(ctx, p, k))]      # (caption-gap new-time-distortion: no OB candle of a masked bar)
     if not cand:
         return None
     k = min(cand, key=lambda k: (abs(k - e), -k))
@@ -4372,7 +4421,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     flat = _DW.flat_for(day, p, _eff_flat(p))                # N7.1 EARLY_CLOSE
     ff = _NC.fomc_flat_min(day, p)                        # N3 / N3.2: an FOMC day is flat at the release (0 = n/a)
     am_lo, am_hi = p.am_win                               # Ep01.10 am_from_0830
-    ctx = DayCtx(df, day, hist, tf, p.htf, closes, p.or_minutes, evening if p.globex_pool else None)
+    ctx = DayCtx(df, day, hist, tf, p.htf, closes, p.or_minutes, evening if p.globex_pool else None, tf_lookback=p.tf_lookback)
     ctx.conf = conf
     ctx.gaps = gaps if (p.gap_mode == "ict" and gaps is not None) else None
     ctx.equity = float(equity) if (equity is not None and p.risk_basis == "equity") else p.account_equity
@@ -4384,6 +4433,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     ctx.bias_row = bias                                   # setups_models: htf table row (draws)
     _BD.apply_open_src(ctx, p, intermarket)               # bias_htf D22: bias_open_src "spy" / "es_map"
     ctx.eth = eth
+    ctx.eve = eve                                         # caption-gap new-intra-week-extreme-raid: the evening before today (Sunday's for a Monday)
     ctx.prev_full = prev_full
     _attach_meta(ctx, meta, p, symbol)
     _setup_news(ctx, day, p)
@@ -4407,6 +4457,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                   -1: Side(-1, pctx.o, pctx.h, pctx.l, pctx.c, p.pivot_n, mg, **sk)}
         ppos = pd.Series(np.arange(len(pctx.idx)), index=pctx.idx)
     _LD.attach_pool_tf(ctx, sides, p)                     # caption-gap B5 pool_tf
+    _LD4.attach_td(ctx, sides, p)                         # caption-gap new-time-distortion: swings / zones of masked bars are dropped from the sides
     if psides is not None:
         _LD.attach_pool_tf(pctx, list(psides.values()), p)
     ctx.pside = (pctx, psides, ppos)                      # setups_models M16.2 sick sister
@@ -5406,6 +5457,10 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         o_ = _external(ctx, sd, i, p, session, risk_mult)
     if o_ is None and p.hs_fade and sd.sweep is None:
         o_ = _LD4.hs_order(ctx, sd, i, p, session, risk_mult)      # caption-gap new-hs-fade (levels_detectors #3/3)
+    if o_ is None and p.trendline_trap and p.tl_trap_entries and sd.sweep is None:
+        o_ = _LD4.tl_trap_order(ctx, sd, i, p, session, risk_mult)  # caption-gap new-trendline-trap: the OB / breaker entries at L23 (no sweep needed)
+    if o_ is None and p.flip_retest_entry and sd.sweep is None:
+        o_ = _LD4.flip_order(ctx, sd, i, p, session, risk_mult)     # caption-gap L2-sr-needs-fvg: the flip retest at the FVG CE
     if o_ is None and (p.pm_ep01 or p.moc_run or p.ir_entries or p.cc_swings in ("failure", "both")):
         o_ = _SM.extra_setups(ctx, sd, i, p, session, risk_mult)   # setups_models non-sweep setups
     return o_
@@ -5532,7 +5587,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     releq = ("rel_eq", "eng") if p.engineered_pools else ("rel_eq",)     # caption-gap A3 (review fix #5): engineered pools count as rel-eq pools in the sweep pick
     if p.eq_pref == "require":                   # Ep06.7: only relative equal lows are liquidity
         hit = [kv for kv in hit if kv[0].startswith(releq)]
-    if sw is None and hit:
+    if sw is None and hit and not _LD4.td_masked(ctx, p, i):     # (caption-gap new-time-distortion: a run of a pool in a masked bar infers no direction)
         eqh = [kv for kv in hit if kv[0].startswith(releq)]
         if p.eq_pref == "rank" and eqh:          # Ep06.7: rel-eq pools win (best-ranked with eq_rank)
             k, v = eqh[0] if p.eq_rank else min(eqh, key=lambda kv: (kv[1], -_LD3.eng_score(ctx, kv[0])))
@@ -5701,7 +5756,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         gaps = [g for g in gaps if id(g) not in ifv]
     xz = []                            # Ep07.2 vi_entries / L14b void: more entry zones (not IFVGs)
     if p.vi_entries or "void" in p.irl_entries:
-        xz = [z for z in _EN.extra_entry_zones(sd, sw, i, p) if sw.get("ev_g") is None or z.i > sw["ev_g"]]
+        xz = [z for z in _LD4.td_gaps(ctx, sd, _EN.extra_entry_zones(sd, sw, i, p), p) if sw.get("ev_g") is None or z.i > sw["ev_g"]]
         gaps = sorted(gaps + xz, key=lambda z: z.i)
     if p.irl_entries and "fvg" not in p.irl_entries:
         gaps = [g for g in gaps if any(g is z for z in xz)]      # L14b: the FVG is not an allowed IRL entry
@@ -5717,7 +5772,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     if p.or_fvg_entries:                  # caption-gap L3-or-refs-expire-1100: the opening range's FVGs are entry arrays for setups armed 10:00-11:00
         ldz += _LD4.or_fvg_zones(ctx, sd, sw, i, p)
     if ldz:
-        ldz = [z for z in ldz if sw.get("ev_g") is None or z.i > sw["ev_g"]]
+        ldz = [z for z in _LD4.td_gaps(ctx, sd, ldz, p) if sw.get("ev_g") is None or z.i > sw["ev_g"]]
         xz = list(xz) + ldz
         gaps = sorted(gaps + ldz, key=lambda z: z.i)
     nn = p.news_no_unicorn and bool(events(ctx.day) & {"jobs", "cpi", "fomc"})   # N6
@@ -5775,7 +5830,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         gp = p.fvg_pool_gap_pts * p.es_pt
         gaps = [g for g in gaps if not any(0 <= g.bottom - v <= gp for v in pools)]
     if p.fvg_state_filter:             # A5 state (open / repriced / rebalanced)
-        gaps = [g for g in gaps if _fvg_state(sd, g, i) in p.fvg_state_filter]
+        held_ = _LD4.td_held(ctx, sd, gaps, i, p)       # caption-gap new-time-distortion (a): wicks outside, bodies inside = still valid, whatever its state
+        gaps = [g for g in gaps if _fvg_state(sd, g, i) in p.fvg_state_filter or g in held_]
     if not gaps:
         _f("x_fvg_closed_through")
         return None
@@ -5925,6 +5981,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         entry, stop = r_
     st = _fvg_state(sd, g, i) if g in sd.gaps else ""
     lvt = list(sm_tags)
+    if p.td_fvg_hold and _LD4.td_hold(ctx, sd, g, i, p) and _fvg_state(sd, g, i) != "open":
+        lvt.append("td_hold")                          # caption-gap new-time-distortion (a): the gap lives on the body hold
     lvx = {}
     if p.prop_mt_exit and prop_exit is not None:
         lvx["prop_mt"] = (prop_exit, False)           # A16: a body close below the propulsion MT exits

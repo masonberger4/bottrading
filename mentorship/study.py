@@ -1544,6 +1544,26 @@ _LD3B_DECISIONS = {
     "new-time-distortion": dict(time_distortion=True, td_lunch=True, td_fvg_hold=True, single_bar_fvg_strict=True),
 }
 DECISIONS.update(_LD3B_DECISIONS)
+# caption-gap pass, levels_detectors #3/3 REVIEW FIXES: one variant per added switch (name prefix = the gap id)
+_LD3C_DECISIONS = {
+    "L2-sr-needs-fvg_flip_retest": dict(daily_level_needs_array="fvg", flip_retest_entry=True, htf_bias="combo"),
+    "new-trendline-trap_entries": dict(trendline_trap=True, tl_trap_entries=("ob", "breaker"), htf_bias="combo"),
+    "new-trendline-trap-target_adr_tol": dict(trendline_pools=True, trendline_trap=True, tl_tol_adr=0.1, htf_bias="combo"),
+    "new-hs-fade_rearm": dict(hs_fade=True, hs_rearm=True, htf_bias="combo", hs_tf=15, hs_stop_pts=10.0),
+    "L3-htf-pd-arrays-intraday_monthly": dict(htf_monthly_arrays=True, htf_bias="combo", htf_targets=("15m", "1h", "4h", "D", "W", "M")),
+    "new-lookback-per-tf-topdown_pools": dict(tf_lookback={"D": 252, "4h": 63, "1h": 15, "15m": 4}, tf_pools=True, pool_rank=True, rel_tfs=(60, 240)),
+    "B21-reference-points-in-windows_arrays": dict(ipda_pools=True, ipda_anchor="current_month", ipda_arrays=True, ipda_window_arrays=True,
+                                                   ipda_frame=True, tf_lookback={"D": 252}),
+    "B21-progression-20-40-60-beyond_converge": dict(ipda_next=True, ipda_roll_arrays=True, ipda_converge=True),
+    "B21-open-float-forward-windows_recompute": dict(ipda_pools=True, ipda_anchor="month", ipda_forward=True, ipda_recompute=True),
+    "L3-monthly-ohlc-3m_frame": dict(monthly_ohlc=True, monthly_frame=True, converge_rank=True),
+    "LLT3-london-extreme-preny-range_ny_frame": dict(london_lr_zone="tag", ny_hl_frame=True),
+    "L5-holiday-nwog_midnight": dict(nwog_skip_holiday=True, nwog_holiday_pick="closest", htf_bias="combo", weekly_open="sun18", tue_open_ref=True,
+                                     tue_open_time="midnight"),
+    "L7-org-lifetime-sr_revisit_gate": dict(org_days=60, org_both_ways=True, org_revisit_gate=True),
+    "new-reactionary-high-liquidity_precond": dict(reactionary_pools=True, reactionary_precond=True),
+}
+DECISIONS.update(_LD3C_DECISIONS)
 SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): their look-ahead tests are in test_silver_bullet.py
 
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
