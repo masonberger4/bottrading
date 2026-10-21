@@ -2260,3 +2260,88 @@ def fvg_body_hold(o, h, l, c, bottom: float, top: float, a: int, b: int, min_bar
         return False
     k0 = b - run + 1
     return bool((np.asarray(l[k0:b + 1]) < bottom - 1e-9).any() or (np.asarray(h[k0:b + 1]) > top + 1e-9).any())
+
+
+# --- caption-gap pass, setups_models #2/7 --------------------------------------------------------------------------------------------------------
+
+def reclaimed_obs_loose(o, h, l, c, a: int, i: int) -> list[Zone]:
+    """A18-reclaimed-ob-codeable, the LOOSE definition (006 / Ep 02 ~49:57, ~55:24: "it becomes what a reclaimed order block"): a down-close candle k (bars
+    a .. i) that price LEAVES (a later close above its high), RE-TRADES (a later bar whose low is back inside its range) and LEAVES AGAIN (a later close above
+    its high). Zone = the candle's range, known at the second leaving close; the next return into it is the entry (one per block on its first retrace
+    [our interpretation]). Bullish terms; bars after i are never read."""
+    out = []
+    for k in range(max(int(a), 0), int(i)):
+        if not c[k] < o[k]:
+            continue
+        up1 = np.flatnonzero(c[k + 1:i + 1] > h[k])
+        if not len(up1):
+            continue
+        j1 = k + 1 + int(up1[0])
+        back = np.flatnonzero(l[j1 + 1:i + 1] <= h[k])
+        if not len(back):
+            continue
+        j2 = j1 + 1 + int(back[0])
+        up2 = np.flatnonzero(c[j2 + 1:i + 1] > h[k])
+        if not len(up2):
+            continue
+        out.append(Zone("bull", float(h[k]), float(l[k]), int(j2 + 1 + up2[0]), k, float((o[k] + c[k]) / 2), tag="reclaimed_loose"))
+    return out
+
+
+DELIVERY_STATES = ("CONSOLIDATION", "EXPANSION", "RETRACEMENT", "REVERSAL")
+
+
+def delivery_state(o, h, l, c, i: int, adr: float, consol_bars: int = 20, consol_adr: float = 0.3, disp_mult: float = 1.5) -> str:
+    """new-delivery-states-machine (cc01_001 ~2:33, ~7:51; cc01_002 ~18:35; cc01_003 ~9:15): the state of the leg at closed bar i, from the bars up to i only
+    (all thresholds [our interpretation]; `adr` = ADR5 in price units, 0 / None = unknown -> "").
+      CONSOLIDATION - the last `consol_bars` bars' whole range is under consol_adr x ADR (a clear range)
+      REVERSAL      - bar i or i-1 ran PAST the preceding `consol_bars`-bar extreme by its wick and closed back inside the old range (an old high / low run, then rejection)
+      EXPANSION     - a bar within the last 3 closed beyond the preceding range, or a displacement bar (body >= disp_mult x the mean body of the 10 before) in the last 3
+      RETRACEMENT   - anything else: back inside the recently created range."""
+    n = int(consol_bars)
+    if not adr or i < n + 1:
+        return ""
+    w_h, w_l = np.asarray(h[i - n + 1:i + 1]), np.asarray(l[i - n + 1:i + 1])
+    if float(w_h.max() - w_l.min()) < consol_adr * adr:
+        return "CONSOLIDATION"
+    for j in (i, i - 1):
+        ph, pl = float(np.max(h[j - n:j])), float(np.min(l[j - n:j]))
+        if (h[j] > ph and c[j] <= ph) or (l[j] < pl and c[j] >= pl):
+            return "REVERSAL"
+    for j in (i, i - 1, i - 2):
+        ph, pl = float(np.max(h[j - n:j])), float(np.min(l[j - n:j]))
+        body = abs(c[j] - o[j])
+        prev = np.abs(np.asarray(c[max(0, j - 10):j]) - np.asarray(o[max(0, j - 10):j]))
+        if c[j] > ph or c[j] < pl or (len(prev) and body >= disp_mult * float(prev.mean()) > 0):
+            return "EXPANSION"
+    return "RETRACEMENT"
+
+
+def stochastic_k(h, l, c, k: int = 14) -> np.ndarray:
+    """Raw stochastic %K (0..100) per bar over the last k bars (NaN before k bars exist); only bars up to each index are read."""
+    h, l, c = (np.asarray(x, float) for x in (h, l, c))
+    out = np.full(len(c), np.nan)
+    for j in range(k - 1, len(c)):
+        hh, ll = h[j - k + 1:j + 1].max(), l[j - k + 1:j + 1].min()
+        out[j] = 50.0 if hh == ll else 100.0 * (c[j] - ll) / (hh - ll)
+    return out
+
+
+def stoch_divergence(h, l, c, i: int, n: int = 2, k: int = 14) -> str:
+    """new-divergence-types (cc04_013 ~2:41, ~12:15, ~13:52), bullish terms, the last two swing lows (confirmed by bar i) against the stochastic %K at them:
+    "type1" = the classic divergence (price LOWER low, momentum HIGHER low), "type2" = the hidden one (price HIGHER low, momentum LOWER low = continuation),
+    "" = neither. Confirmation only, never a trigger. Bearish = mirrored arrays."""
+    ph, pl = pivots(np.asarray(h, float), np.asarray(l, float), n)
+    lows = [q for q in pl if q.known <= i]
+    if len(lows) < 2:
+        return ""
+    st = stochastic_k(h[:i + 1], l[:i + 1], c[:i + 1], k)
+    a, b = lows[-2], lows[-1]
+    sa, sb = st[a.i], st[b.i]
+    if sa != sa or sb != sb:
+        return ""
+    if b.price < a.price and sb > sa:
+        return "type1"
+    if b.price > a.price and sb < sa:
+        return "type2"
+    return ""

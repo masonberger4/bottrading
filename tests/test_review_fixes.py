@@ -429,6 +429,10 @@ def test_sb_draw_mode_vs_fixed_and_rebalance_ext():
     sd = S.Side(1, ctx.o, ctx.h, ctx.l, ctx.c, 1, 0.25)
     i = S._idx_at(ctx, 615)
     assert sb_model.immediate_rebalance(sd, S._idx_at(ctx, 600), i, 0.25)
+    # caption-gap A7-immediate-rebalance-gates (ir_need_draw, default True): the extension acts only when the draw / bias was known beforehand and points this way
+    assert sb_model._arm(ctx, sd, i, k0, replace(p, sb_rebalance_ext=20.0), 0.5, None, "AM", 600)["entry"] == 102.0            # no bias row: no extension
+    assert sb_model._arm(ctx, sd, i, k0, replace(p, sb_rebalance_ext=20.0, ir_need_draw=False), 0.5, None, "AM", 600) is None    # the gate off: the old behaviour
+    ctx.bias_row = dict(combo=1)
     assert sb_model._arm(ctx, sd, i, k0, replace(p, sb_rebalance_ext=10.0), 0.5, None, "AM", 600)["t1"] == 112.25
     assert sb_model._arm(ctx, sd, i, k0, replace(p, sb_rebalance_ext=20.0), 0.5, None, "AM", 600) is None
     assert sb_model._arm(ctx, sd, i, k0, p, 0.5, None, "AM", 600)["entry"] == 102.0

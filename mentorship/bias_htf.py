@@ -71,7 +71,7 @@ def bx_string(p) -> str:
     if p.weekly_open != "off":
         x["wo"] = p.weekly_open_early_days
         x["woa"] = p.weekly_open_array_days
-    if hb == "nwog" or p.nwog_regime != "off" or p.nwog_bias != "off":
+    if hb == "nwog" or p.nwog_regime != "off" or p.nwog_bias != "off" or p.nwog_sr_entries:     # (caption-gap L5-nwog-sr-levels: the regime column is read by nwog_sr_entries)
         x["nwog"] = [p.nwog_leave_adr, p.nwog_returns_cons, p.nwog_converge_pts, p.nwog_bias_reclaim, p.nwog_converge_mode]
     if hb == "candle" or p.bias_candle_tag:
         x["bc"] = "midnight" if p.bias_candle_open == "midnight" else 1

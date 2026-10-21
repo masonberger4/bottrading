@@ -1626,6 +1626,50 @@ _SM1_DECISIONS = {
     "B12-judas-depth-adr_tag": dict(judas_depth_tag=True),
 }
 DECISIONS.update(_SM1_DECISIONS)
+
+# --- caption-gap pass, setups_models #2/7 (definitions_pd_arrays_structure.md, levels_liquidity_targets.md): one variant per gap id (name prefix = the gap id) ---
+_SM2_DECISIONS = {
+    "A5-premium-half-daily-fvg": dict(dfvg_half="tag"),
+    "A5-premium-half-daily-fvg_skip": dict(dfvg_half="skip"),
+    "L5-nwog-sr-levels": dict(nwog_sr_entries=True, htf_bias="combo", nwog_regime="tag"),
+    "new-stop-run-overshoot-next-array": dict(turtle_soup="2023", ts_next_array=True, **SM_POST),
+    "new-stop-run-overshoot-next-array_cc_limit": dict(turtle_soup="cc_limit", ts_next_array=True, htf_bias="combo"),
+    "L5-quarter-level-no-imbalance": dict(gap_quarter_retrace=True),
+    "L6-ndog-nwog-primary-entry": dict(gap_edge_entry=True, htf_bias="combo"),
+    "L7-gap-up-premium-template": dict(org_two_rally=True),
+    "A18-reclaimed-ob-codeable": dict(reclaimed_ob=True, reclaimed_def="loose", **SM_POST),
+    "A18-reclaimed-ob-codeable_strict": dict(reclaimed_ob=True, **SM_POST),
+    "A18-traded-through-ok": dict(reclaimed_ob=True, **SM_POST),                       # already built (levels.reclaimed_obs keeps the overrun candidates): the same run as the strict definition
+    "A19-mss-when-raid-missing": dict(mss_ref_raid=True, **SM_POST),
+    "A19-mss-no-rel-sweep-with-htf-draw": dict(mss_eq_wait=True, mss_eq_wait_unless_draw=True, **SM_POST),
+    "A19-reh-short-term-low-trap": dict(reh_trap=True, htf_bias="combo", **SM_POST),
+    "N-micro-structure-regime": dict(micro_regime=True, **SM_POST),
+    "M12-second-takeout-turtle-soup": dict(turtle_soup="2023", ts_skip_reswept=True, second_break_partial=True, **SM_POST),
+    "A21-pre-trigger-dealing-range": dict(breaker_entry="fallback", breaker_range_hold=True, **SM_POST),
+    "A8-ifvg-narrative-liquidity-run": dict(ifvg_entries=True, ifvg_need_run=True, ifvg_over_pool_pref=True, htf_bias="combo", **SM_POST),
+    "A8-ifvg-stacked-tails-exclusion": dict(ifvg_entries=True, ifvg_tails_block=True, **SM_POST),
+    "A7-immediate-rebalance-gates": dict(ir_entries=True, htf_bias="combo"),
+    "A11-bpr-levels-ce-rejection": dict(entry_arrays=("bpr_ce",), **SM_POST),
+    "A12-range-internal-ignore": dict(range_lock=True, **SM_POST),
+    "A19-second-mss-no-new-low": dict(mss_rearm_lower_high=True, **SM_POST),
+    "A24-reaper-definition": dict(reaper=True, reaper_def="ob_overlap", **SM_POST),
+    "A4-wick-poke-vi-invalidation": dict(poke_high_cancel=True, **SM_POST),
+    "A8-ifvg-before-pool": dict(ifvg_entries=True, ifvg_pool_intact=True, **SM_POST),
+    "A8-ifvg-depth-tolerances": dict(ifvg_entries=True, ifvg_depth="w_cap", **SM_POST),
+    "A2-delivery-vs-liquidity": dict(mmxm_ctx=True, mm_ssl_target=True, **SM_POST),
+    "A4-ltf-body-qualification": dict(htf_entry_arrays=(15, 60), htf_body_qual=True, **SM_POST),
+    "new-state-to-array-map": dict(state_machine=True, state_tool_map=True, **SM_POST),
+    "A4-sweep-body-cluster": dict(sweep_ref="body", daily_first_return=True, **SM_POST),
+    "B18-smt-accum-distrib": dict(turtle_soup="2023", ts_need_smt=True, **SM_POST),
+    "new-divergence-types": dict(div_tag=True, **SM_POST),
+    "A17-index-or-rejection-block": dict(or_rb=True),
+    "A22-htf-definition-nested-arrays": dict(pm_reversal=True, pm_rev_nested=True, extra_pools=True),
+    "new-consolidation-exit-direction": dict(consol_fade=True, htf_bias="combo"),
+    "new-price-engine-models": dict(),                                                  # a tag only (Trade.setup_model, always on): the default run carries it
+    "new-intermediate-term-hl-fade": dict(turtle_soup="2023", ts_itl_context=True, extra_pools=True, **SM_POST),
+    "B18-smt-three-point-swing": dict(smt_mode="three_point", smt_pre=True, smt_windows=((570, 660),), **SM_POST),
+}
+DECISIONS.update(_SM2_DECISIONS)
 SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): their look-ahead tests are in test_silver_bullet.py
 
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)

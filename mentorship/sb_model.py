@@ -609,7 +609,9 @@ def _arm_all(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=
     ext_pts = 0.0                                      # M3.10: an immediate rebalance in the window
     if p.sb_rebalance_ext and win_a is not None:       # -> expect more than 5 handles
         if immediate_rebalance(sd, a_idx, i, 0.25 * p.es_pt):
-            ext_pts = p.sb_rebalance_ext
+            from .sm2 import ir_gates_ok               # caption-gap A7-immediate-rebalance-gates: the draw (the htf.table row) was known beforehand and it prints in a window
+            if ir_gates_ok(ctx, sd, i, p, "PM" if ctx.t[i] >= 810 else "AM", use_want=False):
+                ext_pts = p.sb_rebalance_ext
     li = k0 + int(np.argmin(l[k0:i + 1]))             # the leg's extreme since the leg start
     if li >= i:
         return []

@@ -31,7 +31,7 @@ def _c(ctx) -> dict:
 
 
 TRADE_KEYS = ("open_grade", "po3_seq", "wk_open_side", "touch_n", "judas_depth", "array_depth", "array_respect", "clean_swing", "move_pct",
-              "lc_reversal")
+              "lc_reversal", "setup_model", "delivery", "div_type")
 
 
 def trade_fields(o: dict) -> dict:
@@ -78,12 +78,12 @@ def ref_open(ctx, p, session: str, i: int):
     return refs[0] if refs else None
 
 
-def bias_at(ctx, p, session: str, i: int) -> int:
+def bias_at(ctx, p, session: str, i: int, use_want: bool = True) -> int:
     """The HTF bias side known at closed bar i, for the setups that run outside the per-side loop: the loop's own reading when set, else
     the htf.table row KNOWN at that bar (bias_day.row_for: the 09:30 table from 09:30, the lock-time cut before it) read with the htf_bias
     column ("combo" when htf_bias is off), else the daily / 4h structure of the Confluence object when both agree [our interpretation]."""
     from . import bias_day as BD
-    w = want(ctx)
+    w = want(ctx) if use_want else 0
     if w:
         return w
     row = BD.row_for(ctx, session, i)
@@ -1589,3 +1589,935 @@ def news_pool_targets(ctx, sd, i: int, p, session: str, entry: float) -> list:
     if out:
         hit("news_pool_targets")
     return sorted(set(out))
+
+
+# =====================================================================================================================================================
+# caption-gap pass, setups_models #2/7 (chunk 2 of 7): digests/rulebook_gaps/definitions_pd_arrays_structure.md items 48-202, levels_liquidity_targets.md
+# items 6-36. Same conventions as above. The switches are named in strategy.Params ("caption-gap pass, setups_models #2/7").
+# =====================================================================================================================================================
+
+def _tk(p) -> float:
+    return _S()._tick(p)
+
+
+def _real_disp(ctx, j: int, mult: float = 1.5) -> bool:
+    """A displacement bar at j (real prices): body >= mult x the mean body of the 10 bars before (bars up to j only)."""
+    if j < 1:
+        return False
+    body = abs(ctx.c[j] - ctx.o[j])
+    prev = np.abs(ctx.c[max(0, j - 10):j] - ctx.o[max(0, j - 10):j])
+    return bool(len(prev) and body >= mult * float(prev.mean()) > 0)
+
+
+# --- A2-delivery-vs-liquidity / new-price-engine-models: tags that are always on ---------------------------------------------------------------------
+
+def delivery_dir(ctx, sd, i: int) -> str:
+    """A2-delivery-vs-liquidity (104 ~11:24: "buy side delivery is the actual animated movement of price"): "up" / "down" = the real direction of the last
+    displacement bar within the 20 bars up to i ("" without one). Buy-side delivery = a leg moving higher; BSL / SSL are the static stop pools."""
+    for j in range(i, max(ctx.start, i - 19) - 1, -1):
+        if _real_disp(ctx, j):
+            return "up" if ctx.c[j] > ctx.o[j] else "down"
+    return ""
+
+
+def setup_model(sd, sw) -> str:
+    """new-price-engine-models (cc09_006 ~0:54; cc09_007 ~1:27, ~2:23): OA / OD for a sweep-driven order (a raid of an old low (high), then a long (short) to a
+    short-term array), RA / RD for a retrace into an array without a sweep of its own (the synthetic setups: breaker retests, mitigation, IFVG returns ...)."""
+    synth = bool(sw.get(_S()._SM.SYNTH)) or sw.get("key") in ("mitigation", "ir", "pm_reversal")
+    return ("R" if synth else "O") + ("A" if sd.sign > 0 else "D")
+
+
+# --- A5-premium-half-daily-fvg ------------------------------------------------------------------------------------------------------------------------
+
+def dfvg_gate(ctx, sd, sw, i: int, p, lvt: list):
+    """A5-premium-half-daily-fvg (012 ~18:02: "I want to see the majority of the reactions in the upper portion"): the sweep extreme lies inside a large unfilled
+    daily BISI (SIBI for shorts; height >= dfvg_large_pts): a continuation long needs the extreme at / above its CE (side space, 1 tick); and no 15m / 1h body
+    may have closed below the CE today. A breach is tagged dfvg_lower_half ("tag") or rejects the order ("skip"). Real daily arrays from the Confluence object."""
+    cf = getattr(ctx, "conf", None)
+    if cf is None:
+        return None
+    tk = _tk(p)
+    ext = float(sw["ext"])
+    for top, bot, tf, src, known in cf.valid(now_ts(ctx, i), sd.sign, ("D",), (0,)):
+        if top - bot < p.dfvg_large_pts * p.es_pt - 1e-9:
+            continue
+        zt, zb = max(sd.x(top), sd.x(bot)), min(sd.x(top), sd.x(bot))
+        if not (zb - tk <= ext <= zt + tk):
+            continue
+        hit("dfvg_half")
+        ce = (zt + zb) / 2
+        bad = ext < ce - tk - 1e-9
+        if not bad:
+            for m in (15, 60):
+                o, h, l, c, last, first = bars_tf(ctx, sd, m, i)
+                if any(last[k] >= ctx.start and c[k] < ce - 1e-9 for k in range(len(c))):
+                    bad = True
+                    break
+        if bad:
+            lvt.append("dfvg_lower_half")
+            if p.dfvg_half == "skip":
+                return "x_dfvg_lower_half"
+        return None
+    return None
+
+
+# --- L5 / L6 / L7: gap setups --------------------------------------------------------------------------------------------------------------------------
+
+def gap_list(ctx, i: int, kinds=("nwog", "nwog_rth")) -> list:
+    """The stored gaps known at closed bar i as (hi, lo, ce) real prices: the ICT gap table (ctx.gaps) when the engine has it (rows of the given kinds), else the
+    NWOGs of the day context (a Monday's own NWOG only from 09:30: strategy._nwogs)."""
+    S = _S()
+    if getattr(ctx, "gaps", None) is not None:
+        return [(float(hi), float(lo), float(ce)) for kind, hi, lo, ce in ctx.gaps if kind in kinds]
+    return [(max(a, b), min(a, b), (a + b) / 2) for a, b in S._nwogs(ctx, i)]
+
+
+def _synth_sw(S, session: str, name: str, level: float, ext: float, ext_i: int, broke: int | None = None) -> dict:
+    return dict(session=session, name=name, level=float(level), key=name, ext=float(ext), ext_i=int(ext_i), broke=broke, sweep_i=int(ext_i),
+                smt=None, smt2=None, **{S._SM.SYNTH: True})
+
+
+def nwog_sr_order(ctx, sd, i: int, p, session: str, risk_mult: float):
+    """L5-nwog-sr-levels (039 ~10:52-12:06; 024 ~18:37): in a CONSOLIDATION NWOG week (the htf.table `nwog_regime` column = "cons", B14.1) the stored NWOG high /
+    CE / low are exact support / resistance: with the bias this way a limit at the nearest stored level below the market (side space), stop nwog_sr_stop_pts beyond
+    it, first target the next stored level above; once per level. A trending week gives no order. Tag nwog_sr."""
+    from . import bias_day as BD
+    S = _S()
+    if want(ctx) != sd.sign:
+        return None
+    row = BD.row_for(ctx, session, i)
+    if not row or (row.get("nwog_regime") or "") != "cons":
+        return None
+    lv = sorted({round(float(sd.x(v)), 6) for hi, lo, ce in gap_list(ctx, i) for v in (hi, lo, ce)})
+    below = [v for v in lv if v < sd.c[i] - 1e-9]
+    if not below:
+        return None
+    entry = max(below)
+    sent = sd.__dict__.setdefault("_nwog_sr", set())
+    if (session, entry) in sent:
+        return None
+    sent.add((session, entry))
+    hit("nwog_sr")
+    above = [v for v in lv if v > entry + 1e-9]
+    fixed = [(S._exit_px(above[0], "array", p), "array")] if above else None
+    stop = entry - p.nwog_sr_stop_pts * p.es_pt
+    sw = _synth_sw(S, session, "nwog_sr", entry, entry, i, i)
+    tags = dict(unicorn=False, fvg_bottom=stop, fvg_ce=entry, entry_kind="nwog_sr", mitigation=False, propulsion=False, no_leg_wait=True, lv_tags=["nwog_sr"])
+    return S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, float(sd.h[max(ctx.start, i - 3):i + 1].max()), tags, skip_leg_pd=True, fixed=fixed)
+
+
+def gap_edge_order(ctx, sd, i: int, p, session: str, risk_mult: float):
+    """L6-ndog-nwog-primary-entry (050 ~54:42, ~51:00): with the daily bias this way the FIRST return of price to the near edge of an active NWOG / NDOG is an
+    entry on its own (no FVG / OB needed; contradicts 052 "confluence only" and 051 "never standalone" - hence a switch): a short at the gap's lower edge with the
+    bias down (side space: a long at the gap's upper edge), stop = the gap's far edge + pad, targets the ordinary pools. Once per gap and session; tag gap_edge."""
+    S = _S()
+    if want(ctx) != sd.sign:
+        return None
+    a0 = sess_a(ctx, session)
+    sent = sd.__dict__.setdefault("_gap_edge", set())
+    for hi, lo, ce in gap_list(ctx, i, ("nwog", "nwog_rth", "ndog")):
+        zt, zb = max(sd.x(hi), sd.x(lo)), min(sd.x(hi), sd.x(lo))
+        key = (session, round(zt, 6), round(zb, 6))
+        if key in sent or not sd.c[i] > zt or sd.l[a0:i + 1].min() <= zt:
+            continue                                      # inside / below the gap, or the gap was already entered this session (not a first return)
+        sent.add(key)
+        hit("gap_edge")
+        entry, stop = zt, zb - p.pad
+        sw = _synth_sw(S, session, "gap_edge", zt, zb, i, i)
+        tags = dict(unicorn=False, fvg_bottom=zb, fvg_ce=(zt + zb) / 2, entry_kind="gap_edge", mitigation=False, propulsion=False, no_leg_wait=True,
+                    lv_tags=["gap_edge"])
+        o = S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, float(sd.h[max(ctx.start, i - 3):i + 1].max()), tags, skip_leg_pd=True)
+        if o is not None:
+            return o
+    return None
+
+
+def gap_quarter_order(ctx, sd, i: int, p, session: str, risk_mult: float):
+    """L5-quarter-level-no-imbalance (030 ~1:23:49: "was there any imbalance in here no so what level are we looking at"): after a CLOSE beyond an NWOG edge, if the
+    retrace leg (the break extreme to bar i) holds no FVG / VI, the retrace level is the NEAR QUARTER ((CE + edge) / 2): a limit there, stop beyond the CE
+    + 1 tick; no order once price has traded back to the gap's far edge. Side space: a close above the gap top (coming from inside / below it), the retrace falls
+    toward it. Once per gap and day; tag gap_quarter. Targets: the ordinary pools / wick CEs."""
+    S = _S()
+    tk = _tk(p)
+    a = ctx.start
+    for hi, lo, ce in gap_list(ctx, i):
+        zt, zb = max(sd.x(hi), sd.x(lo)), min(sd.x(hi), sd.x(lo))
+        ce_s = (zt + zb) / 2
+        key = (round(zt, 6), round(zb, 6))
+        sent = sd.__dict__.setdefault("_gap_q", set())
+        if key in sent or a < 1:
+            continue
+        cross = np.flatnonzero((sd.c[a:i + 1] > zt) & (sd.c[a - 1:i] <= zt))
+        if not len(cross):
+            continue
+        j = a + int(cross[0])                             # the first close beyond the edge, coming from inside / below the gap
+        e = j + int(np.argmax(sd.h[j:i + 1]))             # the break extreme
+        if e >= i or sd.l[e:i + 1].min() <= zb:
+            continue                                      # no retrace yet / the far edge traded: the read is dead
+        quarter = (ce_s + zt) / 2
+        if not sd.c[i] > quarter + 1e-9:
+            continue
+        has_imb = any(e <= g.i <= i and g.i - 2 >= e for g in list(sd.gaps) + list(sd.opposing())) \
+            or any(e <= z.i <= i for z in list(sd.vis("bull")) + list(sd.vis("bear")))
+        if has_imb:
+            continue
+        entry, stop = quarter, ce_s - tk
+        if entry - stop < p.min_risk_pts * p.es_pt:
+            continue
+        sent.add(key)
+        hit("gap_quarter")
+        sw = _synth_sw(S, session, "gap_quarter", zt, zb, e, j)
+        tags = dict(unicorn=False, fvg_bottom=stop, fvg_ce=ce_s, entry_kind="gap_quarter", mitigation=False, propulsion=False, no_leg_wait=True,
+                    lv_tags=["gap_quarter"])
+        o = S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, float(sd.h[e]), tags, skip_leg_pd=True)
+        if o is not None:
+            return o
+    return None
+
+
+def org_state(ctx, i: int, p):
+    """L7-gap-up-premium-template (042 ~11:31): (gap direction +1 / -1, open, prior close, step) of a SIGNIFICANT opening-range gap at closed bar i, or None.
+    Significant = |open - prior RTH close| >= org_sig_adr x ADR5, with the open in the premium (gap up) / discount (gap down) of the 20-day range
+    [our interpretation]. step: 0 before the first rally beyond the open, 1 after it, 2 after the dip back to the open (within 1 pt), 3 after the second rally
+    beyond the first extreme (only then may the fade be taken). Real prices; bars up to i only."""
+    S = _S()
+    if not getattr(ctx, "org", None) or not getattr(ctx, "org_today", False):
+        return None
+    k0 = S._idx_at(ctx, 570)
+    if k0 >= len(ctx.t) or i < k0:
+        return None
+    pc, op = ctx.org[-1]
+    a5 = adr5(ctx)
+    if not a5 or abs(op - pc) < p.org_sig_adr * a5:
+        return None
+    d = 1 if op > pc else -1
+    hist = getattr(ctx, "hist", [])[-20:]
+    if not hist:
+        return None
+    eq = (max(float(x.high.max()) for x in hist) + min(float(x.low.min()) for x in hist)) / 2
+    if (d > 0 and op <= eq) or (d < 0 and op >= eq):
+        return None
+    hi_s, lo_s, op_s = (ctx.h, ctx.l, op) if d > 0 else (-ctx.l, -ctx.h, -op)     # the gap direction made "up"
+    near = 1.0 * p.es_pt
+    h1, step = None, 0
+    for j in range(k0, i + 1):
+        if step == 0:
+            if hi_s[j] > op_s + near:
+                step, h1 = 1, float(hi_s[j])
+        elif step == 1:
+            if lo_s[j] <= op_s + near:
+                step = 2
+            else:
+                h1 = max(h1, float(hi_s[j]))
+        elif step == 2 and hi_s[j] > h1:
+            step = 3
+            break
+    return d, float(op), float(pc), step
+
+
+def org_two_rally_gate(ctx, sd, i: int, p):
+    """L7-gap-up-premium-template: after a significant gap up into premium (down into discount) a SHORT (long) waits for the two-rally template - no fade before
+    step 3 (a second rally above the first high after the dip to the 09:30 open). Returns a reject key or None."""
+    st = org_state(ctx, i, p)
+    if st is None:
+        return None
+    d, op, pc, step = st
+    if sd.sign != -d:
+        return None
+    hit("org_two_rally")
+    return None if step >= 3 else "x_org_two_rally"
+
+
+def org_two_rally_targets(ctx, sd, i: int, p, entry: float) -> list:
+    """L7-gap-up-premium-template: the fade's first target is the 09:30 open -/+ 5 pts ("about a 5-handle run into the ORG"), then the prior close (optional)."""
+    st = org_state(ctx, i, p)
+    if st is None:
+        return []
+    d, op, pc, step = st
+    if sd.sign != -d or step < 3:
+        return []
+    out = [(sd.x(op - d * 5.0 * p.es_pt), "array"), (sd.x(pc), "pool")]
+    return [(float(v), k) for v, k in out if v > entry]
+
+
+# --- A18: reclaimed order blocks ---------------------------------------------------------------------------------------------------------------------
+
+def reclaimed_zones(sd, a: int, e: int, i: int, p) -> list:
+    """A18-reclaimed-ob-codeable: the reclaimed OBs known by bar i under `reclaimed_def` ("strict" = cc04_007: the curve's candles, reclaimed after the low e;
+    "loose" = 006: a block price left, re-traded and left again). A18-traded-through-ok (cc04_007 ~9:45: "it trades through it but we see a climax high"): neither
+    definition drops a candidate that price traded or closed through before the curve extreme - the A12 MT invalidation does not apply (already so in
+    levels.reclaimed_obs: nothing there reads the closes before e)."""
+    if p.reclaimed_def == "loose":
+        hit("reclaimed_loose")
+        return [z for z in L.reclaimed_obs_loose(sd.o, sd.h, sd.l, sd.c, a, i) if z.i <= i]
+    return [z for z in L.reclaimed_obs(sd.o, sd.h, sd.l, sd.c, a, e, i) if z.i <= i]
+
+
+# --- A19: MSS reference rules ------------------------------------------------------------------------------------------------------------------------
+
+def disp_break(ctx, sd, i: int, mult: float = 1.5) -> bool:
+    """A displacement break at bar i (side space): a body >= mult x the mean body of the 10 bars before, or an FVG completed at i."""
+    body = abs(sd.c[i] - sd.o[i])
+    prev = np.abs(sd.c[max(0, i - 10):i] - sd.o[max(0, i - 10):i])
+    return bool((len(prev) and body >= mult * float(prev.mean()) > 0) or any(g.i == i for g in sd.gaps))
+
+
+def raid_ref(ctx, sd, sw, i: int, p):
+    """A19-mss-when-raid-missing (010 ~41:31: "I wanted this one to break down more specifically"): the expected raid level R (raid_level "pdh" = the prior day's
+    low for a long / high for a short, when no later day took it). R TAKEN today (case A): the MSS reference is the swing that started the leg into the raid
+    (Ep08.4 leg_origin of the sweep extreme). R NOT TAKEN (case B): a break of a short-term swing inside the range is no MSS; the reference is the swing that
+    launched the leg making the SESSION extreme; in both cases only a displacement break counts (sw["raid_disp"], tested in setups.break_ok). None = rule n/a (R unknown):
+    the caller falls back to the ordinary reference."""
+    S = _S()
+    key = "pdl1" if sd.sign > 0 else "pdh1"
+    if key not in ctx.pd:
+        return None
+    r_s = sd.x(ctx.pd[key])
+    e = sw["ext_i"]
+    taken = bool(sd.l[ctx.start:i + 1].min() <= r_s + 1e-9)
+    hit("raid_ref")
+    sw["raid_disp"] = True                            # both cases: a DISPLACEMENT body close beyond the reference is the MSS (010)
+    if taken:
+        q = S._SM.leg_origin(sd, e, i)
+        sw["raid_miss"] = False
+    else:
+        e_d = ctx.start + int(np.argmin(sd.l[ctx.start:e + 1]))
+        q = S._SM.leg_origin(sd, e_d, i)
+        sw["raid_miss"] = True
+    return None if q is None else (q.i, q.price, True)
+
+
+def eq_wait_waived(ctx, sd, p) -> bool:
+    """A19-mss-no-rel-sweep-with-htf-draw (019 ~8:34, ~9:25: "why didn't it go below that it doesn't need to"): with the session draw LOCKED in the trade's direction the
+    lower relative equal low need not be run before the MSS."""
+    if not p.mss_eq_wait_unless_draw:
+        return False
+    lk = getattr(ctx, "cur_lock", None)
+    ok = bool(lk and lk.get("side") == sd.sign)
+    if ok:
+        hit("eq_wait_waived")
+    return ok
+
+
+def micro_active(ctx, sd, i: int, p) -> bool:
+    """N-micro-structure-regime (024 ~10:08: "when the market is moving when it's dynamic"): a small intraday consolidation at closed bar i - the range since
+    09:30 under micro_range_adr x ADR5, at least two ALTERNATING swing points (a high and a low, twice) and no displacement bar since 09:30
+    [our interpretation of "consolidation / no displacement"]. Then the MSS reference is read on the 5m chart (mss_ref_tf 5)."""
+    S = _S()
+    k0 = S._idx_at(ctx, 570)
+    if k0 >= len(ctx.t) or i <= k0 + 4:
+        return False
+    a5 = adr5(ctx)
+    if not a5:
+        return False
+    if float(ctx.h[k0:i + 1].max() - ctx.l[k0:i + 1].min()) >= p.micro_range_adr * a5:
+        return False
+    pv = sorted([(q.i, 1) for q in sd.ph if q.known <= i and q.i >= k0] + [(q.i, -1) for q in sd.pl if q.known <= i and q.i >= k0])
+    if sum(1 for a, b in zip(pv, pv[1:]) if a[1] != b[1]) < 2:
+        return False
+    if any(_real_disp(ctx, j) for j in range(k0, i + 1)):
+        return False
+    hit("micro_regime")
+    return True
+
+
+def reh_trap_gate(ctx, sd, i: int, p):
+    """A19-reh-short-term-low-trap (029 ~48:29: "what do they see that as a market structure shift"): bias long, the HTF objective above not yet reached and the
+    last two swing highs relatively equal (A3 eq_tol) and still untaken: a break of the short-term low under them is bait that builds buy-side above the REH,
+    not a bearish MSS - the AGAINST-bias order is rejected (the long on the next bullish FVG is the ordinary flow). Mirror for shorts."""
+    S = _S()
+    w = want(ctx)
+    if not w or w == sd.sign:
+        return None
+    ws = other_side(ctx, sd, p)
+    hs = [q for q in ws.ph if q.known <= i and q.i >= ctx.start]
+    if len(hs) < 2 or abs(hs[-1].price - hs[-2].price) > p.eq_tol_pts * p.es_pt:
+        return None
+    top = max(hs[-1].price, hs[-2].price)
+    if ws.h[hs[-1].i + 1:i + 1].max(initial=-np.inf) >= top:
+        return None                                       # the REH was taken: the run is spent
+    if S._SM.htf_done_sign(ctx, w, i):
+        return None                                       # the HTF objective was reached
+    hit("reh_trap")
+    return "x_reh_trap"
+
+
+# --- M12: turtle soup, second take-out / intermediate-term pools / SMT / next array -------------------------------------------------------------------
+
+def reswept(ctx, sd, sw, i: int, p) -> bool:
+    """M12-second-takeout-turtle-soup (046 ~1:01:58: "I don't think it's something to build a framework on"): the swept pool was ALREADY traded through earlier (after
+    it formed) and a later close came back above it (a rally) before this sweep - a second, shallow break and recovery is a likely deeper retracement, no turtle
+    long. The rally must NOT have taken the opposing high (the highest high from the pool's creation to the first break); one that did starts a new range. The pool
+    exists from its natural creation (the last swing of a relative-equal cluster; strategy._level_created with the AM clock), never from before."""
+    S = _S()
+    key = sw.get("key", "")
+    if not key or sw.get(S._SM.SYNTH):
+        return False
+    lvl, s_i = float(sw["level"]), int(sw.get("sweep_i", sw["ext_i"]))
+    if key.startswith("rel_eq"):
+        tol = p.eq_tol_pts * p.es_pt
+        qs = [q for q in sd.pl if q.known <= s_i and abs(q.price - lvl) <= tol and q.i < s_i]
+        a = (max(q.i for q in qs) + 1) if qs else s_i
+    else:
+        try:
+            a = max(ctx.start, int(S._level_created(ctx, key, "AM")))
+        except Exception:
+            a = ctx.start
+    if a >= s_i:
+        return False
+    seg = np.flatnonzero(sd.l[a:s_i] < lvl - 1e-12)
+    if not len(seg):
+        return False
+    j = a + int(seg[0])
+    h0 = float(sd.h[a:j + 1].max())                  # the opposing high of the range the first break came from: a rally that TOOK it is a new range, not a failed break
+    ok = bool((sd.c[j + 1:s_i] > lvl).any()) and bool(sd.h[j + 1:s_i].max(initial=-np.inf) < h0 - 1e-12)
+    if ok:
+        hit("reswept")
+    return ok
+
+
+def second_break_partial(ctx, sd, pos, tr, ts, i: int, p) -> None:
+    """M12-second-takeout-turtle-soup (046): an open trade whose target POOL was already traded earlier today (before the fill) and now takes it by a shallow break
+    (<= ts_max_pts) that closes back inside protects itself: a partial of what is left at the close (once). Side space (shorts = the mirrored long)."""
+    if pos.get("sb_done") or not pos["left"] or i <= pos["fill_i"]:
+        return
+    S = _S()
+    kinds = pos.get("level_kinds") or []
+    for k in range(pos["k"], len(pos["levels"])):
+        v = pos["levels"][k]
+        if k >= len(kinds) or kinds[k] not in S.POOL_KINDS:
+            continue
+        before = sd.h[ctx.start:pos["fill_i"]]
+        if not len(before) or before.max() < v:
+            continue
+        if sd.h[i] > v and sd.h[i] - v <= p.ts_max_pts * p.es_pt and sd.c[i] < v:
+            q = min(pos["left"], max(p.lot, S._lots(pos["left"] * p.partial, p.lot)))
+            if q >= pos["left"]:
+                return
+            tr.exits.append((ts, sd.x(sd.c[i]), q, "second_break"))
+            pos["left"] -= q
+            pos["sb_done"] = True
+            hit("second_break")
+            return
+
+
+def itl_ok(ctx, sd, sw, i: int, p) -> bool:
+    """new-intermediate-term-hl-fade (cc09_005 ~23:14: "it's beyond just yesterday"): a turtle-soup fade of an INTERMEDIATE-TERM pool (older than yesterday: pdl2 / pdl3,
+    last week, last month, IPDA) needs context: an HTF array at the extreme, or a range-bound market (the last 10 sessions' whole range <= 3 x ADR5), or a long
+    trend into the pool (profit taking: the last 10 sessions moved >= 3 x ADR5 against the fade's direction) [our interpretation of "long trend"]. Other pools
+    are n/a (True)."""
+    S = _S()
+    key = str(sw.get("key", ""))
+    if not key.startswith(("pdl2", "pdl3", "pdh2", "pdh3", "pwl", "pwh", "pml", "pmh", "ipda")):
+        return True
+    hit("itl_context")
+    if S._htf_tag(ctx, sd, i, sw["ext"], p.eq_tol_pts * p.es_pt):
+        return True
+    hs = getattr(ctx, "hist", [])[-10:]
+    a5 = adr5(ctx)
+    if not hs or not a5:
+        return False
+    rng = max(float(x.high.max()) for x in hs) - min(float(x.low.min()) for x in hs)
+    if rng <= 3.0 * a5:
+        return True
+    net = float(hs[-1].close.iloc[-1]) - float(hs[0].open.iloc[0])
+    return bool(sd.sign * net <= -3.0 * a5)                # a long fade of a low after a decline of >= 3 ADR (the mirror for a short)
+
+
+def ts_smt_ok(sw) -> bool:
+    """B18-smt-accum-distrib (cc03_005 ~10:20: "otherwise it would have been permitted to go lower"): the SMT of the sweep (either partner)."""
+    return bool(sw.get("smt") is True or sw.get("smt2") is True)
+
+
+def next_array_level(ctx, sd, i: int, level: float, p, known_by):
+    """new-stop-run-overshoot-next-array (025 ~1:05:16; 038 ~46:12): the likely extreme of a run of the pool `level` (side space, a sell-side low) is the next
+    opening gap (NWOG / NDOG / ORG) or PD array (FVG / OB / VI) BEYOND it: the first level more than ts_min_beyond_pts below it - a wick CE hugging the pool is
+    skipped. Returns (limit price = the level's near edge, stop = its far edge - 1 tick) or None. Gap rows offer each of high / CE / low, the gap's low as far edge."""
+    S = _S()
+    mb = p.ts_min_beyond_pts * p.es_pt
+    cand = [(top, bot) for top, bot, kn in S._ts_arrays(ctx, sd, i, known_by)]
+    cand += [(z.top, z.bottom) for z in sd.vis("bull") if z.i <= i]
+    orgs = ctx.org[:-1] if (ctx.t[i] < 570 and ctx.org_today) else ctx.org
+    rows = list(gap_list(ctx, i, ("nwog", "nwog_rth", "ndog"))) + [(max(a, b), min(a, b), (a + b) / 2) for a, b in orgs[-5:]]
+    for hi, lo, ce in rows:
+        zt, zb = max(sd.x(hi), sd.x(lo)), min(sd.x(hi), sd.x(lo))
+        for v in (zt, (zt + zb) / 2, zb):
+            cand.append((v, zb))
+    ok = [(near, far) for near, far in cand if near <= level - mb - 1e-9]
+    if not ok:
+        return None
+    near, far = max(ok, key=lambda x: (x[0], x[1]))
+    hit("ts_next_array")
+    return float(near), float(far - _tk(p))
+
+
+# --- A8: inversion FVGs ------------------------------------------------------------------------------------------------------------------------------
+
+def ifvg_zone(sd, tags: dict):
+    """The inversion zone of an IFVG order (its tags: zone_top / fvg_bottom / fvg_i), or None."""
+    top, bot, zi = tags.get("zone_top"), tags.get("fvg_bottom"), tags.get("fvg_i")
+    if top is None or bot is None or zi is None:
+        return None
+    for z in sd.ifvgs():
+        if z.i == zi and abs(z.top - float(top)) < 1e-9 and abs(z.bottom - float(bot)) < 1e-9:
+            return z
+    return None
+
+
+def _taken_pools(ctx, sd, i: int, p, session: str, a: int, b: int) -> list:
+    """The sell-side pools (side space) traded through by a bar in a..b (this session's named pools and relative equal lows)."""
+    S = _S()
+    lv = S._sell_side(ctx, sd, session, i, p.extra_pools, p)
+    for k, eq in enumerate(S._eq_levels(sd, i - 1, p.eq_tol_pts * p.es_pt, lows=True, p=p)):
+        lv[f"rel_eq_lows{k}"] = eq
+    low = sd.l[a:b + 1].min(initial=np.inf)
+    return sorted(v for v in lv.values() if low < v - 1e-12)
+
+
+def ifvg_run_gate(ctx, sd, sw, i: int, p, session: str, z, lvt: list):
+    """A8-ifvg-narrative-liquidity-run (078 ~51:00: "an inversion fair value gap is narrative based"): (a) the HTF bias is this way, (b) an old low (sell-side pool)
+    was taken inside or just beyond (one gap height) the bearish FVG between its formation and the inversion; (c) the inversion (an MSS closing above its high) is
+    the IFVG itself. Without (a) it is just an FVG in its original direction. ifvg_over_pool_pref: an IFVG whose range does not contain the taken pool is
+    rejected when another IFVG after the sweep does."""
+    if not p.ifvg_need_run:
+        return None
+    hit("ifvg_run")
+    if want(ctx) != sd.sign:
+        return "x_ifvg_no_bias"
+    a = max(ctx.start, z.src - 1)
+    ht = z.top - z.bottom
+    pools = [v for v in _taken_pools(ctx, sd, i, p, session, a, z.i) if z.bottom - ht <= v <= z.top + 1e-9]
+    if not pools:
+        return "x_ifvg_no_run"
+    if any(z.bottom - 1e-9 <= v <= z.top + 1e-9 for v in pools):
+        lvt.append("ifvg_pool_inside")
+    elif p.ifvg_over_pool_pref:
+        for z2 in sd.ifvgs():
+            if z2 is z or z2.i > i or z2.i < ctx.start:
+                continue
+            if any(z2.bottom - 1e-9 <= v <= z2.top + 1e-9 for v in _taken_pools(ctx, sd, i, p, session, max(ctx.start, z2.src - 1), z2.i)):
+                return "x_ifvg_pool_pref"
+    return None
+
+
+def ifvg_tails_gate(ctx, sd, i: int, p, z):
+    """A8-ifvg-stacked-tails-exclusion (090 ~21:24: "I like to see these things fail"): a cluster of 2+ candles with long lower tails (lower wick >= body) whose lows end
+    within tails_tol_ticks ticks of each other, sitting just below the IFVG (within one gap height under its bottom), is run first: the IFVG is armed only after a
+    low below the cluster's lows. Side space."""
+    tk = _tk(p) * p.tails_tol_ticks
+    ht = z.top - z.bottom
+    a = max(ctx.start, z.src - 20)
+    ks = [k for k in range(a, z.i + 1) if z.bottom - ht - 1e-9 <= sd.l[k] < z.bottom
+          and (min(sd.o[k], sd.c[k]) - sd.l[k]) >= abs(sd.c[k] - sd.o[k]) - 1e-9]
+    best = None
+    for k in ks:
+        grp = [m for m in ks if abs(sd.l[m] - sd.l[k]) <= tk + 1e-9]
+        if len(grp) >= 2 and (best is None or len(grp) > len(best)):
+            best = grp
+    if best is None:
+        return None
+    hit("ifvg_tails")
+    lo, last = min(sd.l[m] for m in best), max(best)
+    if sd.l[last + 1:i + 1].min(initial=np.inf) < lo - 1e-9:
+        return None
+    return "x_ifvg_tails"
+
+
+def ifvg_pool_gate(ctx, sd, i: int, p, z):
+    """A8-ifvg-before-pool (102 ~1:08:45: "because that sell side's still there"): the IFVG is armed only while the nearest swing extreme beyond it (the draw: side space the
+    nearest swing high above its top, known at the inversion) has not been traded through; once taken before the return the draw is spent - cancel."""
+    hs = [q for q in sd.ph if q.known <= z.i and q.price > z.top]
+    if not hs:
+        return None
+    hit("ifvg_pool")
+    q = min(hs, key=lambda q: q.price)
+    return "x_ifvg_pool_taken" if sd.h[z.i + 1:i + 1].max(initial=-np.inf) > q.price + 1e-9 else None
+
+
+def ifvg_w_cap(sd, g, entry: float, stop: float, i: int | None, p):
+    """A8-ifvg-depth-tolerances (102 ~1:11:04, ~1:55:46: "only be high probability if it stayed below consequent encroachment"), ifvg_depth "w_cap", side space (the
+    inverted bearish gap [bottom, top], the retrace falls toward it; the real short's wording mirrored). The original gap's third candle opens the passes.
+      (a) PARTLY re-traded - a candle printed high W inside the gap before the failure: the retrace should stop at the top, the CE or W (cap = max(CE, W)); the entry
+          is at / above the cap, the stop just under it, and a retrace deeper than the cap by more than the mohawk (2 ticks) kills the setup;
+      (b) NOT re-traded: the retrace may go to the far edge (bottom), stop beyond it;
+      (c) traded through and back: valid only while the lows stay >= CE - 1 tick, stop just under the CE.
+    Returns (entry, stop) or None (skip)."""
+    ce = (g.top + g.bottom) / 2
+    orig = g.src + 1
+    ps = L.ifvg_passes(sd.h, sd.l, g.top, g.bottom, orig, g.i)
+    tk = _tk(p)
+    low = sd.l[g.i + 1:i + 1].min(initial=np.inf) if i is not None else np.inf
+    if ps == "none":
+        return entry, g.bottom - p.pad
+    if ps == "partial":
+        w = float(sd.h[orig + 1:g.i].max())
+        cap = max(ce, min(w, g.top))
+        if low < cap - 2 * tk - 1e-9:
+            return None
+        return max(entry, cap), cap - p.pad
+    if low < ce - tk - 1e-9:
+        return None
+    return entry, ce - p.pad
+
+
+# --- A4: poke, sweep body cluster, HTF body qualification ------------------------------------------------------------------------------------------
+
+def poke_cancel(ctx, sd, i: int, p, session: str):
+    """A4-wick-poke-vi-invalidation (090 ~1:05:53: "if it goes back above this high here ... I'm not interested"): an AM idea whose HTF level (a same-side 4h / daily array)
+    was only POKED by a wick (no body close beyond) records the poke extreme H; a later trade beyond H (after the poke cluster ended) cancels the AM orders of
+    that side (the PM is re-evaluated at 13:30). Side space: a poke below the array's bottom image. Returns a reject key or None."""
+    cf = getattr(ctx, "conf", None)
+    if cf is None or session == "PM":
+        return None
+    S = _S()
+    k0 = S._idx_at(ctx, 570)
+    if k0 >= len(ctx.t) or i <= k0:
+        return None
+    body_lo = np.minimum(sd.o[k0:i + 1], sd.c[k0:i + 1])
+    for top, bot, tf, src, known in cf.valid(now_ts(ctx, i), sd.sign, ("4h", "D"), (0, 1, 3)):
+        zb = min(sd.x(top), sd.x(bot))
+        poke = (sd.l[k0:i + 1] < zb - 1e-9) & (body_lo >= zb - 1e-9)
+        if not poke.any():
+            continue
+        hit("poke_cancel")
+        j = int(np.argmax(poke))
+        ext, m = sd.l[k0 + j], j + 1
+        while m < len(poke) and poke[m]:
+            ext = min(ext, sd.l[k0 + m])
+            m += 1                                          # the poke cluster
+        if m < len(poke) and sd.l[k0 + m:i + 1].min() < ext - 1e-9:
+            return "x_poke_high_cancel"
+    return None
+
+
+def body_qualified(ctx, sd, g, i: int, p) -> bool:
+    """A4-ltf-body-qualification (104 ~21:53, ~34:55: "only the candlesticks wicks are piercing it"): an HTF entry zone reached by a run stays qualified while the
+    15m and 5m BODIES since it formed stay on the near side of its far edge (side space: no body low below its bottom), however far the wicks pierce."""
+    for m in (5, 15):
+        if m < ctx.tf:
+            continue
+        o, h, l, c, last, first = bars_tf(ctx, sd, m, i)
+        for k in range(len(c)):
+            if first[k] > g.i and min(o[k], c[k]) < g.bottom - 1e-9:
+                return False
+    hit("htf_body_qual")
+    return True
+
+
+def daily_first_return(ctx, sd, sw, i: int, p) -> bool:
+    """A4-sweep-body-cluster (cc02_007 ~21:51): the sweep extreme ran below a daily BODY-low cluster (2+ sessions whose bodies' lows end within 0.1 x ADR5) and it
+    is the first return to that zone since the cluster formed, at least daily_first_days sessions ago (30-45 trading days = 1.5-2 months [our interpretation]): HTF
+    accumulation - tagged daily_first_return (on the LTF the continuation patterns there are ignored and the buy comes after a swing high is broken). Side space."""
+    hs = getattr(ctx, "hist", [])
+    a5 = adr5(ctx)
+    if len(hs) < p.daily_first_days + 2 or not a5:
+        return False
+    s, tol = sd.sign, 0.1 * a5
+    bl = np.array([min(s * float(x.open.iloc[0]), s * float(x.close.iloc[-1])) for x in hs])
+    lo = np.array([float(s * x.low.min()) if s > 0 else float(-x.high.max()) for x in hs])
+    for m in range(len(hs) - 1 - p.daily_first_days, 0, -1):
+        grp = [k for k in range(max(0, m - 6), m + 1) if abs(bl[k] - bl[m]) <= tol]
+        if len(grp) < 2:
+            continue
+        zone_lo = min(bl[k] for k in grp)
+        if sw["ext"] < zone_lo and lo[m + 1:].min(initial=np.inf) > zone_lo + tol:       # no session since traded back down to the cluster's bodies
+            hit("daily_first_return")
+            return True
+    return False
+
+
+# --- B18: three-point swing SMT ---------------------------------------------------------------------------------------------------------------------
+
+def three_point_smt(ctx, sd, i: int, pctx, ps, j: int, p):
+    """B18-smt-three-point-swing (cc11_004 ~27:39: "you can sometimes have to trade through a short-term low"): this index prints low - LOWER low - HIGHER low
+    while the partner prints low - lower low - LOWER low = a bullish SMT (side space; the mirror for shorts). The first point may be an earlier swing than the
+    one next to the lower low (the window extends past a short-term low that all traded through) [our interpretation]. True / False, None without three swing
+    lows on both. Swing lows confirmed by closed bars only."""
+    xs = [q for q in sd.pl if q.known <= i and q.i >= ctx.start - 1]
+    if len(xs) < 3:
+        return None
+    c_ = xs[-1]
+    b_ = next((q for q in reversed(xs[:-1]) if q.price < c_.price), None)
+    if b_ is None:
+        return None
+    a_ = next((q for q in reversed([q for q in xs if q.i < b_.i]) if q.price > b_.price), None)
+    if a_ is None:
+        return None
+    pad = pd.Timedelta(minutes=ctx.tf * max(p.pivot_n, 1))
+
+    def twin(q):
+        t0, t1 = ctx.idx[q.i] - pad, ctx.idx[q.i] + pad
+        cand = [r for r in ps.pl if r.known <= j and t0 <= pctx.idx[r.i] <= t1]
+        return None if not cand else min(cand, key=lambda r: r.price)
+
+    ta, tb, tc = twin(a_), twin(b_), twin(c_)
+    if ta is None or tb is None or tc is None:
+        return None
+    hit("smt_three_point")
+    return bool(tb.price < ta.price and tc.price < tb.price)
+
+
+# --- A22 / M6 nested arrays --------------------------------------------------------------------------------------------------------------------------
+
+def nested_at_am(ctx, sd, i: int, p) -> bool:
+    """A22-htf-definition-nested-arrays (cc10_013 ~8:17, ~13:44; cc10_014 ~11:08: "nested ideas of premium array would be our catalyst"): the AM extreme of the PM
+    reversal's side lies in a NESTED array - a 15m / 1h array overlapping a 4h / D array of the same polarity (any price overlap [our interpretation]). Real
+    prices; False without a Confluence object."""
+    cf = getattr(ctx, "conf", None)
+    if cf is None or not ctx.am_hl:
+        return False
+    ext_r = float(ctx.am_hl[1] if sd.sign > 0 else ctx.am_hl[0])
+    now = now_ts(ctx, i)
+    tol = p.eq_tol_pts * p.es_pt
+    low = [(min(t_, b_), max(t_, b_)) for t_, b_, *_ in cf.valid(now, sd.sign, ("15m", "1h"), (0,))]
+    high = [(min(t_, b_), max(t_, b_)) for t_, b_, *_ in cf.valid(now, sd.sign, ("4h", "D"), (0,))]
+    hit("pm_rev_nested")
+    return any(a - tol <= ext_r <= b + tol and any(c <= b and d >= a for c, d in high) for a, b in low)
+
+
+# --- delivery states: state machine, tool map, consolidation fade -------------------------------------------------------------------------------------
+
+STATE_TOOLS = {
+    "RETRACEMENT": ("fvg", "ifvg", "implied_fvg", "vi", "void", "ifvg_061", "nfp_release_fvg", "arr_vi"),
+    "EXPANSION": ("ob_pre", "ob_anchor", "arr_ob", "arr_cons_ob_open", "cisd_ob", "release_ob", "ts_cc_1h_ob"),
+    "REVERSAL": ("turtle_soup", "ts_or60", "ts_cc_limit", "ts_external", "hs_fade", "consol_fade"),
+    "CONSOLIDATION": (),
+}
+_MAPPED = frozenset(k for v in STATE_TOOLS.values() for k in v)
+
+
+def state_at(ctx, i: int, p) -> str:
+    """The delivery state at closed bar i (levels.delivery_state, real prices; cached per bar)."""
+    c = _c(ctx).setdefault(("state", p.consol_bars, p.consol_adr), {})
+    if i not in c:
+        c[i] = L.delivery_state(ctx.o, ctx.h, ctx.l, ctx.c, i, adr5(ctx), p.consol_bars, p.consol_adr)
+    return c[i]
+
+
+def state_gate(ctx, sd, i: int, p, tags: dict):
+    """new-delivery-states-machine (cc01_001 ~2:33, ~7:51; cc01_002 ~18:35): no entry while the state is CONSOLIDATION (state_machine). new-state-to-array-map
+    (cc01_001 ~2:33; cc01_002 ~12:42): state_tool_map - EXPANSION <-> order blocks, RETRACEMENT <-> FVG / void / VI, REVERSAL <-> sweeps (turtle soup),
+    CONSOLIDATION <-> wait; an entry kind of another tool than the state's is rejected (kinds outside the map pass). Returns a reject key or None."""
+    st = state_at(ctx, i, p)
+    if not st:
+        return None
+    hit("state")
+    if p.state_machine and st == "CONSOLIDATION" and tags.get("entry_kind") != "consol_fade":
+        return "x_state_consolidation"
+    k = tags.get("entry_kind")
+    if p.state_tool_map and k in _MAPPED and k not in STATE_TOOLS[st]:
+        return "x_state_tool"
+    return None
+
+
+def consol_fade_order(ctx, sd, i: int, p, session: str, risk_mult: float):
+    """new-consolidation-exit-direction (cc09_004 ~5:07: "that's going to be the direction of the move outside the consolidation"): a lower-timeframe consolidation
+    (range under consol_adr x ADR5 over consol_bars bars) most often exits with the daily / 4h order flow. A break OUT of the range against the bias (side space:
+    a wick below the range low within the last 10 bars) that closes back inside is a stop run to fade: a limit at the range low, stop under the break's extreme,
+    target the opposite extreme (the range high). Once per range. Entry kind consol_fade."""
+    S = _S()
+    if want(ctx) != sd.sign:
+        return None
+    n = p.consol_bars
+    a5 = adr5(ctx)
+    if not a5:
+        return None
+    sent = sd.__dict__.setdefault("_cfade", set())
+    for j in range(i, max(ctx.start + n + 1, i - 10) - 1, -1):
+        lo, hi = float(sd.l[j - n:j].min()), float(sd.h[j - n:j].max())
+        if hi - lo >= p.consol_adr * a5 or not sd.l[j] < lo - 1e-9 or (j - n, j) in sent:
+            continue
+        if not sd.c[i] > lo or sd.h[j:i + 1].max() > hi:
+            continue                                         # not back inside / it left through the top (the exit went the bias way)
+        ext = float(sd.l[j:i + 1].min())
+        entry, stop = lo, ext - p.pad
+        if entry - stop < p.min_risk_pts * p.es_pt:
+            continue
+        sent.add((j - n, j))
+        hit("consol_fade")
+        sw = _synth_sw(S, session, "consol_fade", lo, ext, j + int(np.argmin(sd.l[j:i + 1])), j)
+        tags = dict(unicorn=False, fvg_bottom=ext, fvg_ce=(lo + hi) / 2, entry_kind="consol_fade", mitigation=False, propulsion=False, no_leg_wait=True,
+                    lv_tags=["consol_fade"])
+        o = S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, hi, tags, skip_leg_pd=True, fixed=[(S._exit_px(hi, "pool", p), "pool")])
+        if o is not None:
+            return o
+    return None
+
+
+# --- A11: BPR CE entries, A17: opening-range rejection block -------------------------------------------------------------------------------------
+
+def bpr_ce_order(ctx, sd, i: int, p, session: str, risk_mult: float):
+    """A11-bpr-levels-ce-rejection (062 ~3:47: "hits it like a brick wall"): a balanced price range (also a single-candle BISI / SIBI pair: bpr_def) is a reaction
+    zone - high, CE, low, extended right: a limit at the CE on EVERY revisit from above (side space), stop below the BPR low, valid while no body closes below the
+    CE. Repeat retests arm again (once per retest). Entry kind bpr_ce."""
+    S = _S()
+    sent = sd.__dict__.setdefault("_bpr_ce", {})
+    for z in sorted([z for z in sd.bprs(p.bpr_max_gap_bars) if z.kind == "bull"], key=lambda z: -z.i):
+        if z.i > i or z.i < ctx.start or sd.c[z.i + 1:i + 1].min(initial=np.inf) < z.mid - 1e-9 or not sd.c[i] > z.top:
+            continue
+        key = (z.i, z.src)
+        last = sent.get(key)
+        a = z.i if last is None else last
+        if last is not None and not sd.l[a + 1:i + 1].min(initial=np.inf) <= z.top:
+            continue
+        entry, stop = float(z.mid), float(z.bottom - p.pad)
+        if entry - stop < p.min_risk_pts * p.es_pt:
+            continue
+        sent[key] = i
+        hit("bpr_ce")
+        sw = _synth_sw(S, session, "bpr_ce", z.top, z.bottom, max(z.src, 0), z.i)
+        tags = dict(unicorn=False, fvg_bottom=float(z.bottom), fvg_ce=float(z.mid), entry_kind="bpr_ce", mitigation=False, propulsion=False, no_leg_wait=True,
+                    lv_tags=["bpr_ce"], lvx={"bpr_ce_close": (float(z.mid), False)})
+        o = S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, float(sd.h[max(z.src, 0):i + 1].max()), tags, skip_leg_pd=True)
+        if o is not None:
+            return o
+    return None
+
+
+def or_rb_order(ctx, sd, i: int, p, session: str, risk_mult: float):
+    """A17-index-or-rejection-block (cc10_010 ~9:03: "the lowest close down close candle"): the opening-range rejection block. Long: among the down-close candles inside
+    the 09:30-10:30 range the one with the LOWEST close - level = its close, the zone down to the OR60 low; on a later-morning return (from or_rb_from, before 12:00
+    [our interpretation]) a limit at the level, valid while the lows hold above the OR60 low. Short: the LAST up-close candle inside the range (or_rb_bear "last";
+    "highest_close" = the highest close) - level its close, invalid above the OR60 high. Real prices, mirrored by sd for shorts. Once per side and day."""
+    S = _S()
+    t = ctx.t[i]
+    if t < max(p.or_rb_from, 630) or t >= 720 or getattr(ctx, "or60", None) is None:
+        return None
+    sent = sd.__dict__.setdefault("_or_rb", set())
+    if (ctx.day, sd.sign) in sent:
+        return None
+    k0, k1 = S._idx_at(ctx, 570), S._idx_at(ctx, 630)
+    o, c = ctx.o[k0:k1], ctx.c[k0:k1]
+    if sd.sign > 0:
+        ks = np.flatnonzero(c < o)
+        if not len(ks):
+            return None
+        k = int(ks[np.argmin(c[ks])])
+    else:
+        ks = np.flatnonzero(c > o)
+        if not len(ks):
+            return None
+        k = int(ks[-1]) if p.or_rb_bear == "last" else int(ks[np.argmax(c[ks])])
+    level = float(sd.x(c[k]))
+    or_lo = float(sd.x(ctx.or60[1] if sd.sign > 0 else ctx.or60[0]))
+    if not (sd.c[i] > level and sd.l[k1:i + 1].min() > or_lo):
+        return None
+    entry, stop = level, or_lo - p.pad
+    if entry - stop < p.min_risk_pts * p.es_pt:
+        return None
+    sent.add((ctx.day, sd.sign))
+    hit("or_rb")
+    sw = _synth_sw(S, session, "or_rb", level, or_lo, k0 + k, i)
+    tags = dict(unicorn=False, fvg_bottom=or_lo, fvg_ce=(level + or_lo) / 2, entry_kind="or_rb", mitigation=False, propulsion=False, no_leg_wait=True,
+                lv_tags=["or_rb"])
+    return S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, float(sd.x(ctx.or60[0] if sd.sign > 0 else ctx.or60[1])), tags, skip_leg_pd=True)
+
+
+def extra2(ctx, sd, i: int, p, session: str, risk_mult: float):
+    """The non-sweep setups of this chunk, tried in order when the sweep machine has nothing (strategy._scan)."""
+    if p.nwog_sr_entries:
+        o = nwog_sr_order(ctx, sd, i, p, session, risk_mult)
+        if o is not None:
+            return o
+    if p.gap_edge_entry:
+        o = gap_edge_order(ctx, sd, i, p, session, risk_mult)
+        if o is not None:
+            return o
+    if p.gap_quarter_retrace:
+        o = gap_quarter_order(ctx, sd, i, p, session, risk_mult)
+        if o is not None:
+            return o
+    if "bpr_ce" in p.entry_arrays:
+        o = bpr_ce_order(ctx, sd, i, p, session, risk_mult)
+        if o is not None:
+            return o
+    if p.or_rb:
+        o = or_rb_order(ctx, sd, i, p, session, risk_mult)
+        if o is not None:
+            return o
+    if p.consol_fade:
+        o = consol_fade_order(ctx, sd, i, p, session, risk_mult)
+        if o is not None:
+            return o
+    return None
+
+
+# --- IR gates ---------------------------------------------------------------------------------------------------------------------------------------
+
+def ir_gates_ok(ctx, sd, i: int, p, session: str, use_want: bool = True) -> bool:
+    """A7-immediate-rebalance-gates (059 ~4:50: "the immediate rebalance isn't going to help you all that much"): an immediate rebalance is a continuation trigger only
+    if (a) the draw / HTF bias was known beforehand and points its way (ir_need_draw) and (b) it prints in a window where volatility is expected (ir_need_window:
+    [our interpretation] the macro window or an am / pm session). Used by the opt-in IR paths (ir_entries, sb_rebalance_ext)."""
+    if p.ir_need_draw and bias_at(ctx, p, session, i, use_want) != sd.sign:
+        return False
+    if p.ir_need_window and not (session in ("AM", "PM") or p.macro[0] <= ctx.t[i] < p.macro[1]):
+        return False
+    hit("ir_gates")
+    return True
+
+
+# --- range lock (A12-range-internal-ignore) -----------------------------------------------------------------------------------------------------
+
+def range_lock_set(sd, sw, i: int, inval: float, lo: float) -> None:
+    """A12-range-internal-ignore (064 ~56:17; 066 ~32:01: "all of these candles in between are all time distortion"): remember the dealing range an armed order defines -
+    low `lo` (the OB low / the sweep extreme), high = the leg high so far, invalid on a body close below `inval` (the OB MT / the low) or an expansion beyond the high."""
+    sd.__dict__["_rlock"] = dict(lo=float(lo), hi=float(sd.h[sw["ext_i"]:i + 1].max()), inval=float(inval), since=i)
+
+
+def range_locked(sd, i: int) -> bool:
+    """True while bar i lies strictly INSIDE (wicks) an active range lock: its candles are ignored (no new sweep / MSS / FVG is read from them). The lock ends on a
+    body close below its invalidation or a trade beyond its high (expansion toward the first draw)."""
+    rl = sd.__dict__.get("_rlock")
+    if rl is None or i <= rl["since"]:
+        return False
+    if sd.c[i - 1] < rl["inval"] or sd.h[i - 1] > rl["hi"]:
+        sd.__dict__["_rlock"] = None
+        return False
+    hit("range_locked")
+    return bool(sd.h[i] <= rl["hi"] and sd.l[i] >= rl["lo"])
+
+
+# --- the order gate of this chunk -------------------------------------------------------------------------------------------------------------------
+
+def order_gate2(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str, lvt: list, lvx: dict, tags: dict):
+    """Gates / tags of setups_models #2/7 at order completion (strategy._finish_order, after order_gate). Returns a reject key or None."""
+    tags["setup_model"] = setup_model(sd, sw)
+    tags["delivery"] = delivery_dir(ctx, sd, i)
+    if p.div_tag:
+        d = L.stoch_divergence(sd.h, sd.l, sd.c, i, p.pivot_n)
+        if d:
+            tags["div_type"] = d
+            hit("div_tag")
+    if p.dfvg_half != "off":
+        r = dfvg_gate(ctx, sd, sw, i, p, lvt)
+        if r:
+            return r
+    if p.reh_trap:
+        r = reh_trap_gate(ctx, sd, i, p)
+        if r:
+            return r
+    if p.org_two_rally:
+        r = org_two_rally_gate(ctx, sd, i, p)
+        if r:
+            return r
+    if p.poke_high_cancel:
+        r = poke_cancel(ctx, sd, i, p, session)
+        if r:
+            return r
+    if p.state_machine or p.state_tool_map:
+        r = state_gate(ctx, sd, i, p, tags)
+        if r:
+            return r
+    if tags.get("entry_kind") == "ifvg" and (p.ifvg_need_run or p.ifvg_tails_block or p.ifvg_pool_intact):
+        z = ifvg_zone(sd, tags)
+        if z is not None:
+            r = ifvg_run_gate(ctx, sd, sw, i, p, session, z, lvt)
+            if not r and p.ifvg_tails_block:
+                r = ifvg_tails_gate(ctx, sd, i, p, z)
+            if not r and p.ifvg_pool_intact:
+                r = ifvg_pool_gate(ctx, sd, i, p, z)
+            if r:
+                return r
+    if p.daily_first_return and str(sw.get("key", "")).startswith("rel_eq") and daily_first_return(ctx, sd, sw, i, p):
+        lvt.append("daily_first_return")
+    return None

@@ -90,14 +90,21 @@ def mss_ref(ctx, sd, sw, i, p):
     back to the A1 tier chain with mss_ref "stl"). Ep08.4 "origin" = leg_origin (anchored at the
     sweep extreme, review fix); "origin_max" = the first build's rule, kept as a value."""
     e = sw["ext_i"]
+    if p.mss_ref_raid:                       # caption-gap A19-mss-when-raid-missing (010 ~41:31): the reference depends on whether the expected raid level was taken
+        r_ = S._SM2.raid_ref(ctx, sd, sw, i, p)
+        if r_ is not None:
+            return r_
+    m_tf = p.mss_ref_tf
+    if p.micro_regime and ctx.tf < 5 and S._SM2.micro_active(ctx, sd, i, p):
+        m_tf = 5                             # caption-gap N-micro-structure-regime (024 ~10:08): inside a small consolidation read the structure on the 5m chart
     if p.mss_ref_sibi:                       # Ep07.6 / M1: the small SIBI high the leg left
         hs = [q for q in sd.ph if q.i < e and q.known <= i]
         a = hs[-1].i if hs else max(0, e - 30)
         z = L.leg_sibi(sd.h, sd.l, sd.o, sd.c, a, e, sd.c2_dir)
         if z is not None:
             return z.src, z.top, True
-    if p.mss_ref_tf and p.mss_ref_tf > ctx.tf:    # Ep08.16: the 5m swing (equal highs -> the higher)
-        hs = [q for q in _tf_pivots(ctx, sd, p.mss_ref_tf)[0] if q.i < e and q.known <= i]
+    if m_tf and m_tf > ctx.tf:    # Ep08.16: the 5m swing (equal highs -> the higher)
+        hs = [q for q in _tf_pivots(ctx, sd, m_tf)[0] if q.i < e and q.known <= i]
         if hs:
             q = hs[-1]
             if len(hs) > 1 and abs(hs[-2].price - q.price) <= p.eq_tol_pts * p.es_pt and hs[-2].price > q.price:
@@ -202,7 +209,10 @@ def break_ok(ctx, sd, sw, i, p, ref, lv: dict, tol: float, tk: float) -> bool:
         if len(rng) and h[i] - l[i] < p.mss_disp * float(rng.mean()):
             S._f("x_mss_disp")
             return False
-    if p.mss_eq_wait:                     # A19.2: the lower of relative equal lows still standing
+    if sw.get("raid_disp") and not S._SM2.disp_break(ctx, sd, i):
+        S._f("x_raid_no_disp")               # caption-gap A19-mss-when-raid-missing: with mss_ref_raid only a displacement break is an MSS (case B stresses it: the raid level untaken)
+        return False
+    if p.mss_eq_wait and not S._SM2.eq_wait_waived(ctx, sd, p):     # A19.2: the lower of relative equal lows still standing (caption-gap A19-mss-no-rel-sweep-with-htf-draw: waived with a locked draw its way)
         for k, v in lv.items():
             if v < sw["level"] - 1e-12 and sw["level"] - v <= tol and not S._thru(sw["ext"], v, tk):
                 S._f("x_mss_eq_wait")
@@ -361,13 +371,20 @@ def ifvg_filter(ctx, sd, sw, gaps, i, p):
     return out
 
 
-def ifvg_stop(sd, g, entry: float, stop: float, p) -> tuple[float, float]:
+def ifvg_stop(sd, g, entry: float, stop: float, p, i: int | None = None):
     """M10 / A8 entry and stop for an inversion FVG: ifvg_entry "ce"; ifvg_depth (no prior pass ->
     the far edge, else the CE); ifvg_stop_pts beyond the CE."""
     ce = (g.top + g.bottom) / 2
     if p.ifvg_entry == "ce":
         entry = ce
-    if p.ifvg_depth:
+    elif p.ifvg_entry == "quadrant":         # caption-gap A8-ifvg-narrative-liquidity-run (078 ~51:00): long entries at H, the upper quadrant or the CE
+        entry = g.q(0.75)
+    if p.ifvg_depth == "w_cap":              # caption-gap A8-ifvg-depth-tolerances (102 ~1:11:04): cases a / b / c with the W cap; None = the retrace went too deep
+        r_ = S._SM2.ifvg_w_cap(sd, g, entry, stop, i, p)
+        if r_ is None:
+            return None
+        entry, stop = r_
+    elif p.ifvg_depth:
         orig = g.src + 1                     # the original gap's third candle
         ps = L.ifvg_passes(sd.h, sd.l, g.top, g.bottom, orig, g.i)
         stop = (g.bottom if ps == "none" else ce) - p.pad
@@ -459,7 +476,7 @@ def array_cands(ctx, sd, sw, i, p, bz) -> list:
     if "reclaimed_ob" in ea:
         hs = [q for q in sd.ph if q.i < e and q.known <= i]
         a = hs[-1].i if hs else max(0, e - 30)
-        rs = [z for z in L.reclaimed_obs(sd.o, sd.h, sd.l, sd.c, a, e, i) if z.i <= i]
+        rs = S._SM2.reclaimed_zones(sd, a, e, i, p)          # caption-gap A18-reclaimed-ob-codeable: strict (cc04_007) / loose (006)
         if rs:
             z = max(rs, key=lambda z: z.top)
             out.append((z.top, z.bottom, "reclaimed_ob"))
@@ -478,6 +495,8 @@ def array_order(ctx, sd, sw, i, p, session, risk_mult, fvg_entry, bz):
         stop = sw["ext"] - p.pad
     tags = dict(unicorn=False, fvg_bottom=bottom, fvg_ce=(entry + bottom) / 2, entry_kind="arr_" + kind,
                 mitigation=False, propulsion=False)
+    if kind == "reclaimed_ob" and p.reclaimed_def != "strict":
+        tags["lv_tags"] = ["reclaimed_" + p.reclaimed_def]         # caption-gap A18-reclaimed-ob-codeable: which definition was used (the strict default stays untagged, as built)
     return S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult,
                            sd.h[sw["ext_i"]:i + 1].max(), tags, pctx_free=True)
 
@@ -492,6 +511,21 @@ def reaper_order(ctx, sd, sw, i, p, session, risk_mult, ref_i, real_ref, wait: i
     cut through on the way to the lower low. After the MSS: a limit at its top, stop below it, out
     on a body close below its CE (bodies stay above); reaper_confirm = only after a reaction candle
     (a wick into it, a close at or above its CE) -> market entry. "wait" while confirming."""
+    if p.reaper_def == "ob_overlap":         # caption-gap A24-reaper-definition option B (081 ~11:49): the breaker zone (lowest-close down candle) coincides with an order block
+        if sw.get("reaper_ob_sent"):
+            return None
+        bz = S._breaker(ctx, sd, sw, ref_i, real_ref, i, p)
+        ob = S._ob_at_low(sd, sw, i, p, ctx)
+        if bz is None or ob is None or not (ob["body_low"] < bz.top and ob["body_top"] > bz.bottom) or bz.top >= sd.c[i]:
+            return None
+        sw["reaper_ob_sent"] = True
+        S._SM2.hit("reaper_ob")
+        tags = dict(unicorn=False, fvg_bottom=bz.bottom, fvg_ce=bz.mt, entry_kind="reaper_ob", mitigation=False, propulsion=False, no_leg_wait=True,
+                    lv_tags=["reaper_ob"])
+        stop = bz.bottom - p.pad
+        if bz.top - stop < p.min_risk_pts * p.es_pt:
+            stop = sw["ext"] - p.pad
+        return S._finish_order(ctx, sd, i, p, session, sw, bz.top, stop, risk_mult, sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True)
     q = _l1(sd, ref_i, i)
     if q is None or not real_ref or not sw["ext"] < q.price:
         return None
@@ -727,7 +761,9 @@ def ir_entry(ctx, sd, i, p, session, risk_mult):
     stop below the rebalancing candle [our interpretation of "very tight"]; out on a close below
     the EQ of the displacement candle (the range)."""
     info = sd.ir_info(0.25 * p.es_pt).get(i)
-    if getattr(ctx, "cur_bias", 0) != sd.sign or info is None:
+    if info is None or (getattr(ctx, "cur_bias", 0) != sd.sign and p.ir_need_draw):       # (caption-gap A7-immediate-rebalance-gates: ir_need_draw False = no bias needed)
+        return None
+    if not S._SM2.ir_gates_ok(ctx, sd, i, p, session):      # caption-gap A7-immediate-rebalance-gates: the draw was known beforehand and it prints in a volatility window
         return None
     bound, d = info                       # review fix #85: the rebalanced level and the displacement candle of THIS definition (open_space: older / d+2)
     eq = (sd.l[d] + sd.h[d]) / 2
@@ -923,6 +959,9 @@ def pm_reversal(ctx, sd, i, p, risk_mult):
         return None                  # review fix: no lock (draw_lock off / neutral) -> the htf table's
                                      # draw the other way traded today is the "objective met"
     k_pm = S._idx_at(ctx, 810)
+    if p.pm_rev_nested and not S._SM2.nested_at_am(ctx, sd, i, p):
+        S._f("x_pm_reversal_not_nested")     # caption-gap A22-htf-definition-nested-arrays (cc10_013): the AM move stopped at an un-nested 15 / 60m array - continuation, not a fade
+        return None
     am_x = sd.x(ctx.am_hl[1] if sd.sign > 0 else ctx.am_hl[0])
     if p.pm_reversal_pool == "lunch_or_am" and "lunch" in ctx.sess:
         # caption-gap DS2-am-move-pm-reversal-templates (cc10_013 ~6:36): a sweep of the LUNCH extreme (a failure swing vs the AM extreme) also counts
@@ -1299,7 +1338,11 @@ def draw_prefs(ctx, sd, sw, i, p, session, entry, risk, keep) -> list:
             v, k = (eqp or pools)[0]
             out.append((v, k, "m2"))
     if p.mmxm_ctx:
-        q = parent_high(sd, sw["ext_i"], i)
+        q = leg_origin(sd, sw["ext_i"], i) if p.mm_ssl_target else None      # caption-gap A2-delivery-vs-liquidity (104 ~11:24): the far end of the delivery leg that engineered the pool (the origin of the decline into a long's sweep)
+        if q is None:
+            q = parent_high(sd, sw["ext_i"], i)
+        else:
+            q = type(q)(q.i, float(sd.h[q.i:sw["ext_i"] + 1].max()), q.known)
         if q is not None and q.price > entry:
             px_ = q.price
             if p.orig_consol:             # caption-gap M1-original-consolidation (104 ~27:53): the smooth-edge level of the original consolidation

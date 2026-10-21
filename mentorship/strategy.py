@@ -656,10 +656,10 @@ class Params:
     pm_judas_array: bool = False         # M7.3 (010 ~56:30): beyond the 13:30 open INTO a same-side HTF array
                                          # counts as the PM sweep (no pool needed)
     # M10 / A8 inversion FVG entries (with ifvg_entries)
-    ifvg_entry: str = "edge"             # M10 (078 ~50:28; 085 ~27:21): "ce" = limit at the IFVG CE
+    ifvg_entry: str = "edge"             # M10 (078 ~50:28; 085 ~27:21): "ce" = limit at the IFVG CE; "quadrant" (caption-gap A8-ifvg-narrative-liquidity-run, 078 ~51:00) = its upper quadrant (75%)
     ifvg_stop_pts: float = 0.0           # M10 (102 ~1:40:20): stop N ES pts beyond the CE (3-4 per ICT)
     ifvg_min_risk_pts: float = 0.0       # M10: IFVG stops under N ES pts too tight (except 1m and below)
-    ifvg_depth: bool = False             # A8 (102 ~1:09:00): no prior pass -> stop beyond the far edge; re-traded
+    ifvg_depth: bool | str = False       # A8 (102 ~1:09:00): True = no prior pass -> stop beyond the far edge; re-traded (the first build); "w_cap" = caption-gap A8-ifvg-depth-tolerances cases a / b / c; re-traded
                                          # or both ways -> CE at most (stop beyond the CE)
     ifvg_061: bool = False               # M10 (061 ~2:15:00): an IFVG with a normal FVG below; a body close at
                                          # that FVG's high/CE triggers (market entry)
@@ -1970,6 +1970,91 @@ class Params:
     mitigation_entry: bool = False       # A15: True - a mitigation block is an entry (a limit in the block with the bias); the 075 reading (target only) is the default
     mit_entry_px: str = "near"           # ... "near" (the block edge price reaches first) / "mid" (its CE)
 
+    # --- caption-gap pass, setups_models #2/7 (every switch defaults off / to the built behaviour unless its comment says otherwise; the gap id is the comment's first word) ---
+    # A5-premium-half-daily-fvg (012 ~18:02)
+    dfvg_half: str = "off"               # A5: inside a large unfilled daily BISI (SIBI) the sweep must sit at / above the CE (below it): "tag" (lv_tag dfvg_lower_half) / "skip" (no order); also tagged / skipped once a 15m / 1h body closed below the CE today
+    dfvg_large_pts: float = 15.0         # [our interpretation of "large"] the daily gap's height in ES pts
+    # L5-nwog-sr-levels (039 ~10:52; 024 ~18:37)
+    nwog_sr_entries: bool = False        # L5: in a consolidation NWOG week (nwog_regime table column) a limit at the nearest stored NWOG level (high / CE / low) in the bias direction (tag nwog_sr)
+    nwog_sr_stop_pts: float = 1.0        # ... the stop this many ES pts beyond the level
+    # new-stop-run-overshoot-next-array (025 ~1:05:16; 038 ~46:12)
+    ts_next_array: bool = False          # M12 / L5: the turtle-soup limit sits at the first array / gap level more than ts_min_beyond_pts beyond the swept pool (skipping a wick CE hugging it); stop 1 tick beyond that array's far edge
+    ts_min_beyond_pts: float = 1.0       # [our interpretation] a level within this many ES pts of the pool is no stopping point
+    # L5-quarter-level-no-imbalance (030 ~1:23:49)
+    gap_quarter_retrace: bool = False    # L5: after a close beyond an NWOG edge, a retrace leg without an FVG / VI is entered at the NEAR QUARTER ((CE + edge) / 2); stop beyond the CE + 1 tick
+    # L6-ndog-nwog-primary-entry (050 ~54:42)
+    gap_edge_entry: bool = False         # L6: with the daily bias, the first return of price to the near edge of an active NWOG (NDOG) is an entry on its own (contradicts 052 / 051 "confluence only"); stop beyond the gap's far edge
+    # L7-gap-up-premium-template (042 ~11:31, ~1:00:16)
+    org_two_rally: bool = False          # L7 / B15: on a significant gap up (down) the short (long) waits for the two-rally template: first high, a dip to the 09:30 open, a second rally above the first high; T1 = open -/+ 5 pts, then the prior close
+    org_sig_adr: float = 0.25            # [our interpretation] "significant" = the gap >= this x ADR5
+    # A18-reclaimed-ob-codeable (006 ~49:57; cc04_007 ~4:07)
+    reclaimed_def: str = "strict"        # A18: "strict" (cc04_007: the curve's down-close candles reclaimed after the low) / "loose" (006: an OB price leaves, re-trades and leaves again)
+    # A19-mss-when-raid-missing (010 ~41:31)
+    mss_ref_raid: bool = False           # A19: the MSS reference depends on the expected raid level R: taken -> the swing that started the leg into the raid; not taken -> the swing that launched the leg making the session extreme, displacement break only
+    raid_level: str = "pdh"              # [our interpretation] R = the prior day's high (low) on the trade's side
+    # A19-mss-no-rel-sweep-with-htf-draw (019 ~8:34; 044 ~42:55)
+    mss_eq_wait_unless_draw: bool = False    # A19.2: mss_eq_wait is waived when the session draw is locked in the trade's direction (the REL need not be swept)
+    # A19-reh-short-term-low-trap (029 ~48:29)
+    reh_trap: bool = False               # A19: bias long, HTF objective untaken, the last two swing highs relatively equal (REH): a short on a break of the short-term low under them is bait - the short is rejected
+    # N-micro-structure-regime (024 ~10:08)
+    micro_regime: bool = False           # N: inside a small intraday consolidation (< micro_range_adr x ADR5 since 09:30, >= 2 alternating pivots, no displacement) the MSS reference is read on the 5m chart
+    micro_range_adr: float = 0.25        # [our interpretation]
+    # M12-second-takeout-turtle-soup (046 ~1:01:58)
+    ts_skip_reswept: bool = True         # M12: a swept pool that was already swept earlier and followed by a rally is no turtle-soup setup (a shallow second break = a deeper retracement); only acts with turtle_soup on
+    second_break_partial: bool = False   # M12 / ME: an open SHORT (long) takes a partial at a failed shallow second break of a low (high) already swept
+    # A21-pre-trigger-dealing-range (048 ~1:20:40)
+    breaker_range_hold: bool = False     # A21: after a breaker tap the order stays armed with no expiry until a body closes below the breaker's low
+    # A8-ifvg-narrative-liquidity-run (078 ~51:00; 084 ~19:43)
+    ifvg_need_run: bool = False          # A8: an IFVG entry needs the narrative - the HTF bias its way AND an old sell-side pool taken inside / just beyond the gap before its inversion
+    ifvg_over_pool_pref: bool = False    # A8: prefer an IFVG whose range contains the taken pool (others are rejected when one exists)
+    # A8-ifvg-stacked-tails-exclusion (090 ~21:24)
+    ifvg_tails_block: bool = False       # A8: an IFVG with a cluster of long lower tails just below it is armed only after a low below the cluster
+    tails_tol_ticks: int = 3             # [our interpretation] the tails' lows end within this many ticks of each other (cluster = 2+ candles)
+    # A7-immediate-rebalance-gates (059 ~4:50; 060 ~7:29)
+    ir_need_draw: bool = True            # A7: an immediate rebalance acts only when the draw / HTF bias was known beforehand and points its way (only the opt-in IR paths: ir_entries, sb_rebalance_ext)
+    ir_need_window: bool = True          # A7: ... and only inside a volatility window ([our interpretation] the macro window + the am / pm sessions)
+    # A12-range-internal-ignore (064 ~56:17; 066 ~32:01)
+    range_lock: bool = False             # A12: the order armed after the MSS stays armed (no pending_minutes expiry) while no body closes below the OB MT / range low; new sweeps inside the range are ignored
+    # A19-second-mss-no-new-low (069 ~14:41)
+    mss_rearm_lower_high: bool = False   # A19: after a valid MSS the side stays armed while the retrace does not pierce the sweep extreme (lower high / higher low); a later displacement FVG arms an entry
+    # A24-reaper-definition (076 ~21:44; 081 ~11:49)
+    reaper_def: str = "fvg"              # A24.2: "fvg" (076: the discount-half FVG the leg cut through) / "ob_overlap" (081: the breaker zone coincides with an order block - enter the return)
+    # A4-wick-poke-vi-invalidation (090 ~1:05:53)
+    poke_high_cancel: bool = False       # A4: after a wick-only poke through an HTF array / level (no body close beyond) a trade beyond the poke extreme cancels the AM orders of that side (re-evaluated in the PM)
+    # A8-ifvg-before-pool (102 ~1:08:45)
+    ifvg_pool_intact: bool = False       # A8: an IFVG is armed only while the nearest swing extreme beyond it (the draw) has not been traded through
+    # A8-ifvg-depth-tolerances (102 ~1:11:04, ~1:55:46): ifvg_depth (above) is False / True (the first build) / "w_cap" (cases a / b / c)
+    # A2-delivery-vs-liquidity (104 ~11:24)
+    mm_ssl_target: bool = False          # A2 / Ep05.8: with mmxm_ctx the MM model's target is the far end of the leg that engineered the pool (the origin of the decline into a long's sweep)
+    # A4-ltf-body-qualification (104 ~21:53, ~34:55)
+    htf_body_qual: bool = False          # A4: an HTF entry zone (htf_entry_arrays) pierced by wicks beyond the mohawk is still qualified while 15m and 5m bodies stay inside it
+    # new-state-to-array-map / new-delivery-states-machine (cc01_001 ~2:33; cc01_002 ~12:42)
+    state_tool_map: bool = False         # new: entry filter by delivery state - EXPANSION: order blocks; RETRACEMENT: FVG / void / VI; REVERSAL: sweeps (turtle soup); CONSOLIDATION: nothing
+    state_machine: bool = False          # new-delivery-states-machine (helper of the DWC package, built here): no entry while the state is CONSOLIDATION
+    consol_bars: int = 20                # ... the bars of the consolidation test
+    consol_adr: float = 0.3              # ... a range under this x ADR5 is a consolidation [our interpretation]
+    # A4-sweep-body-cluster (cc03_002 ~11:36; cc02_007 ~21:51)
+    sweep_ref: str = "wick"              # A4: "wick" (as built) / "body" (the relative-equal-low pool is the cluster of 2+ candles whose BODIES end at about the same price; the sweep needs a low below the lowest body)
+    daily_first_return: bool = False     # A4 / cc02_007: tag a sweep of a daily body-low cluster that is the first return to the zone in daily_first_days sessions (HTF accumulation)
+    daily_first_days: int = 30           # [our interpretation] the 30-45 trading-day window
+    # B18-smt-accum-distrib (cc03_005 ~10:20)
+    ts_need_smt: bool = False            # B18 / M12: a turtle-soup setup needs the SMT at the swept level (the correlated asset refuses the break); the order is tagged smt
+    # new-divergence-types (cc04_013 ~2:41)
+    div_tag: bool = False                # new: tag the stochastic divergence type at the order (type1 classic / type2 hidden); confirmation only
+    # A17-index-or-rejection-block (cc10_010 ~9:03)
+    or_rb: bool = False                  # A17: the opening-range rejection block - a long off the lowest-close down candle of the 09:30-10:30 range, a short off its last up-close candle
+    or_rb_from: int = 630                # ... armed from this minute of the day (10:30)
+    or_rb_bear: str = "last"             # [our interpretation] the bearish block: "last" (cc10_010 NQ example: the last up-close candle) / "highest_close"
+    # A22-htf-definition-nested-arrays (cc10_013 ~8:17; cc10_014 ~11:08)
+    pm_rev_nested: bool = False          # A22 / M6: the PM reversal needs the AM extreme at a NESTED array (a 15m / 60m array overlapping a 4h / D array of the same polarity)
+    # new-consolidation-exit-direction (cc09_004 ~5:07)
+    consol_fade: bool = False            # new: a break out of a consolidation (delivery state CONSOLIDATION) against the bias that closes back inside is fought - an entry back toward the opposite extreme
+    # A5/A10-style tag: new-price-engine-models (cc09_006 ~0:54) is a tag only (Trade.setup_model, always on)
+    # new-intermediate-term-hl-fade (cc09_005 ~23:14)
+    ts_itl_context: bool = False         # new: a turtle-soup fade of an intermediate-term pool (older than yesterday: pdl2 / pdl3 / week / month / IPDA) needs context: an HTF array tag or a range-bound day
+    # B18-smt-three-point-swing (cc11_004 ~27:39)
+    smt_mode: str = "pair"               # B18: "pair" (the partner did not take the swept level) / "three_point" (this index low - lower low - higher low against the partner's low - lower low - lower low)
+
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
         _sb_check(self)
@@ -2027,6 +2112,16 @@ class Params:
                              "0 < mature_pd < 1, nfp_release_fvg_min >= 1")
         if not self.markets or any(not isinstance(m_, str) for m_ in self.markets):
             raise ValueError(f"markets {self.markets!r}: expected a non-empty tuple of market names")
+        # caption-gap pass (setups_models #2/7)
+        for name, ok in (("dfvg_half", ("off", "tag", "skip")), ("reclaimed_def", ("strict", "loose")), ("raid_level", ("pdh",)),
+                         ("reaper_def", ("fvg", "ob_overlap")), ("sweep_ref", ("wick", "body")), ("or_rb_bear", ("last", "highest_close")),
+                         ("smt_mode", ("pair", "three_point")), ("ifvg_depth", (False, True, "w_cap"))):
+            if getattr(self, name) not in ok:
+                raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
+        if (self.dfvg_large_pts < 0 or self.nwog_sr_stop_pts < 0 or self.ts_min_beyond_pts < 0 or self.org_sig_adr < 0 or self.micro_range_adr <= 0
+                or self.tails_tol_ticks < 0 or self.consol_bars < 2 or self.consol_adr <= 0 or self.daily_first_days < 1 or not 0 <= self.or_rb_from < 1440):
+            raise ValueError("setups_models #2/7: dfvg_large_pts / nwog_sr_stop_pts / ts_min_beyond_pts / org_sig_adr >= 0, micro_range_adr > 0, tails_tol_ticks >= 0, "
+                             "consol_bars >= 2, consol_adr > 0, daily_first_days >= 1, 0 <= or_rb_from < 1440")
         # caption-gap pass (levels_detectors #3/3)
         if self.ipda_anchor == "daily":
             self.ipda_anchor = "rolling"       # B21-anchor-month-vs-daily: "daily" is the rolling count from yesterday
@@ -2081,7 +2176,7 @@ class Params:
                          # setups_models
                          ("mss_on_side", ("off", "tag", "require")), ("mm_context", ("off", "tag", "require")),
                          ("three_drives", ("off", "tag", "require")), ("unicorn_entry", ("edge", "overlap")),
-                         ("cc_swings", ("off", "breaker", "failure", "both")), ("ifvg_entry", ("edge", "ce")),
+                         ("cc_swings", ("off", "breaker", "failure", "both")), ("ifvg_entry", ("edge", "ce", "quadrant")),
                          ("ote", ("off", "filter", "limit")), ("smt_pick", SMT_PICKS),
                          ("news_profile", ("off", "tag", "require", "pool_test")), ("nfp_sd", ("off", "tag", "skip")),
                          ("candle_draw_bias", ("off", "daily", "weekly")),
@@ -2139,7 +2234,7 @@ class Params:
             raise ValueError(f"entry_ladder_fracs {self.entry_ladder_fracs!r}: expected >= 2 fractions summing to 1")
         if self.fvg_pick not in ("last", "first", "2022"):
             raise ValueError(f"fvg_pick {self.fvg_pick!r}")
-        bad = set(self.entry_arrays) - {"ob", "breaker", "ote", "wick_ce", "vi", "reclaimed_ob", "cons_ob_open"}
+        bad = set(self.entry_arrays) - {"ob", "breaker", "ote", "wick_ce", "vi", "reclaimed_ob", "cons_ob_open", "bpr_ce"}
         if bad:
             raise ValueError(f"entry_arrays {sorted(bad)}")
         bad = [x for x in self.nest_tfs if x not in CF_TFS]
@@ -2662,6 +2757,10 @@ class Trade:
     clean_swing: bool | None = None    # D15 smt_pick "clean_swing": a 15m pivot (n=2) between the entry and T1
     move_pct: float | None = None  # D15 smt_pick "middle": the move from the session open to the fill, in the trade direction (fraction)
     lc_reversal: bool = False      # lc_tag: a 10:00-12:00 reversal off an HTF array against the morning
+    # package setups_models #2/7 (caption-gap pass)
+    setup_model: str = ""          # new-price-engine-models (cc09_006): OA / OD (a sweep-driven order: old-low sweep then the premium array / old-high sweep then the discount array), RA / RD (a retrace into an array)
+    delivery: str = ""             # A2-delivery-vs-liquidity (104 ~11:24): "up" / "down" - the sign of the last displacement leg in the trade's direction terms at the order
+    div_type: str = ""             # div_tag: "type1" (classic) / "type2" (hidden) stochastic divergence at the order
     obj_met_t: object = None       # D15 smt_pick "laggard_objective": when this instrument's OWN htf.table draw was first traded (end of that bar); None = not met / not asked
 
     REAL_FIELDS = ("entry", "stop", "t1", "t2", "draw_px", "bz_top", "bz_bottom", "bz_mt",
@@ -3214,7 +3313,8 @@ def _eq_levels(sd: Side, i: int, tol: float, lows: bool, p: "Params | None" = No
     of the cluster (the lower of the lows, 038 ~43:43); `eq_rank` orders the clusters by touches
     (more = stronger), then by spread (smoother = stronger). Without either: the old list."""
     piv = _LD.pool_piv(sd, lows)          # caption-gap B5 pool_tf: the pools' pivots may come from 15m bars
-    bodies = p is not None and p.eq_bodies
+    body_ref = p is not None and p.sweep_ref == "body"      # caption-gap A4-sweep-body-cluster: the pool is the cluster of BODIES (the line = the lowest body), the sweep needs a low below it
+    bodies = p is not None and (p.eq_bodies or body_ref)
     rank = p is not None and p.eq_rank
     out, wick, bar = [], [], []
     bt = np.minimum(sd.o, sd.c) if lows else np.maximum(sd.o, sd.c)
@@ -3226,7 +3326,7 @@ def _eq_levels(sd: Side, i: int, tol: float, lows: bool, p: "Params | None" = No
             after = bt[q.i + 1:i + 1]
             if len(after) == 0 or (after.min() >= b if lows else after.max() <= b):
                 out.append(-b if lows else b)
-                wick.append(-q.price if lows else q.price)
+                wick.append((-b if lows else b) if body_ref else (-q.price if lows else q.price))
                 bar.append(q.i)
             continue
         after = sd.l[q.i + 1:i + 1] if lows else sd.h[q.i + 1:i + 1]
@@ -4818,6 +4918,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 tr.exits.append((ts, sd.x(c), pos["left"], "htf_heavy")); pos["left"] = 0   # #7 Ep02 30m
             if pos["left"] and (p.smt_bank or p.smt_bank_against_frac or p.adr_early or p.wick_read != "off" or p.trail_breakaway):
                 _TP.manage(ctx, sd, pos, tr, i, ts, p, pctx, psides, ppos)      # X3g / L16 / A23 / A6 partials
+            if pos["left"] and p.second_break_partial:
+                _SM2.second_break_partial(ctx, sd, pos, tr, ts, i, p)            # caption-gap M12-second-takeout-turtle-soup: a failed shallow second break of a swept pool = a partial
             if pos["left"]:
                 pos["best"] = max(pos["best"], h)
                 _MG.exits(ctx, sd, pos, tr, i, ts, p, state)       # management_exits: X6-X12, X9 time stops, D18, Ep07.5
@@ -4939,8 +5041,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 cut = min(cut, pending["cut"])
             ob_pre = pending.get("ob_pre", False)
             mkt = pending.get("market") or pending.get("stop_entry")
-            if t >= cut or i - max(pending["i"], pending.get("anchor_i", -1)) > max(1, p.pending_minutes // tf):
-                pending = None
+            if t >= cut or (i - max(pending["i"], pending.get("anchor_i", -1)) > max(1, p.pending_minutes // tf) and not pending.get("no_expire")):
+                pending = None                       # (caption-gap A12 range_lock / A21 breaker_range_hold: no_expire - the order rests until its range breaks)
             elif ob_pre and i - 1 > pending["i"] and sd.c[i - 1] < pending["ob_body_low"]:
                 pending = None                       # #11: a close below the OB bodies (bar i-1)
             elif (ob_pre and pending.get("sw_ref") is not None and pending["sw_ref"].get("ob_void")
@@ -4955,6 +5057,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             elif (pending.get("cancel_low") is not None and i - 1 > pending["i"]
                   and sd.l[i - 1] < pending["cancel_low"]):
                 pending = None                       # setups_models M11b: the OB low traded
+            elif (pending.get("cancel_close") is not None and i - 1 > pending["i"]
+                  and sd.c[i - 1] < pending["cancel_close"]):
+                pending = None                       # caption-gap A12-range-internal-ignore: a body close below the OB MT / the range low
             elif (pending.get("no_new_extreme") and i - 1 > pending["i"] and sd.l[i - 1] < pending["ext"]):
                 pending = None                       # M2.4: a new low printed before the fill
             elif (p.body_low_cancel and i - 1 > pending["i"] and sd.l[i - 1] < pending["body_low"]):
@@ -5605,6 +5710,8 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         o_ = _SM2.breaker_retest_order(ctx, sd, i, p, session, risk_mult)    # caption-gap A13-breaker-lifetime: repeat retests of the day's breakers
     if o_ is None and p.mitigation_entry and sd.sweep is None:
         o_ = _SM2.mit_order(ctx, sd, i, p, session, risk_mult)               # caption-gap A15-mitigation-block-entry: ranks below the breakers
+    if o_ is None and sd.sweep is None and (p.nwog_sr_entries or p.gap_edge_entry or p.gap_quarter_retrace or "bpr_ce" in p.entry_arrays or p.or_rb or p.consol_fade):
+        o_ = _SM2.extra2(ctx, sd, i, p, session, risk_mult)                  # caption-gap setups_models #2/7: the gap / BPR CE / OR block / consolidation-fade setups
     return o_
 
 
@@ -5613,8 +5720,8 @@ def _mss_ref(ctx, sd, sw, i, p):
     sweep extreme known by bar i; mss_ref_fallback "lower" tries the lower tiers, then (like
     "highest") the highest high of the 3*pivot_n bars before the extreme (the old rule); "none" =
     no reference. Returns (ref_i, ref, real_pivot) or None."""
-    if p.mss_ref in ("parent", "origin", "origin_max") or p.mss_ref_sibi or p.mss_ref_tf:
-        r = _SM.mss_ref(ctx, sd, sw, i, p)      # setups_models A19 / Ep08.4 / Ep07.6 / Ep08.16
+    if p.mss_ref in ("parent", "origin", "origin_max") or p.mss_ref_sibi or p.mss_ref_tf or p.mss_ref_raid or p.micro_regime:
+        r = _SM.mss_ref(ctx, sd, sw, i, p)      # setups_models A19 / Ep08.4 / Ep07.6 / Ep08.16 (+ #2/7: A19 mss_ref_raid, N micro_regime)
         if r is not None:
             return r
     tiers = ("stl", "itl", "ltl")
@@ -5687,6 +5794,8 @@ def _breaker_order(ctx, sd, sw, bz, i, p, session, risk_mult):
                 propulsion=False, unicorn_side="",
                 bz_top=float(max(sd.x(bz.top), sd.x(bz.bottom))), bz_bottom=float(min(sd.x(bz.top), sd.x(bz.bottom))),
                 bz_mt=bz.mt if p.breaker_mt_respect else None)
+    if p.breaker_range_hold:                      # caption-gap A21-pre-trigger-dealing-range (048 ~1:20:40): time does not invalidate - the order rests until a trade goes deeper than the breaker
+        tags.update(no_expire=True, cancel_low=float(bz.bottom))
     return _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult,
                          sd.h[sw["ext_i"]:i + 1].max(), tags, pctx_free=True)
 
@@ -5723,6 +5832,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     """Advance this side's sweep -> (OB before the break | MSS -> FVG) machine at bar i;
     return an order or None."""
     l, h, c = sd.l, sd.h, sd.c
+    if p.range_lock and _SM2.range_locked(sd, i):
+        return None                  # caption-gap A12-range-internal-ignore: a candle strictly inside the armed order's dealing range arms nothing
     tol = p.eq_tol_pts * p.es_pt
     tk = _tick(p)
     lv = _sell_side(ctx, sd, session, i, p.extra_pools or p.profile_consol_pm, p)      # (caption-gap DS2-consolidation-profiles: the PM lunch pool)
@@ -5920,8 +6031,11 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     ldz = []                           # caption-gap pass: A5 reclaimed FVGs, B5 HTF fixed zones, A8 inverted arrays (entry zones, not IFVGs)
     if p.fvg_reclaim:
         ldz += _LD.reclaimed_zones(ctx, sd, sw, i, p)
+    htf_keys = set()
     if p.htf_entry_arrays:
-        ldz += _LD.htf_entry_zones(ctx, sd, sw, i, p)
+        hz_ = _LD.htf_entry_zones(ctx, sd, sw, i, p)
+        htf_keys = {(round(float(z.top), 9), round(float(z.bottom), 9), z.i) for z in hz_}      # caption-gap A4-ltf-body-qualification
+        ldz += hz_
     if p.inversions:
         ldz += _LD.inv_entry_zones(ctx, sd, sw, i, p)
     if p.vi_flip_entries:
@@ -5946,7 +6060,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
             return o3
     if not gaps:
         if sw.get("ev_g") is not None:      # E5: alive until the order lifetime passed since the last gap
-            if i - sw["ev_i"] > max(1, p.pending_minutes // ctx.tf):
+            if i - sw["ev_i"] > max(1, p.pending_minutes // ctx.tf) and not p.mss_rearm_lower_high:
                 sd.sweep = None
             return None
         wait = p.fvg_wait * (p.setup_minutes // ctx.tf if p.entry_tf == "5m" and ctx.tf < p.setup_minutes else 1)
@@ -5969,7 +6083,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     if not _EN.engage_ok(ctx, i, p):    # Ep08.17: the sweep waits (is not consumed) until the range has formed
         _f("x_engage_range")
         return None
-    keep_sw = p.evolve_fvg or p.wait_structural
+    keep_sw = p.evolve_fvg or p.wait_structural or p.mss_rearm_lower_high      # caption-gap A19-second-mss-no-new-low (069 ~14:41): the side stays armed while the retrace does not pierce the sweep extreme
     rearm = sw.get("ev_g") is not None
     if keep_sw:                       # E5: the sweep stays alive; only a gap newer than these re-arms
         sw["ev_g"], sw["ev_i"] = max(g.i for g in gaps), i
@@ -5992,7 +6106,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     if not gaps:
         _f("x_fvg_closed_through")
         return None
-    fresh = [g for g in gaps if l[g.i + 1:i + 1].min(initial=np.inf) > g.top - p.mohawk]    # A4 mohawk poke ok
+    fresh = [g for g in gaps if l[g.i + 1:i + 1].min(initial=np.inf) > g.top - p.mohawk       # A4 mohawk poke ok
+             or (p.htf_body_qual and (round(float(g.top), 9), round(float(g.bottom), 9), g.i) in htf_keys and _SM2.body_qualified(ctx, sd, g, i, p))]   # caption-gap A4-ltf-body-qualification: wicks pierce, 15m / 5m bodies hold
     if not fresh:
         if p.evolve_fvg and rearm:
             return None                   # E5: only a newer UNTOUCHED gap replaces the order
@@ -6127,7 +6242,11 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         s_ = _EN.gap_stop(sd, g, sw, i, p, ob, p.stop_mode)
         stop = stop if s_ is None else s_
     if is_ifvg and (p.ifvg_entry != "edge" or p.ifvg_depth or p.ifvg_stop_pts):   # M10 / A8
-        entry, stop = _SM.ifvg_stop(sd, g, entry, stop, p)
+        r_ = _SM.ifvg_stop(sd, g, entry, stop, p, i)
+        if r_ is None:
+            _f("x_ifvg_depth")
+            return None                           # caption-gap A8-ifvg-depth-tolerances: the retrace reached past the cap / the CE
+        entry, stop = r_
     if is_ifvg and p.ifvg_min_risk_pts and ctx.tf > 1 and entry - stop < p.ifvg_min_risk_pts * p.es_pt:
         _f("x_ifvg_min_risk")
         return None
@@ -6192,9 +6311,15 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         o2 = _SM.array_order(ctx, sd, sw, i, p, session, risk_mult, entry, bz)
         if o2 is not None:
             return o2
+    rl_inv = None
+    if p.range_lock:                              # caption-gap A12-range-internal-ignore: the order rests with no expiry while the range holds
+        rl_inv = float(mt) if mt is not None else (float(ob.bottom) if ob is not None else float(sw["ext"]))
+        tags["no_expire"], tags["cancel_close"] = True, rl_inv
     o_ = _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult,
                        h[sw["ext_i"]:i + 1].max(), tags, pctx_free=True)
-    if o_ is not None and keep_sw and not p.evolve_fvg:
+    if o_ is not None and rl_inv is not None:
+        _SM2.range_lock_set(sd, sw, i, rl_inv, float(ob.bottom) if ob is not None else float(sw["ext"]))
+    if o_ is not None and keep_sw and not p.evolve_fvg and not p.mss_rearm_lower_high:
         sd.sweep = None                   # wait_structural: the sweep is consumed once an order is armed
     return o_
 
@@ -6404,6 +6529,15 @@ def _turtle(ctx, sd, sw, i, p, session, risk_mult):
         return None
     if p.ts_need_htf and not _htf_tag(ctx, sd, i, sw["ext"], p.eq_tol_pts * p.es_pt):
         return None
+    if p.ts_skip_reswept and _SM2.reswept(ctx, sd, sw, i, p):
+        _f("x_ts_reswept")               # caption-gap M12-second-takeout-turtle-soup (046): a second shallow break of an already swept pool is no turtle long
+        return None
+    if p.ts_need_smt and not _SM2.ts_smt_ok(sw):
+        _f("x_ts_no_smt")                # caption-gap B18-smt-accum-distrib (cc03_005): the correlated asset must refuse the break
+        return None
+    if p.ts_itl_context and not _SM2.itl_ok(ctx, sd, sw, i, p):
+        _f("x_ts_itl_context")           # caption-gap new-intermediate-term-hl-fade (cc09_005): an older-than-yesterday pool is faded only with context
+        return None
     if p.ts_need_flow:                   # setups_models M12 (cc09_005 ~3:12): HTF order flow its way
         cf_ = getattr(ctx, "conf", None)
         if cf_ is None or cf_.trend(ctx.idx[i] + pd.Timedelta(minutes=ctx.tf), "D") != sd.sign:
@@ -6423,7 +6557,11 @@ def _turtle(ctx, sd, sw, i, p, session, risk_mult):
             arr = min(ins, key=lambda a: a[0])           # [our interpretation] the tightest array
         if arr is not None and p.ts_entry == "array":
             entry = min(arr[0], sw["level"])
-        stop = _ts_stop(ctx, sd, sw, i, p, arr, entry)
+        nx = _SM2.next_array_level(ctx, sd, i, sw["level"], p, kb) if p.ts_next_array else None     # caption-gap new-stop-run-overshoot-next-array (025 ~1:05:16)
+        if nx is not None:
+            entry, stop = nx
+        else:
+            stop = _ts_stop(ctx, sd, sw, i, p, arr, entry)
     else:                                                # or60: target the OR60 high
         hi = sd.x(ctx.or60[0] if sd.sign > 0 else ctx.or60[1])
         fixed = [(hi + p.pool_beyond_pts * p.es_pt if p.exit_mode == "split" else hi - p.exit_before_pts * p.es_pt, "pool")]
@@ -6506,6 +6644,17 @@ def _cc_limit(ctx, sd, i, p, session, risk_mult):
     stop = v - p.ts_max_pts * p.es_pt - p.pad
     sw = dict(session=session, name=k, level=v, key=k, ext=entry, ext_i=i, broke=None, sweep_i=i,
               smt=None, smt2=None)
+    if p.ts_skip_reswept and _SM2.reswept(ctx, sd, sw, i, p):
+        _f("x_ts_reswept")                  # caption-gap M12-second-takeout-turtle-soup
+        return None
+    if p.ts_itl_context and not _SM2.itl_ok(ctx, sd, dict(sw, ext=v), i, p):
+        _f("x_ts_itl_context")
+        return None
+    if p.ts_next_array:                     # caption-gap new-stop-run-overshoot-next-array: the resting limit sits at the next array beyond the pool
+        nx = _SM2.next_array_level(ctx, sd, i, v, p, ctx.idx[i] + pd.Timedelta(minutes=ctx.tf))
+        if nx is not None:
+            entry, stop = nx
+            sw["ext"] = entry
     tags = dict(unicorn=False, fvg_bottom=stop, fvg_ce=(entry + stop) / 2, entry_kind="ts_cc_limit",
                 mitigation=False, propulsion=False)
     return _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, sd.h[i], tags, skip_leg_pd=True)
@@ -6701,6 +6850,10 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     if rj_:
         _f(rj_)
         return None
+    rj_ = _SM2.order_gate2(ctx, sd, sw, i, p, entry, stop, session, lvt, lvx, tags)             # caption-gap setups_models #2/7 gates / tags (setup model, delivery, daily half, REH trap, two-rally, poke, states, IFVG narrative ...)
+    if rj_:
+        _f(rj_)
+        return None
     if p.wick_react != "off":            # Ep 08: the sweep extreme at a prior daily wick CE
         wr = any(abs(sw["ext"] - w) <= tol for w in _wick_ces(ctx, sd, True))
         if wr:
@@ -6801,6 +6954,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             lv = sorted(set(lv) | set(extra))
         extra = _lv_finish_targets(ctx, sd, i, above, p, htf_t)    # levels_detectors arrays
         extra = list(extra) + _SM2.extra_targets(ctx, sd, sw, i, p, session, entry)     # caption-gap setups_models #1/7: the leg low after compressed highs, the PM consolidation pools
+        if p.org_two_rally:
+            extra = list(extra) + _SM2.org_two_rally_targets(ctx, sd, i, p, entry)      # caption-gap L7-gap-up-premium-template: open -/+ 5 pts, then the prior close
         if p.daily_vi_targets or p.news_ce_target:                 # setups_models M1.1 / N6
             more = _SM.more_targets(ctx, sd, i, above, p)
             extra = list(extra) + more
@@ -7088,6 +7243,8 @@ def _smt(ctx, sd, i, key, level, session, pctx, psides, ppos, p=None):
     j = ppos.index.searchsorted(ctx.idx[i], side="right") - 1
     if j < pctx.start:
         return None
+    if p is not None and p.smt_mode == "three_point":
+        return _smt_qual(ctx, sd, i, p, _SM2.three_point_smt(ctx, sd, i, pctx, ps, j, p))     # caption-gap B18-smt-three-point-swing: low - lower low - higher low vs low - lower low - lower low
     if p is not None and p.smt_pm_points and session == "PM":
         return _smt_qual(ctx, sd, i, p, _SM2.pm_points(ctx, sd, i, pctx, ps, j))     # caption-gap B18-pm-smt-reference-points: lunch-hour low vs the first low after 13:00
     if p is not None and p.smt_ref_window and not _SM2.smt_ref_ok(ctx, sd, i, key, level, p):
