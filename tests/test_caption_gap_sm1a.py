@@ -624,7 +624,14 @@ def test_judas_depth():
     tags = {}
     assert sm2.order_gate(ctx, sl, sw, i, replace(p, judas_max_adr=0.4), 3992.0, 3984.0, "AM", None, None, [], {}, tags) is None
     assert tags["judas_depth"] == pytest.approx(0.375, rel=0.01)
-    assert sm2.judas_depth(ctx, sl, dict(ext=4001.0), i, p, "AM") == 0.0                                      # not beyond the open
+    flat, (sf, _) = mkctx([(4000.2, 4002.0, 4000.1, 4001.0)] * 4, base=4000.0, hist=hs)
+    assert sm2.judas_depth(flat, sf, dict(ext=4001.0), ib(flat, "09:40"), p, "AM") == pytest.approx(0.0, abs=0.01)                      # never beyond the open
+    # the Judas extreme is the SESSION's lowest low after the open bar up to the MSS, not only the order's sweep extreme (review fix)
+    assert sm2.judas_depth(ctx, sl, dict(ext=4001.0), i, p, "AM") == pytest.approx(0.375, rel=0.01)
+    assert sm2.judas_depth(ctx, sl, dict(ext=4001.0, broke=ib(ctx, "09:30") - 1), i, p, "AM") == pytest.approx(0.0, abs=0.01)   # an MSS before the low: the low is no Judas of this order
+    tg = {}
+    sm2.order_gate(ctx, sl, dict(ext=3985.0), i, replace(p, judas_max_adr=0.0, judas_depth_tag=True), 3992.0, 3984.0, "AM", None, None, [], {}, tg)
+    assert tg["judas_depth"] == pytest.approx(0.375, rel=0.01)                                                        # the tag alone, no gate
     # the mirror: a short, the Judas above the open
     rows_s = [(4000.0, 4015.0, 3999.0, 4010.0)] + [(4010.0, 4011.0, 4008.0, 4009.0)] * 3
     ctx2, (_, ss2) = mkctx(rows_s, base=4000.0, hist=hs)

@@ -928,10 +928,12 @@ def pm_reversal(ctx, sd, i, p, risk_mult):
         # caption-gap DS2-am-move-pm-reversal-templates (cc10_013 ~6:36): a sweep of the LUNCH extreme (a failure swing vs the AM extreme) also counts
         lx = sd.x(ctx.sess["lunch"][1] if sd.sign > 0 else ctx.sess["lunch"][0])
         am_x = max(am_x, lx)
+        S._SM2.hit("pm_reversal_lunch")
     if p.pm_reversal_ltf_only:
         # ... the reversal carries through only when the AM move started off a 60m / 15m array: a 4h+ origin (the AM extreme's array) blocks it
         cf = getattr(ctx, "conf", None)
         if cf is not None:
+            S._SM2.hit("pm_reversal_ltf")
             org = float(ctx.am_hl[1] if sd.sign < 0 else ctx.am_hl[0])       # real price of the AM move's origin (its low for an AM rally = b > 0)
             if any(t_ in ("4h", "D", "W", "M") for t_ in cf.at(ctx.idx[k_pm], org, b)):
                 S._f("x_pm_reversal_htf_origin")

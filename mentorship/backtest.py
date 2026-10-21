@@ -388,7 +388,7 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     p, ds = pr.p, pr.ds
     pmap = {g.index[0].date(): g for g in days(partner, tf, partial_last, p.session_close)} if partner is not None else {}
     pmap2 = {g.index[0].date(): g for g in days(partner2, tf, partial_last, p.session_close)} if partner2 is not None else {}
-    locks, skips = [], []
+    locks, skips, objective = [], [], []
     hist_p: list[pd.DataFrame] = []
     hist_p2: list[pd.DataFrame] = []
     rows = []
@@ -408,7 +408,7 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             if p.risk_basis == "equity":               # #12: start-of-day equity, closed trades only
                 eq = p.account_equity + sum(r["net"] for r in rows)
             kw = day_kwargs(pr, k, eq, (intermarket or INTERMARKET()).get(d), week_state(rows, d) if p.dw_needs_week else None)
-            day_trades = run_day(partner=pa, partner2=pa2, locks=locks, skips=skips, risk_state=rs, **kw)
+            day_trades = run_day(partner=pa, partner2=pa2, locks=locks, skips=skips, risk_state=rs, objective=objective, **kw)
             if p.max_trades_week:                        # X15: the week's budget is applied in ENTRY-time order (run_day did it
                 day_trades = sorted(day_trades, key=lambda t_: t_.entry_time)[:p.max_trades_week - n_wk]   # already; the main loop first, then
                                                          # the Silver Bullet / Ma Deuce: the old slice dropped the earlier trade)
@@ -424,6 +424,8 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
         out.attrs["days"] = len(ds) - warmup
     out.attrs["locks"] = locks
     out.attrs["skips"] = skips
+    if objective:                          # D15 laggard_objective: the per-day, per-instrument draw-met moments (also for days without a trade)
+        out.attrs["objective_met"] = {(r["date"], r["symbol"]): r["t"] for r in objective}
     return out
 
 
@@ -549,15 +551,47 @@ def consolidation_day(row) -> bool:
 ES_SYMBOLS = ("ES", "MES")           # D15 pick="fixed_es" (cc10_012 / cc10_014: the crack in any index signals the trade in ES)
 
 
-def objective_met_filter(t: pd.DataFrame, consol_only: bool = False) -> pd.DataFrame:
-    """BH-D15-sick-sister-laggard (056 ~9:10; 070 ~18:41; 099 ~26:53): once one instrument's objective is met - one of its trades reached its last ladder
-    level (`final_hit`, the locked draw) and exited at time T - its own later fills go and only the OTHER instruments' fills from T on stay (the unmet
-    one, the 'sick sister', routed to its own analogous target). Fills before T are untouched (the rule needs the leader to have met it: causal,
-    T is a past exit at every later entry). `consol_only` (the 053 statement, D15 option B's narrow form): only on consolidation days (`consolidation_day`);
-    every other day keeps all fills, ready for the plain first-fill pick."""
-    if not {"final_hit", "exit_time", "symbol", "entry_time"} <= set(t.columns) or not len(t):
+def _met_map(runs, t: pd.DataFrame) -> dict | None:
+    """{(date, symbol): the moment that instrument's own draw was met (None = not met)} from the runs' `attrs["objective_met"]` (backtest.run: engine level,
+    days without a trade included) and the trades' `obj_met_t` column; None when neither exists (hand-made books: the trade-outcome fallback)."""
+    m = {}
+    have = False
+    for r in runs:
+        om = getattr(r, "attrs", {}).get("objective_met")
+        if om is not None:
+            have = True
+            m.update(om)
+    if "obj_met_t" in t.columns:
+        have = True
+        for (d, s), g in t.groupby(["date", "symbol"]):
+            v = g.obj_met_t.dropna()
+            if len(v) and (d, s) not in m:
+                m[(d, s)] = v.iloc[0]
+    return m if have else None
+
+
+def objective_met_filter(t: pd.DataFrame, consol_only: bool = False, met: dict | None = None) -> pd.DataFrame:
+    """BH-D15-sick-sister-laggard (056 ~9:10; 070 ~18:41; 099 ~26:53): once one instrument's objective is met - the draw of its OWN htf.table row traded
+    since it was formed, computed inside `run_day` per instrument (`sm2.objective_record`, `met` = {(date, symbol): moment}) - its own later fills go
+    (a fill at or after the moment) and only the instruments that have NOT met theirs keep trading (the 'sick sister', routed to its own analogous
+    target). Fills before the moment are untouched (a past moment at every later entry: causal). `consol_only` (the 053 statement, D15 option B's narrow
+    form): only on consolidation days (`consolidation_day`); every other day keeps all fills, ready for the plain first-fill pick.
+    Without `met` (hand-made books) the old read from the trades is the fallback: an instrument's objective counts as met when one of its trades reached
+    its last ladder level (`final_hit`) and exited at T."""
+    if not {"exit_time", "symbol", "entry_time"} <= set(t.columns) or not len(t):
         return t
     keep = pd.Series(True, index=t.index)
+    if met is not None:
+        for d, day in t.groupby("date"):
+            if consol_only and not day.apply(consolidation_day, axis=1).any():
+                continue
+            for sym, g in day.groupby("symbol"):
+                T = met.get((d, sym))
+                if T is not None and T == T:
+                    keep.loc[g[g.entry_time >= T].index] = False
+        return t[keep]
+    if "final_hit" not in t.columns:
+        return t
     done = t[t.final_hit.eq(True) & t.exit_time.notna()]
     for d, g in done.groupby("date"):
         day = t[t.date == d]
@@ -653,7 +687,7 @@ def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, 
             later = (t.session == "AM") & (t.setup != "sb_am") & (t.entry_time > t.date.map(done))
             t = t[~later]
     if pick == "laggard_objective":                    # D15 (caption-gap BH-D15-sick-sister-laggard): the unmet instrument after a leader met its objective
-        t = objective_met_filter(t, laggard_consol_only)
+        t = objective_met_filter(t, laggard_consol_only, _met_map(runs, t))
         pick = "first"
     elif pick == "swept":                              # D15 (BH D15-which-index-contradiction): the swept index (turtle soup) = the SMT tag True: "laggard"
         pick = "laggard"

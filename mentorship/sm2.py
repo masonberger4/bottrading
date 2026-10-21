@@ -136,6 +136,24 @@ def open_pools(ctx, sd, i: int, p, out: dict) -> None:
             out[k] = sd.x(v)
 
 
+def smt_ref_ok(ctx, sd, i: int, key: str, level: float, p) -> bool:
+    """B18-am-smt-window-points (086 ~5:42): the extreme the SMT compares (the swept level's low in side space; for an open point the open's own time) printed
+    inside [smt_win_a, smt_win_b] (minutes of the day, inclusive). The time = the last bar before i whose low sits at the level within eq_tol_pts; a level
+    with no such bar today (a prior day's pool) is outside. [our interpretation]"""
+    S = _S()
+    hit("smt_ref_window")
+    if key in OPEN_KEYS:
+        t = S.OPEN_MIN[OPEN_KEYS[key]]
+        return p.smt_win_a <= t <= p.smt_win_b
+    a = ctx.start
+    if i <= a:
+        return False
+    near = np.flatnonzero(np.abs(sd.l[a:i] - level) <= p.eq_tol_pts * p.es_pt + 1e-9)
+    if not len(near):
+        return False
+    return p.smt_win_a <= int(ctx.t[a + int(near[-1])]) <= p.smt_win_b
+
+
 def created(ctx, key: str):
     """The bar from which the open pool exists (the bar AFTER the open's own bar: its low is always at or under its open), else None."""
     if key in OPEN_KEYS:
@@ -145,6 +163,18 @@ def created(ctx, key: str):
 
 
 # --- B12: wrong-side tolerance, the PO3 sequence, Judas depth ---------------------------------------------------------------------------
+
+def judas_from(ctx, a: int, ref_px: float) -> int:
+    """First bar the Judas scan may read: the bar AFTER the open's own bar when the reference open is that of bar `a` (midnight; the 13:30 open in the
+    PM) - the open bar's low is below its own open almost every time, so counting it would make 'the open already traded through' trivially true.
+    Other opens (08:30 / 09:30) keep the scan from `a` (the overnight trade beyond a later open is the Judas the source describes)."""
+    S = _S()
+    for nm, m in S.OPEN_MIN.items():
+        v = ctx.opens.get(nm) if hasattr(ctx, "opens") else None
+        if v is not None and abs(float(v) - float(ref_px)) < 1e-9 and S._idx_at(ctx, m) == a:
+            return a + 1
+    return a
+
 
 def open_tol_ok(ctx, sd, sw, i: int, p, session: str, entry: float, ref_open_px: float) -> bool:
     """BH-B12-midnight-open-tolerance (006 ~25:38; 010 ~38:48): the entry may sit up to `open_tol_pts` ES points on the WRONG side of the reference
@@ -158,7 +188,7 @@ def open_tol_ok(ctx, sd, sw, i: int, p, session: str, entry: float, ref_open_px:
     b = sw.get("broke")
     if b is None:
         return False                                   # (c) no MSS yet
-    seg = sd.l[a:b]                                    # the Judas: the open traded through BEFORE the MSS bar
+    seg = sd.l[judas_from(ctx, a, ref_open_px):b]       # the Judas: the open traded through BEFORE the MSS bar (not the open bar itself)
     return bool(len(seg) and seg.min() < x - 1e-9)
 
 
@@ -173,6 +203,7 @@ def po3_seq_state(ctx, sd, sw, i: int, p, session: str, entry: float):
     a = sess_a(ctx, session)
     b = sw.get("broke")
     end = i if b is None else b
+    a = judas_from(ctx, a, r)                         # not the open bar itself (its low is below its own open almost always)
     below = np.flatnonzero(sd.l[a:end + 1] < x - 1e-9)
     if not len(below):
         return False
@@ -184,13 +215,20 @@ def po3_seq_state(ctx, sd, sw, i: int, p, session: str, entry: float):
 
 
 def judas_depth(ctx, sd, sw, i: int, p, session: str):
-    """B12-judas-depth-adr (cc08_003 ~12:59, FX translated by ADR): (reference open - the sweep extreme) / ADR5 in side terms (0 when the extreme is
-    not beyond the open); None without an open or an ADR."""
+    """B12-judas-depth-adr (cc08_003 ~12:59, FX translated by ADR): (reference open - the Judas extreme) / ADR5 in side terms (0 when the extreme is not
+    beyond the open). The Judas extreme = the session's lowest low (side space) after the open bar up to the MSS (bar i without one), or the sweep
+    extreme when that is lower; None without an open or an ADR."""
     r = ref_open(ctx, p, session, i)
     a5 = adr5(ctx)
     if r is None or not a5:
         return None
-    return max(0.0, (sd.x(r) - sw["ext"]) / a5)
+    ext = sw["ext"]
+    a = judas_from(ctx, sess_a(ctx, session), r)
+    b = sw.get("broke")
+    seg = sd.l[a:(i if b is None else b) + 1]
+    if len(seg):
+        ext = min(ext, float(seg.min()))
+    return max(0.0, (sd.x(r) - ext) / a5)
 
 
 def touch_count(ctx, sd, sw, i: int, p, session: str) -> int:
@@ -295,7 +333,7 @@ def gap_premium_gate(ctx, sd, sw, i: int, p, lvt: list):
     hit("gap_premium")
     if sd.sign == g:                                   # the gap's own direction (longs after a gap up): not chased
         return "x_gap_premium_long"
-    seg = ctx.l[k930:i + 1] if g > 0 else ctx.h[k930:i + 1]
+    seg = ctx.l[k930 + 1:i + 1] if g > 0 else ctx.h[k930 + 1:i + 1]    # a bar AFTER the 09:30 bar (its own low is below its open almost always)
     if not len(seg) or (seg.min() >= o930 if g > 0 else seg.max() <= o930):
         return "x_gap_premium_wait"
     lvt.append("gap_premium_smt" if sw.get("smt") is True else "gap_premium_nosmt")
@@ -404,6 +442,16 @@ def compressed_leg_low(ctx, sd, sw, i: int, p):
     a = ctx.start + int(np.argmax(ot.h[ctx.start:orun[0].i + 1]))
     low = float(ot.l[a:orun[0].i + 1].min())
     return sd.x(ot.x(low))
+
+
+def compressed_first(ctx, sd, sw, i: int, p, entry: float, lv: list) -> list:
+    """BH-compressed-higher-highs (028 ~1:26:02): after an MSS below a compressed run the leg low is the FIRST target - the targets nearer than it go
+    (side space), the leg low joins as a pool."""
+    v = compressed_leg_low(ctx, sd, sw, i, p)
+    if v is None or v <= entry:
+        return lv
+    hit("compressed_first")
+    return sorted(set([(x, k) for x, k in lv if x >= v - 1e-9] + [(v, "pool")]))
 
 
 def pool_runs(ctx, sd, i: int, p, session: str) -> int:
@@ -563,6 +611,24 @@ def mss_htf_reject(ctx, sd, sw, i: int, p, session: str, ref_i: int, ref: float)
     return True
 
 
+def against_bias_break(ctx, sd, i: int, p, session: str, w: int) -> None:
+    """A19-break-against-htf-stop-run in the main loop: the side AGAINST the bias is never scanned, so its break is looked for here. The first CLOSE of bar i
+    beyond the latest confirmed swing of `sd` (side space: a close above its newest pivot high of today = a real break of a swing low for a short Side) while the
+    bias flow is the other way is a stop run, not an MSS: with stoprun_rearm the bias Side's sweep is armed (`mss_htf_reject`, once per sweep; the run's extreme
+    = the lowest low since that swing formed). [our interpretation of 'the break']"""
+    ph = [q for q in sd.ph if q.known <= i - 1 and q.i >= ctx.start]
+    if not ph or i <= ctx.start:
+        return
+    q = ph[-1]
+    if not (sd.c[i] > q.price and sd.c[i - 1] <= q.price):
+        return
+    ctx.cur_bias = w
+    sws = _c(ctx).setdefault("against_sw", {})
+    sw = sws.setdefault((sd.sign, q.i), dict(session=session, ext_i=int(q.i), ext=float(sd.x(ctx.l[q.i])), broke=None))
+    hit("against_break")
+    mss_htf_reject(ctx, sd, sw, i, p, session, int(q.i), float(q.price))
+
+
 # --- A13: breakers --------------------------------------------------------------------------------------------------------------------------
 
 def breaker_confirmed(ctx, sd, sw, bz, i: int, p) -> bool:
@@ -574,7 +640,11 @@ def breaker_confirmed(ctx, sd, sw, bz, i: int, p) -> bool:
         return False
     if p.breaker_needs_disp:
         hit("breaker_disp")
-        if not any(sw["ext_i"] <= g.src <= b and g.i <= min(b + p.breaker_disp_bars, i) for g in sd.gaps):
+        gs = [g for g in sd.gaps if sw["ext_i"] <= g.src <= b and g.i <= min(b + p.breaker_disp_bars, i)]
+        # "price should not trade back into the rebalanced range" (001 ~45:39) [our interpretation]: a CLOSE back through the displacement FVG (below its bottom,
+        # side space) undoes the repricing - that FVG no longer confirms (a retest of the breaker inside the gap's span is the entry itself, so only a full return counts)
+        gs = [g for g in gs if not (sd.c[g.i + 1:i + 1] < g.bottom - 1e-9).any()]
+        if not gs:
             return False
     if p.breaker_break_ref == "body_high":
         hit("breaker_body_high")
@@ -622,7 +692,21 @@ def breaker_retest_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     to the end of the day (PM last hour included). The first touch is the ordinary flow's; this is the REPEAT retest."""
     S = _S()
     for e in sorted(_c(ctx).get(("brk", sd.sign), []), key=lambda e: -e["born"]):
-        if i <= e["born"] or not brk_alive(sd, e, i, p) or not sd.c[i] > e["top"]:
+        if i <= e["born"] or not brk_alive(sd, e, i, p):
+            continue
+        if p.breaker_accumulate and not e.get("acc") and e["bottom"] <= sd.c[i] <= e["top"]:
+            # A13-breaker-lifetime (015): entries may ACCUMULATE inside the breaker without a break and retest - once per breaker, a limit at the zone's CE
+            # while price sits inside it [our interpretation of 'accumulate']
+            e["acc"] = True
+            hit("breaker_accumulate")
+            bz = L.Zone("bull", (e["top"] + e["bottom"]) / 2, e["bottom"], i, e["src"], e["mt"])
+            sw = dict(e["sw"], session=session)
+            sw.pop("bz_sent", None)
+            o = S._breaker_order(ctx, sd, sw, bz, i, p, session, risk_mult)
+            if o is not None:
+                return o
+            continue
+        if not sd.c[i] > e["top"]:
             continue
         last = e["born"] if e["armed_i"] is None else e["armed_i"]
         if not sd.l[last + 1:i + 1].min(initial=np.inf) <= e["top"]:
@@ -675,9 +759,39 @@ def htf_sibi_gate(ctx, sd, sw, i: int, p, entry: float, lvt: list, lvx: dict):
 
 # --- T3 / T13 ------------------------------------------------------------------------------------------------------------------------------------
 
+def lc_array(ctx, sd, sw, i: int, p):
+    """The highest HTF array (Confluence, FVG / OB of the order's side, p.daily_level_array_tfs) that holds the SWEEP EXTREME, known by the time the extreme
+    printed: (top, bottom, tf) real prices, or None (also without a Confluence object)."""
+    cf = getattr(ctx, "conf", None)
+    if cf is None:
+        return None
+    from .confluence import TFS
+    j = sw.get("ext_i", i)
+    when = ctx.idx[j] + pd.Timedelta(minutes=ctx.tf)
+    ext_r = sd.x(sw["ext"])
+    tol = p.eq_tol_pts * p.es_pt
+    best = None
+    for top, bot, tf, src, known in cf.valid(when, sd.sign, tuple(p.daily_level_array_tfs), (0, 1), when):
+        if min(top, bot) - tol <= ext_r <= max(top, bot) + tol and (best is None or TFS.index(tf) > TFS.index(best[2])):
+            best = (round(float(top), 6), round(float(bot), 6), tf)
+    return best
+
+
+def morning_dir(ctx, i: int) -> int:
+    """The 09:30-10:00 leg's direction (real): sign of (the close of the last bar before 10:00 - the 09:30 open); 0 when 10:00 is not yet in / no open."""
+    S = _S()
+    k1000 = S._idx_at(ctx, 600)
+    o930 = S._open_known(ctx, "0930", i)
+    if o930 is None or k1000 > i + 1 or k1000 - 1 < 0:
+        return 0
+    return int(np.sign(float(ctx.c[k1000 - 1]) - float(o930)))
+
+
 def lc_reversal(ctx, sd, sw, i: int, p, cf, htf) -> bool:
-    """T3-london-close-multiday-reversal (cc09_005 ~32:44): an entry armed in 10:00-12:00 whose sweep extreme sat at an HTF array and ran against the
-    morning (side space: below the 09:30 open) - a possible multi-day turn."""
+    """T3-london-close-multiday-reversal (cc09_005 ~32:44): an entry armed in 10:00-12:00 against the morning's direction (the 09:30-10:00 leg; a long after
+    a morning decline) whose sweep extreme (below the 09:30 open, side space) sat INSIDE an HTF array - a possible multi-day turn. The array is the Confluence
+    array holding the sweep extreme (`lc_array`; recorded per extreme for the retry's 'same array'); without a Confluence object the order's own confluence list
+    stands in."""
     S = _S()
     t = ctx.t[i]
     if not 600 <= t < 720:
@@ -685,24 +799,47 @@ def lc_reversal(ctx, sd, sw, i: int, p, cf, htf) -> bool:
     o930 = S._open_known(ctx, "0930", i)
     if o930 is None or not sw["ext"] < sd.x(o930) - 1e-9:
         return False
+    md = morning_dir(ctx, i)
+    if md and md == sd.sign:                           # the morning already went the order's way: not a reversal against it
+        return False
+    if getattr(ctx, "conf", None) is not None:
+        arr = lc_array(ctx, sd, sw, i, p)
+        if arr is None:
+            return False
+        _c(ctx).setdefault("lc_arr", {})[round(float(sd.x(sw["ext"])), 6)] = arr
+        return True
     return bool(S._htf_array(cf, p) if cf is not None else htf)
 
 
 def lc_reopen(ctx, tr, done: dict, key: str, state: dict) -> None:
-    """T3 lc_reentry: after a stopped-out lc_reversal one more try (the one-trade-per-session flag is re-opened for this case only)."""
+    """T3 lc_reentry: after a stopped-out lc_reversal one more try (the one-trade-per-session flag is re-opened for this case only). The retry is bound to
+    the slot (session + done key) and to the first trade's HTF array."""
     hit("lc_reopen")
     done[key] = False
     state["lc_done"] = True
-    ctx.lc_retry = dict(side=1 if tr.side == "long" else -1, ext_px=float(tr.ext_px) if tr.ext_px is not None else None)
+    ext = float(tr.ext_px) if tr.ext_px is not None else None
+    arr = None if ext is None else _c(ctx).get("lc_arr", {}).get(round(ext, 6))
+    ctx.lc_retry = dict(side=1 if tr.side == "long" else -1, ext_px=ext, session=tr.session, key=key, arr=arr)
 
 
-def lc_retry_gate(ctx, sd, sw, i: int, p, lc: bool):
-    """While the re-opened slot is live every order must be the retry: same direction, 10:00-12:00, a sweep BEYOND the first extreme at an HTF array."""
+def lc_clear(ctx) -> None:
+    """The retry slot was used (its trade closed): the gate is gone."""
+    if getattr(ctx, "lc_retry", None):
+        ctx.lc_retry = None
+
+
+def lc_retry_gate(ctx, sd, sw, i: int, p, lc: bool, session: str = "AM", tags: dict | None = None):
+    """While the re-opened slot is live, an order OF THAT SLOT (same session and done key) must be the retry: same direction, 10:00-12:00, a sweep BEYOND the
+    first extreme inside the SAME HTF array. Orders of other sessions (the PM) are not touched."""
     ry = getattr(ctx, "lc_retry", None)
     if not ry:
         return None
+    if session != ry.get("session", session) or (tags or {}).get("done_key", session) != ry.get("key", session):
+        return None
     hit("lc_retry")
     if not (sd.sign == ry["side"] and lc and ry["ext_px"] is not None and sw["ext"] < sd.x(ry["ext_px"]) - 1e-9):
+        return "x_lc_retry"
+    if ry.get("arr") is not None and getattr(ctx, "conf", None) is not None and lc_array(ctx, sd, sw, i, p) != ry["arr"]:
         return "x_lc_retry"
     return None
 
@@ -710,6 +847,7 @@ def lc_retry_gate(ctx, sd, sw, i: int, p, lc: bool):
 def judas_news(ctx, sw, p) -> bool:
     """T13-judas-news-driver (cc01_002 ~15:16): the Judas sweep's extreme came within `judas_news_min` minutes of a scheduled release."""
     from . import newscal as NC
+    hit("judas_news")
     t = int(ctx.t[sw["ext_i"]])
     return any(R - p.judas_news_min <= t <= R + p.judas_news_min for R in NC.releases(ctx.day, p))
 
@@ -726,15 +864,38 @@ def am_leg(ctx, k810: int):
     return d, float(h.max()), float(l.min())
 
 
+def opp_touched(cf, now, d: int, lo: float, hi: float, tfs=("4h", "D", "W")) -> bool:
+    """Whether price has traded INTO an opposing array (real prices; for a leg in direction d the arrays of side -d on `tfs`) anywhere in the leg's range
+    [lo, hi] - the swing origin to its extreme, not only at the extreme (DS2 two-session validity, cc10_013 ~5:10)."""
+    if cf is None:
+        return False
+    for top, bot, *_ in cf.valid(now, -d, tfs, (0, 1), now):
+        if min(top, bot) <= hi and max(top, bot) >= lo:
+            return True
+    return False
+
+
+def _releases(ctx) -> list:
+    from .calendar import release_times
+    return release_times(ctx.day)
+
+
+def _day_release(ctx) -> bool:
+    """A scheduled release from 10:00 on (the consolidation profiles' precondition)."""
+    return any(R >= 600 for R in _releases(ctx))
+
+
 def pm_profile_gate(ctx, sd, sw, i: int, p, session: str, entry: float, lvt: list):
-    """DS2-two-session-close-templates / DS2-consolidation-profiles (cc10_013 ~1:33-15:43), PM only."""
+    """DS2-two-session-close-templates / DS2-consolidation-profiles (cc10_013 ~1:33-15:43): the PM templates, and the AM variants (`two_session_am`,
+    `profile_consol_am`)."""
+    if session == "AM":
+        return am_profile_gate(ctx, sd, sw, i, p, entry, lvt)
     if session != "PM" or not (p.profile_two_session or p.profile_consol_pm):
         return None
     S = _S()
     k810 = S._idx_at(ctx, 810)
     if i < k810 or k810 >= len(ctx.t):
         return None
-    from .calendar import release_times
     d, ah, al = am_leg(ctx, k810)
     if d == 0:
         return None
@@ -743,16 +904,20 @@ def pm_profile_gate(ctx, sd, sw, i: int, p, session: str, entry: float, lvt: lis
     ext_r = ah if d > 0 else al
     opp = lambda tfs: cf is not None and any(t_ in tfs for t_ in cf.at(now, ext_r, -d))
     bias = bias_at(ctx, p, session, i)
-    if p.profile_two_session and bias == d and not opp(("4h", "D", "W")):
+    if p.profile_two_session and bias == d and not opp_touched(cf, now, d, al, ah):
         hit("two_session")
+        catalyst = p.two_session_catalyst and bool(_releases(ctx))       # a strong-catalyst day may trend straight through lunch: the PM trigger is not asked for
         if sd.sign != d:
             return "x_two_session_counter"
         lo, hi = float(sd.l[ctx.start:i + 1].min()), float(sd.h[ctx.start:i + 1].max())
-        if not (sw.get("key") == "lunch" or entry <= (lo + hi) / 2 + 1e-9):
+        if not (catalyst or sw.get("key") == "lunch" or entry <= (lo + hi) / 2 + 1e-9):
             return "x_two_session_trigger"
+        _c(ctx)["two_leg"] = (d, float(ah - al))
         lvt.append("two_session_up" if d > 0 else "two_session_down")
+        if catalyst:
+            lvt.append("two_session_catalyst")
         return None
-    if p.profile_consol_pm and bias == 0 and not any(R >= 600 for R in release_times(ctx.day)):
+    if p.profile_consol_pm and bias == 0 and not _day_release(ctx):
         hit("consol_pm")
         htf_arr = opp(("1h", "4h", "D", "W", "M"))
         if sd.sign != -d:
@@ -764,11 +929,50 @@ def pm_profile_gate(ctx, sd, sw, i: int, p, session: str, entry: float, lvt: lis
     return None
 
 
+def am_profile_gate(ctx, sd, sw, i: int, p, entry: float, lvt: list):
+    """DS2 AM variants. `two_session_am` (cc10_013 ~1:33, 'AM returns to a discount array, then rallies'): with the bias (`bias_at`) up and no opposing
+    4h / D / W array traded into since the day's low, AM orders are bias-direction longs at a same-side HTF (1h+) array only (the mirror for a down bias);
+    tag two_session_am_up / _down. `profile_consol_am` (~11:35-12:00; neutral bias, no release from 10:00): either direction, at an array of the order's side
+    (return to a discount / premium array) or - once the opening range has formed - on the expansion side of its equilibrium; London's opposite extreme
+    and the day's far extreme are extra targets (`pm_extra_targets`); tag consol_am_up / _down. [our interpretation of 'return to an array']"""
+    if not (p.two_session_am or p.profile_consol_am):
+        return None
+    cf = getattr(ctx, "conf", None)
+    now = now_ts(ctx, i)
+    ent_r = sd.x(entry)
+    bias = bias_at(ctx, p, "AM", i)
+    at_arr = cf is not None and any(t_ in ("1h", "4h", "D", "W") for t_ in cf.at(now, ent_r, sd.sign))
+    if p.two_session_am and bias:
+        lo, hi = float(ctx.l[ctx.start:i + 1].min()), float(ctx.h[ctx.start:i + 1].max())
+        if not opp_touched(cf, now, bias, lo, hi):
+            hit("two_session_am")
+            if sd.sign != bias:
+                return "x_two_session_am_counter"
+            if not at_arr:
+                return "x_two_session_am_array"
+            lvt.append("two_session_am_up" if bias > 0 else "two_session_am_down")
+            return None
+    if p.profile_consol_am and bias == 0 and not _day_release(ctx):
+        hit("consol_am")
+        ok = at_arr
+        if not ok and ctx.or_hl is not None and ctx.t[i] >= ctx.or_end:
+            eq = sd.x((ctx.or_hl[0] + ctx.or_hl[1]) / 2)
+            ok = entry >= eq - p.eq_tol_pts * p.es_pt
+        if not ok:
+            return "x_consol_am"
+        lvt.append("consol_am_up" if sd.sign > 0 else "consol_am_down")
+    return None
+
+
 def pm_extra_targets(ctx, sd, i: int, p, session: str, entry: float) -> list:
-    """DS2-consolidation-profiles: after the PM sweep + MSS the counter side targets the day's / London's opposite pools (side space, > entry)."""
-    if session != "PM" or not p.profile_consol_pm:
-        return []
+    """DS2-consolidation-profiles: after the PM sweep + MSS the counter side targets the day's / London's opposite pools (side space, > entry); the AM
+    consolidation variant (`profile_consol_am`) the same; DS2-two-session: the measured move (the PM leg ~= the AM leg, from the entry)."""
     out = []
+    tl = _c(ctx).get("two_leg")
+    if session == "PM" and p.profile_two_session and tl and tl[0] == sd.sign and tl[1] > 0:
+        out.append((entry + tl[1], "array"))
+    if not ((session == "PM" and p.profile_consol_pm) or (session == "AM" and p.profile_consol_am and bias_at(ctx, p, session, i) == 0)):
+        return out
     cand = [float(sd.h[ctx.start:i + 1].max())]          # side space: the day's far extreme in the trade's direction (a short: the day LOW, mirrored)
     lon = ctx.sess.get("london")
     if lon is not None:
@@ -785,6 +989,7 @@ def order_gate(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str, 
     """Gates / tags of this package at order completion (strategy._finish_order, after levels_detectors' own). Returns a reject key or None."""
     S = _S()
     if p.smt_with_bias and not want(ctx) and (sw.get("smt") is True or sw.get("smt2") is True):
+        hit("smt_no_bias")
         return "x_smt_no_bias"                             # B18: no clear daily IOF - the SMT is not traded
     if sw.get("smt_laggard"):
         lvt.append("smt_laggard")
@@ -793,12 +998,12 @@ def order_gate(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str, 
             tags["touch_n"] = touch_count(ctx, sd, sw, i, p, session)
         except Exception:                                  # a synthetic sweep without a level history
             pass
-    if p.judas_max_adr:
+    if p.judas_max_adr or p.judas_depth_tag:
         jd = judas_depth(ctx, sd, sw, i, p, session)
         if jd is not None:
             tags["judas_depth"] = round(float(jd), 4)
             hit("judas_depth")
-            if jd > p.judas_max_adr + 1e-12:
+            if p.judas_max_adr and jd > p.judas_max_adr + 1e-12:
                 return "x_judas_too_deep"
     if p.po3_seq != "off":
         ps = po3_seq_state(ctx, sd, sw, i, p, session, entry)
@@ -850,7 +1055,7 @@ def order_gate(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str, 
         if lc:
             tags["lc_reversal"] = True
             lvt.append("lc_reversal")
-        r = lc_retry_gate(ctx, sd, sw, i, p, lc)
+        r = lc_retry_gate(ctx, sd, sw, i, p, lc, session, tags)
         if r:
             return r
     r = pm_profile_gate(ctx, sd, sw, i, p, session, entry, lvt)
@@ -867,6 +1072,7 @@ def extra_targets(ctx, sd, sw, i: int, p, session: str, entry: float) -> list:
         if v is not None and v > entry:
             out.append((v, "pool"))
     out += pm_extra_targets(ctx, sd, i, p, session, entry)
+    out += news_pool_targets(ctx, sd, i, p, session, entry)
     return out
 
 
@@ -958,12 +1164,17 @@ def mit_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     narrative our way (the bias side), a resting limit in the day's alive mitigation block (the full range of the last down-close candle at the failed
     low for a short; side space: a bull zone below price) - at its near edge ("near") or CE ("mid") - stop beyond the block; once per retest, no
     expiry. Ranks below breakers (only tried when the sweep flow produced nothing). mit_needs_bias: the bias must be its way AND an untaken daily
-    pool / array lies beyond - its level is the target. Sub-cases NOT built: the 041 pre-open consolidation block and the cc06_005 4h block."""
+    pool / array lies beyond - its level is the target. `mit_preopen` adds the 041 pre-open consolidation block (`preopen_block`). NOT built: the cc06_005 4h-premium block (the 4h arrays carry no mitigation source and the day holds three 4h bars)."""
     S = _S()
     if want(ctx) != sd.sign:
         return None
     sent = sd.__dict__.setdefault("_mit_sent", {})
-    for z in sorted(sd.mitigations(), key=lambda z: -z.i):
+    zs, pre = list(sd.mitigations()), set()
+    pz = preopen_block(ctx, sd, i, p) if p.mit_preopen else None
+    if pz is not None:
+        zs.append(pz)
+        pre.add((pz.i, pz.src))
+    for z in sorted(zs, key=lambda z: -z.i):
         if z.i > i or z.i < ctx.start or not L.mitigation_alive(sd.c, z, i, p.mit_mt_invalid):
             continue
         if not sd.c[i] > z.top:
@@ -988,9 +1199,32 @@ def mit_order(ctx, sd, i: int, p, session: str, risk_mult: float):
         sw = dict(session=session, name="mitigation", level=float(z.top), key="mitigation", ext=float(z.bottom), ext_i=int(z.src), broke=int(z.i),
                   sweep_i=int(z.src), smt=None, smt2=None, **{S._SM.SYNTH: True})
         tags = dict(unicorn=False, fvg_bottom=float(z.bottom), fvg_ce=float((z.top + z.bottom) / 2), entry_kind="mitigation_entry", mitigation=True,
-                    propulsion=False, no_leg_wait=True, lv_tags=["mitigation_entry"])
+                    propulsion=False, no_leg_wait=True, lv_tags=["mitigation_entry"] + (["mit_preopen"] if (z.i, z.src) in pre else []))
         return S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, float(sd.h[z.src:i + 1].max()), tags, skip_leg_pd=True, fixed=fixed)
     return None
+
+
+def preopen_block(ctx, sd, i: int, p):
+    """A15-mitigation-block-entry, 041 ~0:00 (side space): the up-close candles of the 09:00-09:30 pre-open consolidation as ONE bullish mitigation block
+    (their full range: lowest low .. highest high), known from 09:30; the consolidation = the window's range of at most 0.25 x ADR5 [our interpretation of
+    the 041 window and of 'consolidation']. A Zone with kind bull, i = the last window bar, src = the first up-close candle, mt = the last one's body mean."""
+    S = _S()
+    k0, k1 = S._idx_at(ctx, 540), S._idx_at(ctx, 570)
+    if k1 > i + 1 or k1 - k0 < 2 or k0 < ctx.start:
+        return None
+    c = _c(ctx)
+    key = ("preopen", sd.sign)
+    if key not in c:
+        o, h, l, cl = sd.o[k0:k1], sd.h[k0:k1], sd.l[k0:k1], sd.c[k0:k1]
+        a5 = adr5(ctx)
+        up = np.flatnonzero(cl > o)
+        z = None
+        if len(up) and a5 and float(h.max() - l.min()) <= 0.25 * a5:
+            u = up + k0
+            z = L.Zone("bull", float(sd.h[u].max()), float(sd.l[u].min()), k1 - 1, int(u[0]), float((sd.o[u[-1]] + sd.c[u[-1]]) / 2))
+            hit("mit_preopen")
+        c[key] = z
+    return c[key]
 
 
 def daily_beyond(ctx, sd, i: int, p, entry: float):
@@ -1004,18 +1238,22 @@ def daily_beyond(ctx, sd, i: int, p, entry: float):
     if cf is not None:
         for near, ce, far, tf, src in cf.opposing(now_ts(ctx, i), sd.x(entry), sd.sign, ("D",), (0,)):
             cands.append(sd.x(near))
-    cands = [v for v in cands if v > entry]
+    day_hi = float(sd.h[ctx.start:i + 1].max())
+    cands = [v for v in cands if v > entry and v > day_hi + 1e-9]          # untapped today: a level the day already traded is not a draw
     return min(cands) if cands else None
 
 
 # --- release setups (N1 / N5) ----------------------------------------------------------------------------------------------------------------
 
-def release_setups(ctx, sides, i: int, p, state: dict, pos, pending, risk_mult: float):
+def release_setups(ctx, sides, i: int, p, state: dict, pos, pending, risk_mult: float, done: dict | None = None):
     """The three setups that fire around a scheduled release and bypass the news windows (nfp_floor_min / news_wait / nfp_first_hour) for themselves
     only: N1-nfp-release-4h-fvg, N5-entry-at-release (a) post_news_continuation, (b) release_ob_entry. Returns an order or None; each fires at most once a
     day (state["sm2_sent"]). Armed on the bar that has just closed."""
     if pos is not None or pending is not None:
         return None
+    if state.get("day_done"):                              # a day stop (daily loss / target / the day's trade ended it) ends these setups too
+        return None
+    done = done or {}
     S = _S()
     sent = state.setdefault("sm2_sent", set())
     t = int(ctx.t[i])
@@ -1028,13 +1266,13 @@ def release_setups(ctx, sides, i: int, p, state: dict, pos, pending, risk_mult: 
     out = None
     try:
         ctx.cur_lock, ctx.cur_news, ctx.cur_sloppy, ctx.cur_no_draw, ctx.cur_bias = None, None, "", False, 0
-        if p.nfp_release_fvg and "nfp" not in sent and "jobs" in tags and end == 510:
+        if p.nfp_release_fvg and "nfp" not in sent and "jobs" in tags and end == 510 and not done.get("NFPR"):
             sent.add("nfp")
             out = nfp_release_order(ctx, sides, i, p, risk_mult)
-        if out is None and p.release_ob_entry and "relob" not in sent and 600 in rel and end == 600:
+        if out is None and p.release_ob_entry and "relob" not in sent and 600 in rel and end == 600 and not done.get("AM"):
             sent.add("relob")
             out = release_ob_order(ctx, sides, i, p, risk_mult)
-        if out is None and p.post_news_continuation and "pnc" not in sent and 510 in rel and 515 <= end <= 570:
+        if out is None and p.post_news_continuation and "pnc" not in sent and 510 in rel and 515 <= end <= 570 and not done.get("PNC"):
             out = post_news_order(ctx, sides, i, p, risk_mult, sent)
     finally:
         for k in ("cur_lock", "cur_bias", "cur_news", "cur_sloppy", "cur_no_draw"):
@@ -1118,7 +1356,8 @@ def nfp_release_order(ctx, sides, i: int, p, risk_mult: float):
 def release_ob_order(ctx, sides, i: int, p, risk_mult: float):
     """N5-entry-at-release (b) (049 ~2:27): a 10:00 high-impact day with a known daily draw (the bias): when the close at 10:00 is inside an alive 5m OB of
     the bias side, a market entry at the 10:00 open (bar i + 1), the stop beyond the OB's far edge, one exit at the nearest short-term swing (a scalp,
-    sb_mgmt 'fixed' semantics). 'Continue only if SMT / sick sister supports it' is NOT built (always the scalp)."""
+    sb_mgmt 'fixed' semantics); 'continue only if SMT / the sick sister supports it' (`release_support`): then a second exit at the table's draw and the
+    lv_tag release_ob_continue, else the scalp."""
     S = _S()
     b = bias_at(ctx, p, "AM", i)
     if not b:
@@ -1135,15 +1374,47 @@ def release_ob_order(ctx, sides, i: int, p, risk_mult: float):
     if not t1:
         return None
     entry, stop = c, float(z.bottom) - p.pad
+    cont = release_support(ctx, sd, i, p, entry)
     sw = dict(session="AM", name="release_ob", level=float(z.top), key="release_ob", ext=float(z.bottom), ext_i=int(i), broke=int(i), sweep_i=int(i),
               smt=None, smt2=None, **{S._SM.SYNTH: True})
     tg = dict(unicorn=False, fvg_bottom=float(z.bottom), fvg_ce=float((z.top + z.bottom) / 2), entry_kind="release_ob", mitigation=False,
-              propulsion=False, skip_po3=True, no_leg_wait=True, market=True, single_exit=True, lv_tags=["release_ob"])
-    o = S._finish_order(ctx, sd, i, p, "AM", sw, entry, stop, risk_mult, float(c), tg, skip_leg_pd=True, fixed=[(S._exit_px(min(t1), "pool", p), "pool")])
+              propulsion=False, skip_po3=True, no_leg_wait=True, market=True, lv_tags=["release_ob"])
+    fixed = [(S._exit_px(min(t1), "pool", p), "pool")]
+    if cont:                                                # SMT / the sick sister supports it: continue to the draw after the scalp's first exit
+        row = S._BD.row_for(ctx, "AM", i) or getattr(ctx, "bias_row", None) or {}
+        dv = row.get("draw_up" if b > 0 else "draw_dn") if hasattr(row, "get") else None
+        if dv is not None and dv == dv and sd.x(float(dv)) > fixed[0][0] + p.es_pt:
+            fixed.append((S._exit_px(sd.x(float(dv)), "pool", p), "pool"))
+            tg["fracs"] = (0.5, 0.5)
+            tg["lv_tags"] = ["release_ob", "release_ob_continue"]
+    if len(fixed) == 1:
+        tg["single_exit"] = True                            # the scalp: one exit at the nearest short-term swing
+    o = S._finish_order(ctx, sd, i, p, "AM", sw, entry, stop, risk_mult, float(c), tg, skip_leg_pd=True, fixed=fixed)
     if o is not None:
         hit("release_ob")
         o["setup"] = "release_ob"
     return o
+
+
+def release_support(ctx, sd, i: int, p, entry: float) -> bool:
+    """N5-entry-at-release (b) (049 ~2:27): 'continue only if SMT or the sick sister supports it'. Supported when (a) this index is the sick sister
+    (`setups.sick_sister`: fewer reference highs / lows traded than the sister, in the discount) or (b) the index took a pool today (a tick through) and
+    the partner did NOT (an SMT, `strategy._smt`), both read at the 10:00 close."""
+    S = _S()
+    if S._SM.sick_sister(ctx, sd, i, p, "AM", entry) is not None:
+        hit("release_sick")
+        return True
+    ps = getattr(ctx, "pside", None)
+    if not ps or ps[0] is None:
+        return False
+    pctx, psides, ppos = ps
+    tk = S._tick(p)
+    low = float(sd.l[ctx.start:i + 1].min())
+    for k, v in S._sell_side(ctx, sd, "AM", i, p.extra_pools, p).items():
+        if S._thru(low, v, tk) and S._smt(ctx, sd, i, k, v, "AM", pctx, psides, ppos, p) is True:
+            hit("release_smt")
+            return True
+    return False
 
 
 def post_news_order(ctx, sides, i: int, p, risk_mult: float, sent: set):
@@ -1177,7 +1448,7 @@ def post_news_order(ctx, sides, i: int, p, risk_mult: float, sent: set):
         return None
     stop = lo - p.pad
     hi_ = float(sd.h[kh])
-    rng = hi_ - lo
+    rng = hi_ - base                                        # the run-out leg (the 08:30 open to its extreme), not the OB: the SD projections of the leg
     fixed = [(hi_ + kk * rng, "array") for kk in p.sd_levels[:2]]
     sent.add("pnc")
     sw = dict(session="NEWS", name="post_news", level=entry, key="post_news", ext=lo, ext_i=int(k), broke=int(kh), sweep_i=int(k), smt=None, smt2=None,
@@ -1239,9 +1510,82 @@ def news_pool_gate(ctx, sd, sw, i: int, p, session: str, lvt: list):
             return None
         return "x_news_profile"
     lvt.append("news_pool_test")
+    w = want(ctx)
+    if w != sd.sign:                                         # the trade is the BIAS-direction entry at the array (N6 spec: no bias / the other way = no trade)
+        return "x_news_pool_bias"
     if sd.sign == -d:
         cf = getattr(ctx, "conf", None)
         at_arr = cf is not None and any(t_ in ("1h", "4h") for t_ in cf.at(now_ts(ctx, i), sd.x(sw["ext"]), sd.sign))
         if not at_arr:
             return "x_news_pool_counter"
     return None
+
+
+# --- D15 laggard_objective: the instrument's OWN draw met, at engine level -------------------------------------------------------------------
+
+def objective_record(ctx, p, symbol: str):
+    """BH-D15-sick-sister-laggard (056 ~9:10; 070 ~18:41; 099 ~26:53): this instrument's objective = the draw of its OWN htf.table row (the 09:30 table:
+    draw_up for a bullish bias column, draw_dn for a bearish one; the bias column is the htf_bias one, "combo" when htf_bias is off). It is MET when the
+    day's bars from 09:30 (the row is known from then; [our interpretation] of 'since formed') traded through the draw level (high >= draw / low <= draw);
+    the moment is the END of that bar. Returns dict(date, symbol, side, draw, t) (t None = not met) or None without a row / bias / draw."""
+    from . import bias_day as BD
+    S = _S()
+    row = getattr(ctx, "bias_row", None)
+    if row is None or not hasattr(row, "get"):
+        return None
+    col = BD.bias_col(p) if p.htf_bias != "off" else "combo"
+    try:
+        v = row.get(col)
+        side = 0 if v is None or v != v else int(v)
+    except Exception:
+        side = 0
+    if not side:
+        return None
+    dv = row.get("draw_up" if side > 0 else "draw_dn")
+    if dv is None or dv != dv:
+        return None
+    draw = float(dv)
+    k0 = S._idx_at(ctx, 570)
+    seg = (ctx.h[k0:] >= draw - 1e-9) if side > 0 else (ctx.l[k0:] <= draw + 1e-9)
+    hit_ = np.flatnonzero(seg)
+    t = None if not len(hit_) else ctx.idx[k0 + int(hit_[0])] + pd.Timedelta(minutes=ctx.tf)
+    return dict(date=ctx.day, symbol=symbol, side=side, draw=draw, t=t)
+
+
+def objective_stamp(ctx, p, symbol: str, trades: list, out: list | None) -> None:
+    """Stamp `Trade.obj_met_t` on the day's trades and (for the days without a trade) append the record to `out` (run_day's `objective` list) - only
+    with smt_pick "laggard_objective"; everything else is untouched. `combine` compares a later FILL with t: only a past moment is ever read."""
+    if p.smt_pick != "laggard_objective":
+        return
+    rec = objective_record(ctx, p, symbol)
+    hit("objective_met")
+    if rec is None:
+        return
+    for tr in trades:
+        tr.obj_met_t = rec["t"]
+    if out is not None:
+        out.append(rec)
+
+
+def news_pool_targets(ctx, sd, i: int, p, session: str, entry: float) -> list:
+    """N6 pool_test: when move 1 took no pool, the pools it left UNTAKEN on its own side (the buy-side pools above a rally that took none; the mirror)
+    are the targets of the bias-direction entry (side space, above the entry). Empty when move 1 took a pool / the order is not in move 1's direction."""
+    if p.news_profile != "pool_test":
+        return []
+    d, hi, lo = news_move1(ctx, i)
+    if not d or d != sd.sign or pool_taken(ctx, p, i, session, d, hi, lo):
+        return []
+    S = _S()
+    sg = 1 if d < 0 else -1
+    sm = getattr(ctx, "sides_map", None)
+    s2 = sm[sg] if sm else S.Side(sg, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n)
+    ext_s = lo if d < 0 else -hi
+    out = []
+    for v in S._sell_side(ctx, s2, session, i, True, p).values():
+        if v < ext_s:                                      # left untaken (in that Side's space the pools sit below the leg's extreme)
+            tgt = sd.x(s2.x(float(v)))
+            if tgt > entry:
+                out.append((tgt, "pool"))
+    if out:
+        hit("news_pool_targets")
+    return sorted(set(out))

@@ -24,9 +24,10 @@ WIN = {
     "def": [("2024-01-22", "2024-02-16"), ("2023-11-27", "2023-12-15")],
     "wide": [("2023-09-05", "2023-11-10")],
     "long": [("2023-06-01", "2024-01-31")],            # wpr (14 weeks), the monthly MWD state, the quarterly shift
-    "rare": [("2024-08-19", "2024-09-13")],            # B9 objective_neutral='both' after the caption-gap levels pass: 0 trades in
-}                                                      # the other windows, 2 here (2024-08-26 / 09-09)
-RARE = ("B9_objective_neutral",)
+    "rare": [("2024-08-19", "2024-09-13"), ("2024-02-26", "2024-03-25")],      # B9 objective_neutral='both' after the caption-gap levels pass: 0 trades in
+}                                                      # the other windows, 2 in the first (2024-08-26 / 09-09); T13 require_judas_news (a Judas sweep within 30 minutes
+                                                       # of a scheduled release AND a full setup): 1 trade in the second, none in the common windows
+RARE = ("B9_objective_neutral", "T13-judas-news-driver_require")
 LONG_HISTORY = ("wpr", "qshift", "mwd", "B22", "B20.3", "B10")
 LA_COLS = ["entry_time", "entry", "stop", "t1", "side", "day_tags", "dw_tags"]
 

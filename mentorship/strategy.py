@@ -1910,6 +1910,7 @@ class Params:
     # B18-am-smt-window-points (086 ~5:42; cc10_011 ~12:50)
     smt_win_a: int = 300                 # B18.2: the SMT window (smt_pre) in minutes of the day, start (05:00) ...
     smt_win_b: int = 570                 # ... end (09:30); test 120 / 660
+    smt_ref_window: bool = False         # B18.2 (086 ~5:42): the COMPARED extremes (the swept level's own low / high and the partner's twin) must have printed inside [smt_win_a, smt_win_b] (inclusive: an open at the edge is a point); acts without smt_windows
     smt_open_points: bool = False        # B18.2: the 08:30 and 09:30 opening prices are candidate reference points (pools open_0830 / open_0930)
     # NEW-low-of-day-zone-tag-first (093 ~8:46)
     lod_zone_first: bool = False         # M0 / B4: no longs until price trades down to the pre-market low-of-day zone (+ 2 ticks), then an SMT sweep is required
@@ -1920,10 +1921,12 @@ class Params:
     mature_pd: float = 0.62              # the premium / discount line of the 20-day range
     # X3-a15-mitblock-bear-context (cc04_004 ~6:44)
     mit_needs_bias: bool = False         # A15: a mitigation-block entry needs the bias its way and an untaken daily pool / array beyond; the target is that level
+    mit_preopen: bool = False            # A15 (041 ~0:00): with mitigation_entry, the up-close candles of the 09:00-09:30 consolidation (<= 0.25 x ADR5 range) are one more bullish mitigation block (tag mit_preopen)
     # X3-graduated-pricing-second-touch (cc04_010 ~11:24)
     touch_tag: bool = False              # L: Trade.touch_n = the touches of the swept level (the sweep included) since it formed
     # B12-judas-depth-adr (cc08_003 ~12:59)
     judas_max_adr: float = 0.0           # B12: reject a Judas deeper than this x ADR5 (0 = off; test 0.4); Trade.judas_depth is tagged when set
+    judas_depth_tag: bool = False        # B12-judas-depth-adr: tag Trade.judas_depth at every fill with an open (no gate; judas_max_adr gates)
     # T3-london-close-multiday-reversal (cc09_005 ~32:44)
     lc_tag: bool = False                 # T3: tag lc_reversal (a 10:00-12:00 fill whose sweep was at an HTF array against the morning)
     lc_reentry: bool = False             # T3: after a stopped-out lc_reversal one more try in the same direction when the new sweep runs beyond the first extreme at the same HTF array
@@ -1946,6 +1949,9 @@ class Params:
     pm_reversal_pool: str = "am_high"    # M6: "am_high" (as built) / "lunch_or_am" (a sweep of the lunch high - failure swing - also counts)
     pm_reversal_ltf_only: bool = False   # M6: the PM reversal only when the AM move started off an array of 60m or lower (a 4h+ origin blocks it)
     profile_consol_pm: bool = False      # T13: consolidation day (neutral bias, no release from 10:00): the PM sweeps the lunch extreme (an HTF AM extreme) or the AM extreme, then reverses
+    two_session_am: bool = False         # T13 (cc10_013 ~1:33): the AM of a two-session close - with the bias up and no opposing 4h/D/W array reached since the day's low, AM orders are bias-direction longs at a same-side 1h+ array only (the mirror)
+    two_session_catalyst: bool = False   # T13 (cc10_013 ~3:26): on a scheduled-release day the market may trend straight through lunch - profile_two_session then drops the lunch-sweep / discount trigger (tag two_session_catalyst)
+    profile_consol_am: bool = False      # T13 (cc10_013 ~11:35-12:00): consolidation day AM (neutral bias, no release from 10:00) - orders at an array of their side or from the opening-range EQ's expansion side; London / day extremes as targets
     # A13-breaker-needs-rebalance-and-fvg / close-vs-wick / lifetime (cc04_005; 001; 035; 015; 043)
     breaker_needs_disp: bool = False     # A13: the break leg leaves an FVG within breaker_disp_bars bars of the break
     breaker_disp_bars: int = 3
@@ -1953,6 +1959,7 @@ class Params:
     breaker_by_close: bool = False       # A13: a body close beyond the swing marks the breaker (taken first); a wick-only break is an MSS without one (FVG entry)
     breaker_day_life: bool = False       # A13: a breaker stays eligible for retest entries to the end of the day (PM last hour included)
     breaker_keep_original: bool = False  # A13: a newer breaker formed on top of an alive one does not replace it
+    breaker_accumulate: bool = False     # A13-breaker-lifetime (015 ~22:43): with breaker_day_life, one order may accumulate inside an alive breaker (a limit at its CE while a close sits in the zone) without waiting for a break and retest
     # A19-break-against-htf-stop-run (cc09_004 ~9:01; 102 ~39:11; cc02_008 ~0:58)
     mss_requires_htf_agreement: bool = False   # A19: an intraday MSS counts only with the HTF flow (the bias column); a counter-HTF break is a stop run
     stoprun_rearm: bool = False          # A19: a counter-HTF break arms the opposite side's sweep (the stops it ran)
@@ -2655,6 +2662,7 @@ class Trade:
     clean_swing: bool | None = None    # D15 smt_pick "clean_swing": a 15m pivot (n=2) between the entry and T1
     move_pct: float | None = None  # D15 smt_pick "middle": the move from the session open to the fill, in the trade direction (fraction)
     lc_reversal: bool = False      # lc_tag: a 10:00-12:00 reversal off an HTF array against the morning
+    obj_met_t: object = None       # D15 smt_pick "laggard_objective": when this instrument's OWN htf.table draw was first traded (end of that bar); None = not met / not asked
 
     REAL_FIELDS = ("entry", "stop", "t1", "t2", "draw_px", "bz_top", "bz_bottom", "bz_mt",
                    "resist_lo", "resist_hi", "ext_px", "leg_hi_px", "eve_draw_px")
@@ -3727,6 +3735,8 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
         done[key] = False
         state["reversed"][tr.session] = True
         state.setdefault("only_side", {})[tr.session] = -1 if tr.side == "long" else 1
+    if p.lc_reentry and ctx is not None and tr.session == (getattr(ctx, "lc_retry", None) or {}).get("session"):
+        _SM2.lc_clear(ctx)                              # the re-opened slot's trade closed: the retry gate ends
     if (p.lc_reentry and ctx is not None and lost is not None and not reopened and not state.get("lc_done") and "lc_reversal" in (tr.lv_tags or "")
             and tr.exits and tr.exits[-1][3] in ("stop", "stop_gap") and 600 <= tr.exits[-1][0].hour * 60 + tr.exits[-1][0].minute < 720):
         _SM2.lc_reopen(ctx, tr, done, key, state)       # caption-gap T3 lc_reentry: one more try after a stopped-out London-close reversal
@@ -4470,7 +4480,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             intermarket: dict | None = None, equity: float | None = None,
             bias_by_cut: dict | None = None, meta=None, locks: list | None = None, skips: list | None = None,
             eth: dict | None = None, risk_state: dict | None = None, week: dict | None = None,
-            eve: tuple | None = None, prev_full: pd.DataFrame | None = None) -> list[Trade]:
+            eve: tuple | None = None, prev_full: pd.DataFrame | None = None, objective: list | None = None) -> list[Trade]:
     """Trades for one day (see `_run_day_once` for the arguments). The main loop runs BEFORE the Silver Bullet / Ma Deuce
     (they read its trades), so the session / day stops (X7c / X12 / X13a / X14b / X14d) would be one-way. With a stop
     switch on and an extra engine on, this wrapper makes them two-way by a fixed point: pass 1 as usual; its Silver Bullet
@@ -4483,12 +4493,12 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
               week=week, eve=eve, prev_full=prev_full)
     if not ((_MG.any_stop_switch(p, df.index[0].date()) or p.max_trades_week) and (p.ma_deuce or p.sb_model)
             and p.stops_passes > 1):                       # (the D19 / X15 week budget is two-way across the engines the same way)
-        return _run_day_once(df, hist, symbol, p, tf, log=log, locks=locks, skips=skips, risk_state=risk_state, **kw)
+        return _run_day_once(df, hist, symbol, p, tf, log=log, locks=locks, skips=skips, risk_state=risk_state, objective=objective, **kw)
     import copy
     ext, sig, res, sc = None, None, [], {}
     for k in range(p.stops_passes):
         sc = dict(log=None if log is None else [], locks=None if locks is None else [],
-                  skips=None if skips is None else [],
+                  skips=None if skips is None else [], objective=None if objective is None else [],
                   risk_state=None if risk_state is None else copy.deepcopy(risk_state))
         out: dict = {}
         res = _run_day_once(df, hist, symbol, p, tf, _ext=ext, _out=out, **sc, **kw)
@@ -4497,7 +4507,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         if (k == 0 and not new) or nsig == sig:
             break
         ext, sig = new, nsig
-    for key, real in (("log", log), ("locks", locks), ("skips", skips)):
+    for key, real in (("log", log), ("locks", locks), ("skips", skips), ("objective", objective)):
         if real is not None:
             real.extend(sc[key])
     if risk_state is not None and sc.get("risk_state") is not None:
@@ -4516,7 +4526,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             bias_by_cut: dict | None = None, meta: pd.DataFrame | None = None,
             locks: list | None = None, skips: list | None = None, eth: dict | None = None,
             risk_state: dict | None = None, week: dict | None = None, eve: tuple | None = None,
-            prev_full: pd.DataFrame | None = None, _ext: list | None = None, _out: dict | None = None) -> list[Trade]:
+            prev_full: pd.DataFrame | None = None, _ext: list | None = None, _out: dict | None = None,
+            objective: list | None = None) -> list[Trade]:
     """Trades for one day. With `live`, a position still open at the last bar is returned
     with no exit (exit_reason "open") instead of being closed at the last price.
     equity     (#12) start-of-day equity for risk_basis="equity"
@@ -5023,7 +5034,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         if p.sloppy_tests:
             chop.update(i)
         if (p.nfp_release_fvg or p.post_news_continuation or p.release_ob_entry) and pending is None and pos is None:
-            o_x = _SM2.release_setups(ctx, sides, i, p, state, pos, pending, _risk_mult(state, "NEWS", p))     # caption-gap N1 / N5: the release setups (bypass the news windows for themselves)
+            o_x = _SM2.release_setups(ctx, sides, i, p, state, pos, pending, _risk_mult(state, "NEWS", p), done)     # caption-gap N1 / N5: the release setups (bypass the news windows for themselves)
             if o_x is not None:
                 pending = o_x
         if lock_t:
@@ -5155,6 +5166,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             w_ = _BD.want_at(ctx, p, session, i) if want is not None else 0     # B3: the bias known at THIS bar (pre-09:30 sessions: their own cut)
             if want is not None:
                 if w_ and w_ != sd.sign:
+                    if p.stoprun_rearm:
+                        _SM2.against_bias_break(ctx, sd, i, p, session, w_)    # caption-gap A19: a break against the bias flow is a stop run - arm the bias side
                     continue
                 if not w_ and p.bias_neutral == "skip":
                     continue
@@ -5249,6 +5262,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         for tr_ in trades:
             tr_.news_tags = nt_
         _DW.stamp(ctx, trades, p)                          # day_week_context: dw_tags and the X16 journal columns
+    _SM2.objective_stamp(ctx, p, symbol, trades, objective)   # caption-gap D15 laggard_objective: this instrument's own draw met (engine level)
     return trades
 
 
@@ -6792,6 +6806,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             extra = list(extra) + more
         if extra:
             lv = sorted(set(lv) | set(extra))
+            if p.compressed_hh:
+                lv = _SM2.compressed_first(ctx, sd, sw, i, p, entry, lv)      # caption-gap BH-compressed-higher-highs: the leg low is the FIRST target
         if p.mm_targets or p.proj_breaker or p.sd_anchor in ("broken", "multi"):
             rr_ = _mss_ref(ctx, sd, sw, i, p)
         lv = sorted(set(lv) | set(_TP.extra_sources(ctx, sd, i, p, sw, entry, risk, leg_hi, above, lv, lvt, rr_)))
@@ -7074,6 +7090,8 @@ def _smt(ctx, sd, i, key, level, session, pctx, psides, ppos, p=None):
         return None
     if p is not None and p.smt_pm_points and session == "PM":
         return _smt_qual(ctx, sd, i, p, _SM2.pm_points(ctx, sd, i, pctx, ps, j))     # caption-gap B18-pm-smt-reference-points: lunch-hour low vs the first low after 13:00
+    if p is not None and p.smt_ref_window and not _SM2.smt_ref_ok(ctx, sd, i, key, level, p):
+        return None                                      # caption-gap B18-am-smt-window-points: the compared extreme is outside [smt_win_a, smt_win_b]
     if key.startswith("rel_eq") and p is not None and p.smt_rel_eq:   # B18.1 rel-eq partner twin
         return _smt_qual(ctx, sd, i, p, _smt_rel_eq(ctx, sd, i, level, pctx, ps, j, p))
     if key.startswith(("rel_eq", "round", "swing_low")):
@@ -7083,6 +7101,8 @@ def _smt(ctx, sd, i, key, level, session, pctx, psides, ppos, p=None):
     plv = _sell_side(pctx, ps, session, j, True, p).get(key)
     if plv is None:
         return None
+    if p is not None and p.smt_ref_window and not _SM2.smt_ref_ok(pctx, ps, j, key, plv, p):
+        return None                                      # (the partner's twin extreme too)
     at = lambda m: pctx.start + int(np.searchsorted(pctx.t[pctx.start:], m))
     created = {"am_session": at(810), "lunch": at(810), "opening_range": at(pctx.or_end),
                "london": at(300)}.get(key)

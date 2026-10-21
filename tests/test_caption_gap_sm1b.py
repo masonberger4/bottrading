@@ -126,11 +126,23 @@ def test_news_profile_pool_test():
     assert d == 1 and hi == 5006.0                                                                       # the first leg is up (the high before the low)
     assert not sm2.pool_taken(ctx, p, i, "NEWS", d, hi, lo)
     lvt = []
+    ctx.cur_bias = 1
     assert sm2.news_pool_gate(ctx, sl, dict(ext=4994.0), i, p, "NEWS", lvt) is None and lvt == ["news_pool_test"]       # a long at the 4h FVG
+    ctx.cur_bias = -1
     assert sm2.news_pool_gate(ctx, ss, dict(ext=-5006.0), i, p, "NEWS", []) == "x_news_pool_counter"                  # a short with the drop is blocked
+    ctx.cur_bias = 0
+    assert sm2.news_pool_gate(ctx, sl, dict(ext=4994.0), i, p, "NEWS", []) == "x_news_pool_bias"                      # no bias / the other way: not the trade
+    ctx.cur_bias = -1
+    assert sm2.news_pool_gate(ctx, sl, dict(ext=4994.0), i, p, "NEWS", []) == "x_news_pool_bias"
     # ... until price is at a HTF array of the short's side
     ctx.conf = StubConf(at_tfs={-1: ["1h"]})
     assert sm2.news_pool_gate(ctx, ss, dict(ext=-5006.0), i, p, "NEWS", []) is None
+    # targets: the buy-side pools the rally left untaken (the previous high 5030 and the overnight highs above the 5006 high) are the bias-direction entry's targets
+    ctx.cur_bias = 1
+    tg = [v for v, k in sm2.news_pool_targets(ctx, sl, i, p, "NEWS", 4995.0)]
+    assert tg and all(v > 5006.0 for v in tg) and 5030.0 in tg
+    assert sm2.news_pool_targets(ctx, ss, i, p, "NEWS", -4995.0) == []                                                   # not move 1's direction
+    assert sm2.news_pool_targets(ctx, sl, i, replace(p, news_profile="require"), "NEWS", 4995.0) == []
     # case B: the rally takes the PDH (5010)
     rally_pool = [(5000.0, 5001.0, 4999.0, 5000.5), (5000.5, 5012.0, 5000.0, 5011.0), (5011.0, 5012.0, 5002.0, 5003.0), (5003.0, 5004.0, 4994.0, 4995.0)]
     ctx, (sl, ss) = _news_ctx(rally_pool, StubConf(), hi=5010.0)
@@ -146,7 +158,9 @@ def test_news_profile_pool_test():
     ctx, (sl, ss) = _news_ctx(drop_no_pool, StubConf(at_tfs={-1: ["4h"]}), hi=5030.0, lo=4980.0, close=4985.0)
     d, hi, lo = sm2.news_move1(ctx, i)
     assert d == -1 and not sm2.pool_taken(ctx, p, i, "NEWS", d, hi, lo)
+    ctx.cur_bias = -1
     assert sm2.news_pool_gate(ctx, ss, dict(ext=-5006.0), i, p, "NEWS", []) is None
+    ctx.cur_bias = 1
     assert sm2.news_pool_gate(ctx, sl, dict(ext=4994.0), i, p, "NEWS", []) == "x_news_pool_counter"
 
 
@@ -185,7 +199,7 @@ def test_post_news_continuation():
     p = Params(**{**BASE, **RUN_P, "post_news_continuation": True})
     t = run_day(df, hs, p, conf=StubConf(), bias_by_cut={480: BIAS_UP})
     assert len(t) == 1 and t[0].setup == "post_news" and t[0].entry == 5000.0 and t[0].stop == pytest.approx(4999.0 - 0.25)
-    assert t[0].exits[0][1] == pytest.approx(5017.0) and t[0].exits[1][1] == pytest.approx(5021.5)       # 5008 + 1.0 x 9, + 1.5 x 9
+    assert t[0].exits[0][1] == pytest.approx(5016.0) and t[0].exits[1][1] == pytest.approx(5020.0)       # 5008 + 1.0 x 8, + 1.5 x 8: the run-out leg is the 08:30 open (5000) to its extreme (5008), not the OB
     # a run-out shorter than the minimum is no run-out
     assert run_day(df, hs, replace(p, post_news_run_pts=20.0), conf=StubConf(), bias_by_cut={480: BIAS_UP}) == []
     assert run_day(df, hs, replace(p, post_news_continuation=False), conf=StubConf(), bias_by_cut={480: BIAS_UP}) == []
@@ -244,8 +258,20 @@ def test_profile_two_session():
     assert sm2.pm_profile_gate(ctx, sl, dict(key="lunch"), i, p, "AM", 105.4, []) is None                                      # PM only
     assert sm2.pm_profile_gate(ctx, sl, dict(key="lunch"), i, replace(p, profile_two_session=False), "PM", 105.4, []) is None
     # the AM high is in an opposing 4h array: the two-session profile no longer holds (other profiles apply)
-    ctx2, (sl2, ss2) = _am_rally_day(bias=1, conf=StubConf(at_tfs={-1: ["4h"]}))
+    ctx2, (sl2, ss2) = _am_rally_day(bias=1, conf=StubConf({-1: [(106.5, 105.9, "4h", 0, 0.0)]}))          # a bearish 4h array the AM rally traded into
     assert sm2.pm_profile_gate(ctx2, ss2, dict(key="lunch"), i, p, "PM", -105.4, []) is None
+    # a 4h array ABOVE the AM high (never reached) does not end the profile; one traded into on the way (not at the extreme) does
+    ctx2b, (sl2b, _) = _am_rally_day(bias=1, conf=StubConf({-1: [(110.0, 108.0, "4h", 0, 0.0)]}))
+    assert sm2.pm_profile_gate(ctx2b, sl2b, dict(key="lunch"), i, p, "PM", 105.4, []) is None
+    ctx2c, (sl2c, ss2c) = _am_rally_day(bias=1, conf=StubConf({-1: [(102.5, 102.0, "4h", 0, 0.0)]}))
+    assert sm2.pm_profile_gate(ctx2c, ss2c, dict(key="lunch"), i, p, "PM", -105.4, []) is None             # reached mid-leg, not at the high
+    # the measured move (PM leg ~= AM leg) is an extra target from the entry
+    sm2.pm_profile_gate(ctx, sl, dict(key="lunch"), i, p, "PM", 105.4, [])
+    mv = dict(sm2.pm_extra_targets(ctx, sl, i, p, "PM", 105.4))
+    assert any(abs(v - (105.4 + (ctx.h[sm2.am_leg(ctx, S._idx_at(ctx, 810))[0] * 0 + S._idx_at(ctx, 570):S._idx_at(ctx, 810)].max() - ctx.l[S._idx_at(ctx, 570):S._idx_at(ctx, 810)].min()))) < 1e-6 for v in mv)
+    # a strong-catalyst day (a release in the day) drops the lunch / discount trigger
+    # (this fixture has no release: the switch is inert here)
+    assert sm2.pm_profile_gate(ctx, sl, dict(key="other"), i, replace(p, two_session_catalyst=True), "PM", 105.8, []) == "x_two_session_trigger"
     # no bias: not a two-session day
     ctx3, (sl3, ss3) = _am_rally_day(bias=0)
     assert sm2.pm_profile_gate(ctx3, ss3, dict(key="lunch"), i, p, "PM", -105.4, []) is None

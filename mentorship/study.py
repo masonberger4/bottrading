@@ -1590,7 +1590,7 @@ _SM1_DECISIONS = {
     "BH-M3-scan-all-indices": dict(markets=("ES", "NQ")),
     "BH-three-pool-runs-exhaustion": dict(pool_runs_max=3),
     "BH-premium-FVG-CE-vs-far-edge-trap": dict(far_edge_trap=True),
-    "B18-am-smt-window-points": dict(smt_pre=True, smt_windows=((570, 660),), smt_win_a=120, smt_win_b=660, smt_open_points=True),
+    "B18-am-smt-window-points": dict(smt_pre=True, smt_windows=((570, 660),), smt_win_a=120, smt_win_b=660, smt_open_points=True, smt_ref_window=True),
     "NEW-low-of-day-zone-tag-first": dict(lod_zone_first=True),
     "B18-smt-only-with-bias": dict(smt_with_bias=True, htf_bias="combo"),
     "B5-mature-trend-continuation": dict(mature_flag_block=True),
@@ -1607,7 +1607,7 @@ _SM1_DECISIONS = {
     "N5-entry-at-release": dict(post_news_continuation=True, htf_bias="combo"),
     "N5-entry-at-release_release_ob": dict(release_ob_entry=True, htf_bias="combo"),
     "T13-judas-news-driver": dict(require_judas_news=True, judas_news_tag=True),            # the tag (require_judas_news gates only together with require_judas)
-    "T13-judas-news-driver_require": dict(require_judas=True, judas_window=600, require_judas_news=True, judas_news_min=600),     # wide windows: some days keep a news-backed Judas
+    "T13-judas-news-driver_require": dict(require_judas=True, judas_window=600, require_judas_news=True),     # the default +-30 minute window around a release (a wide judas_window so a 10:00 release day can back a 10:10 sweep)
     "DS2-two-session-close-templates": dict(profile_two_session=True, htf_bias="combo", extra_pools=True),
     "DS2-am-move-pm-reversal-templates": dict(pm_reversal=True, pm_reversal_pool="lunch_or_am", pm_reversal_ltf_only=True, extra_pools=True),
     "DS2-consolidation-profiles": dict(profile_consol_pm=True),
@@ -1618,6 +1618,12 @@ _SM1_DECISIONS = {
     "A5-short-into-htf-sibi": dict(htf_sibi_short_zone=True, htf_sibi_need_smt=True, **SM_POST),
     "A15-mitigation-block-entry": dict(mitigation_entry=True, htf_bias="combo"),
     "A15-mitigation-block-entry_mid": dict(mitigation_entry=True, mit_entry_px="mid", htf_bias="combo"),
+    # review fixes (setups_models#1/7): the sub-cases the first build left out
+    "DS2-two-session-close-templates_am": dict(profile_two_session=True, two_session_am=True, two_session_catalyst=True, htf_bias="combo", extra_pools=True),
+    "DS2-consolidation-profiles_am": dict(profile_consol_am=True),
+    "A13-breaker-lifetime_accumulate": dict(breaker_day_life=True, breaker_accumulate=True, **SM_POST),
+    "A15-mitigation-block-entry_preopen": dict(mitigation_entry=True, mit_preopen=True, htf_bias="combo"),
+    "B12-judas-depth-adr_tag": dict(judas_depth_tag=True),
 }
 DECISIONS.update(_SM1_DECISIONS)
 SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): their look-ahead tests are in test_silver_bullet.py
