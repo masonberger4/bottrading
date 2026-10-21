@@ -336,6 +336,10 @@ def pick_2022(ctx, sd, sw, pick: list, i: int, p):
     gap in the leg's discount (top at or below the leg EQ), (3) else the deeper of the last two."""
     o, h, l, c = sd.o, sd.h, sd.l, sd.c
     e = sw["ext_i"]
+    if p.m2_anchor == "runup":                       # caption-gap M2-pyramid-runup-leg-eq (022 ~01:03:28): the EQ of the run into the swept pool - a VI first, else the FVG
+        r_ = S._SM4.runup_pick(ctx, sd, sw, pick, i, p)
+        if r_ is not None:
+            return r_
     leg_hi = h[e:i + 1].max()
     eq = sw["ext"] + 0.5 * (leg_hi - sw["ext"])
     vis = [z for z in sd.vis("bull") if z.i <= i]
@@ -358,8 +362,9 @@ def ifvg_filter(ctx, sd, sw, gaps, i, p):
     native = set(id(g) for g in sd.gaps) | set(id(z) for z in sd._lz.get("implied", []))   # A24.1
     out = []
     htf = None
+    sym = bool(p.ifvg_symmetry_skip and S._SM4.symmetric(ctx, sd, i, p))     # caption-gap A8-symmetry-skip-ifvg-confirmation: the indices agree - the inversion steps are skipped
     for g in gaps:
-        if id(g) in native:
+        if id(g) in native or sym:
             out.append(g)
             continue
         if p.ifvg_hold and (sd.c[g.i + 1:i + 1] < g.top).any():
@@ -470,8 +475,15 @@ def array_cands(ctx, sd, sw, i, p, bz) -> list:
         out.append((bz.top, bz.bottom, "breaker"))
     if "ote" in ea:
         out.append((L.ote_band(ext, float(sd.h[e:i + 1].max()))[2], ext, "ote"))
-    if "wick_ce" in ea:
+    if p.wick_ce_mode == "retrace" and sw.get("_nofvg") and "wick_ce" not in ea:
+        S._SM2.hit("wick_ce_retrace")
+    if "wick_ce" in ea or (p.wick_ce_mode == "retrace" and sw.get("_nofvg")):     # caption-gap M11-wick-ce-fade-short (042 ~00:33:56): after an MSS that left no FVG the sweep candle's wick CE is the entry
         out.append((L.wick_ce(sd.o, sd.l, sd.c, e), ext, "wick_ce"))
+    if "ob_post" in ea and sw.get("broke") is not None:      # caption-gap M1-ob-entry-after-mss (020 ~00:06:14): the first down-close candle of the pullback after the MSS
+        r = S._SM4.ob_post_cand(ctx, sd, sw, i, p)
+        if r is not None:
+            S._SM2.hit("ob_post")
+            out.append(r)
     if "vi" in ea:
         vs = [z for z in sd.vis("bull") if e <= z.i <= i and not (p.vi_breakaway and S._LD3.vi_is_breakaway(sd, sw, z, i))]   # A9 vi_breakaway
         if vs:
@@ -492,6 +504,8 @@ def array_order(ctx, sd, sw, i, p, session, risk_mult, fvg_entry, bz):
     """The highest array entry (the first the retrace reaches) when it beats the FVG entry (or
     there is no FVG). Stop below the array (OB MT rule kept), else below the sweep extreme."""
     cs = [x for x in array_cands(ctx, sd, sw, i, p, bz) if fvg_entry is None or x[0] > fvg_entry]
+    if cs and p.entry_pick == "shallowest_unused":
+        cs = S._SM4.unused_cands(ctx, sd, sw, i, p, bz, cs)        # caption-gap M5-lasthour-shallowest-unused-array (030 ~00:21:36): arrays price already traded back into are dropped
     if not cs:
         return None
     entry, bottom, kind = max(cs)
@@ -500,6 +514,8 @@ def array_order(ctx, sd, sw, i, p, session, risk_mult, fvg_entry, bz):
         stop = sw["ext"] - p.pad
     tags = dict(unicorn=False, fvg_bottom=bottom, fvg_ce=(entry + bottom) / 2, entry_kind="arr_" + kind,
                 mitigation=False, propulsion=False)
+    if kind == "ob_post" and sw.get("_ob_post_mt") is not None:
+        tags["cancel_close"] = float(sw["_ob_post_mt"])           # a body close under the candle's MT invalidates (A12)
     if kind == "reclaimed_ob" and p.reclaimed_def != "strict":
         tags["lv_tags"] = ["reclaimed_" + p.reclaimed_def]         # caption-gap A18-reclaimed-ob-codeable: which definition was used (the strict default stays untagged, as built)
     return S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult,
@@ -670,7 +686,11 @@ def pre_break(ctx, sd, sw, i, p, session, risk_mult, ref):
         o_ = _cisd_ob(ctx, sd, sw, i, p, session, risk_mult)
         if o_ is not None:
             return o_
-    if p.wick_ce_entries and not sw.get("wce_sent") and i == sw["ext_i"] + 1:
+    if p.wick_ce_entries and (p.wick_ce_tf or p.wick_ce_mode == "intrabar"):
+        o_ = S._SM4.wick_ce_entry(ctx, sd, sw, i, p, session, risk_mult, ref)         # caption-gap M11-wick-ce-fade-short / new-sweep-wick-ce-failure-swing-long
+        if o_ is not None:
+            return o_
+    elif p.wick_ce_entries and not sw.get("wce_sent") and i == sw["ext_i"] + 1:
         sw["wce_sent"] = True
         e = sw["ext_i"]
         ce = L.wick_ce(sd.o, sd.l, sd.c, e)
@@ -961,7 +981,10 @@ def pm_reversal(ctx, sd, i, p, risk_mult):
         return None
     b = -sd.sign
     locks = [lk for lk in getattr(ctx, "lock", {}).values() if lk.get("side")]
-    if locks:
+    armed_ = bool(getattr(ctx, "done_ref", {}).get("PM_REV_ARMED"))      # caption-gap M6-pm-continuation-long-at-old-high: the continuation long's target fill arms the reversal
+    if armed_:
+        pass
+    elif locks:
         if not any(lk.get("side") == b and lk.get("delivered_i") is not None and lk["delivered_i"] <= i
                    for lk in locks):
             return None
@@ -1007,13 +1030,21 @@ def pm_reversal(ctx, sd, i, p, risk_mult):
     if "lunch" in ctx.sess:
         lv.append(sd.x(ctx.sess["lunch"][0] if sd.sign > 0 else ctx.sess["lunch"][1]))
     fixed = sorted({(S._exit_px(v, "pool", p), "pool") for v in lv if v > entry})
+    if p.pm_rev_partial:                                  # caption-gap M6-ifvg-must-stay-partly-open (015 ~00:33:56): the lunch relative equal lows join the ladder after the old daily level
+        fixed = sorted(set(fixed) | {(S._exit_px(v, k, p), k) for v, k in S._SM4.pm_rev_extra_targets(ctx, sd, i, p, entry)})
     if not fixed:
         return None
     sw = dict(session="PM", name="pm_reversal", level=am_x, key="pm_reversal", ext=float(sd.l[e]), ext_i=e,
               broke=z.i, sweep_i=e, smt=None, smt2=None, **{SYNTH: True})
     tags = dict(unicorn=False, fvg_bottom=z.bottom, fvg_ce=z.mid, entry_kind="pm_reversal", mitigation=False,
                 propulsion=False, done_key="PMR", no_leg_wait=True)
-    return S._finish_order(ctx, sd, i, p, "PM", sw, entry, z.bottom - p.pad, risk_mult,
+    stop = z.bottom - p.pad
+    if p.pm_rev_partial:                                  # the gap must stay partly open: a body close past its far edge before the fill cancels the order, a trade through it afterwards exits
+        S._SM2.hit("pm_rev_partial")
+        stop = z.bottom - p.tick
+        tags["cancel_close"] = float(z.bottom)
+        tags["sm4"] = dict(kind="pm_rev_partial", far=float(z.bottom))
+    return S._finish_order(ctx, sd, i, p, "PM", sw, entry, stop, risk_mult,
                            sd.h[e:i + 1].max(), tags, skip_leg_pd=True, fixed=fixed)
 
 
@@ -1314,7 +1345,7 @@ def sick_sister(ctx, sd, i, p, session, entry):
         S._f("x_not_sick_sister")
         return None
     lo_, hi_ = sd.l[ctx.start:i + 1].min(), sd.h[ctx.start:i + 1].max()
-    if not entry < lo_ + p.sick_depth * (hi_ - lo_):
+    if not entry < lo_ + p.sick_depth * (hi_ - lo_) and not (p.smt_trend_ignore and S._SM4.trend_day(ctx, sd, i, p)):    # (caption-gap M16-trending-divergence-continuation: a trending day needs no deep discount)
         S._f("x_sick_not_discount")
         return None
     tg = [v for v in me[1] if v > entry]
@@ -1396,6 +1427,9 @@ def add_leg(pos):
 def add_pd_ok(pos, px, p) -> bool:
     """M2.6 add_in_pd (022 ~49:26; 058 ~43:12): pyramid only on the entry side of the leg's EQ (add_pd_level). Checked in
     `add_ok` AND in `strategy._arm_add`, so every add path (FVG, Ep04.10 low end, retest, Ep01 CE add, down-close) honours it."""
+    ie = (pos.get("sm4") or {}).get("implied_eq")
+    if ie is not None and px > ie + 1e-9:
+        return False                              # caption-gap M2-implied-range-eq-gate (025 ~00:46:41): entries and adds only on the entry side of the implied range's EQ
     leg = add_leg(pos)
     if not (p.add_in_pd and leg):
         return True

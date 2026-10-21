@@ -1723,6 +1723,53 @@ _SM3_DECISIONS = {
     "M1M2-htf-array-replaces-sweep": dict(allow_htf_array_premise=True, **SM_POST),
 }
 DECISIONS.update(_SM3_DECISIONS)
+
+# --- caption-gap pass, setups_models #4/7 (models_setups_entries.md): one variant per gap id (name prefix = the gap id) ---
+_SM4_DECISIONS = {
+    "new-falling-dagger-upper-half-buy": dict(dagger_entry=True, htf_bias="combo", **SM_POST),
+    "new-falling-dagger-upper-half-buy_ltf": dict(dagger_entry=True, dagger_level="ltf", htf_bias="combo", **SM_POST),
+    "M12-0930-htf-fvg-stab-no-mss": dict(turtle_soup="htf_stab", **SM_POST),
+    "B12-po3-low-after-0830-into-old-low": dict(po3_ideal="tag", **SM_POST),
+    "B12-po3-low-after-0830-into-old-low_require": dict(po3_ideal="require", **SM_POST),
+    "new-po3-midnight-open-resting-order": dict(po3_resting=True, po3_rest_off_pts=0.25, po3_rest_mgmt="none", htf_bias="combo"),
+    "M5-lasthour-first-unit-at-old-low": dict(lh_old_low_entry=True, lh_add2_mult=1.0, lh_old_low_stop_pts=3.0, last_hour_own_slot=True, htf_bias="combo", **SM_POST),
+    "M6-pm-continuation-long-at-old-high": dict(pm_old_high_fvg=True, pm_old_high_bars=6, adds=(0.5,), htf_bias="combo", **SM_POST),
+    "M6-ifvg-must-stay-partly-open": dict(pm_reversal=True, pm_rev_partial=True, pm_rev_first_only=True, **SM_POST),
+    "new-pm-retracement-short-after-draw-delivered": dict(pm_after_draw=True, pm_after_room_pts=10.0, htf_bias="combo", **SM_POST),
+    "new-pm-retracement-short-after-draw-delivered_sb": dict(sb_model=True, sb_counter_after_draw=True, pm_after_room_pts=10.0, htf_bias="combo", **SM_POST),
+    "M1-ob-entry-after-mss": dict(entry_arrays=("ob_post",), **SM_POST),
+    "B5-multi-tf-fvg-scan": dict(leg_tfs=(15, 5, 4, 3, 2), fvg_pick="2022", **SM_POST),
+    "M2-leg-eq-after-low-prints": dict(m2_live_eq=True, fvg_pick="2022", **SM_POST),
+    "M2-pyramid-runup-leg-eq": dict(m2_anchor="runup", fvg_pick="2022", **SM_POST),
+    "M2-implied-range-eq-gate": dict(implied_range_gate=True, draw_lock="session", ob_entry="post_mss", htf_resist_cap=False),
+    "M7-pm-short-after-lunch-run-of-am-stops": dict(pm_am_stops=True, pool_swings=True, **SM_POST),
+    "M5-lasthour-short-sequence": dict(lh_array_short=True, **SM_POST),
+    "B16-nwog-gapup-return-then-mss": dict(nwog_fill_long=True, nwog_fill_tol_pts=2.0, **SM_POST),
+    "M11-wick-ce-fade-short": dict(wick_ce_entries=True, wick_ce_mode="intrabar", wick_ce_pad_pts=1.0, **SM_POST),
+    "M11-wick-ce-fade-short_retrace": dict(wick_ce_mode="retrace", **SM_POST),
+    "M5-lasthour-shallowest-unused-array": dict(entry_arrays=("ob", "vi", "breaker"), entry_pick="shallowest_unused", **SM_POST),
+    "new-nwog-edge-to-ce-cookie-cutter": dict(nwog_edge_ce=True, **SM_POST),
+    "M8-short-after-reprice-to-prior-close": dict(org_fill_reverse=True, **SM_POST),
+    "A12-entry-array-at-key-level": dict(ob_at_key="tag", ob_key_ticks=2, **SM_POST),
+    "A12-entry-array-at-key-level_require": dict(ob_at_key="require", **SM_POST),
+    "M4-breaker-needs-fvg-inside": dict(breaker_low_invalidate=True, breaker_entry="fallback", unicorn_pref=True, **SM_POST),
+    "A13-breaker-inversion-against": dict(breaker_block_counter=True, breaker_entry="fallback", **SM_POST),
+    "new-sweep-wick-ce-failure-swing-long": dict(wick_ce_entries=True, wick_ce_tf=15, wick_ce_need_pool=True, **SM_POST),
+    "M16-sick-sister-ob-open-entry": dict(sick_entry="ob_open", **SM_POST),          # (the sister needs a partner index: tested in the synthetic partner runs)
+    "M16-sick-sister-discount-confluence": dict(sick_entry="ote_stack", sick_units=2, **SM_POST),
+    "new-lunch-macro-long-nwog": dict(lunch_nwog_long=True, **SM_POST),
+    "A8-symmetry-skip-ifvg-confirmation": dict(ifvg_entries=True, ifvg_hold=True, ifvg_symmetry_skip=True, **SM_POST),
+    "A8-ifvg-5m-to-1m-handoff": dict(ifvg_entries=True, ifvg_tf=5, ifvg_hold=True, **SM_POST),
+    "new-short-top-of-htf-discount-fvg": dict(htf_fvg_top_short=True, htf_bias="combo", **SM_POST),
+    "new-ndog-asian-scalp": dict(ndog_scalp=True, asia_session=True, **SM_POST),
+    "M16-trending-divergence-continuation": dict(smt_trend_ignore=True, smt_bias="filter", **SM_POST),         # (the sick-sister half needs a partner index: tested in the synthetic partner runs)
+    "M2-three-drives-conditions": dict(three_drives_htf=True, htf_bias="combo", **SM_POST),
+    "M4-complete-model-breaker-ote-ob": dict(complete_model="tag", breaker_entry="fallback", unicorn_pref=True, **SM_POST),
+    "M4-complete-model-breaker-ote-ob_require": dict(complete_model="require", breaker_entry="fallback", unicorn_pref=True, **SM_POST),
+    "M5-lasthour-reversal-into-org": dict(lh_org_fill=True, last_hour_own_slot=True, **SM_POST),
+    "D15-one-clean-gap-instrument": dict(smt_pick="clean"),
+}
+DECISIONS.update(_SM4_DECISIONS)
 SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): their look-ahead tests are in test_silver_bullet.py
 
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)

@@ -1546,9 +1546,13 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat, ff=0
         if i < made or chopped or blk or dwb or dw_now:
             continue
         lk = lock if isinstance(lock, dict) else None
+        cnt_side = 0
         if lk is not None and lk.get("delivered_i") is not None and i >= lk["delivered_i"] and rev_state is None:
-            continue                                  # #9: the session's draw is delivered
-        if rev_state is not None:
+            if p.sb_counter_after_draw and session == "PM" and 840 <= t < 900 and lk.get("side"):
+                cnt_side = -int(lk["side"])           # caption-gap new-pm-retracement-short-after-draw-delivered (060 ~01:09:30): the opposite Silver Bullet, 14:00-15:00, once the draw is delivered
+            else:
+                continue                              # #9: the session's draw is delivered
+        if rev_state is not None or cnt_side:
             lk = None                                 # gap 15: the counter-draw trade ignores the lock's side
         if p.sb_spotty != "off" and (i >= a_idx - 1 or p.sb_spotty == "skip"):
             if i < a_idx - 1:
@@ -1569,6 +1573,8 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat, ff=0
         for sd in sides:
             if rev_state is not None and sd.sign != rev_state["sign"]:
                 continue
+            if cnt_side and sd.sign != cnt_side:
+                continue
             if sd.sign in getattr(ctx, "block_side", {}).get("year_end", ()):
                 continue
             if p.tgif and sd.sign in getattr(ctx, "block_side", {}).get("tgif", ()):
@@ -1577,7 +1583,7 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat, ff=0
                 continue                              # day_week_context: outside day, ORG tell, strong Thursday ...
             if lk is not None and lk["side"] and sd.sign != lk["side"]:
                 continue
-            if (ds.day_side and sd.sign != ds.day_side and rev_state is None
+            if (ds.day_side and sd.sign != ds.day_side and rev_state is None and not cnt_side
                     and not (p.sb_day_dir_delivered == "free" and ds.delivered)):
                 continue                              # one direction per day (gap 15's counter trade is the exception)
             if p.sb_use_bias:                         # M3.3: the engine's bias filters
@@ -1602,6 +1608,12 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat, ff=0
             if p.sb_cancel_sticky and dead_draws:
                 os_ = [x for x in os_ if (sd.sign, round(float(x["draw_raw"]), 6)) not in dead_draws]
             os_ = [x for x in os_ if not _DW.order_ok(ctx, sd, x, dws, i, p)]   # day_week_context: tue_off_monday / tgif_week_sweep
+            if cnt_side:                                  # the same 10-handle room rule as the main engine's after-draw retracement
+                from .sm4 import room_ok, hit as _h4
+                os_ = [x for x in os_ if room_ok(sd, x["entry"], i, p)]
+                for x in os_:
+                    _h4("sb_counter_after_draw")
+                    x["lv_tags"] = "|".join(y for y in (x["lv_tags"], "sb_counter_after_draw") if y)
             for o_ in os_:
                 if wk_tag:
                     o_["lv_tags"] = "|".join(x for x in (o_["lv_tags"], wk_tag) if x)

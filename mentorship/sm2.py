@@ -31,7 +31,7 @@ def _c(ctx) -> dict:
 
 
 TRADE_KEYS = ("open_grade", "po3_seq", "wk_open_side", "touch_n", "judas_depth", "array_depth", "array_respect", "clean_swing", "move_pct",
-              "lc_reversal", "setup_model", "delivery", "div_type")
+              "lc_reversal", "setup_model", "delivery", "div_type", "gap_count")
 
 
 def trade_fields(o: dict) -> dict:

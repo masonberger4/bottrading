@@ -12,6 +12,7 @@ import pandas as pd
 
 from claude_hf.daytypes import JOBS, is_trading_day
 from . import htf
+from . import sm4 as _SM4
 from .entries import new_risk_state
 from .strategy import ROUND_STEP, SMT_PICKS, Params, resolve_session_close, run_day
 
@@ -371,7 +372,8 @@ def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: d
                 intermarket=({**(intermarket or {}), "ext_midnight": pr.midnight_map[d]}
                              if pr.midnight_map and d in pr.midnight_map else intermarket), equity=equity,
                 bias_by_cut={m: t_.loc[d].to_dict() for m, t_ in pr.cuts.items() if d in t_.index},
-                meta=pr.meta, week=week, eve=(pr.eve or {}).get(d))
+                meta=pr.meta, week=week, eve=(pr.eve or {}).get(d),
+                post_eve=_SM4.post_evening(pr.df, d) if p.asia_session else None)
 
 
 def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
@@ -630,6 +632,9 @@ def _group_pick(t: pd.DataFrame, pick: str) -> pd.DataFrame:
         elif pick == "clean_swing":
             c = g[g.clean_swing.eq(True)] if "clean_swing" in g else g.iloc[:0]
             r = (c if len(c) else g).iloc[0]
+        elif pick == "clean":                       # caption-gap D15-one-clean-gap-instrument (061 ~01:49:01): the fill whose area is ONE clean gap (gap_count == 1), else the first
+            c = g[g.gap_count.eq(1)] if "gap_count" in g else g.iloc[:0]
+            r = (c if len(c) else g).iloc[0]
         else:
             if "array_depth" not in g or g.array_depth.isna().all():
                 r = g.iloc[0]
@@ -696,7 +701,7 @@ def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, 
         pick = "first"
         if not len(t):
             return t.drop(columns="_sk")
-    if pick in ("middle", "clean_swing", "depth"):
+    if pick in ("middle", "clean_swing", "depth", "clean"):
         out = _group_pick(t, pick)
         if "_sk" in out:
             out = out.drop(columns="_sk")
