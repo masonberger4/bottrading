@@ -26,6 +26,7 @@ NEW_SWITCHES = (
     "ir_accel_hold", "tgif_need_draw", "tgif_sd_exit", "ma_deuce_ladder", "ss_ladder", "ss_t1_frac", "mb_targets", "mb_done_at_htf", "mb_body_exit", "counter_scalp",
     "sweep_max_linger", "breaker_max_taps_for_entry", "lh_draw_freeze", "lh_freeze_t", "mm_plan", "unicorn_preopen", "unicorn_back_bars", "breaker_need_bias_draw",
     "ce_fail_entry", "expansion_ce_entry", "expansion_bulk", "pm_need_htf_target", "pm_lunch_fvg_array", "allow_htf_array_premise", "premise_tfs",
+    "vb_entry", "vb_back_full", "unfulfilled_nearest", "fs_sweep_close",
 )
 
 
@@ -42,7 +43,8 @@ def test_new_switch_defaults_and_validation():
         (False, 0, 0, False, 720, "", False, 15)
     assert (p.breaker_need_bias_draw, p.ce_fail_entry, p.expansion_ce_entry, p.expansion_bulk, p.pm_need_htf_target, p.pm_lunch_fvg_array, p.allow_htf_array_premise, p.premise_tfs) == \
         (False, False, False, 0.65, False, False, False, (15, 60))
-    for kw in (dict(leg_grade_gate="x"), dict(leg_origin="x"), dict(eq_hunt="x"), dict(ts_age_rank="x"), dict(mm_plan="x"), dict(mm_turn_types=("nope",)), dict(wick_depth_bars=0),
+    assert (p.vb_entry, p.vb_back_full, p.unfulfilled_nearest, p.fs_sweep_close) == ("fill_limit", False, False, False)
+    for kw in (dict(vb_entry="x"), dict(leg_grade_gate="x"), dict(leg_origin="x"), dict(eq_hunt="x"), dict(ts_age_rank="x"), dict(mm_plan="x"), dict(mm_turn_types=("nope",)), dict(wick_depth_bars=0),
                dict(shallow_ticks=-1), dict(eq_hunt_band=0.9), dict(wk_proj_size=0), dict(wk_proj_k=()), dict(ss_t1_frac=0), dict(expansion_bulk=1.5), dict(premise_tfs=(7,)),
                dict(org_entry_windows=((10, 5),)), dict(lh_freeze_t=1440), dict(unicorn_back_bars=0), dict(near_pool_adr=-1)):
         with pytest.raises(ValueError):
@@ -127,6 +129,7 @@ def test_leg_grade_entry_zone():
     assert sm3.order_gate3(ctx, sl, sw, i, replace(req, leg_grade_gate="tag"), 4070.0, 4060.0, "AM", lvt2, {}, {}) is None and "grade_q3" in lvt2
     assert sm3.leg_grade(ctx, sl, sw, i, replace(req, leg_origin="session_low"), 4040.0, "AM")[1] == pytest.approx(4000.5)
     assert sm3.order_gate3(ctx, sl, sw, i, replace(req, leg_grade_tol=0.0), 4050.0, 4040.0, "AM", [], {}, {}) is None          # exactly the half way
+    assert sm3.order_gate3(ctx, sl, sw, i, req, 3999.0, 3990.0, "AM", [], {}, {}) == "x_leg_grade"                               # review fix: under O the entry is out (the zone starts at O)
     ctx.cur_lock = None
     assert sm3.leg_grade(ctx, sl, sw, i, req, 4040.0, "AM") is None                                                             # no draw: nothing to grade
 
@@ -191,21 +194,28 @@ def test_prev_day_eq_long_gate():
     ds = prior_days(D0, 6)
     hs = [rth_day(x, 4040.0, 3990.0, close=4020.0) for x in ds[:-1]]
     leg = [(4000.0, 4005.0, 3999.0, 4004.0), (4004.0, 4010.0, 4003.0, 4009.0), (4009.0, 4020.0, 4008.0, 4019.0), (4019.0, 4030.0, 4015.0, 4029.0), (4029.0, 4045.0, 4028.0, 4044.0),
-           (4044.0, 4060.0, 4043.0, 4059.0), (4059.0, 4080.0, 4058.0, 4079.0), (4079.0, 4100.0, 4078.0, 4099.0)]
+           (4044.0, 4060.0, 4043.0, 4059.0), (4059.0, 4080.0, 4058.0, 4079.0), (4079.0, 4100.0, 4078.0, 4099.0),
+           (4099.0, 4099.0, 4060.0, 4062.0), (4062.0, 4062.0, 4000.5, 4005.0)]     # ... then back down THROUGH the 4010-4015 gap (the Reaper: levels.reaper needs the cut-through)
     hs.append(frame(ds[-1], leg, 5, "09:30"))
     rows = [(4050.0, 4051.0, 4040.0, 4045.0)] * 6
     p = Params(**BASE, prev_eq_long=True)
-    ctx, (sl, ss) = mkctx(rows, base=4050.0, p=p, hist=hs)
+    ctx, (sl, ss) = mkctx(rows, base=4050.0, p=p, hist=hs, bias=1)
     i = ib(ctx, "09:30") + 4
+    assert sm3.prev_range_eq(ctx, sl, i, p, 4060.0) is None                      # review fix: no prev_full (the 00:00 open) = the gate is n/a, no RTH-open fallback
+    ctx.prev_full = hs[-1]
     assert sm3.prev_range_eq(ctx, sl, i, p, 4060.0) is False
     assert sm3.prev_range_eq(ctx, sl, i, p, 4045.0) is True
     z = sm3.prev_reaper(hs[-1], 1)
-    assert z is not None and z[0] < 4050.0                                      # the 4010-4015 gap is in the discount half of the leg
+    assert z is not None and z.mid < 4050.0                                      # the 4010-4015 gap is in the discount half of the leg
     assert sm3.prev_range_eq(ctx, sl, i, p, 4005.0) is False                    # under the Reaper's CE: no support left
     flat = [rth_day(x, 4040.0, 3990.0, close=4020.0) for x in ds]
     flat[-1] = rth_day(ds[-1], 4030.0, 3990.0, close=4020.0)
-    ctx2, (sl2, _) = mkctx(rows, base=4050.0, p=p, hist=flat)
+    ctx2, (sl2, _) = mkctx(rows, base=4050.0, p=p, hist=flat, bias=1)
+    ctx2.prev_full = flat[-1]
     assert sm3.prev_range_eq(ctx2, sl2, i, p, 4060.0) is None                    # no key high taken yesterday
+    ctx.cur_bias = 0
+    assert sm3.prev_range_eq(ctx, sl, i, p, 4060.0) is None                      # review fix: the gate needs want == +1 (a neutral / bearish day is not gated)
+    ctx.cur_bias = 1
     # the gate in order_gate3 and the mirror (a short at the discount side of a down day)
     assert sm3.order_gate3(ctx, sl, dict(session="AM", key="x", level=0, ext=4040.0, ext_i=i - 1, sweep_i=i - 1, broke=i), i, p, 4060.0, 4050.0, "AM", [], {}, {}) == "x_prev_eq"
 
@@ -235,6 +245,14 @@ def test_retrace_to_recapitalized_ob(monkeypatch):
     assert sm3.order_gate3(ctx, sl2, sw, i, p, -4058.0, -4070.0, "AM", lvt, {}, {}) == "x_unfulfilled" and "unfulfilled" in lvt
     assert sm3.order_gate3(ctx, sl, dict(sw, ext=4040.0), i, p, 4056.0, 4050.0, "AM", [], {}, {}) is None          # the long toward it is fine
     assert sm3.order_gate3(ctx, sl2, sw, i, replace(p, recap_ob_entry=False), -4058.0, -4070.0, "AM", [], {}, {}) is None
+    # review fix: blocked while the objective stands even when the short's own draw is NEARER (unfulfilled_nearest=True keeps the first build: not blocked then)
+    ctx.bias_row = dict(draw_up=4120.0, draw_up_name="D_swing_high", draw_dn=4050.0, draw_dn_name="D_swing_low")
+    assert sm3.order_gate3(ctx, sl2, sw, i, p, -4058.0, -4070.0, "AM", [], {}, {}) == "x_unfulfilled"
+    assert sm3.order_gate3(ctx, sl2, sw, i, replace(p, unfulfilled_nearest=True), -4058.0, -4070.0, "AM", [], {}, {}) is None
+    # ... and the LOCKED draw (no htf.table row) counts as the objective
+    ctx.bias_row = None
+    ctx.cur_lock_any = dict(side=1, target=4120.0, kind="pool", name="pdh1", marked=[])
+    assert sm3.order_gate3(ctx, sl2, sw, i, p, -4058.0, -4070.0, "AM", [], {}, {}) == "x_unfulfilled"
 
 
 # --- M1-turning-level-types (121) -------------------------------------------------------------------------------------------------------------------
@@ -319,6 +337,31 @@ def test_vb_trade():
     assert tr2.exits == [] and pos2["left"] == 100
 
 
+def test_vb_close_above_entry_and_full_exit(monkeypatch):
+    """levels#123 (contested with 85, switches vb_entry / vb_back_full): vb_entry="close_above" arms a MARKET long on the close of the first bar closing above the first post-gap up candle
+    (high 4110) after the fill - not the pre-gap limit; vb_back_full exits the whole position on the first close under the pre-gap close (85: half, then all on a lower close)."""
+    after = [(4101.0, 4112.0, 4100.5, 4111.0)]
+    p = Params(**BASE, vb_trade=True, vb_min_gap_pts=0.5, vb_entry="close_above", vb_back_full=True)
+    ctx, sl = _vb_ctx(p, after)
+    cap = {}
+    monkeypatch.setattr(S, "_finish_order", lambda ctx_, sd_, i_, p_, sess_, sw_, entry, stop, rm, lh, tags, **k: cap.update(entry=entry, stop=stop, fixed=k.get("fixed"), tags=tags) or "ORDER")
+    k0 = ib(ctx, "09:30")
+    assert sm3.vb_order(ctx, sl, k0 + 1, p, "AM", 1.0) is None                   # filled, but no close above the up candle yet (the limit mode would arm here)
+    assert sm3.vb_order(ctx, sl, k0 + 2, p, "AM", 1.0) == "ORDER"
+    assert cap["entry"] == 4111.0 and cap["tags"]["market"] is True and cap["stop"] == pytest.approx(4099.0 - p.pad) and cap["fixed"][0] == (4110.25, "pool")
+    ctx2, sl2 = _vb_ctx(replace(p, vb_entry="fill_limit"), after)
+    cap.clear()
+    assert sm3.vb_order(ctx2, sl2, k0 + 1, replace(p, vb_entry="fill_limit"), "AM", 1.0) == "ORDER" and cap["entry"] == 4100.0 and cap["tags"]["market"] is False
+    # management: traded above, then ONE close under 4100 closes everything
+    after2 = [(4101.0, 4111.0, 4100.5, 4109.0), (4109.0, 4109.5, 4098.0, 4099.0)]
+    ctx3, sl3 = _vb_ctx(p, after2)
+    pos = dict(left=100, fill_i=k0 + 1, k=0, last_partial_i=-1, sm3=dict(vb=dict(hi=4110.0, pre=4100.0, stall=0, reached=False, above=False, traded_above=False, back=0, back_c=None, done_stall=False)))
+    tr = SimpleNamespace(exits=[])
+    for i in (k0 + 2, k0 + 3):
+        sm3.manage(ctx3, sl3, pos, tr, i, ctx3.idx[0], p)
+    assert pos["left"] == 0 and tr.exits[-1][3] == "vb_back_full"
+
+
 # --- L2-raid-level-rolls (124) ----------------------------------------------------------------------------------------------------------------------
 
 def test_raid_level_rolls_to_new_low(monkeypatch):
@@ -386,6 +429,16 @@ def test_monday_weekly_high_projection(monkeypatch):
     assert sm3.wk_proj_order(ctx, sl, i, p, "AM", 1.0) is None                    # the long side of a bearish week
     ctx.wbias = 0
     assert sm3.wk_proj_order(ctx, ss, i, p, "AM", 1.0) is None
+    # review fix: strategy.weekly_bias reads only EARLIER days of the week (0 on a Monday) - the Monday week direction is the htf.table weekly reading (wk_bias)
+    ctx.bias_row = {"wk_bias": float("nan")}
+    assert sm3.week_dir(ctx, i, "AM") == 0
+    ctx.bias_row = {"wk_bias": -1}
+    assert sm3.week_dir(ctx, i, "AM") == -1
+    assert sm3.wk_proj_order(ctx, ss, i, p, "AM", 1.0) == "ORDER"
+    ss.__dict__.pop("_wkp_sent")
+    assert sm3.wk_proj_order(ctx, sl, i, p, "AM", 1.0) is None
+    ctx.bias_row = None
+    ss.__dict__.pop("_wkp_sent", None)
     ctx.wbias = -1
     ctx_t, (_, ss_t) = mkctx(rows, base=4095.0, p=p, d=date(2026, 6, 23), start="02:00", conf=StubConf(arrays=arr), hist=hist_close(close=4095.0, hi=4130.0, lo=4040.0))
     ctx_t.wbias = -1
@@ -418,10 +471,32 @@ def test_turtle_soup_any_age_prefer_recent():
     sd = sd_of([(3991.0, 3992.0, 3990.5, 3991.0), (3991.0, 3991.5, 3988.0, 3989.0), (3989.0, 3990.0, 3988.5, 3989.5), (3989.5, 3990.0, 3988.5, 3989.0), (3989.0, 3991.5, 3988.9, 3991.0)])
     ctx5 = stub(5)
     sw2 = dict(session="AM", key="pdl3", level=3990.0, ext=3988.0, ext_i=1, sweep_i=1, broke=None)
-    assert sm3.sweep_step(ctx5, sd, sw2, 3, Params(**BASE, turtle_soup="2023", ts_linger_bars=3)) is None and not sw2.get("ts_sent")      # 3 closes under the level: allowed
-    assert sm3.sweep_step(ctx5, sd, sw2, 3, Params(**BASE, turtle_soup="2023", ts_linger_bars=2)) is None and sw2.get("ts_sent") is True  # ... more than 2: the turtle is cancelled
+    assert sm3.sweep_step(ctx5, sd, sw2, 3, Params(**BASE, turtle_soup="2023", ts_linger_bars=3)) is None      # 3 closes under the level: allowed
+    assert sm3.sweep_step(ctx5, sd, sw2, 3, Params(**BASE, turtle_soup="2023", ts_linger_bars=2)) == "drop"  # ... more than 2: the sweep is cancelled (review fix: dropped, not only its turtle)
     sw3 = dict(session="AM", key="pdl3", level=3990.0, ext=3988.0, ext_i=1, sweep_i=1, broke=None)
-    assert sm3.sweep_step(ctx5, sd, sw3, 3, Params(**BASE, ts_linger_bars=2)) is None and not sw3.get("ts_sent")                  # (only with turtle_soup on)
+    assert sm3.sweep_step(ctx5, sd, sw3, 3, Params(**BASE, ts_linger_bars=2)) is None                  # (only with turtle_soup on)
+
+
+def test_failure_swing_sweep_bar_closes_back(monkeypatch):
+    """management#88 daily clause (fs_sweep_close): with fs_def no_new_extreme the bar of the sweep (swing low L1 under the key level 100) must CLOSE back above 100: close 100.5 passes,
+    close 99.2 (it lingered under the level) does not; off = both pass."""
+    P = L.Pivot
+    for close_l1, want in ((100.5, True), (99.2, False)):
+        c = np.array([101.0, 101.0, close_l1, 101.5, 102.0, 101.0, 102.5, 103.0, 103.0])
+        sd = SimpleNamespace(c=c, h=c + 0.5, l=c - 0.5, ph=[P(4, 104.0, 6)], pl=[P(2, 99.0, 4), P(6, 100.5, 8)], sign=1, __dict__={})
+        ctx = SimpleNamespace(idx=None)
+        monkeypatch.setattr(S, "_sess_start", lambda ctx_, i_: 0)
+        monkeypatch.setattr(S, "_sell_side", lambda *a, **k: {"k": 100.0})
+        monkeypatch.setattr(S, "_level_intact", lambda *a, **k: True)
+        monkeypatch.setattr(L, "failure_swing", lambda *a, **k: (P(6, 100.5, 8), P(4, 102.0, 6)))
+        got = []
+        monkeypatch.setattr(S, "_finish_order", lambda *a, **k: got.append(1) or "ORDER")
+        p = Params(**BASE, cc_swings="failure", cc_fail_pts=5.0, fs_def="no_new_extreme", fs_sweep_close=True, pivot_n=1)
+        sd.__dict__.pop("_ccf", None)
+        assert (SM.cc_failure_order(ctx, sd, 8, p, "AM", 1.0) == "ORDER") is want
+        sd2 = SimpleNamespace(**{**sd.__dict__, "c": c, "h": c + 0.5, "l": c - 0.5, "ph": sd.ph, "pl": sd.pl, "sign": 1})
+        sd2.__dict__.pop("_ccf", None)
+        assert SM.cc_failure_order(ctx, sd2, 8, replace(p, fs_sweep_close=False), "AM", 1.0) == "ORDER"
 
 
 # --- LLT3-equal-highs-fade-condition (158) ----------------------------------------------------------------------------------------------------------
@@ -667,6 +742,11 @@ def test_counter_scalp():
     assert len(t) == 1 and "counter_scalp" in t[0].lv_tags and t[0].shares == plain[0].shares // 2
     assert [(e[3], e[1]) for e in t[0].exits] == [("counter_mo", 100.0)]
     assert t[0].entry < 100.0
+    # review fix: the same long filled ABOVE the midnight open (unshifted rows) is the "never hold there" case - the counter scalp is not taken at all
+    rows0 = list(B_ROWS + AFTER)
+    plain0 = rf_run(day(rows0), history(hi=112.0, lo=88.0), Params(**{**B_POST, "adds": (0.5,)}), {})[0]
+    assert plain0 and plain0[0].entry >= 100.0
+    assert rf_run(day(rows0), history(hi=112.0, lo=88.0), Params(**{**B_POST, "adds": (0.5,), "htf_bias": "combo", "counter_scalp": True}), {}, bias=bias)[0] == []
     # the manage rule on its own: a bar trading through the MO exits at max(open, MO) in side space; a bar that opens beyond it exits at the open
     ctx, (sl, ss) = mkctx([(99.0, 99.5, 98.5, 99.0), (99.0, 100.6, 98.9, 100.4), (100.4, 101.0, 100.0, 100.8)], base=99.0, bias=1)
     k0 = ib(ctx, "09:30")
@@ -739,7 +819,7 @@ def test_lh_draw_frozen_at_noon():
     assert 720 in B.lock_cuts(p) and 900 not in B.lock_cuts(p) and 900 in B.lock_cuts(replace(p, lh_draw_freeze=False))
     hs = [rth_day(x, 4010.0, 3900.0, close=3995.0) for x in prior_days(D0, 8)]
 
-    def lock_run(bar_hi=None):
+    def lock_run(bar_hi=None, p=p):
         rows = [(3995.0, 3996.0, 3994.0, 3995.0)] * 4 * 12 + [(3995.0, 3996.0, 3994.0, 3995.0)] * 90          # 09:30 .. 17:00 flat
         ctx, (sl, ss) = mkctx(rows, base=3995.0, p=p, hist=hs)
         for hhmm, hi in (bar_hi or {}).items():
@@ -760,7 +840,12 @@ def test_lh_draw_frozen_at_noon():
     ctx2, done2, out2 = lock_run({"14:30": 4010.5})
     assert out2["13:40"]["target"] == 4010.0 and out2["14:30"]["delivered"] and done2["LH"] is True                           # traded before 15:00: the slot is done
     ctx3, done3, out3 = lock_run({"11:00": 4010.5})
-    assert ctx3.lock["AM"]["delivered"] and out3["12:00"]["target"] != 4010.0 or out3["12:00"]["side"] == 0                   # the delivered AM draw is not carried over
+    assert ctx3.lock["AM"]["delivered"]
+    assert out3["12:00"]["side"] == 0 or out3["12:00"]["target"] != 4010.0                                                  # the delivered AM draw is not carried over
+    # review fix: with draw_relock a frozen LH draw delivered before 15:00 ends the slot (no new LH draw is locked)
+    p_rl = replace(p, draw_relock=True)
+    ctx4, done4, out4 = lock_run({"14:30": 4010.5}, p_rl)
+    assert done4["LH"] is True and out4["15:20"]["target"] == 4010.0 and out4["15:20"]["delivered"]
     # a run_day day reports the LH lock at 12:00
     rows = [(o, h, l, c) for o, h, l, c in [(100.0, 100.3, 99.9, 100.1)] * 40]
     tr, locks, log, skips = rf_run(day(rows), history(hi=112.0, lo=88.0), Params(**BASE, last_hour_own_slot=True, lh_draw_freeze=True), {})
@@ -835,14 +920,17 @@ def test_breaker_entry_needs_lock():
     sw = dict(session="AM", key="x", level=99.0, ext=99.0, ext_i=k0, sweep_i=k0, broke=k0)
     tags = lambda: dict(entry_kind="breaker", bz_top=101.0, bz_bottom=100.0)
     assert sm3.order_gate3(ctx, sl, sw, k0 + 5, p, 100.5, 99.0, "AM", [], {}, tags()) == "x_breaker_no_draw"
-    ctx.cur_lock = dict(side=1, target=106.0, kind="pool", name="pdh1", marked=[])
+    ctx.cur_lock = ctx.cur_lock_any = dict(side=1, target=106.0, kind="pool", name="pdh1", marked=[])
     t1 = tags()
     assert sm3.order_gate3(ctx, sl, sw, k0 + 5, p, 100.5, 99.0, "AM", [], {}, t1) is None and t1["sm3"]["bd_ok"] is True
-    ctx.cur_lock = dict(side=1, target=100.9, kind="pool", name="x", marked=[])        # a draw that is not above the zone
+    ctx.cur_lock = ctx.cur_lock_any = dict(side=1, target=100.9, kind="pool", name="x", marked=[])        # a draw that is not above the zone
     assert sm3.order_gate3(ctx, sl, sw, k0 + 5, p, 100.5, 99.0, "AM", [], {}, tags()) == "x_breaker_no_draw"
-    ctx.cur_lock = None
+    ctx.cur_lock = ctx.cur_lock_any = None
     ctx.bias_row = dict(draw_up=106.0, draw_up_name="D_fvg", draw_dn=float("nan"), draw_dn_name="")
     assert sm3.order_gate3(ctx, sl, sw, k0 + 5, p, 100.5, 99.0, "AM", [], {}, tags()) is None
+    ctx.cur_lock_any = dict(side=0, target=106.0, kind="pool", name="x", marked=[])      # review fix: a NEUTRAL lock (side 0) made = no draw, whatever the row says
+    assert sm3.order_gate3(ctx, sl, sw, k0 + 5, p, 100.5, 99.0, "AM", [], {}, tags()) == "x_breaker_no_draw"
+    ctx.cur_lock_any = None
     ctx.cur_bias = 0
     assert sm3.order_gate3(ctx, sl, sw, k0 + 5, p, 100.5, 99.0, "AM", [], {}, tags()) == "x_breaker_no_draw"                      # no session bias
     ctx.cur_bias = 1
@@ -899,13 +987,21 @@ def test_expansion_ce_entry():
     assert [(e[3], e[1]) for e in on[0].exits] == [("t1", 112.25), ("t2", 118.25)]
     n = on[0].shares
     assert on[0].exits[0][2] == int(n * 0.65) or abs(on[0].exits[0][2] - 0.65 * n) <= 1
-    assert sm3.single_expansion(SimpleNamespace(cur_lock=None, opens={}), None) is False
-    ctx = SimpleNamespace(cur_lock=dict(side=1, name="pdh1", target=112.0), opens={"0930": 100.0}, hist=hs)
-    assert sm3.single_expansion(ctx, None) is True
+    ctx, _ = mkctx([(100.0, 101.0, 99.0, 100.0)] * 8, base=100.0, start="08:00", hist=hs)
+    i = ib(ctx, "09:30") + 1
+    ctx.cur_lock = None
+    assert sm3.single_expansion(ctx, None, i) is False
+    ctx.cur_lock = dict(side=1, name="pdh1", target=112.0)
+    ctx.opens = {"0930": 100.0}
+    assert sm3.single_expansion(ctx, None, i) is True
     ctx.cur_lock = dict(side=1, name="pdh1", target=140.0)
-    assert sm3.single_expansion(ctx, None) is False                                   # farther than ADR5 (24)
+    assert sm3.single_expansion(ctx, None, i) is False                                   # farther than ADR5 (24)
     ctx.cur_lock = dict(side=1, name="org_far", target=105.0)
-    assert sm3.single_expansion(ctx, None) is False                                   # an array, not a daily level
+    assert sm3.single_expansion(ctx, None, i) is False                                   # an array, not a daily level
+    ctx.cur_lock = dict(side=1, name="pmonth_h", target=112.0)
+    assert sm3.single_expansion(ctx, None, i) is True                                    # the month pool is a daily level (review fix: real lock name)
+    # review fix (look-ahead): the 09:30 open is not known to an order completed before the 09:30 bar is in
+    assert sm3.single_expansion(ctx, None, ib(ctx, "09:30") - 1) is False
 
 
 # --- M7-pm-1330-judas-full (9) ----------------------------------------------------------------------------------------------------------------------
@@ -932,13 +1028,16 @@ def test_pm_judas_lunch_fvg():
     assert sm3.pm_htf_target_ok(ctx, sl, i, pn, "PM", 4005.0) is True and sm3.pm_htf_target_ok(ctx, ss, i, pn, "PM", -4005.0) is True
     sw = dict(session="PM", key="lunch", level=4000.0, ext=3999.0, ext_i=i - 2, sweep_i=i - 2, broke=i - 1)
     assert sm3.order_gate3(ctx, sl, sw, i, pn, 4005.0, 4000.0, "PM", [], {}, {}) is None
-    ctx.bias_row = dict(draw_up=4100.0, draw_up_name="4h_fvg", draw_dn=3950.0, draw_dn_name="4h_fvg")                     # not a daily-level target
+    ctx.bias_row = dict(draw_up=4100.0, draw_up_name="4h_fvg", draw_dn=3950.0, draw_dn_name="4h_fvg")                     # not a daily-level target ...
+    assert sm3.order_gate3(ctx, sl, sw, i, pn, 4005.0, 4000.0, "PM", [], {}, {}) is None                                   # ... but an untouched prior-day high above is one (review fix)
+    pd_keep, ctx.pd = ctx.pd, {k: v for k, v in ctx.pd.items() if not k.startswith(("pdh", "pdl"))}
     assert sm3.order_gate3(ctx, sl, sw, i, pn, 4005.0, 4000.0, "PM", [], {}, {}) == "x_pm_no_htf_target"
     ctx.bias_row = dict(draw_up=4005.0, draw_up_name="D_fvg", draw_dn=3950.0, draw_dn_name="D_swing_low")                  # the target was reached already
     assert sm3.order_gate3(ctx, sl, sw, i, pn, 4003.0, 4000.0, "PM", [], {}, {}) == "x_pm_no_htf_target"
     ctx.bias_row = None
     assert sm3.order_gate3(ctx, sl, sw, i, pn, 4005.0, 4000.0, "PM", [], {}, {}) == "x_pm_no_htf_target"
     assert sm3.order_gate3(ctx, sl, sw, i, pn, 4005.0, 4000.0, "AM", [], {}, {}) is None                                   # the AM is not gated
+    ctx.pd = pd_keep
 
 
 # --- M1M2-htf-array-replaces-sweep (10) -------------------------------------------------------------------------------------------------------------

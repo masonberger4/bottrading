@@ -636,6 +636,11 @@ def cc_failure_order(ctx, sd, i, p, session, risk_mult):
         B, H = r
         if B.i in used or not sd.c[i] > H.price:
             continue
+        if p.fs_sweep_close and nne:                  # caption-gap M4-immediate-response-swept-extreme (cc05_005 ~14:40; management#88 daily clause): the bar of the sweep (the earlier swing low L1
+            prior = [q for q in sd.pl if q.i < H.i and q.known <= i and q.i >= ss]      # that traded through K) must CLOSE back above K - no lingering under it [our interpretation of "closes back above L1"]
+            if not prior or not sd.c[prior[-1].i] > v:
+                continue
+            S._SM2.hit("fs_sweep_close")
         # review fix: the swing low B is confirmed only pivot_n bars after it prints, and the
         # break of H often comes inside those bars - arm on the first bar where BOTH are known
         # (B confirmed and a close above H since B), not only when the first close above H is

@@ -167,15 +167,17 @@ def sweep_step(ctx, sd, sw, i: int, p):
         sw["shallow"] = False
         hit("shallow_cleared")
     if sw.get("broke") is None and sw.get("key") != "htf_array" and (p.sweep_max_linger or (p.ts_linger_bars and p.turtle_soup)):
+        # [our interpretation] "lingers" = the COUNT of closes beyond the swept level since the sweep (not necessarily consecutive: a bounce and a re-break still mean it hung around)
         n = int(np.count_nonzero(sd.c[sw["sweep_i"]:i + 1] < sw["level"] - MIN1))
         if p.sweep_max_linger and n > p.sweep_max_linger:
             sw["ob_void"] = True                           # a pending OB order of this sweep dies with it
             S._f("x_linger")
             hit("sweep_linger")
             return "drop"
-        if p.ts_linger_bars and p.turtle_soup and n > p.ts_linger_bars and not sw.get("ts_sent"):
-            sw["ts_sent"] = True
+        if p.ts_linger_bars and p.turtle_soup and n > p.ts_linger_bars:
+            sw["ob_void"] = True                           # levels#141 "cancel the sweep" (review fix: the whole sweep, not only its turtle order): its pending OB order dies with it
             hit("ts_linger")
+            return "drop"
     if sw.get("key") == "htf_array" and sd.c[i] < sw["arr_bot"] - tk:
         hit("premise_dead")
         return "drop"                                      # a body closed beyond the array: not a test of it
@@ -242,7 +244,7 @@ def row_draw(ctx, sd, i: int, session: str):
 def htf_pivot_high(ctx, sd, i: int, session: str):
     """The untaken HTF pivot high above (side space): the locked draw when it is on this side, else the htf.table draw named D/W pivot / PDH / PWH; None when there is none or the day
     already traded it."""
-    lk = getattr(ctx, "cur_lock", None)
+    lk = getattr(ctx, "cur_lock_any", None) or getattr(ctx, "cur_lock", None)
     v = None
     if lk is not None and lk.get("side") == sd.sign:
         v = float(sd.x(lk["target"]))
@@ -325,17 +327,14 @@ def near_pool(ctx, sd, sw, i: int, p, session: str, entry: float):
 
 def prev_range_eq(ctx, sd, i: int, p, entry: float):
     """new-prev-day-range-eq-long (076 ~20:09): after an expansion day that took a key high (the prior high beyond the day before's and the week before's) the range R = [prior 00:00
-    open .. prior high]; longs only at or below EQ(R); a Reaper (an FVG in the discount half of the prior impulsive leg) below EQ lowers the floor to its CE. Real-price longs only; the
-    mirror runs on the mirrored Side. Returns True (allowed) / False / None (n/a)."""
+    open .. prior high]; longs (with the bias, review fix: `want == +1`) only at or below EQ(R); a Reaper (levels.reaper: an FVG in the discount half of the prior impulsive leg that price
+    cut through) below EQ lowers the floor to its CE. The mirror runs on the mirrored Side. Needs ctx.prev_full (the prior day's 00:00 open; backtest passes it for prev_eq_long) - without
+    it the gate is n/a (review fix: no fallback to the RTH open). Returns True (allowed) / False / None (n/a)."""
     hist = getattr(ctx, "hist", [])
-    if len(hist) < 2:
-        return None
     pf = getattr(ctx, "prev_full", None)
-    if pf is not None and len(pf):                           # the prior day's FULL frame: its 00:00 open
-        po, ph, pl = float(pf.open.iloc[0]), float(pf.high.max()), float(pf.low.min())
-    else:
-        prev = hist[-1]
-        po, ph, pl = float(prev.open.iloc[0]), float(prev.high.max()), float(prev.low.min())
+    if len(hist) < 2 or pf is None or not len(pf) or _want(ctx) != sd.sign:
+        return None
+    po, ph, pl = float(pf.open.iloc[0]), float(pf.high.max()), float(pf.low.min())
     pw = getattr(ctx, "pw", None)
     if sd.sign > 0:
         key_ref = max([float(hist[-2].high.max())] + ([float(pw[0])] if pw else []))
@@ -351,32 +350,28 @@ def prev_range_eq(ctx, sd, i: int, p, entry: float):
     hit("prev_eq_long")
     if entry <= eq + MIN1:
         # a Reaper under EQ: the long may also not sit below its CE (support there) [our interpretation of "allow entries down to its CE"]
-        z = prev_reaper(hist[-1], sd.sign)
-        if z is not None and z[1] < eq:
-            return bool(entry >= z[0] - p.eq_tol_pts * p.es_pt - MIN1)
+        z = prev_reaper(pf, sd.sign)
+        if z is not None and z.mid < eq:
+            return bool(entry >= z.mid - p.eq_tol_pts * p.es_pt - MIN1)
         return True
     return False
 
 
 def prev_reaper(prev: pd.DataFrame, sign: int):
-    """The Reaper of the prior session's impulsive leg (low -> high, side space): the newest bullish FVG in the discount half of the leg -> (CE, top) or None [our interpretation of
-    levels.reaper without the breaker context]."""
+    """The Reaper of the prior session's impulsive leg (low a0 -> high hk, side space) by levels.reaper: the newest bullish FVG in the discount half of the leg that a later close (hk+1 ..
+    the lowest low after the high) cut through. The Zone (.mid = its CE) or None."""
     if sign > 0:
         o, h, l, c = (prev[k].values.astype(float) for k in ("open", "high", "low", "close"))
     else:
         o, h, l, c = (-prev.open.values.astype(float), -prev.low.values.astype(float), -prev.high.values.astype(float), -prev.close.values.astype(float))
     if len(h) < 4:
         return None
-    a0 = int(np.argmin(l))
-    hk = a0 + int(np.argmax(h[a0:]))
-    if hk <= a0:
+    hk = int(np.argmax(h))
+    if hk < 1 or hk >= len(h) - 1:
         return None
-    mid = (float(l[a0]) + float(h[hk])) / 2
-    out = None
-    for z in L.fvgs(h[:hk + 1], l[:hk + 1], o[:hk + 1], c[:hk + 1]):
-        if z.kind == "bull" and z.i - 2 >= a0 and z.i <= hk and z.mid <= mid:
-            out = (float(z.mid), float(z.top))
-    return out
+    a0 = int(np.argmin(l[:hk + 1]))
+    ext_i = hk + 1 + int(np.argmin(l[hk + 1:]))
+    return L.reaper(o, h, l, c, a0, hk, ext_i)
 
 
 # --- 121: turning-level types -------------------------------------------------------------------------------------------------------------------
@@ -428,10 +423,10 @@ def bias_draw_ok(ctx, sd, i: int, p, session: str, top: float) -> bool:
     htf.table draw)."""
     if _want(ctx) != sd.sign:
         return False
-    lk = getattr(ctx, "cur_lock", None)
-    if lk is not None and lk.get("side") == sd.sign:
-        return bool(sd.x(lk["target"]) > top)
-    r = row_draw(ctx, sd, i, session)
+    lk = getattr(ctx, "cur_lock_any", None)
+    if lk is not None:                                       # review fix: once a session lock exists it IS the named draw - it must be this side's and above the zone
+        return bool(lk.get("side") == sd.sign and sd.x(lk["target"]) > top)
+    r = row_draw(ctx, sd, i, session)                        # no lock made (draw_lock off / before the lock time): the htf.table row draw
     return bool(r is not None and r[0] > top)
 
 
@@ -461,11 +456,20 @@ def breaker_taps(ctx, sd, sw, i: int, p, top: float, bottom: float):
 # --- 9: PM needs an HTF target ---------------------------------------------------------------------------------------------------------------------
 
 def pm_htf_target_ok(ctx, sd, i: int, p, session: str, entry: float) -> bool:
-    """M7-pm-1330-judas-full (010 ~57:47): an undelivered daily-level target (a daily FVG / old daily high or low of the htf.table) lies beyond the entry in the trade's direction."""
+    """M7-pm-1330-judas-full (010 ~57:47): an undelivered daily-level target lies beyond the entry in the trade's direction: the htf.table draw named as a daily level / daily FVG, or (review
+    fix: "in htf.table arrays") any untouched daily pool (the prior days' extremes) or D / W array edge of the Confluence object (sm2.daily_beyond) - not yet traded today."""
+    day_hi = float(sd.h[ctx.start:i + 1].max())
     r = row_draw(ctx, sd, i, session)
-    if r is None or r[1] not in DAILY_DRAWS or r[0] <= entry:
-        return False
-    return bool(float(sd.h[ctx.start:i + 1].max()) < r[0])
+    if r is not None and r[1] in DAILY_DRAWS and r[0] > entry and day_hi < r[0]:
+        return True
+    if sm2.daily_beyond(ctx, sd, i, p, entry) is not None:
+        return True
+    cf = getattr(ctx, "conf", None)
+    if cf is not None:
+        for near, ce, far, tf, src in cf.opposing(sm2.now_ts(ctx, i), sd.x(entry), sd.sign, ("W",), (0,)):
+            if sd.x(near) > entry and sd.x(near) > day_hi + MIN1:
+                return True
+    return False
 
 
 def lunch_fvg_tops(ctx, sd, i: int, ref: float) -> list:
@@ -507,7 +511,7 @@ def order_gate3(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str,
             lvt.append(f"grade_q{g[0]}" if g[0] else "grade_below_origin")
             if p.leg_grade_gate == "require":
                 O, D = g[1], g[2]
-                if not (O - p.leg_grade_tol * (D - O) - MIN1 <= entry <= O + (0.5 + p.leg_grade_tol) * (D - O) + MIN1):
+                if not (O - MIN1 <= entry <= O + (0.5 + p.leg_grade_tol) * (D - O) + MIN1):          # review fix: the allowed zone starts AT O (the tolerance widens only the 50% edge)
                     return "x_leg_grade"
                 if "cancel_close" not in tags:
                     tags["cancel_close"] = float(O)          # a close under O cancels the pending long
@@ -524,12 +528,20 @@ def order_gate3(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str,
         if ok is False:
             return "x_prev_eq"
     if p.recap_ob_entry:
+        # an untaken HTF pivot high (low) in the direction OPPOSITE to this order is an unfulfilled objective while the bias / the locked draw points at it (review fix: the locked draw counts):
+        # the order against it is blocked while it stands. With neither a bias nor a lock naming the direction (both HTF pivots would block each other) - and always with unfulfilled_nearest
+        # (the first build) - the objective is the nearer of the two htf.table draws.
         ot = sm2.other_side(ctx, sd)
-        ro = row_draw(ctx, ot, i, session)
-        # an untaken HTF pivot high (low) in the direction OPPOSITE to this order that is also the nearest draw is an unfulfilled objective: the order against it is blocked
-        if ro is not None and ro[1] in HTF_PIVOTS and ro[0] > ot.c[i] and float(ot.h[ctx.start:i + 1].max()) < ro[0]:
-            r = row_draw(ctx, sd, i, session)
-            if r is None or ro[0] - ot.c[i] < r[0] - sd.c[i]:
+        ho = htf_pivot_high(ctx, ot, i, session)
+        if ho is not None:
+            lka = getattr(ctx, "cur_lock_any", None)
+            w = _want(ctx)
+            if p.unfulfilled_nearest or not (w or (lka is not None and lka.get("side"))):
+                r = row_draw(ctx, sd, i, session)                # no bias / lock names the objective's direction (or the first build): the nearer of the two HTF draws is the objective
+                blk = r is None or ho - ot.c[i] < r[0] - sd.c[i]
+            else:
+                blk = w == ot.sign or (lka is not None and lka.get("side") == ot.sign)
+            if blk:
                 lvt.append("unfulfilled")
                 hit("unfulfilled")
                 return "x_unfulfilled"
@@ -624,7 +636,16 @@ def vb_order(ctx, sd, i: int, p, session: str, risk_mult: float):
         if sd.c[i] <= bot + MIN1:
             continue
         low = float(sd.l[j:i + 1].min())
-        entry, stop = bot, low - p.pad
+        up = [x for x in range(k, j + 1) if sd.c[x] > sd.o[x]]
+        cand_hi = float(sd.h[up[0]]) if up else float(sd.h[k])
+        mkt = p.vb_entry == "close_above"
+        if mkt:                                              # new-vb-target (123, cc04_009 ~12:42): a bar CLOSING above the first post-gap up candle after the fill -> market at that close
+            if i <= j or not sd.c[i] > cand_hi + MIN1:
+                continue
+            entry = float(sd.c[i])
+        else:                                                # new-vb-post-fill-management (85, ~11:48): the limit at the pre-gap close
+            entry = bot
+        stop = low - p.pad
         if entry - stop < p.min_risk_pts * p.es_pt:
             continue
         sent.add(k)
@@ -637,10 +658,8 @@ def vb_order(ctx, sd, i: int, p, session: str, risk_mult: float):
             nx = []
         if nx:
             fixed.append((S._exit_px(nx[0][0], "pool", p), "pool"))
-        up = [x for x in range(k, j + 1) if sd.c[x] > sd.o[x]]
-        cand_hi = float(sd.h[up[0]]) if up else float(sd.h[k])
         sw = _synth(S, session, "vb", bot, low, j, j)
-        tags = dict(unicorn=False, fvg_bottom=low, fvg_ce=(entry + low) / 2, entry_kind="vb", mitigation=False, propulsion=False, no_leg_wait=True,
+        tags = dict(unicorn=False, fvg_bottom=low, fvg_ce=(entry + low) / 2, entry_kind="vb", mitigation=False, propulsion=False, no_leg_wait=True, market=mkt,
                     skip_po3=not p.synth_po3, lv_tags=["vb_trade"], sm3=dict(vb=dict(hi=cand_hi, pre=float(bot), stall=0, reached=False, above=False, traded_above=False, back=0, back_c=None, done_stall=False)))
         return S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, float(sd.h[j:i + 1].max()), tags, skip_leg_pd=True, fixed=fixed)
     return None
@@ -773,12 +792,30 @@ def wk_proj_levels(ctx, sign: int, p):
     return out
 
 
+def week_dir(ctx, i: int, session: str) -> int:
+    """The week's direction on a MONDAY [our interpretation of "weekly_bias -1" of the spec: strategy.weekly_bias reads only EARLIER days of the same week, so it is always 0 on Monday]: the
+    htf.table weekly reading (`wk_bias`, built with weekly_gate / weekly_open / htf_bias "wk") known at bar i; falls back to ctx.wbias."""
+    w = int(getattr(ctx, "wbias", 0) or 0)
+    if w:
+        return w
+    from . import bias_day as BD
+    row = BD.row_for(ctx, session, i)
+    if row is None:
+        return 0
+    try:
+        v = row.get("wk_bias")
+    except Exception:
+        return 0
+    return 0 if v is None or v != v else int(np.sign(v))
+
+
 def wk_proj_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     """L13 wk_high_proj: Monday, weekly bias with this side, from 09:30: a projected level within 1 point of a weekly array (the weekly bearish OB / FVG for a short) becomes a limit
     shaded one tick toward price, stop beyond the array, `wk_proj_size` x the normal risk (the Monday partial)."""
     S = _S()
-    if ctx.day.weekday() != 0 or getattr(ctx, "wbias", 0) != sd.sign or ctx.t[i] < 570 or ctx.t[i] >= 960:
+    if ctx.day.weekday() != 0 or ctx.t[i] < 570 or ctx.t[i] >= 960 or week_dir(ctx, i, session) != sd.sign:
         return None
+    hit("wk_proj_eval")
     sent = sd.__dict__.setdefault("_wkp_sent", set())
     kb = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
     arrs = S._ts_arrays(ctx, sd, i, kb, ("W",), (0, 1, 3))
@@ -846,6 +883,7 @@ def org_cands(ctx, sd, sw, i: int, p, out: list) -> list:
     hist = list(getattr(ctx, "hist", []))
     tol = p.org_confl_ticks * p.tick
     res = []
+    hit("org_eval")
     for (pc, op), d in zip(orgs[-5:], dates[-5:]):
         glo, ghi = sorted((float(sd.x(pc)), float(sd.x(op))))
         later = [x for x in hist if d is None or x.index[0].date() >= d]
@@ -863,16 +901,19 @@ def org_cands(ctx, sd, sw, i: int, p, out: list) -> list:
                 if not alive and not near_out:
                     continue
                 hit("org_confl")
+            hit("org_cand")
             res.append((float(v), float(glo), "org"))
     return res
 
 
 # --- expansion CE entry (M1 8) ----------------------------------------------------------------------------------------------------------------------
 
-DAILY_LOCK_NAMES = ("pdh", "pdl", "pwh", "pwl", "htf_PDH", "htf_PDL", "htf_PWH", "htf_PWL", "htf_D_swing", "pmh_month", "pml_month", "pmh", "pml")
+DAILY_LOCK_NAMES = ("pdh", "pdl", "pwh", "pwl", "htf_PDH", "htf_PDL", "htf_PWH", "htf_PWL", "htf_D_swing", "pmonth_h", "pmonth_l")
+# review fix: the month pools are "pmonth_h" / "pmonth_l" (mark_levels); "pmh" / "pml" are the PRE-market high / low (not daily levels - dropped). Daily gap / VI draws (htf_D_fvg ...) are arrays, not
+# "one level": excluded on purpose.
 
 
-def single_expansion(ctx, p) -> bool:
+def single_expansion(ctx, p, i: int) -> bool:
     """M1-inside-fvg-expansion-only (009 ~3:49) [our interpretation]: the session lock is ONE daily level (an old close / high / low, not an array) within ADR5 of the 09:30 open."""
     lk = getattr(ctx, "cur_lock", None)
     if lk is None or not lk.get("side"):
@@ -881,7 +922,7 @@ def single_expansion(ctx, p) -> bool:
     if not nm.startswith(DAILY_LOCK_NAMES):
         return False
     a5 = sm2.adr5(ctx)
-    o0 = ctx.opens.get("0930")
+    o0 = _S()._open_known(ctx, "0930", i)                    # review fix: the 09:30 open only once its bar is in (an order completed before it cannot read it)
     if not a5 or o0 is None:
         return False
     return bool(abs(float(lk["target"]) - float(o0)) <= a5)
@@ -933,6 +974,7 @@ def tgif_sd_level(ctx, sd, i: int, p, entry: float):
     A, B = float(z0.top), float(z0.bottom)
     if A <= B:
         return None
+    hit("tgif_sd_eval")
     opp = [(zz.bottom, zz.top) for zz in sd.opposing() if zz.i < z0.i and sd.c[zz.i + 1:i + 1].max(initial=-np.inf) <= zz.top]
     opp += [(zz.bottom, zz.top) for zz in S._TP.matrix_breakers(sd, p) if zz.i < z0.i]
     cf = getattr(ctx, "conf", None)
@@ -1020,7 +1062,10 @@ def manage(ctx, sd, pos, tr, i: int, ts, p) -> None:
                         v["done_stall"] = True
                         hit("vb_stall")
         if pos["left"] and v["traded_above"] and c < v["pre"] - MIN1:
-            if v["back"] == 0:
+            if p.vb_back_full:                               # 123: "exit fully" on the first close back under the pre-gap close (85 = the two-step partial / full)
+                _part(sd, pos, tr, ts, c, 1.0, "vb_back_full", p, all_=True)
+                hit("vb_back_full")
+            elif v["back"] == 0:
                 _part(sd, pos, tr, ts, c, 0.5, "vb_back", p)
                 v["back"], v["back_c"] = 1, c
                 hit("vb_back")
@@ -1134,6 +1179,7 @@ def htf_level_beyond(ctx, sd, i: int, p, entry: float, session: str, above: floa
 def lunch_not_target(ctx, sd) -> bool:
     """LLT3-lunch-hl-raid-not-target (cc10_013 ~1:50): in the PM with a bias, the lunch extreme this (counter) side would target is the raid pool of the biased move - it leaves the ladder."""
     w = _want(ctx)
+    hit("pm_lunch_raid_eval")
     r = bool(w and sd.sign == -w and getattr(ctx, "cur_session", "") == "PM")
     if r:
         hit("pm_lunch_raid")

@@ -1683,14 +1683,17 @@ _SM3_DECISIONS = {
     "new-leg-grading-quadrants": dict(leg_grade_gate="require", **SM_POST),
     "new-leg-grading-quadrants_tag": dict(leg_grade_gate="tag", leg_origin="session_low", **SM_POST),
     "L7-org-later-day-entry-array": dict(org_entry_array=True, org_entry_confl=False, htf_bias="combo", **SM_POST),
+    "L7-org-later-day-entry-array_confl": dict(org_entry_array=True, htf_bias="combo", **SM_POST),                   # (092: the default - another array within 4 ticks required)
     "new-eq-stop-hunt-entry": dict(eq_hunt="prefer", pool_swings=True, **SM_POST),
     "new-prev-day-range-eq-long": dict(prev_eq_long=True, **SM_POST),
     "new-retrace-to-recapitalized-ob": dict(recap_ob_entry=True, htf_bias="combo", **SM_POST),
+    "new-retrace-to-recapitalized-ob_nearest": dict(recap_ob_entry=True, unfulfilled_nearest=True, htf_bias="combo", **SM_POST),
     "M1-turning-level-types": dict(am_discount_array=True, mm_turn_types=("ob", "fvg", "old_high", "old_low", "void"), **SM_POST),
     "new-vb-target": dict(vb_trade=True, vb_min_gap_pts=0.5, **SM_POST),
+    "new-vb-target_close_above": dict(vb_trade=True, vb_min_gap_pts=0.5, vb_entry="close_above", vb_back_full=True, **SM_POST),
     "L2-raid-level-rolls": dict(turtle_soup="cc_limit", raid_roll=True, ts_cc_below_pts=0.25, htf_bias="combo", **SM_POST),
     "B1-nearby-unrun-high-trap": dict(near_pool_block=True, **SM_POST),
-    "L13-weekly-high-london-swing": dict(wk_high_proj=True, weekly_bias=True, **SM_POST),
+    "L13-weekly-high-london-swing": dict(wk_high_proj=True, weekly_bias=True, weekly_gate="tag", **SM_POST),
     "M4-swept-low-age": dict(turtle_soup="2023", ts_age_rank="prefer", ts_linger_bars=2, **SM_POST),
     "LLT3-equal-highs-fade-condition": dict(reh_fade_gate=True, htf_bias="combo", **SM_POST),
     "LLT3-judas-depth-third-adr": dict(judas_max_adr=0.33),                                       # already built (judas_max_adr)
@@ -1700,12 +1703,13 @@ _SM3_DECISIONS = {
     "M11-immediate-rebalance-management": dict(ir_entries=True, ir_filters=True, ir_accel_hold=True, htf_bias="combo"),
     "M14-tgif-draw-hit-first-sd-depth": dict(tgif_model=True, tgif_need_draw=True, tgif_sd_exit=True),
     "M15-ma-deuce-ladder": dict(ma_deuce=True, ma_deuce_ladder=True, md_second=True),
-    "M16-sick-sister-exit-ladder": dict(ss_ladder=True),                                           # (the ladder acts under sick_sister, which needs the partner index: tested in the synthetic partner runs)
+    "M16-sick-sister-exit-ladder": dict(ss_ladder=True),                                           # (the ladder acts under sick_sister, which needs the partner index and so makes no trade in the single-index ES look-ahead windows: tested in the synthetic partner runs, SYN_CASES "sick_sister")
     "A15-mitigation-block-targets": dict(mitigation_entry=True, mb_targets=True, mb_done_at_htf=True, htf_bias="combo"),
     "A15-mitigation-block-body-hold": dict(mitigation_entry=True, mb_body_exit=True, htf_bias="combo"),
     "new-vb-post-fill-management": dict(vb_trade=True, vb_min_gap_pts=0.5, **SM_POST),
     "new-counter-bias-scalp-exit": dict(counter_scalp=True, htf_bias="combo", **SM_POST),
     "M4-immediate-response-swept-extreme": dict(sweep_max_linger=2, **SM_POST),
+    "M4-immediate-response-swept-extreme_fs": dict(sweep_max_linger=2, fs_sweep_close=True, cc_swings="failure", cc_fail_pts=5.0, fs_def="no_new_extreme", **SM_POST),
     "X9-repeated-array-taps": dict(breaker_max_taps_for_entry=2, breaker_entry="fallback", **SM_POST),
     "M5-lasthour-draw-frozen-noon": dict(last_hour_own_slot=True, lh_draw_freeze=True),
     "M1-three-entry-plans": dict(mm_plan="full", mmxm_ctx=True),

@@ -1338,10 +1338,10 @@ def release_setups(ctx, sides, i: int, p, state: dict, pos, pending, risk_mult: 
     from . import newscal as NC
     tags = events(ctx.day)
     rel = NC.releases(ctx.day, p)
-    saved = {k: ctx.__dict__[k] for k in ("cur_lock", "cur_bias", "cur_news", "cur_sloppy", "cur_no_draw") if k in ctx.__dict__}
+    saved = {k: ctx.__dict__[k] for k in ("cur_lock", "cur_lock_any", "cur_bias", "cur_news", "cur_sloppy", "cur_no_draw") if k in ctx.__dict__}
     out = None
     try:
-        ctx.cur_lock, ctx.cur_news, ctx.cur_sloppy, ctx.cur_no_draw, ctx.cur_bias = None, None, "", False, 0
+        ctx.cur_lock, ctx.cur_lock_any, ctx.cur_news, ctx.cur_sloppy, ctx.cur_no_draw, ctx.cur_bias = None, None, None, "", False, 0
         if p.nfp_release_fvg and "nfp" not in sent and "jobs" in tags and end == 510 and not done.get("NFPR"):
             sent.add("nfp")
             out = nfp_release_order(ctx, sides, i, p, risk_mult)
@@ -1351,7 +1351,7 @@ def release_setups(ctx, sides, i: int, p, state: dict, pos, pending, risk_mult: 
         if out is None and p.post_news_continuation and "pnc" not in sent and 510 in rel and 515 <= end <= 570 and not done.get("PNC"):
             out = post_news_order(ctx, sides, i, p, risk_mult, sent)
     finally:
-        for k in ("cur_lock", "cur_bias", "cur_news", "cur_sloppy", "cur_no_draw"):
+        for k in ("cur_lock", "cur_lock_any", "cur_bias", "cur_news", "cur_sloppy", "cur_no_draw"):
             if k in saved:
                 setattr(ctx, k, saved[k])
             else:

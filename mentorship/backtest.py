@@ -365,7 +365,7 @@ def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: d
                 gaps=htf.gaps_for_day(pr.og, d, p.nwog_keep, p.nwog_days, p.nwog_skip_holiday,
                                       p.nwog_trading_days, reb=pr.reb, holiday_pick=p.nwog_holiday_pick,
                                       ref_px=float(g.open.iloc[0])) if pr.og is not None else None,
-                prev_full=pr.ds[k - 1] if (k > 0 and (p.prev_london_pool or p.london_lr_zone != "off")) else None,
+                prev_full=pr.ds[k - 1] if (k > 0 and (p.prev_london_pool or p.london_lr_zone != "off" or p.prev_eq_long)) else None,
                 eth=pr.eth,
                 closes=pr.closes, evening=_evening(pr.df, d) if p.globex_pool else None,
                 intermarket=({**(intermarket or {}), "ext_midnight": pr.midnight_map[d]}

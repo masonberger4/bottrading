@@ -2083,11 +2083,14 @@ class Params:
     prev_eq_long: bool = False           # new: after an expansion day that took a key high, longs only at or below EQ(prior 00:00 open .. prior high); a Reaper under EQ moves the floor to its CE
     # new-retrace-to-recapitalized-ob (cc03_003 ~38:17)
     recap_ob_entry: bool = False         # new: with an untaken HTF high above and a pool above swept, the retrace buys the most recent reclaimed OB's open (target the HTF high); the opposite side is blocked while that objective stands (lv_tag unfulfilled)
+    unfulfilled_nearest: bool = False    # new-retrace-to-recapitalized-ob: True = the opposite side is blocked only while the untaken HTF high is also NEARER than the order's own draw (the first build); default = blocked while the objective stands (spec)
     # M1-turning-level-types (cc04_007 ~1:04)
     mm_turn_types: tuple = ("ob", "fvg")  # M1 am_discount_array: what counts as the turning level under the sweep extreme - "ob" (5m OB), "fvg" (1m BISI), "old_high" (an old high as support), "old_low", "void"
     # L8-vacuum-block-trade / new-vb-post-fill-management (cc04_009 ~11:48, ~12:42, ~14:09)
     vb_trade: bool = False               # L8: a vacuum block (a gap between a close and the next open) that price has filled 100% is bought at the pre-gap close; T1 above the high formed at the gap opening; stall / back-below management
     vb_min_gap_pts: float = 1.0          # [our interpretation] the smallest gap that counts as a vacuum block
+    vb_entry: str = "fill_limit"         # L8 / levels#123 vs management#85 (contested, owner question): "fill_limit" = a limit at the pre-gap close once the gap is filled (85); "close_above" = market on the close of the first bar that closes above the first post-gap up candle (123, cc04_009 ~12:42)
+    vb_back_full: bool = False           # L8 levels#123: exit the WHOLE position on the first close back under the pre-gap close (default = 85: half there, all on a lower close)
     # L2-raid-level-rolls (cc04_011 ~13:57)
     raid_roll: bool = False              # L2 cc_limit: after the raid level (an old low) traded without a 15m MSS the level rolls to each new confirmed 15m pivot low under it; no entries above the current raid
     # B1-nearby-unrun-high-trap (cc04_013 ~6:11)
@@ -2123,6 +2126,7 @@ class Params:
     counter_scalp: bool = False          # B3 (opt-in): a setup AGAINST the htf bias is allowed as a scalp - half risk, one exit at the nearest pool, flat when the midnight open trades in the trade's direction
     # M4-immediate-response-swept-extreme (cc05_005 ~14:40)
     sweep_max_linger: int = 0            # M4: a sweep is void when more than this many bars close beyond the swept level before the MSS (0 = off; test 2)
+    fs_sweep_close: bool = False         # M4 / management#88 daily clause: the failure swing (fs_def "no_new_extreme") needs the bar of the sweep (swing low L1 under the key level) to close back above the level
     # X9-repeated-array-taps (048 ~32:51; 063 ~28:54)
     breaker_max_taps_for_entry: int = 0  # X9 / A13: at tap 2 of the entry breaker a 2-bar window must trade above the nearest opposing FVG without breaking the tap low; a 3rd tap marks it worn (0 = no gate)
     # M5-lasthour-draw-frozen-noon (001 ~28:39)
@@ -2216,7 +2220,7 @@ class Params:
                              "consol_bars >= 2, consol_adr > 0, daily_first_days >= 1, 0 <= or_rb_from < 1440")
         # caption-gap pass (setups_models #3/7)
         for name, ok in (("leg_grade_gate", ("off", "tag", "require")), ("leg_origin", ("mss_low", "session_low")), ("eq_hunt", ("off", "tag", "prefer")),
-                         ("ts_age_rank", ("off", "tag", "prefer")), ("mm_plan", ("", "full", "mss_scalp", "pyramid"))):
+                         ("ts_age_rank", ("off", "tag", "prefer")), ("mm_plan", ("", "full", "mss_scalp", "pyramid")), ("vb_entry", ("fill_limit", "close_above"))):
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
         if not set(self.mm_turn_types) <= {"ob", "fvg", "old_high", "old_low", "void"}:
@@ -2229,7 +2233,7 @@ class Params:
                 or any(len(w_) != 2 or not 0 <= w_[0] < w_[1] <= 1440 for w_ in self.org_entry_windows)):
             raise ValueError("setups_models #3/7: counts >= 1 / tolerances >= 0, 0 <= eq_hunt_band <= 0.5, 0 < wk_proj_size <= 1, 0 < ss_t1_frac <= 1, 0 < expansion_bulk <= 1, "
                              "wk_proj_k > 0, premise_tfs in (15, 30, 60, 240), org_entry_windows pairs inside the day, 0 <= lh_freeze_t < 1440")
-        if self.mm_plan:                       # M1-three-entry-plans: the umbrella forces the paths it names (replace() re-runs this)
+        if self.mm_plan:                       # M1-three-entry-plans: the umbrella forces the paths it names (ONE-WAY: ob_entry / mmxm_ctx / add_on_vi stay forced after replace(p, mm_plan=""); set them back explicitly)
             self.ob_entry = "post_mss" if self.mm_plan == "mss_scalp" else "pre_break"
             if self.mm_plan == "full":
                 self.mmxm_ctx = True
@@ -5345,7 +5349,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         ctx.cur_sloppy = "|".join(sorted(sl_now))
         if pmr:                                       # setups_models M6: after the objective
             done.setdefault("PMR", False)
-            ctx.cur_lock, ctx.cur_bias, armed = None, 0, False
+            ctx.cur_lock, ctx.cur_lock_any, ctx.cur_bias, armed = None, None, 0, False
             for sd in sides:
                 if sd.sign in block_side.get("year_end", ()):
                     continue
@@ -5431,6 +5435,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             if p.smt_bias == "filter" and smtb and sd.sign != smtb:
                 continue                              # B18.3: against the SMT bias
             ctx.cur_lock = lk if (lk is not None and lk["side"] == sd.sign) else None
+            ctx.cur_lock_any = lk                     # review fix (setups_models #3/7 breaker_need_bias_draw): the session lock of ANY side (a neutral lock must not fall back to the row draw)
             ctx.cur_bias = lk["side"] if (lk is not None and lk["side"]) else (w_ or 0)
             sd.ctx_bias = ctx.cur_bias                # A16 pb_def cc04_008 step (1): the bullish context of the propulsion block
             ctx.counter_now = counter_
@@ -5648,7 +5653,7 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
             _f("x_draw_delivered")
             if pending is not None and ("LH" if pending.get("done_key") == "LH" else pending["session"]) == s_:
                 pending = None
-            if p.draw_relock:                         # test: lock the next draw from here
+            if p.draw_relock and not (p.lh_draw_freeze and s_ == "LH"):      # test: lock the next draw from here (review fix: not for the frozen last-hour draw - delivered = the slot is done)
                 all_locks.append(lk)
                 nl = mark_levels(ctx, None, int(t + ctx.tf), "PM" if s_ == "LH" else s_, p, spent)
                 nl["session"] = s_
@@ -6271,7 +6276,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         fresh = gaps
     uni_ok = p.unicorn_sides == "both" or p.unicorn_sides == ("long" if sd.sign > 0 else "short")
     uni = [g for g in fresh if bz is not None and g.overlaps(bz)] if uni_ok else []
-    if p.unicorn_preopen and uni_ok and ctx.t[sw["ext_i"]] >= 570:       # caption-gap M4-unicorn-sequence-preopen-breaker (007 ~15:27): after 09:30 only the breaker formed before it, sweep -> back inside -> FVG
+    if p.unicorn_preopen and uni_ok and ctx.t[i] >= 570:       # caption-gap M4-unicorn-sequence-preopen-breaker (007 ~15:27): after 09:30 only the breaker formed before it, sweep -> back inside -> FVG
         bz_pre, uni = _SM3.preopen_unicorn(ctx, sd, sw, i, p, fresh)
         if uni:
             bz = bz_pre
@@ -6330,7 +6335,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
             elif lk_ == "down":
                 bottom = min(bottom, z.bottom)
     entry = _EN.entry_px(sd, g, top, bottom, p)       # D11 / E2: edge, ce, edge_1tick, iofed, ladder
-    exp_ = bool(p.expansion_ce_entry and vi_exact is None and _SM3.single_expansion(ctx, p))
+    exp_ = bool(p.expansion_ce_entry and vi_exact is None and _SM3.single_expansion(ctx, p, i))
     if exp_:
         entry = (top + bottom) / 2                    # caption-gap M1-inside-fvg-expansion-only (009 ~3:49): a single-expansion day enters inside the FVG toward its middle
         _SM2.hit("expansion_ce")
@@ -6908,6 +6913,9 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         lvt.append("counter_scalp")
         mo_ = _open_known(ctx, "midnight", i)
         tags["sm3"] = dict(tags.get("sm3") or {}, **({} if mo_ is None else {"counter_mo": float(sd.x(mo_))}))
+        if mo_ is not None and entry >= float(sd.x(mo_)) - 1e-9:
+            _f("x_counter_past_mo")                  # review fix: an entry already past the midnight open in the trade's direction (a counter short filled below it) is the "never hold there" case
+            return None
         _SM2.hit("counter_scalp")
     if p.ir_accel_hold and tags.get("entry_kind") == "ir":     # caption-gap M11-immediate-rebalance-management (100 ~1:36:14): half at the nearest pivot, the rest only on acceleration
         tags["fracs"] = (0.5, 0.5)
