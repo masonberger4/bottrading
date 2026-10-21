@@ -437,6 +437,9 @@ def ote_adjust(sd, sw, i, p, entry, stop, kind, lvt):
     base = S._LD.leg_low(sd, sw, i, p, leg_hi)       # caption-gap A21 leg_anchor: the dealing range's low ("mss_leg" = the sweep extreme)
     lo, hi, sweet = L.ote_band(base, leg_hi)
     if p.ote == "limit":
+        if p.ote_need_trigger and not S._SM6.ote_trigger_ok(sd, sw, i, hi):
+            S._f("x_ote_no_trigger")                 # caption-gap M13-ote-needs-bias-trigger-structure: OTE is context, not an entry - wait for an LTF MSS inside the band
+            return None
         if sweet < sd.c[i]:
             entry = sweet
     elif p.ote == "filter" and not (lo - 1e-12 <= entry <= hi + 1e-12):
@@ -492,6 +495,7 @@ def array_cands(ctx, sd, sw, i, p, bz) -> list:
         r_ = S._SM5.mit_cand(ctx, sd, sw, i, p)
         if r_ is not None:
             out.append(r_)
+    out += S._SM6.arr_cands6(ctx, sd, sw, i, p, ea)           # caption-gap setups_models #6/7: ob_secondary / propulsion / last_offer arrays, the ote "ob62" body stall
     if "vi" in ea:
         vs = [z for z in sd.vis("bull") if e <= z.i <= i and not (p.vi_breakaway and S._LD3.vi_is_breakaway(sd, sw, z, i))]   # A9 vi_breakaway
         if vs:
@@ -516,12 +520,13 @@ def array_order(ctx, sd, sw, i, p, session, risk_mult, fvg_entry, bz):
         cs = S._SM4.unused_cands(ctx, sd, sw, i, p, bz, cs)        # caption-gap M5-lasthour-shallowest-unused-array (030 ~00:21:36): arrays price already traded back into are dropped
     if not cs:
         return None
-    entry, bottom, kind = max(cs)
+    entry, bottom, kind = S._SM6.pick_array(cs, p) if p.entry_arrays_order else max(cs)       # caption-gap A15-mitigation-block-sell-entry: entry_arrays_order
     stop = bottom - p.pad
     if entry - stop < p.min_risk_pts * p.es_pt:
         stop = sw["ext"] - p.pad
     tags = dict(unicorn=False, fvg_bottom=bottom, fvg_ce=(entry + bottom) / 2, entry_kind="arr_" + kind,
                 mitigation=False, propulsion=False)
+    S._SM6.array_tags(sw, kind, tags)                  # caption-gap A12-secondary-ob / A16-propulsion-entries: a body close under the candle's MT cancels
     if kind == "ob_post" and sw.get("_ob_post_mt") is not None:
         tags["cancel_close"] = float(sw["_ob_post_mt"])           # a body close under the candle's MT invalidates (A12)
     if kind == "reclaimed_ob" and p.reclaimed_def != "strict":
@@ -643,7 +648,8 @@ def cc_breaker_order(ctx, sd, sw, i, p, session, risk_mult, ref):
     the new low."""
     tags = dict(unicorn=False, fvg_bottom=sw["ext"], fvg_ce=(ref + sw["ext"]) / 2, entry_kind="cc_breaker_swing",
                 mitigation=False, propulsion=False, no_leg_wait=True)
-    return S._finish_order(ctx, sd, i, p, session, sw, ref, sw["ext"] - p.pad, risk_mult,
+    entry = S._SM6.near_ob_entry(sd, sw, i, ref, p) if p.cc_near_ob else ref      # caption-gap M4-retest-nearer-ob-or-none: OCO with the break leg's nearer OB
+    return S._finish_order(ctx, sd, i, p, session, sw, entry, sw["ext"] - p.pad, risk_mult,
                            sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True)
 
 
@@ -1506,6 +1512,10 @@ def more_adds(ctx, sd, pos, tr, i, p) -> None:
             arm(top)
             if pos["add"] is not None:
                 return
+    if p.two_chance and pos.get("kind") in TS_KINDS and pos["add"] is None:
+        S._SM6.two_chance_add(ctx, sd, pos, tr, i, p)              # caption-gap M4-two-chance-aggressive-vs-mss-retest: chance 2 is an add after a filled soup
+        if pos["add"] is not None:
+            return
     if (p.ts_adds_breakers or p.ts_breaker_pyramid) and pos.get("kind") in TS_KINDS:
         if p.ts_breaker_pyramid and not p.ts_adds_breakers and pos.get("ts_pyr"):
             return

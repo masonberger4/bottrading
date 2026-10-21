@@ -708,6 +708,10 @@ def breaker_retest_order(ctx, sd, i: int, p, session: str, risk_mult: float):
         last = e["born"] if e["armed_i"] is None else e["armed_i"]
         if not sd.l[last + 1:i + 1].min(initial=np.inf) <= e["top"]:
             continue
+        if p.breaker_retests > 1:                  # caption-gap A13-breaker-reentries-and-wait: a capped number of retests, each after a departure of breaker_leave_pts
+            if not S._SM6.retest_ok(sd, e, i, p):
+                continue
+            e["n_ret"] = e.get("n_ret", 0) + 1
         e["armed_i"] = i
         hit("breaker_retest")
         bz = L.Zone("bull", e["top"], e["bottom"], i, e["src"], e["mt"])

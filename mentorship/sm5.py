@@ -255,6 +255,7 @@ def prev_pm_limit(ctx, sd, i: int, p, session: str, risk_mult: float):
         return None
     hi, lo, _ = ctx.sess["prev_pm"]
     lvl = float(sd.x(lo if sd.sign > 0 else hi))               # the pool beyond the range (side space: its low)
+    lvl = float(S._SM6.prev_pm_body(ctx, sd, lvl, p))          # caption-gap E2-body-extreme-entry: ts_level_src "body" = the range's extreme body
     other = float(sd.x(hi if sd.sign > 0 else lo))
     px = float(sd.c[i])
     rng = other - lvl

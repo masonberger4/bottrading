@@ -1825,6 +1825,56 @@ _SM5_DECISIONS = {
     "M1-one-segment": dict(mm_flip=True, mm_stages=True, mmxm_ctx=True, draw_lock="session", htf_resist_cap=False, ob_entry="post_mss"),
 }
 DECISIONS.update(_SM5_DECISIONS)
+
+# --- caption-gap pass, setups_models #6/7 (models_setups_entries.md): one variant per gap id (name prefix = the gap id) ---
+_SM6_DECISIONS = {
+    "M1-short-sell-side-of-buy-curve": dict(curve_short=True, **SM_POST),
+    "A12-ob-at-consolidation-eq-and-eq-retest": dict(consol_eq_entry=True, consol_eq_mode="ob", **SM_POST),
+    "A12-ob-at-consolidation-eq-and-eq-retest_eq": dict(consol_eq_entry=True, consol_eq_mode="eq", consol_bars=12, consol_max_pts=10.0, **SM_POST),
+    "A10-void-retrace-trades": dict(void_trades=("fill", "range", "cont"), **SM_POST),
+    "new-retrace-to-origin-ob": dict(consol_eq_entry=True, consol_eq_mode="origin_ob", **SM_POST),
+    "M13-ote-needs-bias-trigger-structure": dict(ote="limit", ote_need_trigger=True, ote_parent_pd=True, **SM_POST),
+    "M13-premium-ote-turtle-soup": dict(turtle_soup="2023", ts_need_htf=True, ts_ote_ok=True, **SM_POST),
+    "M13-bodies-stall-62-ob": dict(ote="ob62", **SM_POST),
+    "M12-quick-rejection-required": dict(ts_cont=True, ts_cont_bars=10, turtle_soup="2023", **SM_POST),
+    "M12-cc-daily-ob-turtle-soup": dict(turtle_soup="cc_1h_ob", **SM_POST),
+    "M12-cc-daily-ob-turtle-soup_5m": dict(turtle_soup="cc_1h_ob", cc_ob_tf=5, ts_r_preset="cc02_003", cc_ob_offset_ticks=1, **SM_POST),
+    "B5-topdown-entry-refinement": dict(turtle_soup="cc_1h_ob", refine_tfs=(60, 15, 5), **SM_POST),
+    "A12-secondary-ob": dict(entry_arrays=("ob_secondary",), **SM_POST),
+    "new-false-bear-flag-long": dict(false_flag="tag", entry_arrays=("ob",), **SM_POST),       # (already built: false_flag is side-symmetric; this variant adds the OB entry array)
+    "M12-setup-selection-order": dict(entry_discipline="turtle_soup", **SM_POST),
+    "M12-setup-selection-order_ob_return": dict(entry_discipline="ob_return", **SM_POST),
+    "M12-setup-selection-order_range_void": dict(entry_discipline="range_void", **SM_POST),
+    "M12-contrarian-pmh": dict(pmh_contrarian=True, **SM_POST),
+    "B12-ob-below-midnight-open": dict(ob_below_open=True, entry_arrays=("ob",), **SM_POST),
+    "new-eq-wait-fresh-ob": dict(eq_fresh_ob=True, entry_arrays=("ob",), **SM_POST),
+    "M12-counter-run-in-confirmed-trend": dict(sym_swing_ts=True, **SM_POST),
+    "E2-body-extreme-entry": dict(turtle_soup="cc_limit", ts_level_src="body", **SM_POST),
+    "A13-breaker-reentries-and-wait": dict(breaker_entry="fallback", breaker_retests=3, breaker_leave_pts=3.0, **SM_POST),
+    "A17-rejection-block-entries": dict(rb_entry="limit", **SM_POST),
+    "A17-rejection-block-entries_stop": dict(rb_entry="stop", **SM_POST),
+    "A16-propulsion-entries": dict(entry_arrays=("propulsion",), prop_second=True, **SM_POST),
+    "L8-vacuum-block-entries": dict(vb_entry="auto", **SM_POST),
+    "L8-vacuum-block-entries_partial": dict(vb_entry="partial", vb_react_bars=2, **SM_POST),
+    "L8-vacuum-block-entries_full": dict(vb_entry="full", **SM_POST),
+    "new-post-void-fill-gap-sell": dict(void_trades=("void_fill_gap",), **SM_POST),
+    "new-last-buyside-offered-level": dict(entry_arrays=("last_offer",), offer_run=3, offer_step_pts=1.0, **SM_POST),
+    "M4-two-chance-aggressive-vs-mss-retest": dict(two_chance=True, cc_swings="breaker", turtle_soup="2023", ts_gate_mss=True, **SM_POST),
+    "M4-retest-nearer-ob-or-none": dict(cc_swings="breaker", cc_near_ob=True, **SM_POST),
+    "A15-mitigation-block-sell-entry": dict(entry_arrays=("mitigation", "breaker"), entry_arrays_order=("mitigation", "breaker"), htf_bias="combo", **SM_POST),
+    "new-clarity-filter-pass-if-arguing": dict(clarity="drop", clarity_overlap=4.0, **SM_POST),
+    "new-clarity-filter-pass-if-arguing_tag": dict(clarity="tag", **SM_POST),
+    "new-bullish-week-daily-routine-london-ny": dict(ny_london_range=True, weekly_bias=True, **SM_POST),
+    "M0-judas-ends-in-15m-array": dict(sweep_15m_array="tag", sweep_leave_bars=3, sweep_leave_pts=2.0, **SM_POST),
+    "M0-judas-ends-in-15m-array_require": dict(sweep_15m_array="require", **SM_POST),
+    "M12-turtle-soup-entry-depth": dict(turtle_soup="cc_limit", ts_cc_below_pts=1.25, **SM_POST),
+    "new-consolidation-outer-edge-fade": dict(consol_edge_fade="edge", consol_tf=15, consol_bars=12, **SM_POST),
+    "new-inside-range-expansion-fade": dict(consol_edge_fade="inner", consol_tf=15, consol_bars=12, consol_eq_band=0.15, **SM_POST),
+    "new-eight-reversal-catalogue": dict(reversal_tag=True, reversal_need_htf=True, **SM_POST),
+    "L2-pdh-pdl-fade-only-in-expansion-retrace": dict(pdl_expansion=True, daily_level_needs_array=True, **SM_POST),
+    "new-overlapping-reversal-score": dict(reversal_tag=True, reversal_score=True, **SM_POST),
+}
+DECISIONS.update(_SM6_DECISIONS)
 SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): their look-ahead tests are in test_silver_bullet.py
 
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)

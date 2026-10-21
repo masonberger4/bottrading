@@ -624,6 +624,8 @@ def vb_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     the close is back above it, a limit at the pre-gap close (the close of the last up candle before the gap), stop under the lowest low of the fill, T1 = the high formed at the gap opening
     (the gap bar .. the fill bar) + one tick, a runner to the next pool. Management (sm3.manage): vb_stall / vb_back."""
     S = _S()
+    if p.vb_entry in ("partial", "full", "auto"):       # caption-gap L8-vacuum-block-entries (setups_models #6/7): the partial / full fill entries
+        return S._SM6.vb_order6(ctx, sd, i, p, session, risk_mult)
     sent = sd.__dict__.setdefault("_vb_sent", set())
     for k, bot, top in vb_gaps(ctx, sd, p):
         if k > i - 1 or k in sent:
