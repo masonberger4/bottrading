@@ -2427,6 +2427,9 @@ class Params:
     # E5-missed-entry-5m-retrace (cc09_006 ~00:17:03; cc09_007 ~00:21:11)
     missed_5m: bool = False              # E5: the session's sweep / MSS fired, no order filled and price left: one more order on the first 5m same-side FVG / OB of the move
     missed_leave_pts: float = 5.0        # ... "left" = the close this far past the broken MSS reference
+    missed_kz: tuple = ((500, 660),)     # E5 (review fix): the order only inside a kill zone - the NY one (the futures NY kill zone 08:20-11:00, as ny_kz_futures) [our interpretation]
+    missed_lon: bool = False             # E5: ... plus the London lunch 05:00-07:00 when London was quiet early (02:00-03:30) and active late (03:30-05:00)
+    missed_lon_ratio: float = 0.5        # ... quiet early = the first-half range <= this x the second-half range [our interpretation]
     # B12-dip-below-open-into-converging-15m-array (cc09_008 ~00:46:17)
     htf_converge: bool = False           # B12: tag htf_converge when the 15m array holding the sweep extreme overlaps a 60m / 4h / D same-side array
     # new-or-reference-arrays-reused (cc10_010 ~00:07:38) / new-am-trend-definition-and-start (cc10_011 ~00:01:08)
@@ -2444,7 +2447,7 @@ class Params:
     # M13-pattern1-full-sequence-ote-fvg (cc12_004 ~00:26:47) / M4-pattern3-breaker-half-size-add-ltf (cc12_004 ~00:36:02)
     ote_fvg_overlap: bool = False        # M13: with ote="limit" the 70.5 % limit stays only where it lies inside an FVG of the leg, else at the FVG edge nearest it inside the band; no overlapping FVG = no entry
     ote_need_s: bool = False             # M13: the leg needs a short-term low S (above the leg low) that was taken before the order
-    ts_breaker_add_mult: float = 0.5     # M4: the breaker add of a turtle-soup trade = this x the initial units
+    ts_breaker_add_mult: float | None = None   # M4: the breaker add of a turtle-soup trade = this x the initial units (spec 0.5); None = the standard add fraction (adds), as before the pass
     ts_breaker_ltf: bool = False         # M4: the add limit is the 1m FVG / OB inside the breaker zone nearest its top
     # X14-reentry-after-winning-exit (049 ~00:02:38; 050 ~00:49:44) / X13-reentry-after-trail-stop-in-profit (085 ~00:27:16; 056; 022) / X13-reentry-after-loss-conditions (060; cc02_005; 104)
     reentry_after_win: bool = False      # X14: after a winning exit short of the draw (draw untouched) one more same-direction entry at a NEW PD array formed after the exit, same target, fresh size
@@ -2483,6 +2486,7 @@ class Params:
     lunch_macro_win: tuple = (710, 750)
     lunch_first_rung_only: bool = True
     lunch_htf_program: bool = False      # T7: the lunch macro runs the buy-side (REH) above the late-AM pullback: with the HTF program that way the first rung = REH + exit_before_pts, the runner the HTF draw; against it no entry
+    lunch_long_win: tuple = (710, 730)   # ... the program's long is armed inside the 11:50-12:10 macro only (times#12 'long setup in 710-730'); a later bar is x_lunch_program_window
     # new-ny-runs-london-extreme-news (065 ~03:07:01) / OT-M17-cc09_001-checklist (cc09_001 ~00:01:26) / OT-M17-cc09_003-ny-expansion (cc09_003 ~00:17:37) / OT-one-state-tool-pairing (cc01_001 ~00:19:34)
     london_ext_guard: bool = False       # T3: a no-news day whose London leg made the high and broke down: no AM long targeting above the London high, an AM short's stop never beyond it (mirror)
     cc09_gate: str = "off"               # M17: the cc09_001 day-trade checklist - "off" / "tag" (Trade.cc09 lists the failing names) / "gate" (reject when (1)-(4) or (6) fail)
@@ -2497,6 +2501,7 @@ class Params:
     nyx_counts_session: bool = False
     skip_pm_adr_k: float = 0.8           # X14 split: the AM range at or above this x ADR5 = the AM delivered the bulk of the day's range - no PM trade against it (X10d's 0.8)
     pairing: str = "all"                 # M0: one market condition coupled with one tool - "all" / "expansion_ob" / "retracement_void" / "reversal_pool" / "consolidation_eq"
+    state_tag: bool = False              # M0 (review fix): stamp Trade.state (consolidation / expansion / retracement / reversal) on every trade, so the report can split by it even with pairing "all"
 
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
@@ -2747,19 +2752,23 @@ class Params:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
         if (self.max_exec_markets < 0 or self.nq_overshoot_mult <= 0 or self.lc_adr_mult <= 0 or self.lc_adr_k <= 0 or self.lc_stop_pts < 0 or not 0 < self.lc_retrace < 1
                 or not 0 < self.lc_retrace_mss < 1 or not 0 < self.lc_oneside < 1 or self.missed_leave_pts < 0 or self.or_ref_reuse < 1 or self.or_ref_near_pts < 0
-                or self.consol_exit_min < 0 or self.ts_breaker_add_mult <= 0 or self.reentry_win_max < 1 or self.trail_reentry_max < 1 or self.reentry_risk_mult <= 0
+                or self.consol_exit_min < 0 or (self.ts_breaker_add_mult is not None and self.ts_breaker_add_mult <= 0) or self.missed_lon_ratio <= 0 or self.reentry_win_max < 1 or self.trail_reentry_max < 1 or self.reentry_risk_mult <= 0
                 or self.reverse_risk_mult <= 0 or self.offside_frac <= 0 or self.lod_conf_pts < 0 or self.reentry_max < 1 or self.reentry_mult <= 0
                 or self.cc09_room_pts < 0 or self.cc09_scalp_pts < 0 or self.cc09_depart_bars < 1 or self.nyx_target_pct <= 0 or self.nyx_stop_pct <= 0 or self.nyx_max < 1
                 or not 0 <= self.nyx_start < 600 or self.skip_pm_adr_k <= 0):
             raise ValueError("setups_models #7/7: max_exec_markets, lod_conf_pts, missed_leave_pts, or_ref_near_pts, consol_exit_min, cc09_room_pts, cc09_scalp_pts, lc_stop_pts >= 0; "
                              "nq_overshoot_mult, lc_adr_mult, lc_adr_k, ts_breaker_add_mult, reentry_risk_mult, reverse_risk_mult, offside_frac, reentry_mult, nyx_*_pct > 0; "
                              "0 < lc_retrace, lc_retrace_mss, lc_oneside < 1; or_ref_reuse, reentry_win_max, trail_reentry_max, reentry_max, cc09_depart_bars, nyx_max >= 1; 0 <= nyx_start < 600")
-        for name in ("london_close", "lc_fs_win", "lunch_macro_win"):
+        if any(len(w_) != 2 or not 0 <= w_[0] < w_[1] <= 1440 for w_ in self.missed_kz):
+            raise ValueError(f"missed_kz {self.missed_kz!r}: expected (start_minute, end_minute) pairs")
+        for name in ("london_close", "lc_fs_win", "lunch_macro_win", "lunch_long_win"):
             w_ = getattr(self, name)
             if len(w_) != 2 or not 0 <= w_[0] < w_[1] <= 1440:
                 raise ValueError(f"{name} {w_!r}: expected (start_minute, end_minute)")
         if len(self.adv_rung_fracs) != 3 or any(f_ <= 0 for f_ in self.adv_rung_fracs) or abs(sum(self.adv_rung_fracs) - 1.0) > 1e-6:
             raise ValueError(f"adv_rung_fracs {self.adv_rung_fracs!r}: three positive fractions summing to 1")
+        if self.two_session_smt and self.smt_windows and not any(a_ <= 720 and b_ >= 810 for a_, b_ in self.smt_windows):
+            self.smt_windows = tuple(self.smt_windows) + ((720, 810),)          # T13: the lunch-low vs post-13:00-low pair is part of the switch (empty smt_windows = SMT at any time already covers it)
         if not set(self.ts_sessions) <= {"AM", "PM", "LUNCH", "PRE7", "PRE8", "PRE9", "NEWS", "LON"}:
             raise ValueError(f"ts_sessions {self.ts_sessions!r}: session names (AM / PM / LUNCH / PRE7 / PRE8 / PRE9 / NEWS / LON)")
         bad = [x for x in self.pm_nest_tfs if x not in CF_TFS]
@@ -5522,7 +5531,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                         tr.exits.append((ts, sd.x(c), pos["left"], "am_exit")); pos["left"] = 0
                     else:
                         _MG.raise_stop(pos, new)               # X5c: a day trade keeps its stop
-            if pos["left"] and tr.session == "PM" and p.pm_done_by and pos["t1_done"] and t + tf >= p.pm_done_by and not (pos.get("sm7") or {}).get("hold_pm"):
+            if pos["left"] and tr.session == "PM" and p.pm_done_by and pos["t1_done"] and t + tf >= p.pm_done_by and not _SM7.held(pos):
                 tr.exits.append((ts, sd.x(c), pos["left"], "pm_done")); pos["left"] = 0
             if pos["left"] and ff and pos["fill_t"] < ff and t + tf >= ff:
                 tr.exits.append((ts, sd.x(c), pos["left"], "fomc_flat")); pos["left"] = 0   # N3.2: never hold into the release
@@ -5559,8 +5568,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                                         and g.i - 2 > pos["last_partial_i"])):   # formed since the partial
                         ref_ = (g.bottom if p.trail_ref == "gap" else
                                 float(min(min(sd.o[k_], sd.c[k_]) for k_ in range(g.i - 2, g.i + 1))))   # Ep01.20 body
+                        if ref_ - p.trail_pad > pos["stop"]:
+                            pos["trail_ref"] = (float(g.bottom), float(g.top), int(g.i))      # caption-gap X13-reentry-after-trail-stop-in-profit: the structure the stop was trailed under (recorded only when the stop rose)
                         pos["stop"] = max(pos["stop"], ref_ - p.trail_pad)
-                        pos["trail_ref"] = (float(g.bottom), float(g.top), int(g.i))      # caption-gap X13-reentry-after-trail-stop-in-profit: the structure the stop was trailed under
                     apx = _EN.add_px(g, p)                         # E12 add_points
                     if (can_add and p.add_mode == "fvg" and _nadds(pos, tr) < len(p.adds)
                             and _SM.add_ok(sd, pos, apx, i, p)):
@@ -5947,7 +5957,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             if o_ is not None and flip_ and state["only_side"].get(session) == sd.sign and (o_.get("sm5") or {}).get("kind") != "mm":
                 _f("x_mm_flip_kind")
                 o_ = None                             # caption-gap M1-one-segment review fix: the flipped leg is an MM leg (mm_lowrisk / mm stage / OC / accum orders carry sm5 kind "mm"), not any setup
-            if o_ is not None and rc_ is not None and rc_.get("pending") and not (_SM7.reentry_idea_ok(ctx, sd, i, p, o_, rc_) if p.reentry_idea_gate else _MG.reentry_order_ok(o_, sd, rc_, p)):
+            if o_ is not None and rc_ is not None and rc_.get("pending") and not _SM7.loss_reentry_ok(ctx, sd, i, p, o_, rc_):
                 _f("x_reentry_gate")
                 o_ = None                             # X13b: no restored sweep / FVG after the stop (reentry_idea_gate: the three idea-intact conditions)
             if o_ is not None and r7_ is not None and r7_.get("pending") and not _SM7.reentry_ok(ctx, sd, i, p, o_, r7_):

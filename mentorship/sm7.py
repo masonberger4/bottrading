@@ -126,7 +126,7 @@ def lc_order(ctx, sd, i: int, p, risk_mult: float):
     lower / equal rally"): on the 5m bars a pivot low b (confirmed by the next 5m bar) at or above the day low LOD - tol after a rally of at least 2 x tol; a limit at the open of the last
     down-close 5m candle (side space) up to b (the bearish OB of the real short), stop LOD - lc_stop_pts, single target LOD + lc_retrace x the day range (ICT no longer trades it: it often fails;
     index points are [our interpretation]). `mss` (54): the day's extreme LOD is followed by the normal MSS (a close above the last short-term high before it) and the first FVG of that break:
-    a limit at its near edge, stop LOD - pad, the single target entry + lc_retrace_mss x the day range, out by the AM exit. Own done key LC."""
+    a limit at its near edge, stop LOD - pad, the single target entry + lc_retrace_mss x the day range, out by the AM exit (exit_at). Own done key LC. (lc_retrace / lc_retrace_mss are two switches: the two sources give 25 % and 20 %.)"""
     S = _S()
     lo_w, hi_w = lc_window(p)
     t = int(ctx.t[i])
@@ -157,7 +157,7 @@ def lc_order(ctx, sd, i: int, p, risk_mult: float):
         if k is None:
             return None
         entry = float(o5[k])
-        stop = float(min(l5[a], l5[b])) - p.lc_stop_pts * p.es_pt
+        stop = lod - p.lc_stop_pts * p.es_pt                                 # the DAY extreme (HOD of the real day) + the buffer, as specified
         tgt = float(l5[a]) + p.lc_retrace * rng
         if not (stop < entry < sd.c[i]) or tgt <= entry or entry - stop < p.min_risk_pts * p.es_pt:
             return None
@@ -189,7 +189,8 @@ def lc_order(ctx, sd, i: int, p, risk_mult: float):
     sent.add(("g", z.i))
     _dh("lc_scalp")
     return sm4._order(ctx, sd, i, p, session, risk_mult, "lc_scalp", entry, stop, level=entry, ext=lod, ext_i=e, broke=b, fvg_bottom=float(z.bottom), fvg_ce=float(z.mid),
-                      fixed=[(float(S._exit_px(tgt, "pool", p)), "pool")], lv=("lc_scalp", "lc_mss"), done_key="LC", cut_at=int(hi_w), no_adds=True)
+                      fixed=[(float(S._exit_px(tgt, "pool", p)), "pool")], lv=("lc_scalp", "lc_mss"), done_key="LC", cut_at=int(hi_w), no_adds=True,
+                      exit_at=(int(p.am_exit) if p.am_exit else None))          # mss: out by the AM exit (a forced time exit, not only the order cut)
 
 
 # --- E5-missed-entry-5m-retrace ---------------------------------------------------------------------------------------------------------------------
@@ -200,17 +201,20 @@ def note_sweep(ctx, sd, sw, ref: float, i: int) -> None:
 
 
 @_counted
-def missed_order(ctx, sd, i: int, p, session: str, risk_mult: float):
+def missed_order(ctx, sd, i: int, p, session: str, risk_mult: float, extra=None):
     """E5-missed-entry-5m-retrace (cc09_006 ~00:17:03; cc09_007 ~00:21:11): the session's sweep fired and broke its MSS reference, NO order of the session filled (and none rests) and price left (the
     close more than missed_leave_pts above the broken reference): ONE more order, a limit at the near edge of the first 5m same-side FVG (else 5m OB) formed by the move (after the sweep extreme, still
-    alive), ignoring po3_inclusive / the open-side gate (the synthetic order skips the PO3 filter). Stop under the zone; target the ADR5 extreme (the sweep extreme + ADR5) or the first 60m premium
-    array above the entry, whichever is nearer; before 10:00 the ADR5 extreme takes 80 % and the rest runs [our interpretation of 'leave a runner': a quarter of an ADR5 further]."""
+    alive), ignoring po3_inclusive / the open-side gate (the synthetic order skips the PO3 filter). Stop under the zone; target the ADR5 extreme (the sweep extreme + ADR5) or the first 60m / 4h opposing array above the entry
+    (Confluence), whichever is nearer; only inside a kill zone (missed_kz_ok); with the ADR5 extreme as the target 80 % leave there and the rest runs [our interpretation of 'leave a runner': a quarter
+    of an ADR5 further] ONLY when the ADR5 extreme is hit before 10:00 (manage: runner_before) - hit later, the rest goes out with it."""
     S = _S()
     st = _c(ctx).get("m5", {}).get(sd.sign)
     if st is None or getattr(ctx, "pend_now", None) is not None or getattr(ctx, "done_ref", {}).get(session):
         return None
     sw, ref = st
     if sw.get("broke") is None or sw.get("session") != session or sw.get("_m5_sent") or sw["ext_i"] >= i:
+        return None
+    if not missed_kz_ok(ctx, int(ctx.t[i]), p):
         return None
     if not sd.c[i] > ref + p.missed_leave_pts * p.es_pt:
         return None
@@ -226,17 +230,46 @@ def missed_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     if entry - stop < p.min_risk_pts * p.es_pt:
         return None
     tgt = float(sw["ext"]) + adr
-    arr = [float(a.bottom) for a in sd.opposing() if a.i <= i and a.bottom > entry]
-    tgt2 = min([tgt] + [v for v in arr if v > entry + p.min_rr * (entry - stop)] )
+    tgt2, cand = tgt, [tgt]
+    cf = getattr(ctx, "conf", None)
+    if cf is not None:                                           # review fix: the first 60m / 4h premium (opposing) array above the entry, from the Confluence object (real prices -> side space)
+        for near, ce, far, tf_, src in cf.opposing(sm2.now_ts(ctx, i), sd.x(entry), sd.sign, ("1h", "4h"), (0,))[:1]:
+            v = float(sd.x(near))
+            if v > entry + p.min_rr * (entry - stop):
+                cand.append(v)
+                hit("missed_htf_target")
+    tgt2 = min(cand)
     tags = {}
     fixed = [(float(S._exit_px(tgt2, "pool", p)), "pool")]
-    if int(ctx.t[i]) < 600 and tgt2 >= tgt - MIN1:
+    sm7 = {}
+    if tgt2 >= tgt - MIN1:                                       # the ADR5 extreme is the target: 80 % there, a quarter-ADR5 runner [our interpretation of 'leave a runner'] - kept only when it is hit before 10:00 (manage)
         fixed = [(fixed[0][0], "pool"), (float(S._exit_px(tgt + 0.25 * adr, "pool", p)), "pool")]
         tags["fracs"] = (0.8, 0.2)
+        sm7["runner_before"] = 600
     sw["_m5_sent"] = True
+    if session == "LON":
+        hit("missed_5m_lon")
     _dh("missed_5m")
     return sm4._order(ctx, sd, i, p, session, risk_mult, "missed_5m", entry, stop, level=entry, ext=float(sw["ext"]), ext_i=int(sw["ext_i"]), broke=i,
-                      fvg_bottom=float(z.bottom), fvg_ce=float(z.mid), fixed=fixed, lv=("missed_5m",), **tags)
+                      fvg_bottom=float(z.bottom), fvg_ce=float(z.mid), fixed=fixed, lv=("missed_5m",), **({"sm7": sm7} if sm7 else {}), **tags, **(extra or {}))
+
+
+def missed_kz_ok(ctx, t: int, p) -> bool:
+    """missed_5m runs inside a kill zone only (cc09_006 ~00:17:03): the NY kill zone `missed_kz` (default the futures NY zone 08:20-11:00, as ny_kz_futures), and with `missed_lon` the London lunch
+    05:00-07:00 when London was quiet early and active late [our interpretation: the first half (02:00-03:30) range <= missed_lon_ratio x the second half (03:30-05:00) range]."""
+    if any(a <= t < b for a, b in p.missed_kz):
+        return True
+    if p.missed_lon and 300 <= t < 420:
+        S = _S()
+        k2, k35, k5 = S._idx_at(ctx, 120), S._idx_at(ctx, 210), S._idx_at(ctx, 300)
+        if k5 - k35 < 2 or k35 - k2 < 2 or k5 >= len(ctx.t):
+            return False
+        r1 = float(ctx.h[k2:k35].max() - ctx.l[k2:k35].min())
+        r2 = float(ctx.h[k35:k5].max() - ctx.l[k35:k5].min())
+        if r2 > 0 and r1 <= p.missed_lon_ratio * r2 + MIN1:
+            hit("missed_lon")
+            return True
+    return False
 
 
 # --- resting-limit pullbacks: or_ref (213), am_array_open (214), lh_ob_pullback (T10) --------------------------------------------------------------------
@@ -282,8 +315,8 @@ def or_ref_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     use = _c(ctx).setdefault("orr_use", {})
     near = _near(p)
     for a in or_ref_arrays(ctx, sd, i, p):
-        if k6 <= i and sd.c[k6:i + 1].min(initial=np.inf) < a["low"] - MIN1:
-            continue
+        if sd.c[a["k"] + 1:i + 1].min(initial=np.inf) < a["low"] - MIN1:
+            continue                                            # review fix: a body closed through the array at any time since its candle (inside the OR too), not only after 10:30
         key = (sd.sign, a["name"])
         n_, last = use.get(key, (0, None))
         if n_ >= p.or_ref_reuse or not (sd.c[i] > a["top"] + MIN1 and sd.l[i] <= a["top"] + near + MIN1):
@@ -322,10 +355,11 @@ def am_open_order(ctx, sd, i: int, p, session: str, risk_mult: float):
         arrs.append((float(sd.o[pre[-1]]), float(sd.l[pre[-1]]), "pre_ob", pre[-1]))
     for top, bot, name, k in arrs:
         key = (name, round(top, 4))
-        if key in sent or sd.c[k5:i + 1].min(initial=np.inf) < bot - MIN1:
-            continue
-        if sd.l[k5:i].min(initial=np.inf) <= top + MIN1 or not (sd.c[i] > top + MIN1 and sd.l[i] <= top + near + MIN1):
-            continue                                    # a FIRST touch only: nothing traded into the array since 09:30 before this approach
+        if key in sent or sd.c[k + 1:i + 1].min(initial=np.inf) < bot - MIN1:
+            continue                                    # review fix: a body closed through the array at any time since it formed kills it (not only since 09:30)
+        t0 = k + 1 if name.startswith("london") else k5
+        if sd.l[t0:i].min(initial=np.inf) <= top + MIN1 or not (sd.c[i] > top + MIN1 and sd.l[i] <= top + near + MIN1):
+            continue                                    # a FIRST touch only: nothing traded into the array since it formed (the London FVG; the last pre-09:30 candle: since 09:30) before this approach
         entry, stop = top, bot - p.pad
         if entry - stop < p.min_risk_pts * p.es_pt:
             continue
@@ -366,8 +400,8 @@ def lh_ob_order(ctx, sd, i: int, p, session: str, risk_mult: float):
 
 def rev_pool_run(ctx, sd, i: int, p):
     """Branch A of the 09:50-10:10 macro (043 ~00:05:31; 073 ~00:25:56), side space: a pool of this side (OR20, the London / previous-PM lows, relative equal lows known before the window) traded one tick
-    through inside 09:50-10:10 AND an opposing (bearish) FVG above 50 % of the 09:30-now range was rebalanced (a body closed inside it, the next bar closed beyond it on the far side [our interpretation; the FVG is judged in the side's own frame: premium = above the 09:30-now EQ in side space]).
-    Returns {ext, i (the run bar), pool} or None; cached per bar."""
+    through inside 09:50-10:10 AND a premium FVG of the reversal was rebalanced (REAL prices: after a buy-side run a bearish FVG above the real 09:30-now EQ, after a sell-side run a bullish FVG below it; a body closed inside it and the next
+    bar left it the reversal way [our interpretation]). Returns {ext, i (the run bar), pool, tgt (the 09:30-09:50 extreme, side space)} or None; cached per bar."""
     S = _S()
     k0, k1 = S._idx_at(ctx, 590), S._idx_at(ctx, 610)
     if k0 >= len(ctx.t) or i < k0:
@@ -394,12 +428,15 @@ def rev_pool_run(ctx, sd, i: int, p):
         if run is None:
             continue
         a = S._idx_at(ctx, 570)
+        # review fix (times#2): premium / discount in REAL prices. A buy-side run (side space of the short reversal: a taken LOW) pairs with a REAL bearish FVG above the real 09:30-now EQ
+        # (rebalanced = a body closed in it, the next bar left it the reversal way); a sell-side run with a real bullish FVG below it. In side space both mirror to the same test: a side-space
+        # BULLISH gap (sd.gaps) whose CE lies at or under the side-space EQ of the 09:30-now range.
         eq = (float(sd.h[a:i + 1].max()) + float(sd.l[a:i + 1].min())) / 2
-        for z in sd.opposing():
-            if z.i <= i and z.bottom >= eq - MIN1 and z.i >= a:
+        for z in sd.gaps:
+            if z.i <= i and z.i >= a and (z.top + z.bottom) / 2 <= eq + MIN1:
                 q = next((q for q in range(z.i + 1, i) if z.bottom - MIN1 <= sd.c[q] <= z.top + MIN1 and sd.c[q + 1] > z.top + MIN1), None)
                 if q is not None:
-                    res = dict(ext=float(sd.l[run:i + 1].min()), i=int(run), pool=nm)
+                    res = dict(ext=float(sd.l[run:i + 1].min()), i=int(run), pool=nm, tgt=float(sd.h[a:k0].max()))      # tgt: the 09:30-09:50 extreme the reversal runs toward (side space)
                     break
         if res is not None:
             break
@@ -650,6 +687,8 @@ def lunch_program(ctx, sd, i: int, p, session: str, entry: float, tags: dict):
         hit("lunch_program")
         if w != sd.sign:
             return "x_lunch_program_against"                     # the HTF program is the other way: no entry that runs the buy-side
+        if not p.lunch_long_win[0] <= t < p.lunch_long_win[1]:
+            return "x_lunch_program_window"                      # review fix: the program's long is armed 710-730 (the macro itself), not in its 12:10-12:30 extension
         first = reh + p.exit_before_pts * p.es_pt
         lv = [(float(S._exit_px(first, "pool", p)), "pool")]
         row = getattr(ctx, "bias_row", None) or {}
@@ -954,7 +993,14 @@ def order_gate7(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str,
                 e_am = float(am_.entry)
                 htf_am = cf is not None and any(tf_ in ("4h", "D", "W") for tf_ in cf.at(sm2.now_ts(ctx, k810 - 1), e_am, d))
                 if htf_am:
-                    tags["fixed4"] = [(float(S._exit_px(sd.x(e_am), "array", p)), "array")]
+                    # review fix: the target is the NEAR EDGE of the AM entry's HTF array (the top of a long's array / the bottom of a short's), not the AM entry price inside it. (An AM trade still open at the PM
+                    # cannot meet a PM order: the engine holds one position at a time, so only closed AM trades are read.)
+                    edge = e_am
+                    for t_, b_, *_r in cf.valid(sm2.now_ts(ctx, k810 - 1), d, ("4h", "D", "W"), (0, 1, 3), None):
+                        if min(t_, b_) - tol <= e_am <= max(t_, b_) + tol:
+                            edge = max(t_, b_) if d > 0 else min(t_, b_)
+                            break
+                    tags["fixed4"] = [(float(S._exit_px(sd.x(edge), "array", p)), "array")]
                     tags["single_exit"] = True
                     lvt.append("pm_nest_htf_target")
                 else:
@@ -984,6 +1030,10 @@ def order_gate7(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str,
     if p.m0950_branch != "off" and session == "AM" and not synth:
         rv = rev_pool_run(ctx, sd, i, p)
         lvt.append("m0950_rev" if rv is not None else "m0950_start")
+        if rv is not None and p.m0950_branch in ("rev", "both") and "fixed4" not in tags and rv["tgt"] > entry + MIN1:
+            tags["fixed4"] = [(float(S._exit_px(rv["tgt"], "pool", p)), "pool")]            # (A) the reversal runs toward the 09:30-09:50 extreme = the draw flips to the opposite pool
+            tags["single_exit"] = True
+            hit("m0950_rev_target")
     if p.m0950_branch != "off" and session == "AM" and str(tags.get("entry_kind")) == "m0950_cont":
         lvt.append("m0950_cont_tag")
     # T10 range-day MOC direction / big-day no chase
@@ -1068,8 +1118,10 @@ def late7(ctx, sd, sw, i: int, p, order: dict, tags: dict, session: str):
             hit("london_ext_guard")
             if max(order["levels"]) > ex[1] + MIN1:
                 return "x_london_ext_target"
-    if p.pairing != "all":
+    if p.pairing != "all" or p.state_tag:
         order["state"] = session_state(ctx, sd, i, p)
+        if p.state_tag:
+            hit("state_tag")
     sm = dict(order.get("sm7") or {})
     if p.reverse_after_failure in ("at_stop", "all"):
         sm["at_stop"] = True
@@ -1278,7 +1330,7 @@ def after_close(ctx, pos, tr, lost, net: float, done: dict, key: str, state: dic
             var = "at_stop"
         elif "inversion" in vs and reason in ("stop", "stop_gap") and float(sd.c[fill_i + 1:i + 1].min(initial=np.inf)) < float(pos["fvg_bottom"]) - MIN1:
             var = "inversion"
-        elif "prop_fail" in vs and ("prop" in str(tr.entry_kind) or tr.propulsion):
+        elif "prop_fail" in vs and ("prop" in str(tr.entry_kind) or tr.propulsion) and prop_mt_lost(pos, sd, fill_i, i):
             var = "prop_fail"
         elif "sick_sister" in vs and risk_usd > 0 and -net <= 0.5 * risk_usd + 1e-9:
             var = "sick_sister"
@@ -1299,6 +1351,16 @@ def after_close(ctx, pos, tr, lost, net: float, done: dict, key: str, state: dic
         hit("reentry_ts")
         return True
     return False
+
+
+def prop_mt_lost(pos, sd, fill_i: int, i: int) -> bool:
+    """X13 prop_fail (cc04_008 ~5:15): the propulsion block failed = a BODY closed through its MT after the fill. The MT is the trade's `prop_mt` exit level (lvx, set with prop_mt_exit); a trade that
+    carries none (prop_mt_exit off) cannot be checked and counts as failed [our interpretation: the reversal then follows any loss of a propulsion entry, as the first build did]."""
+    ent = (pos.get("lvx") or {}).get("prop_mt")
+    if not ent:
+        return True
+    hit("prop_fail_mt_eval")
+    return bool(float(sd.c[fill_i + 1:i + 1].min(initial=np.inf)) < float(ent[0]) - MIN1)
 
 
 def rc_extra(pos, tr, i: int, p) -> dict:
@@ -1340,12 +1402,22 @@ def reentry_idea_ok(ctx, sd, i: int, p, o: dict, rc: dict) -> bool:
     return int(o.get("fvg_i", o["i"])) > stop_i
 
 
+def loss_reentry_ok(ctx, sd, i: int, p, o: dict, rc: dict) -> bool:
+    """X13b gate of an order while the loss re-entry context is pending (run_day): the idea-intact test when reentry_idea_gate is on OR the trigger is sibi_return (review fix: the sibi return order
+    carries ext_i == stop_i and could never pass the old restored-sweep test, so the trigger alone was dead), else the old restored-sweep / FVG test."""
+    if p.reentry_idea_gate or p.reentry_trigger == "sibi_return":
+        return reentry_idea_ok(ctx, sd, i, p, o, rc)
+    return _S()._MG.reentry_order_ok(o, sd, rc, p)
+
+
 def reentry_ok(ctx, sd, i: int, p, o: dict, r7: dict) -> bool:
     """The order gate of the re7 kinds (run_day, after _scan): same side / opposite side, a NEW array after the exit, the turtle-soup form, the sister condition."""
     kind = r7["kind"]
     sm = o.get("sm7") or {}
     if kind in ("win", "trail_win", "ts_re") and ("long" if sd.sign > 0 else "short") != r7["side"]:
         return False
+    if kind in ("win", "trail_win") and o.get("market"):
+        return False                                                      # review fix: the re-entry arms through a LIMIT order only (a market chase never qualifies)
     if kind == "win":
         if int(o.get("fvg_i", o["i"])) <= r7["exit_i"]:
             return False
@@ -1386,11 +1458,17 @@ def sister_delivered(ctx, sd, i: int, r7: dict) -> bool:
     return bool(float(psd.h[j0 + 1:j + 1].max()) > float(psd.h[pctx.start:j0 + 1].max()) + MIN1)
 
 
+def held(pos) -> bool:
+    """T13 two_session_smt: the PM trade is held to the close - the PM time exits (pm_done_by, pm_consol_exit) skip a position that carries hold_pm."""
+    return bool((pos.get("sm7") or {}).get("hold_pm"))
+
+
 def fill_note(state: dict, o: dict) -> None:
     """run_day: the re-entry / reversal order filled - the slot's re7 context is no longer pending."""
     r7 = state.get("re7", {}).get(o.get("session"))
     if r7 is not None and r7.get("pending"):
         r7["pending"] = False
+        hit("re7_fill_" + str(r7["kind"]))                       # the OUTCOME counter: the re-entry / reversal order filled (win / trail_win / reverse / ts_re)
 
 
 # --- the re-entry orders (non-sweep) ---------------------------------------------------------------------------------------------------------------
@@ -1423,10 +1501,12 @@ def re_order(ctx, sd, i: int, p, session: str, risk_mult: float):
             stop = ((float(sd.l[k]) + float(min(sd.o[k], sd.c[k]))) / 2 if p.reentry_stop == "wick_ce" else float(sd.l[si:i + 1].min())) - p.pad
             entry = float(top)
             if stop < entry and entry - stop >= p.min_risk_pts * p.es_pt:
-                rc["armed"] = True
                 _dh("sibi_return")
-                return sm4._order(ctx, sd, i, p, session, risk_mult, "sibi_return", entry, stop, level=entry, ext=float(bot), ext_i=int(si), broke=i, fvg_bottom=float(bot),
-                                  lv=("sibi_return",), sm7=dict(kind="sibi_return"))
+                o = sm4._order(ctx, sd, i, p, session, risk_mult, "sibi_return", entry, stop, level=entry, ext=float(bot), ext_i=int(si), broke=i, fvg_bottom=float(bot),
+                               lv=("sibi_return",), sm7=dict(kind="sibi_return"))
+                if o is not None:
+                    rc["armed"] = True                                    # review fix: armed only once the order passed its gates (a rejected one may be tried again)
+                return o
     r7 = getattr(ctx, "re7", None)
     if r7 is None or not r7.get("pending") or r7.get("side") != sidename and r7["kind"] == "trail_win" or r7.get("armed"):
         return None
@@ -1452,10 +1532,12 @@ def re_order(ctx, sd, i: int, p, session: str, risk_mult: float):
             stop = (float(max(gaps, key=lambda g: g.top).mid) if gaps else float(sd.l[k])) - p.pad
         if not (stop < entry < sd.c[i]) or entry - stop < p.min_risk_pts * p.es_pt or r7["draw"] <= entry:
             return None
-        r7["armed"] = True
         _dh("trail_reentry")
-        return sm4._order(ctx, sd, i, p, session, risk_mult, "trail_reentry", entry, stop, level=entry, ext=float(stop + p.pad), ext_i=int(ei), broke=i, fvg_bottom=float(bot),
-                          fvg_ce=float((top + bot) / 2), fixed=[(float(S._exit_px(r7["draw"], "pool", p)), "pool")], lv=("trail_reentry",), sm7=dict(kind="trail_win"))
+        o = sm4._order(ctx, sd, i, p, session, risk_mult, "trail_reentry", entry, stop, level=entry, ext=float(stop + p.pad), ext_i=int(ei), broke=i, fvg_bottom=float(bot),
+                       fvg_ce=float((top + bot) / 2), fixed=[(float(S._exit_px(r7["draw"], "pool", p)), "pool")], lv=("trail_reentry",), sm7=dict(kind="trail_win"))
+        if o is not None:
+            r7["armed"] = True
+        return o
     if kind == "reverse" and r7["side"] == sidename:
         v = r7["variant"]
         if v == "inversion":
@@ -1467,19 +1549,23 @@ def re_order(ctx, sd, i: int, p, session: str, risk_mult: float):
             entry, stop = zt, ce - p.pad
             if not inv or back or not (entry < sd.c[i]) or not (stop < entry) or entry - stop < p.min_risk_pts * p.es_pt:
                 return None
-            r7["armed"] = True
             _dh("reverse_inversion")
-            return sm4._order(ctx, sd, i, p, session, risk_mult, "rev_inversion", entry, stop, level=entry, ext=zb, ext_i=int(r7["exit_i"]), broke=i, fvg_bottom=zb, fvg_ce=ce,
-                              lv=("rev_inversion",), sm7=dict(kind="rev_inversion"))
+            o = sm4._order(ctx, sd, i, p, session, risk_mult, "rev_inversion", entry, stop, level=entry, ext=zb, ext_i=int(r7["exit_i"]), broke=i, fvg_bottom=zb, fvg_ce=ce,
+                           lv=("rev_inversion",), sm7=dict(kind="rev_inversion"))
+            if o is not None:
+                r7["armed"] = True
+            return o
         if v == "at_stop":
             entry = float(sd.x(r7["old_stop"]))
             stop = float(sd.x(r7["adv_ext"])) - p.pad
             if not (entry > sd.c[i] + MIN1) or not (stop < entry) or entry - stop < p.min_risk_pts * p.es_pt:
                 return None
-            r7["armed"] = True
             _dh("reverse_at_stop")
-            return sm4._order(ctx, sd, i, p, session, risk_mult, "rev_at_stop", entry, stop, level=entry, ext=stop + p.pad, ext_i=int(r7["exit_i"]), broke=i, stop_entry=True,
-                              lv=("rev_at_stop",), sm7=dict(kind="rev_at_stop"))
+            o = sm4._order(ctx, sd, i, p, session, risk_mult, "rev_at_stop", entry, stop, level=entry, ext=stop + p.pad, ext_i=int(r7["exit_i"]), broke=i, stop_entry=True,
+                           lv=("rev_at_stop",), sm7=dict(kind="rev_at_stop"))
+            if o is not None:
+                r7["armed"] = True
+            return o
     return None
 
 
@@ -1494,7 +1580,8 @@ def on_fill(ctx, sd, pos, tr, o: dict, i: int, p) -> None:
 
 def manage(ctx, sd, pos, tr, i: int, ts, p) -> None:
     """Per-bar management of the positions this chunk tagged (pos["sm7"]):
-    at_stop (094 ~00:03:05) - the open trade offside by >= offside_frac x (entry -> stop) with a body closed beyond its entry gap: out at that close (reason offside_rev), the reversal order follows;
+    at_stop (094 ~00:03:05) - the open trade offside by >= offside_frac x (entry -> stop) with a body closed beyond its entry gap [our interpretation of 'bodies': ONE body close under the gap]: out at that
+    close (exit reason offside_rev - it is a reversal trigger, so it is named apart from a plain offside exit), the reversal order follows;
     breakaway re-entry (062 ~00:37:28) - once price leaves to a new extreme beyond the order's high and the gap is still partly open, the stop drops to the gap (just under its bottom + a tick)."""
     S = _S()
     st = pos.get("sm7")
@@ -1509,6 +1596,14 @@ def manage(ctx, sd, pos, tr, i: int, ts, p) -> None:
             tr.exits.append((ts, sd.x(c), pos["left"], "offside_rev"))
             pos["left"] = 0
             hit("offside_rev")
+            return
+    if st.get("runner_before") and pos.get("t1_done") and pos["left"] and tr.exits:
+        # missed_5m: the quarter-ADR5 runner is left only when the ADR5 extreme was hit before 10:00; hit later, the rest leaves with the first rung at its price
+        mt0 = tr.exits[0][0]
+        if mt0.hour * 60 + mt0.minute >= st["runner_before"]:
+            tr.exits.append((ts, tr.exits[0][1], pos["left"], "no_runner"))
+            pos["left"] = 0
+            hit("missed_no_runner")
             return
     if st.get("kind") == "ba" and not st.get("dropped"):
         gb = st["gap_bottom"]
@@ -1566,30 +1661,30 @@ def adv_ladder(ctx, sd, sw, i: int, p, A: float, B: float, stop: float):
     """E12-070-rung-order (070 ~00:58:44): the advanced breaker's A-B leg (side space, A the swing low, B the high) filled by up to three resting limits - rung 1 the CE of a 5m FVG inside the leg,
     rung 2 the CE of the 1m IFVG, rung 3 the low end (bottom) of that IFVG - sized adv_rung_fracs (renormalised over the rungs found); only rungs under the close and over the stop. Returns
     (prices descending, fracs) or None when fewer than two rungs exist (the single MT limit stays)."""
-    px = []
-    z5 = [z for z in sd.zones_tf(ctx.idx, ctx.tf, 5) if z.mt != z.mt and z.i <= i and z.bottom >= A - MIN1 and z.top <= B + MIN1 and z.i - 0 >= sw["ext_i"] - 12
+    rungs = []                                                       # (price, index into adv_rung_fracs): 0 = the 5m FVG CE, 1 = the IFVG CE, 2 = the IFVG bottom
+    z5 = [z for z in sd.zones_tf(ctx.idx, ctx.tf, 5) if z.mt != z.mt and z.i <= i and z.bottom >= A - MIN1 and z.top <= B + MIN1 and z.i >= sw["ext_i"]
           and sd.c[z.i + 1:i + 1].min(initial=np.inf) >= z.bottom - MIN1]
     if z5:
-        px.append(float(max(z5, key=lambda z: z.i).mid))
+        rungs.append((float(max(z5, key=lambda z: z.i).mid), 0))
     ifz = [z for z in sd.ifvgs() if z.i <= i and z.bottom >= A - MIN1 and z.top <= B + MIN1 and z.i >= sw["ext_i"] and sd.c[z.i + 1:i + 1].min(initial=np.inf) >= z.bottom - MIN1]
     if ifz:
         z = max(ifz, key=lambda z_: z_.i)
-        px += [float(z.mid), float(z.bottom)]
-    px = sorted({round(v, 6) for v in px if stop + MIN1 < v < sd.c[i] - MIN1}, reverse=True)
+        rungs += [(float(z.mid), 1), (float(z.bottom), 2)]
+    rungs = sorted({(round(v, 6), k) for v, k in rungs if stop + MIN1 < v < sd.c[i] - MIN1}, reverse=True)
     out = []
-    for v in px:
-        if not out or out[-1] - v >= 0.25 * p.es_pt - MIN1:
-            out.append(v)
+    for v, k in rungs:                                               # prices descending; rungs closer than a quarter point merge into the higher one
+        if not out or out[-1][0] - v >= 0.25 * p.es_pt - MIN1:
+            out.append((v, k))
     if len(out) < 2:
         return None
-    fr = list(p.adv_rung_fracs[:len(out)]) if len(out) == 3 else list(p.adv_rung_fracs[:2])
+    fr = [p.adv_rung_fracs[k] for _, k in out]                       # review fix: each rung keeps ITS type's weight (a missing 5m rung does not hand its weight to the IFVG CE), renormalised over the rungs found
     s_ = sum(fr)
     hit("adv_rungs")
-    return out, tuple(f / s_ for f in fr)
+    return [v for v, _ in out], tuple(f / s_ for f in fr)
 
 
 def breaker_add(ctx, sd, pos, tr, i: int, p, z) -> None:
-    """M4-pattern3-breaker-half-size-add-ltf (cc12_004 ~00:36:02): the breaker add of a turtle-soup trade is ts_breaker_add_mult (0.5) x the initial units; with ts_breaker_ltf the add limit is the 1m
+    """M4-pattern3-breaker-half-size-add-ltf (cc12_004 ~00:36:02): the breaker add of a turtle-soup trade is ts_breaker_add_mult (spec 0.5; None = the standard add fraction, unchanged) x the initial units; with ts_breaker_ltf the add limit is the 1m
     FVG (or the down-close candle's body top) INSIDE the breaker zone nearest its top (the lower-timeframe refinement), else the zone top."""
     S = _S()
     hit("ts_breaker_add_eval")
@@ -1601,6 +1696,10 @@ def breaker_add(ctx, sd, pos, tr, i: int, p, z) -> None:
             px = max(c1)
             hit("ts_breaker_ltf")
     if not S._SM.add_ok(sd, pos, px, i, p):
+        return
+    if p.ts_breaker_add_mult is None:                                # unset: the standard add fraction (adds), byte-identical to the build before this pass
+        hit("ts_breaker_add")
+        S._arm_add(pos, tr, px, i, p, ctx.equity)
         return
     base = pos.get("plan_shares") or tr.shares
     size = S._lots(base * p.ts_breaker_add_mult, p.lot)
@@ -1641,12 +1740,13 @@ def extra7(ctx, sd, i: int, p, session: str, risk_mult: float):
 
 
 def any_special7(p) -> bool:
-    return bool(p.lc_scalp or p.m1050 or p.lunch_macro_entry or p.nyx_model)
+    return bool(p.lc_scalp or p.m1050 or p.lunch_macro_entry or p.nyx_model or (p.missed_5m and p.missed_lon))
 
 
 def special7(ctx, sides, i: int, p, state: dict, pos, pending, risk_mult: float, done: dict):
     """The setups of this chunk that run outside the session windows (run_day, like sm4.special4): the London-close scalp, the 10:50 macro model, the lunch-macro entry, the NY expansion turtle soup.
-    Armed on the bar that has just closed; each has its own done key. The day filter (`blocked`) applies to each."""
+    Armed on the bar that has just closed; each has its own done key. The day filter (`blocked`, skip_news) applies to each; the NY expansion, the 10:50 macro and the lunch macro also pass through
+    the htf_bias gate (a side against the bias is not tried; neutral / off = both). The session_veto helper of other.md#10 is not built (the same checks - blocked(), skip_news - are applied here)."""
     if pos is not None or pending is not None or state.get("day_done"):
         return None
     S = _S()
@@ -1661,16 +1761,22 @@ def special7(ctx, sides, i: int, p, state: dict, pos, pending, risk_mult: float,
             ("M1050", p.m1050 and 650 <= t < 670, lambda sd: m1050_order(ctx, sd, i, p, risk_mult)),
             ("LUNCHM", p.lunch_macro_entry and p.lunch_macro_win[0] <= t < p.lunch_macro_win[1], lambda sd: lunch_macro_order(ctx, sd, i, p, risk_mult)),
             ("NYX", p.nyx_model and p.nyx_start <= t < 600, lambda sd: nyx_order(ctx, sd, i, p, risk_mult, n_nyx)),
+            # E5 London lunch: the engine scans no session between 05:00 and 07:00, so the London sweep's missed-entry retrace runs here (the sweep is a LON one, the order is cut at 07:00)
+            ("MISSLON", p.missed_5m and p.missed_lon and 300 <= t < 420, lambda sd: missed_order(ctx, sd, i, p, "LON", risk_mult, extra=dict(cut_at=420, done_key="MISSLON"))),
         )
         for key, on, fn in jobs:
             if not on or done.get(key) or (key == "NYX" and p.nyx_counts_session and done.get("AM")):
                 continue
-            ses = sess_label(t, p) if key in ("LC", "NYX") else ("LUNCH" if key == "LUNCHM" else "AM")
+            ses = sess_label(t, p) if key in ("LC", "NYX") else ("LUNCH" if key == "LUNCHM" else ("LON" if key == "MISSLON" else "AM"))
             ctx.cur_session = ses
             if (p.day_filter and S.blocked(ctx.day, ses, p, t)) or (p.skip_news and S.news(ctx.day) != "none"):
                 continue
             for sd in sides:
-                ctx.cur_bias = bias_now(ctx, p, "AM", i) if key in ("M1050", "LUNCHM") else 0
+                w_ = bias_now(ctx, p, "AM", i) if key != "LC" else 0       # the London-close scalp is counter-trend on purpose (no bias gate)
+                ctx.cur_bias = w_
+                if w_ and w_ != sd.sign:
+                    hit("special7_bias_skip")                                # review fix: NYX / 10:50 / lunch macro pass through use_bias (htf_bias) like every setup: the other side is not tried
+                    continue
                 out = fn(sd)
                 if out is not None:
                     if key == "NYX" and not p.nyx_counts_session:
@@ -1699,4 +1805,4 @@ def is_ts_kind(o: dict) -> bool:
 
 
 def any_late7(p) -> bool:
-    return bool(p.london_ext_guard or p.pairing != "all" or p.reverse_after_failure in ("at_stop", "all") or p.reentry_ts)
+    return bool(p.london_ext_guard or p.pairing != "all" or p.state_tag or p.reverse_after_failure in ("at_stop", "all") or p.reentry_ts)

@@ -20,7 +20,7 @@ NEW_SWITCHES = (
     "reentry_win_max", "reentry_need_sister", "reentry_after_trail_win", "trail_reentry_entry", "trail_reentry_max", "reentry_trigger", "reentry_risk_mult", "reentry_stop", "reentry_idea_gate",
     "reverse_after_failure", "reverse_risk_mult", "offside_frac", "allow_opposite_after_target", "lod_conf_pts", "adv_rungs", "adv_rung_fracs", "reentry_ts", "reentry_max", "reentry_mult",
     "breakaway_reentry", "m0950_branch", "m1050", "m1050_cut", "protect_macro_ext", "lh_ob_pullback", "lh_after_target", "moc_range_dir", "moc_no_chase_hod", "lunch_macro_entry",
-    "lunch_macro_win", "lunch_first_rung_only", "lunch_htf_program", "london_ext_guard", "cc09_gate", "cc09_room_pts", "cc09_scalp_pts", "cc09_depart_bars", "nyx_model", "nyx_start",
+    "lunch_macro_win", "lunch_first_rung_only", "lunch_htf_program", "lunch_long_win", "missed_kz", "missed_lon", "missed_lon_ratio", "state_tag", "london_ext_guard", "cc09_gate", "cc09_room_pts", "cc09_scalp_pts", "cc09_depart_bars", "nyx_model", "nyx_start",
     "nyx_target_pct", "nyx_stop_pct", "nyx_max", "nyx_counts_session", "skip_pm_adr_k", "pairing",
 )
 
@@ -61,9 +61,10 @@ def test_new_switch_defaults_and_validation():
     assert (p.combine_prefer, p.combine_exec_exclude, p.max_exec_markets, p.nq_overshoot_mult) == ("none", ("YM",), 2, 1.0)
     assert (p.lc_scalp, p.lc_mode, p.lc_adr_mult, p.lc_adr_k, p.lc_stop_pts, p.lc_retrace, p.lc_retrace_mss, p.london_close, p.lc_fs_win, p.lc_oneside) == \
         (False, "failure_swing", 1.0, 1.25, 2.0, 0.25, 0.2, (600, 720), (630, 780), 0.15)
+    assert (p.missed_kz, p.missed_lon, p.missed_lon_ratio, p.state_tag) == (((500, 660),), False, 0.5, False)
     assert (p.lc_rev_need_htf, p.missed_5m, p.missed_leave_pts, p.htf_converge, p.or_ref_reuse, p.or_ref_near_pts, p.am_array_open, p.ts_sessions) == (False, False, 5.0, False, 2, 5.0, False, ())
     assert (p.two_session_smt, p.pm_nest_reversal, p.pm_nest_tfs, p.profile_consol, p.consol_exit_min, p.ote_fvg_overlap, p.ote_need_s, p.ts_breaker_add_mult, p.ts_breaker_ltf) == \
-        (False, False, ("D", "4h", "1h"), False, 15, False, False, 0.5, False)
+        (False, False, ("D", "4h", "1h"), False, 15, False, False, None, False)
     assert (p.reentry_after_win, p.reentry_win_max, p.reentry_need_sister, p.reentry_after_trail_win, p.trail_reentry_entry, p.trail_reentry_max, p.reentry_trigger, p.reentry_risk_mult,
             p.reentry_stop, p.reentry_idea_gate) == (False, 1, False, False, "ifvg_ce", 2, "new_array", 0.5, "array", False)
     assert (p.reverse_after_failure, p.reverse_risk_mult, p.offside_frac, p.allow_opposite_after_target, p.lod_conf_pts, p.adv_rungs, p.adv_rung_fracs, p.reentry_ts, p.reentry_max,
@@ -75,7 +76,7 @@ def test_new_switch_defaults_and_validation():
     for kw in (dict(combine_prefer="x"), dict(lc_mode="x"), dict(trail_reentry_entry="x"), dict(reentry_trigger="x"), dict(reentry_stop="x"), dict(reverse_after_failure="x"),
                dict(allow_opposite_after_target="x"), dict(m0950_branch="x"), dict(cc09_gate="x"), dict(pairing="x"), dict(max_exec_markets=-1), dict(nq_overshoot_mult=0), dict(lc_retrace=1.0),
                dict(or_ref_reuse=0), dict(adv_rung_fracs=(0.5, 0.5)), dict(adv_rung_fracs=(0.1, 0.1, 0.1)), dict(london_close=(700, 600)), dict(ts_sessions=("XX",)), dict(pm_nest_tfs=("zz",)),
-               dict(nyx_start=600), dict(reentry_risk_mult=0), dict(skip_pm_adr_k=0), dict(cc09_depart_bars=0), dict(ts_stop="x"), dict(entry_arrays=("nope",))):
+               dict(nyx_start=600), dict(missed_kz=((700, 600),)), dict(missed_lon_ratio=0), dict(ts_breaker_add_mult=0), dict(reentry_risk_mult=0), dict(skip_pm_adr_k=0), dict(cc09_depart_bars=0), dict(ts_stop="x"), dict(entry_arrays=("nope",))):
         with pytest.raises(ValueError):
             Params(**kw)
     assert Params(ts_stop="mid").ts_stop == "mid" and Params(entry_arrays=("or_ref",)).entry_arrays == ("or_ref",)
@@ -388,7 +389,7 @@ def test_two_session_profile_pm_smt():
     assert sm7.order_gate7(ctx, ss, dict(smt=None, ext_i=i, sweep_i=i), i, p, 100.0, 99.0, "PM", [], {}, {}) is None                           # not delivered
     import inspect
     from mentorship import manage as MG
-    assert "hold_pm" in inspect.getsource(MG.exits) and "hold_pm" in inspect.getsource(S._run_day_once)                                       # the PM time exits skip a held position
+    assert "held(" in inspect.getsource(MG.exits) and "_SM7.held(" in inspect.getsource(S._run_day_once)                                       # the PM time exits skip a held position
 
 
 def _am_rally_over():
@@ -500,8 +501,10 @@ def test_ts_breaker_half_add_ltf(monkeypatch):
     tr = SimpleNamespace(shares=10)
     ctx = SimpleNamespace(equity=1e6)
     sm7.breaker_add(ctx, sd, pos, tr, 12, Params(**BASE, ts_breaker_pyramid=True), z)
+    assert got == dict(px=105.0, size=None)                                                 # unset: the standard add fraction (_arm_add's own sizing) - nothing existing changes
+    sm7.breaker_add(ctx, sd, pos, tr, 12, Params(**BASE, ts_breaker_pyramid=True, ts_breaker_add_mult=0.5), z)
     assert got == dict(px=105.0, size=5)                                                    # the zone top, 0.5 x the initial units
-    sm7.breaker_add(ctx, sd, pos, tr, 12, Params(**BASE, ts_breaker_pyramid=True, ts_breaker_ltf=True), z)
+    sm7.breaker_add(ctx, sd, pos, tr, 12, Params(**BASE, ts_breaker_pyramid=True, ts_breaker_ltf=True, ts_breaker_add_mult=0.5), z)
     assert got["px"] == pytest.approx(104.9) and got["size"] == 5                          # the down-close candle's body top inside the zone (open 104.9)
     sm7.breaker_add(ctx, sd, pos, tr, 12, Params(**BASE, ts_breaker_pyramid=True, ts_breaker_add_mult=0.3), z)
     assert got["size"] == 3
@@ -761,29 +764,53 @@ NFP_DAY = date(2023, 3, 10)
 
 
 def _m0950_rev_over():
-    """A run up from 09:30 that leaves a bullish FVG (99.6-100.2) in the lower half, takes the buy-side OR20 high (101.9) at 09:55 and falls back through the gap (a body inside it at 10:00, below it at 10:05)."""
+    """A run up from 09:30 that takes the buy-side OR20 high (101.8) at 09:55 (102.2) and leaves a REAL bearish FVG (100.4-101.0, CE 100.7) above the 09:30-now EQ (100.6): a body closes inside it at 10:10, the
+    next bar leaves it down (10:15)."""
+    return {570: (100.0, 100.3, 99.0, 99.2), 575: (99.2, 99.6, 99.1, 99.5), 580: (99.5, 101.5, 99.4, 101.4), 585: (101.4, 101.8, 100.2, 101.7), 590: (101.7, 101.9, 101.5, 101.8),
+            595: (101.8, 102.2, 101.0, 101.2), 600: (101.2, 101.3, 100.2, 100.4), 605: (100.4, 100.4, 100.0, 100.1), 610: (100.1, 100.9, 100.0, 100.7), 615: (100.7, 100.8, 99.5, 99.8)}
+
+
+def _m0950_discount_over():
+    """The first build's day: the run takes the buy-side pool, but the FVG it leaves is a bullish one in the real DISCOUNT (99.6-100.2) that price falls through - not the premium FVG of the reversal."""
     return {570: (100.0, 100.3, 99.0, 99.2), 575: (99.2, 99.6, 99.1, 99.5), 580: (99.5, 101.5, 99.4, 101.4), 585: (101.4, 101.8, 100.2, 101.7), 590: (101.7, 101.9, 101.5, 101.8),
             595: (101.8, 102.2, 101.0, 101.2), 600: (101.2, 101.3, 99.9, 100.0), 605: (100.0, 100.1, 99.0, 99.2)}
 
 
 def test_m0950_branches(cap):
-    """times#2: branch A (043 ~00:05:31; 073 ~00:25:56) - the buy-side OR20 high taken one tick through at 09:55 and a premium FVG rebalanced inside 09:50-10:10: the short side is flagged `rev` and, on an NFP day, a
-    counter-bias short may be scanned; branch B (015 ~00:27:13) - inside-bar consolidation leaving a bullish FVG at 10:00 with the bias long: a limit at its near edge; AM trades are tagged."""
+    """times#2: branch A (043 ~00:05:31; 073 ~00:25:56) - the buy-side OR20 high taken one tick through at 09:55 and a PREMIUM FVG (a real bearish one above the 09:30-now EQ) rebalanced: the short side is flagged
+    `rev`, runs toward the 09:30-09:50 low, and on an NFP day a counter-bias short may be scanned; the sell-side mirror flags the long; a discount FVG after a buy-side run is no reversal; branch B (015
+    ~00:27:13) - inside-bar consolidation leaving a bullish FVG at 10:00 with the bias long: a limit at its near edge; AM trades are tagged."""
     p = Params(**BASE, m0950_branch="both")
     ctx, (sl, ss) = mk7(_m0950_rev_over(), p, bias=1, d=NFP_DAY, hist=history(NFP_DAY))
-    i = bar(ctx, "10:05")
+    i = bar(ctx, "10:20")
     r = sm7.rev_pool_run(ctx, ss, i, p)
-    assert r is not None and r["pool"] == "or20" and r["i"] == bar(ctx, "09:55") and r["ext"] == pytest.approx(-102.2)
+    assert r is not None and r["pool"] == "or20" and r["i"] == bar(ctx, "09:55") and r["ext"] == pytest.approx(-102.2) and r["tgt"] == pytest.approx(-99.0)
     assert sm7.rev_pool_run(ctx, sl, i, p) is None                                               # the long side saw no sell-side run
     assert sm7.counter_kind7(ctx, ss, i, p, 1) == "m0950"                                        # NFP day, against the bias: allowed
     assert sm7.counter_kind7(ctx, sl, i, p, 1) == ""
+    # the premium / discount judgement is in REAL prices: a bullish FVG in the real discount after a buy-side run is no reversal ...
+    ctxd, (sld, ssd) = mk7(_m0950_discount_over(), p, bias=1, d=NFP_DAY, hist=history(NFP_DAY))
+    assert sm7.rev_pool_run(ctxd, ssd, bar(ctxd, "10:05"), p) is None
+    # ... and the sell-side run + a discount FVG is the exact mirror: the long reversal
+    mir = {k: (200.0 - v[0], 200.0 - v[2], 200.0 - v[1], 200.0 - v[3]) for k, v in _m0950_rev_over().items()}
+    ctxm, (slm, ssm) = mk7(mir, p, bias=-1, d=NFP_DAY, hist=history(NFP_DAY))
+    rm = sm7.rev_pool_run(ctxm, slm, bar(ctxm, "10:20"), p)
+    assert rm is not None and rm["ext"] == pytest.approx(97.8) and rm["tgt"] == pytest.approx(101.0)
+    assert sm7.rev_pool_run(ctxm, ssm, bar(ctxm, "10:20"), p) is None
+    # the order gate gives the reversal order a target toward the 09:30-09:50 extreme (a real low for the short)
+    tg = {}
+    sm7.order_gate7(ctx, ss, dict(ext_i=i, sweep_i=i), i, p, -100.0, -102.0, "AM", [], {}, tg)
+    assert tg["fixed4"][0][0] == pytest.approx(S._exit_px(-99.0, "pool", p)) and tg["single_exit"]
+    tg2 = {}
+    sm7.order_gate7(ctx, ss, dict(ext_i=i, sweep_i=i), i, Params(**BASE, m0950_branch="tag"), -100.0, -102.0, "AM", [], {}, tg2)
+    assert "fixed4" not in tg2                                                                    # the tag branch only tags
     ctx2, (sl2, ss2) = mk7(_m0950_rev_over(), p, bias=1)                                         # an ordinary Tuesday: no counter-bias scan
-    assert sm7.counter_kind7(ctx2, ss2, bar(ctx2, "10:05"), p, 1) == ""
+    assert sm7.counter_kind7(ctx2, ss2, bar(ctx2, "10:20"), p, 1) == ""
     lvt = []
-    sm7.order_gate7(ctx2, ss2, dict(ext_i=i, sweep_i=i), bar(ctx2, "10:05"), p, -100.0, -102.0, "AM", lvt, {}, {})
+    sm7.order_gate7(ctx2, ss2, dict(ext_i=i, sweep_i=i), bar(ctx2, "10:20"), p, -100.0, -102.0, "AM", lvt, {}, {})
     assert "m0950_rev" in lvt                                                                     # every AM trade carries the tag
     lvt2 = []
-    sm7.order_gate7(ctx2, sl2, dict(ext_i=i, sweep_i=i), bar(ctx2, "10:05"), p, 100.0, 98.0, "AM", lvt2, {}, {})
+    sm7.order_gate7(ctx2, sl2, dict(ext_i=i, sweep_i=i), bar(ctx2, "10:20"), p, 100.0, 98.0, "AM", lvt2, {}, {})
     assert "m0950_start" in lvt2
     # branch B
     over = {590: (100.0, 100.2, 99.9, 100.1), 595: (100.1, 102.0, 100.0, 101.9), 600: (101.9, 102.5, 101.0, 102.4)}
@@ -1000,7 +1027,7 @@ def test_reentry_after_loss_gate(cap):
     assert sm7.re_order(ctx, sl, bar(ctx, "10:00"), pv, "AM", 1.0) is None                         # the zone's far edge was not traded beyond yet
     assert sm7.re_order(ctx, sl, i, p, "AM", 1.0) is None                                          # trigger new_array: no return order
     # the gate in the engine: the idea-intact switch swaps the X13b order test
-    assert "reentry_idea_ok" in __import__("inspect").getsource(S._run_day_once)
+    assert "loss_reentry_ok" in __import__("inspect").getsource(S._run_day_once) and "reentry_idea_ok" in __import__("inspect").getsource(sm7.loss_reentry_ok)
 
 
 def test_reverse_after_failure(cap):
@@ -1120,13 +1147,17 @@ def test_adv_breaker_rungs(cap, monkeypatch):
     ctx, (sl, ss) = mk7(_adv_over(), p)
     i = bar(ctx, "10:05")
     lad = sm7.adv_ladder(ctx, sl, dict(ext_i=bar(ctx, "09:30") - 3), i, p, 100.0, 110.0, 96.75)
-    assert lad is not None and lad[0] == [pytest.approx(103.75), pytest.approx(103.5), pytest.approx(102.15)] and lad[1] == (0.1, 0.3, 0.6)
+    assert lad is not None and lad[0] == [pytest.approx(103.75), pytest.approx(103.5), pytest.approx(102.15)]
+    # review fix: each rung keeps ITS type's weight (5m CE 0.1, IFVG CE 0.3, IFVG low end 0.6) - the price order here is IFVG CE, IFVG low end, 5m CE
+    assert lad[1] == pytest.approx((0.3, 0.6, 0.1))
+    lad2 = sm7.adv_ladder(ctx, sl, dict(ext_i=bar(ctx, "09:30") - 3), i, p, 103.0, 110.0, 96.75)                       # no 5m FVG inside this leg: the IFVG pair is renormalised, nobody inherits the 5m weight
+    assert lad2 is not None and lad2[0] == [pytest.approx(103.75), pytest.approx(103.5)] and lad2[1] == pytest.approx((1 / 3, 2 / 3))
     assert sm7.adv_ladder(ctx, sl, dict(ext_i=bar(ctx, "09:30") - 3), i, p, 104.5, 110.0, 96.75) is None            # nothing inside a leg that high
     # the wiring in the advanced breaker order: the ladder replaces the single MT limit
     monkeypatch.setattr(SM, "_l1", lambda sd, ref_i, i_: SimpleNamespace(price=100.0))
     sw = dict(ext=97.0, ext_i=bar(ctx, "09:30") - 3, session="AM", key="x", name="x", level=100.0, broke=i, sweep_i=bar(ctx, "09:30") - 3, smt=None, smt2=None)
     o = SM.adv_breaker_order(ctx, sl, sw, i, p, "AM", 1.0, bar(ctx, "09:30") - 5, 110.0, True)
-    assert o is not None and cap["entry"] == pytest.approx(103.75) and cap["tags"]["ladder"] == lad[0] and cap["tags"]["ladder_fracs"] == (0.1, 0.3, 0.6)
+    assert o is not None and cap["entry"] == pytest.approx(103.75) and cap["tags"]["ladder"] == lad[0] and cap["tags"]["ladder_fracs"] == lad[1]
     SM.adv_breaker_order(ctx, sl, sw, i, Params(**BASE, adv_breaker=True), "AM", 1.0, bar(ctx, "09:30") - 5, 110.0, True)
     assert cap["entry"] == pytest.approx(105.0) and "ladder" not in cap["tags"]                                    # off: the MT limit (A + B) / 2
     # the real order tail sizes the three legs 1 : 3 : 6 and the fill of rung 1 alone is 10 %

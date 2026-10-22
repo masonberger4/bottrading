@@ -465,7 +465,7 @@ def exits(ctx, sd, pos, tr, i: int, ts, p, state, extras: bool = False) -> None:
         if not pos["left"]:
             return
     # --- X11c PM consolidation exit
-    if p.pm_consol_exit and tr.session == "PM" and t + tf >= p.pm_consol_exit and consol_day(ctx, i, p) and not (pos.get("sm7") or {}).get("hold_pm"):
+    if p.pm_consol_exit and tr.session == "PM" and t + tf >= p.pm_consol_exit and consol_day(ctx, i, p) and not S._SM7.held(pos):
         _exit(tr, sd, ts, c, pos["left"], "pm_consol", pos)
         return
     if extras:

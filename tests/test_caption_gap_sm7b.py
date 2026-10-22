@@ -29,7 +29,7 @@ GAP_IDS = (
 TUNING = {"lc_mode", "lc_adr_mult", "lc_adr_k", "lc_stop_pts", "lc_retrace", "lc_retrace_mss", "london_close", "lc_fs_win", "lc_oneside", "missed_leave_pts", "or_ref_reuse", "or_ref_near_pts",
           "pm_nest_tfs", "consol_exit_min", "ts_breaker_add_mult", "reentry_win_max", "trail_reentry_entry", "trail_reentry_max", "reentry_risk_mult", "reentry_stop", "reverse_risk_mult",
           "offside_frac", "lod_conf_pts", "adv_rung_fracs", "reentry_max", "reentry_mult", "m1050_cut", "lunch_macro_win", "lunch_first_rung_only", "cc09_room_pts", "cc09_scalp_pts",
-          "cc09_depart_bars", "nyx_start", "nyx_target_pct", "nyx_stop_pct", "nyx_max", "nyx_counts_session", "skip_pm_adr_k", "reentry_need_sister"}
+          "cc09_depart_bars", "nyx_start", "nyx_target_pct", "nyx_stop_pct", "nyx_max", "nyx_counts_session", "skip_pm_adr_k", "reentry_need_sister", "lunch_long_win", "missed_kz", "missed_lon_ratio"}
 
 
 def test_every_gap_id_has_a_study_variant_that_builds():
@@ -87,11 +87,19 @@ ES_CASES = {
     "re_c": (("2024-02-19", "2024-03-11"), 5, ES_B, RE, ("reentry_after_trail_win", "trail_win_eval", "reentry_win_eval"), "ES"),
     "lod": (("2022-09-12", "2022-10-03"), 5, ES_B, RE, ("lod_short",), "ES"),
     "adv": (("2022-03-07", "2022-03-28"), 5, ES_B, ADV, ("adv_rungs", "breakaway_eval"), "ES"),
-    "time_a": (("2024-02-19", "2024-03-11"), 5, ES_B, TIME, ("m0950_rev", "m0950_cont", "m1050", "protect_macro_ext", "moc_no_chase", "lunch_macro", "lunch_program", "cc09_eval", "moc_range_eval"), "ES"),
-    "time_b": (("2022-01-03", "2022-01-24"), 5, ES_NB, TIME, ("lh_after_target", "london_ext_guard", "nyx"), "ES"),
+    "time_a": (("2022-08-01", "2022-08-22"), 5, ES_B, TIME, ("m1050", "protect_macro_ext", "moc_no_chase", "moc_range_eval", "lunch_macro", "lunch_program", "cc09_eval", "m0950_cont"), "ES"),
+    "time_b": (("2022-01-03", "2022-01-24"), 5, ES_NB, TIME, ("lh_after_target", "london_ext_guard"), "ES"),
     "time_c": (("2023-03-06", "2023-03-27"), 5, ES_B, TIME, ("lh_ob_pullback",), "ES"),
     "pair": (("2022-03-07", "2022-03-28"), 5, ES_NB, PAIR, ("pairing_reversal_pool",), "ES"),
     "nq": (("2023-03-06", "2023-03-27"), 5, ES_B, dict(nq_overshoot_mult=2.0, mohawk_ticks=1.0), ("nq_overshoot",), "NQ"),
+    # review-fix cases: the OUTCOME counters (a re-entry / reversal / London-lunch order that was armed AND filled, the 09:50 reversal's target), not only the evaluation counters
+    "lon": (("2023-03-06", "2023-03-27"), 5, ES_NB, dict(missed_5m=True, missed_lon=True, london_kz=True, state_tag=True), ("missed_5m_lon", "missed_htf_target", "state_tag"), "ES"),
+    "rev_inv": (("2022-05-30", "2022-06-20"), 5, ES_NB, dict(reverse_after_failure="inversion"), ("reverse_inversion", "re7_fill_reverse"), "ES"),
+    "rev_prop": (("2022-08-01", "2022-08-22"), 5, ES_NB, dict(reverse_after_failure="prop_fail", entry_arrays=("propulsion",), prop_mt_exit=True), ("reverse_prop_fail", "re7_fill_reverse"), "ES"),
+    "ts_re": (("2023-03-06", "2023-03-27"), 5, ES_NB, TS, ("reentry_ts", "re7_fill_ts_re"), "ES"),
+    "time_d": (("2023-10-02", "2023-10-23"), 5, ES_B, TIME, ("m0950_rev_target", "m0950_cont"), "ES"),
+    "time_f": (("2023-08-21", "2023-09-11"), 5, ES_B, TIME, ("nyx",), "ES"),
+    "time_e": (("2022-02-14", "2022-03-07"), 5, ES_B, TIME, ("m0950_rev", "m0950_cont", "lunch_program"), "ES"),
 }
 SYN_CASES = {
     # name: (seed, switches, the HITS counters the full run must have bumped)
@@ -139,12 +147,16 @@ def test_look_ahead_es(case):
 SWITCH_HIT = {
     "nq_overshoot_mult": "nq_overshoot", "lc_scalp": "lc_scalp", "lc_rev_need_htf": "lc_rev_need_htf", "missed_5m": "missed_5m", "htf_converge": "htf_converge", "am_array_open": "am_array_open",
     "ts_sessions": "ts_session_drop", "two_session_smt": "two_session_smt_eval", "pm_nest_reversal": "pm_nest_reversal", "profile_consol": "profile_consol", "ote_fvg_overlap": "ote_overlap_sweet",
-    "ote_need_s": "ote_s", "ts_breaker_ltf": "ts_breaker_add", "reentry_after_win": "reentry_win_eval", "reentry_after_trail_win": "trail_win_eval", "reentry_trigger": "sibi_return",
-    "reentry_idea_gate": "reentry_idea_eval", "reverse_after_failure": "reverse_eval", "allow_opposite_after_target": "opposite_eval", "adv_rungs": "adv_rungs", "reentry_ts": "ts_re_eval",
-    "breakaway_reentry": "breakaway_eval", "m0950_branch": "m0950_cont", "m1050": "m1050", "protect_macro_ext": "protect_macro_ext", "lh_ob_pullback": "lh_ob_pullback",
+    "ote_need_s": "ote_s", "ts_breaker_ltf": "ts_breaker_add", "reentry_after_win": "reentry_win_eval", "reentry_after_trail_win": "reentry_after_trail_win", "reentry_trigger": "sibi_return",
+    "reentry_idea_gate": "reentry_idea_eval", "reverse_after_failure": "re7_fill_reverse", "allow_opposite_after_target": "opposite_eval", "adv_rungs": "adv_rungs", "reentry_ts": "re7_fill_ts_re",
+    "breakaway_reentry": "breakaway_eval", "m0950_branch": "m0950_rev_target", "m1050": "m1050", "protect_macro_ext": "protect_macro_ext", "lh_ob_pullback": "lh_ob_pullback",
     "lh_after_target": "lh_after_target", "moc_range_dir": "moc_range_eval", "moc_no_chase_hod": "moc_no_chase", "lunch_macro_entry": "lunch_macro", "lunch_htf_program": "lunch_program",
-    "london_ext_guard": "london_ext_guard", "cc09_gate": "cc09_eval", "nyx_model": "nyx", "pairing": "pairing_reversal_pool",
+    "london_ext_guard": "london_ext_guard", "cc09_gate": "cc09_eval", "nyx_model": "nyx", "pairing": "pairing_reversal_pool", "missed_lon": "missed_5m_lon", "state_tag": "state_tag",
 }
+# switches whose OUTCOME path (the win re-entry armed / the breakaway order created) no data window reaches: ES 2022-01 .. 2024-06 (3-week windows, ES_B / ES_NB bases) and 24 synthetic seeds never produced a
+# reentry_after_win arming (a trade that closes on a non-final target with the draw untouched) or a breakaway_reentry order (two same-direction MSSs, a missed session and a retrace into the gap); their evaluation
+# counters run in the full-vs-truncated cases, the outcome code is unit-tested (test_reentry_after_win, test_reentry_after_trail_win, test_breakaway_reentry_stop in test_caption_gap_sm7a.py)
+OUTCOME_UNREACHED = {"reentry_after_win": "reentry_win_eval", "breakaway_reentry": "breakaway_eval"}
 EXTRA_VALUES = {("entry_arrays", "or_ref"): "or_ref", ("ts_stop", "mid"): "ts_stop_mid"}
 EXCEPTIONS = {
     "combine_prefer": "backtest.combine, not B.run: tested in test_combine_excludes_ym_and_prefers_es (test_caption_gap_sm7a.py)",
@@ -176,5 +188,6 @@ def test_every_switch_of_the_chunk_has_an_executed_path_case():
         if s_ not in SWITCH_HIT or not _ran_by(s_, SWITCH_HIT[s_]):
             missing.append(s_)
     assert not missing, missing
+    assert all(SWITCH_HIT[k] == v for k, v in OUTCOME_UNREACHED.items())          # the two documented switches are covered by their evaluation counters
     for (field, value), hit_ in EXTRA_VALUES.items():
         assert any(field in kw and (value in kw[field] if isinstance(kw[field], tuple) else kw[field] == value) and hit_ in need for kw, need in _RUN_KW.values()), (field, value)

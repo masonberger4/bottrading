@@ -706,6 +706,12 @@ def _combine_dual(runs, mode: str, kw: dict) -> pd.DataFrame:
     books = [r for r in runs if len(r)]
     if not books:
         return runs[0] if runs else pd.DataFrame()
+    excl = set(kw.get("exec_exclude") or ())
+    exec_cap([s_ for r in books for s_ in r.symbol.unique() if s_ not in excl], kw.get("max_exec", 0))       # review fix: the two-market cap sees the dual rows too
+    books = [r[~r.symbol.isin(excl)] if excl else r for r in books]                                           # ... and a never-executed symbol (YM) is not a second market of a dual slot
+    books = [r for r in books if len(r)]
+    if not books:
+        return _combine(*runs, **kw)
     keys = pd.concat([pd.DataFrame({"date": r.date.values, "slot": _slot(r).values, "side": r.side.values, "symbol": r.symbol.values}) for r in books], ignore_index=True)
     multi = set(map(tuple, keys.groupby(["date", "slot", "side"]).symbol.nunique().loc[lambda x: x >= 2].index))
     rest, dual = [], []
@@ -713,7 +719,7 @@ def _combine_dual(runs, mode: str, kw: dict) -> pd.DataFrame:
         if not len(r):
             rest.append(r)
             continue
-        m = pd.Series([(d, sl, sd) in multi for d, sl, sd in zip(r.date, _slot(r), r.side)], index=r.index)
+        m = pd.Series([(d, sl, sd) in multi and sy not in excl for d, sl, sd, sy in zip(r.date, _slot(r), r.side, r.symbol)], index=r.index)
         rest.append(r[~m])
         dual.append(r[m])
     out = _combine(*rest, **kw) if any(len(r) for r in rest) else (rest[0] if rest else pd.DataFrame())
