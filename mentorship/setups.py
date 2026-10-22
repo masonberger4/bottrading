@@ -442,8 +442,17 @@ def ote_adjust(sd, sw, i, p, entry, stop, kind, lvt):
             return None
         if sweet < sd.c[i]:
             entry = sweet
+        if p.ote_fvg_overlap:                        # caption-gap M13-pattern1-full-sequence-ote-fvg: the 70.5 % limit only where it overlaps an FVG of the leg, else the FVG edge nearest it
+            e7 = S._SM7.ote_overlap(sd, sw, i, p, lo, hi, sweet, entry)
+            if e7 is None:
+                S._f("x_ote_no_fvg_overlap")
+                return None
+            entry = e7 if e7 < sd.c[i] else entry
     elif p.ote == "filter" and not (lo - 1e-12 <= entry <= hi + 1e-12):
         S._f("x_ote")
+        return None
+    if p.ote_need_s and not S._SM7.ote_s_ok(sd, sw, i, p):
+        S._f("x_ote_no_s")                           # caption-gap M13-pattern1-full-sequence-ote-fvg: no short-term low S taken before the order = the lower-probability version
         return None
     if p.leg_pd_strict and not entry < base + 0.5 * (leg_hi - base) - 0.25 * p.es_pt + 1e-12:
         S._f("x_leg_pd_strict")
@@ -616,6 +625,11 @@ def adv_breaker_order(ctx, sd, sw, i, p, session, risk_mult, ref_i, ref, real_re
                 propulsion=False, through=tk, no_leg_wait=True)
     if note5 is not None:
         tags["sm5"] = note5
+    if p.adv_rungs:                      # caption-gap E12-070-rung-order (070 ~00:58:44): 5m FVG CE, 1m IFVG CE, the IFVG's low end - three resting limits (sizes adv_rung_fracs)
+        lad7 = S._SM7.adv_ladder(ctx, sd, sw, i, p, A, B, sw["ext"] - p.pad)
+        if lad7 is not None:
+            return S._finish_order(ctx, sd, i, p, session, sw, lad7[0][0], sw["ext"] - p.pad, risk_mult, sd.h[sw["ext_i"]:i + 1].max(),
+                                   dict(tags, ladder=list(lad7[0]), ladder_fracs=lad7[1]), skip_leg_pd=True, fixed=fixed)
     return S._finish_order(ctx, sd, i, p, session, sw, mt, sw["ext"] - p.pad, risk_mult,
                            sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True, fixed=fixed)
 
@@ -1289,7 +1303,7 @@ def finish_gates(ctx, sd, sw, i, p, session, entry, tags: dict, lvt: list, lvx: 
     if lh and p.lh_start_by and (not synth or ep01) and ctx.t[sw["ext_i"]] > p.lh_start_by:
         S._f("x_lh_start_by")                 # Ep01.17: the move started by 15:25 (also pm_ep01)
         return False
-    if lh and (p.pm_last_hour_model or lh_on(p, "lh_htf_done_skip")) and htf_done(ctx, sd, i):
+    if lh and (p.pm_last_hour_model or lh_on(p, "lh_htf_done_skip")) and htf_done(ctx, sd, i) and not S._SM7.lh_after_pass(ctx, sd, i, p):
         S._f("x_lh_htf_done")
         return False
     if lh and p.pm_4h_ce and not ep01:        # pm_ep01 tests its own nested pair's 4h CE
@@ -1526,4 +1540,4 @@ def more_adds(ctx, sd, pos, tr, i, p) -> None:
               and z.top < sd.c[i]]
         if zs:
             pos["ts_pyr"] = True
-            arm(zs[-1].top)
+            S._SM7.breaker_add(ctx, sd, pos, tr, i, p, zs[-1])          # caption-gap M4-pattern3-breaker-half-size-add-ltf: half the initial units, refined on the 1m

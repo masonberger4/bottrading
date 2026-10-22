@@ -44,7 +44,8 @@ def _real(job):
     a = B.run(spy, tf, "SPY", p, qqq)
     b = B.run(qqq, tf, "QQQ", replace(p, es_pt=q_pt), spy)
     out = {"SPY": a, "QQQ": b, "combined": B.combine(a, b, pick=study_pick(p.smt_pick), laggard_consol_only=p.laggard_consol_only, one_market=p.one_market,
-                                                     sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done, dual_deal=p.dual_deal)}
+                                                     sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done, dual_deal=p.dual_deal,
+                                                     exec_exclude=p.combine_exec_exclude, prefer=p.combine_prefer, max_exec=p.max_exec_markets)}
     for k, v in out.items():
         if len(v):
             v["variant"], v["tf"], v["book"] = name, tf, k
@@ -1878,6 +1879,60 @@ _SM6_DECISIONS = {
     "new-overlapping-reversal-score": dict(reversal_tag=True, reversal_score=True, **SM_POST),
 }
 DECISIONS.update(_SM6_DECISIONS)
+
+# --- caption-gap pass, setups_models #7/7 (models_setups_entries.md, other.md, session_day_week_stops_frequency.md, stops_sizing_scaling_in.md, times_sessions_macros.md): one variant per gap id (name prefix = the gap id) ---
+_SM7_DECISIONS = {
+    "OT-D15-default-instrument": dict(combine_prefer="es", nq_overshoot_mult=1.5, **SM_POST),
+    "OT-D15-default-instrument_nq2": dict(combine_prefer="es", nq_overshoot_mult=2.0, **SM_POST),
+    "OT-max-two-correlated-markets": dict(max_exec_markets=2, combine_exec_exclude=("YM",), combine_prefer="es", **SM_POST),
+    "T3-london-close-counter-trend-scalp": dict(lc_scalp=True, lc_mode="failure_swing", lc_adr_mult=1.0, **SM_POST),
+    "T3-london-close-counter-trend-scalp_wide": dict(lc_scalp=True, lc_mode="failure_swing", lc_adr_mult=1.25, lc_fs_win=(600, 720), **SM_POST),
+    "new-london-close-scalp-large-range": dict(lc_scalp=True, lc_mode="mss", lc_adr_k=1.25, **SM_POST),
+    "new-london-close-scalp-large-range_short_window": dict(lc_scalp=True, lc_mode="mss", lc_adr_k=1.33, london_close=(600, 660), **SM_POST),
+    "M17-london-close-asia-only-reversal-profile": dict(lc_rev_need_htf=True, lc_tag=True, **SM_POST),
+    "E5-missed-entry-5m-retrace": dict(missed_5m=True, **SM_POST),
+    "B12-dip-below-open-into-converging-15m-array": dict(htf_converge=True, sweep_15m_array="tag", **SM_POST),
+    "new-or-reference-arrays-reused": dict(entry_arrays=("or_ref",), or_ref_reuse=2, **SM_POST),
+    "new-am-trend-definition-and-start": dict(am_array_open=True, **SM_POST),
+    "T9-pm-reversal-turtle-soup-am-high": dict(turtle_soup="2023", pm_am_stops=True, ts_sessions=("PM",), **SM_POST),
+    "T13-two-session-close-profile": dict(two_session_smt=True, profile_two_session=True, smt_windows=((720, 810),), **SM_POST),
+    "T13-am-move-pm-reversal-htf-nesting": dict(pm_nest_reversal=True, pm_reversal=True, pm_rev_nested=True, **SM_POST),
+    "T13-consolidation-profiles": dict(profile_consol=True, profile_consol_pm=True, consol_exit_min=15, **SM_POST),
+    "M13-pattern1-full-sequence-ote-fvg": dict(ote="limit", ote_fvg_overlap=True, ote_need_s=True, **SM_POST),
+    "M4-pattern3-breaker-half-size-add-ltf": dict(turtle_soup="2023", ts_breaker_pyramid=True, ts_breaker_add_mult=0.5, ts_breaker_ltf=True, two_chance=True, cc_swings="breaker",
+                                                  adds=(0.5, 0.5), **SM_POST),
+    "OT-M17-cc09_001-checklist": dict(cc09_gate="tag", **SM_POST),
+    "OT-M17-cc09_001-checklist_gate": dict(cc09_gate="gate", cc09_room_pts=10.0, cc09_depart_bars=3, **SM_POST),
+    "OT-M17-cc09_003-ny-expansion": dict(nyx_model=True, nyx_start=570, nyx_max=2, **SM_POST),
+    "OT-M17-cc09_003-ny-expansion_0830": dict(nyx_model=True, nyx_start=510, nyx_max=2, **SM_POST),
+    "OT-one-state-tool-pairing": dict(pairing="reversal_pool", **SM_POST),
+    "OT-one-state-tool-pairing_expansion_ob": dict(pairing="expansion_ob", entry_arrays=("ob",), **SM_POST),
+    "OT-one-state-tool-pairing_retracement_void": dict(pairing="retracement_void", **SM_POST),
+    "OT-one-state-tool-pairing_consolidation_eq": dict(pairing="consolidation_eq", **SM_POST),
+    "X14-reentry-after-winning-exit": dict(reentry_after_win=True, reentry_win_max=1, **SM_POST),
+    "X14-reentry-after-winning-exit_two_sister": dict(reentry_after_win=True, reentry_win_max=2, reentry_need_sister=True, **SM_POST),
+    "X13-reentry-after-trail-stop-in-profit": dict(reentry_after_trail_win=True, trail_reentry_entry="ifvg_ce", trail_reentry_max=2, trail=True, **SM_POST),
+    "X13-reentry-after-trail-stop-in-profit_breaker": dict(reentry_after_trail_win=True, trail_reentry_entry="breaker", trail=True, **SM_POST),
+    "X13-reentry-after-loss-conditions": dict(reentry_half=True, reentry_gate=True, reentry_idea_gate=True, reentry_risk_mult=0.5, **SM_POST),
+    "X13-reentry-after-loss-conditions_same_size": dict(reentry_half=True, reentry_gate=True, reentry_idea_gate=True, reentry_risk_mult=1.0, **SM_POST),
+    "X13-reentry-after-loss-conditions_sibi": dict(reentry_half=True, reentry_gate=True, reentry_idea_gate=True, reentry_trigger="sibi_return", reentry_stop="wick_ce", **SM_POST),
+    "X13-reverse-after-failure-switch": dict(reverse_after_failure="all", reverse_risk_mult=0.5, **SM_POST),
+    "X13-reverse-after-failure-switch_inversion": dict(reverse_after_failure="inversion", **SM_POST),
+    "X13-reverse-after-failure-switch_at_stop": dict(reverse_after_failure="at_stop", offside_frac=0.5, **SM_POST),
+    "X14-opposite-second-trade-after-win": dict(allow_opposite_after_target="both", lod_conf_pts=2.0, no_pm_after_am_win=True, **SM_POST),
+    "E12-070-rung-order": dict(adv_breaker=True, adv_rungs=True, adv_rung_fracs=(0.1, 0.3, 0.6), **SM_POST),
+    "X13-reentry-turtle-soup": dict(turtle_soup="cc_limit", reentry_ts=True, reentry_max=2, reentry_mult=0.5, **SM_POST),
+    "E6-breakaway-gap-stop": dict(breakaway_reentry=True, **SM_POST),
+    "M12-ts-stop-midpoint": dict(turtle_soup="2023", ts_stop="mid", **SM_POST),
+    "T7-0950-reversal-or-continuation": dict(m0950_branch="both", **SM_POST),
+    "T7-1050-macro-setup": dict(m1050=True, m1050_cut=True, protect_macro_ext=True, **SM_POST),
+    "T10-lasthour-ob-pullback": dict(lh_ob_pullback=True, **SM_POST),
+    "T7-lasthour-after-target": dict(lh_after_target=True, last_hour_setup=True, **SM_POST),
+    "T7-lasthour-consolidation-direction": dict(moc_run=True, moc_range_dir=True, moc_no_chase_hod=True, **SM_POST),
+    "T7-lunch-macro-htf-program": dict(lunch_macro_entry=True, lunch_htf_program=True, htf_bias="combo", **SM_POST),
+    "new-ny-runs-london-extreme-news": dict(london_ext_guard=True, **SM_POST),
+}
+DECISIONS.update(_SM7_DECISIONS)
 SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): their look-ahead tests are in test_silver_bullet.py
 
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
@@ -1943,14 +1998,15 @@ def _dec_job(job):
               partner2=p2, ref_df=ref,
               bias_table=_bias_cache(tf, 570, p.vi_arrays, p.flip_triggers, B.table_kw(p)), meta=B.load_meta(SYMS[0], tf, SRC),
               lock_cuts=_lock_cache(tf, p))
-    if p.smt_pick != "first" or p.one_market or p.sb_one_market or p.sb_am_done or p.dual_deal or len(p.markets) > 1:    # SB package: M3.9 / gap 7 need the second market too (BH-M3-scan-all-indices: markets)
+    if p.smt_pick != "first" or p.one_market or p.sb_one_market or p.sb_am_done or p.dual_deal or len(p.markets) > 1 or p.combine_prefer != "none":    # SB package: M3.9 / gap 7 need the second market too (BH-M3-scan-all-indices: markets)
         # Ep03.11 (review fix): smt_pick only acts when two instruments are combined - run the
         # partner as its own book (es_pt scaled by the price ratio, as main_index) and combine
         q = replace(p, es_pt=round(p.es_pt * float(pa.close.median() / df.close.median()), 2))
         tb = B.run(pa[(pa.index >= lo) & (pa.index < b)], tf, SYMS[1], q, df[(df.index >= lo) & (df.index < b)],
                    meta=B.load_meta(SYMS[1], tf, SRC) if SRC == "databento" else None, lock_cuts={} if p.draw_lock == "off" else None)
         t = B.combine(t, tb, pick=study_pick(p.smt_pick), laggard_consol_only=p.laggard_consol_only, one_market=p.one_market,
-                      sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done, dual_deal=p.dual_deal)   # SB package (+ setups_models #5/7 D15-dual-dealing)
+                      sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done, dual_deal=p.dual_deal,   # SB package (+ setups_models #5/7 D15-dual-dealing)
+                      exec_exclude=p.combine_exec_exclude, prefer=p.combine_prefer, max_exec=p.max_exec_markets)       # setups_models #7/7: OT-D15-default-instrument / OT-max-two-correlated-markets
     if len(t):
         t = t[pd.to_datetime(t.entry_time.astype(str).str[:10]) >= f"{year}-01-01"].copy()
         t["tf"], t["year"], t["variant"] = tf, year, name

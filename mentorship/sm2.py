@@ -951,7 +951,7 @@ def pm_profile_gate(ctx, sd, sw, i: int, p, session: str, entry: float, lvt: lis
     `profile_consol_am`)."""
     if session == "AM":
         return am_profile_gate(ctx, sd, sw, i, p, entry, lvt)
-    if session != "PM" or not (p.profile_two_session or p.profile_consol_pm):
+    if session != "PM" or not (p.profile_two_session or p.profile_consol_pm or p.profile_consol):
         return None
     S = _S()
     k810 = S._idx_at(ctx, 810)
@@ -978,9 +978,9 @@ def pm_profile_gate(ctx, sd, sw, i: int, p, session: str, entry: float, lvt: lis
         if catalyst:
             lvt.append("two_session_catalyst")
         return None
-    if p.profile_consol_pm and bias == 0 and not _day_release(ctx):
+    if (p.profile_consol_pm or p.profile_consol) and bias == 0 and not _day_release(ctx):
         hit("consol_pm")
-        htf_arr = opp(("1h", "4h", "D", "W", "M"))
+        htf_arr = nested_at_am(ctx, sd, i, p) if p.profile_consol else opp(("1h", "4h", "D", "W", "M"))      # caption-gap T13-consolidation-profiles (setups_models #7/7): the nesting test
         if sd.sign != -d:
             return "x_consol_pm_side"
         need = "lunch" if htf_arr else "am_session"
@@ -1032,7 +1032,7 @@ def pm_extra_targets(ctx, sd, i: int, p, session: str, entry: float) -> list:
     tl = _c(ctx).get("two_leg")
     if session == "PM" and p.profile_two_session and tl and tl[0] == sd.sign and tl[1] > 0:
         out.append((entry + tl[1], "array"))
-    if not ((session == "PM" and p.profile_consol_pm) or (session == "AM" and p.profile_consol_am and bias_at(ctx, p, session, i) == 0)):
+    if not ((session == "PM" and (p.profile_consol_pm or p.profile_consol)) or (session == "AM" and p.profile_consol_am and bias_at(ctx, p, session, i) == 0)):
         return out
     cand = [float(sd.h[ctx.start:i + 1].max())]          # side space: the day's far extreme in the trade's direction (a short: the day LOW, mirrored)
     lon = ctx.sess.get("london")

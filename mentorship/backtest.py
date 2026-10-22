@@ -649,8 +649,14 @@ def _group_pick(t: pd.DataFrame, pick: str) -> pd.DataFrame:
 
 
 def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, sb_one_market: bool = False,
-            sb_am_done: bool = False, laggard_consol_only: bool = False, dual_deal: str = "") -> pd.DataFrame:
-    """Caption-gap D15-dual-dealing (069 ~00:19:09; setups_models #5/7): `dual_deal` "" (the default) = the one-instrument-per-session pick below; "split" / "full" = when BOTH instruments (two or more
+            sb_am_done: bool = False, laggard_consol_only: bool = False, dual_deal: str = "", exec_exclude: tuple = ("YM",), prefer: str = "none",
+            max_exec: int = 2) -> pd.DataFrame:
+    """Caption-gap OT-D15-default-instrument / OT-max-two-correlated-markets (028 ~00:23:58; 055 ~00:27:38; setups_models #7/7): `exec_exclude` (Params.combine_exec_exclude, default ("YM",)) = the
+    symbols that are never EXECUTED - their rows are dropped before the pick (YM is the Dow: a reference for SMT only, it already enters as partner2 / smt2, so the bot's trades do not change; the
+    "middle" pick, which ranks all three indices, drops them AFTER the pick); `prefer` (Params.combine_prefer) "es" = on a same-bar tie (same entry_time) keep the S&P row (ES / SPX / SPY) over
+    the Nasdaq one (NQ / NDX / QQQ), ahead of the weak / relative-leg tie-break; `max_exec` (Params.max_exec_markets, default 2): at most two execution symbols may remain and, with two, they must be
+    one S&P and one Nasdaq instrument (watch two CLOSELY CORRELATED indices, never add markets to find setups) - otherwise ValueError (0 = no cap).
+    Caption-gap D15-dual-dealing (069 ~00:19:09; setups_models #5/7): `dual_deal` "" (the default) = the one-instrument-per-session pick below; "split" / "full" = when BOTH instruments (two or more
     symbols) filled the same side in the same session slot of one day (the same Judas / MSS / FVG window on ES and NQ), keep every one of those trades instead of the pick - "split" at HALF risk each
     (gross / costs / net / risk columns x 0.5, column dual_risk 0.5), "full" at full risk (dual_risk 1.0); everything else goes through the ordinary pick. ICT states neither the conditions nor the
     allocation: the two variants are the test. Conflicts with Ep 05 "watch one market only" and with D15.
@@ -658,9 +664,33 @@ def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, 
     fill's entry time is not yet knowable (and the slot is the date / session / side, not the same entry window). The dual rows carry `dual_alloc` = "posthoc" and the result must be read as an
     allocation study, not a causal live rule; the engine does not size a second leg (owner question).
     """
+    if prefer not in ("none", "es"):
+        raise ValueError(f"prefer {prefer!r}: expected 'none' or 'es'")
+    kw = dict(pick=pick, one_market=one_market, sb_one_market=sb_one_market, sb_am_done=sb_am_done, laggard_consol_only=laggard_consol_only, exec_exclude=tuple(exec_exclude), prefer=prefer,
+              max_exec=int(max_exec))
     if dual_deal:
-        return _combine_dual(runs, dual_deal, dict(pick=pick, one_market=one_market, sb_one_market=sb_one_market, sb_am_done=sb_am_done, laggard_consol_only=laggard_consol_only))
-    return _combine(*runs, pick=pick, one_market=one_market, sb_one_market=sb_one_market, sb_am_done=sb_am_done, laggard_consol_only=laggard_consol_only)
+        return _combine_dual(runs, dual_deal, kw)
+    return _combine(*runs, **kw)
+
+
+SPX_SYMS = frozenset({"ES", "SPX", "SPY", "MES"})           # the S&P instruments (OT-max-two-correlated-markets)
+NDX_SYMS = frozenset({"NQ", "NDX", "QQQ", "MNQ"})           # the Nasdaq instruments
+
+
+def _index_of(sym: str) -> str:
+    s = str(sym).upper()
+    return "spx" if s in SPX_SYMS else ("ndx" if s in NDX_SYMS else s)
+
+
+def exec_cap(symbols, max_exec: int) -> None:
+    """OT-max-two-correlated-markets (Ep05 / 055 ~00:27:38): at most `max_exec` execution symbols, and two only when they are one S&P and one Nasdaq instrument. ValueError otherwise."""
+    syms = sorted({str(s) for s in symbols})
+    if not max_exec or len(syms) <= 1:
+        return
+    if len(syms) > max_exec:
+        raise ValueError(f"execution symbols {syms}: at most {max_exec} closely correlated markets (ES + NQ); never add markets to find setups")
+    if {_index_of(s) for s in syms} != {"spx", "ndx"}:
+        raise ValueError(f"execution symbols {syms}: two markets must be one S&P and one Nasdaq instrument (closely correlated), not the same index twice")
 
 
 def _slot(r: pd.DataFrame) -> pd.Series:
@@ -702,7 +732,7 @@ def _combine_dual(runs, mode: str, kw: dict) -> pd.DataFrame:
 
 
 def _combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, sb_one_market: bool = False,
-             sb_am_done: bool = False, laggard_consol_only: bool = False) -> pd.DataFrame:
+             sb_am_done: bool = False, laggard_consol_only: bool = False, exec_exclude: tuple = (), prefer: str = "none", max_exec: int = 0) -> pd.DataFrame:
     """Trade one instrument per session (watch one market, rules Ep 05): of the setups the
     instruments produced, keep the first to fill. On a tie, keep the one whose SMT check
     didn't show its partner holding stronger. Uses only what was known at the fill.
@@ -726,6 +756,14 @@ def _combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False,
     t = pd.concat([r for r in runs if len(r)], ignore_index=True)
     if not len(t):
         return t
+    if "symbol" in t.columns:
+        if exec_exclude and pick != "middle":
+            t = t[~t.symbol.isin(exec_exclude)]            # OT-D15-default-instrument: YM (the Dow) is a reference only - never executed
+            if not len(t):
+                return t
+        exec_cap([s_ for s_ in t.symbol.unique() if s_ not in exec_exclude], max_exec)       # OT-max-two-correlated-markets
+        if prefer == "es":
+            t = t.assign(_pref=t.symbol.map(lambda s_: 1 if _index_of(s_) == "ndx" else 0))
     out = None
     # SB package (M3.9): a Silver Bullet window is its own slot - the key was (date, session), so an SB trade of the
     # London / AM window (session "AM") shut the main engine's AM trade of the other market out and vice versa.
@@ -753,11 +791,12 @@ def _combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False,
         t = _fixed_es(t)
         pick = "first"
         if not len(t):
-            return t.drop(columns="_sk")
+            return t.drop(columns=[c_ for c_ in ("_sk", "_pref") if c_ in t.columns])
     if pick in ("middle", "clean_swing", "depth", "clean"):
         out = _group_pick(t, pick)
-        if "_sk" in out:
-            out = out.drop(columns="_sk")
+        out = out.drop(columns=[c_ for c_ in ("_sk", "_pref") if c_ in out.columns])
+        if exec_exclude and pick == "middle" and "symbol" in out.columns:
+            out = out[~out.symbol.isin(exec_exclude)]      # the middle index may be the Dow: never executed
     elif pick != "first":
         lag = t.smt.eq(True)
         if pick == "trend":
@@ -770,14 +809,14 @@ def _combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False,
         t = t[keep]
         lead_row = lead_row[keep]
         if not len(t):
-            return t.drop(columns="_sk")
+            return t.drop(columns=[c_ for c_ in ("_sk", "_pref") if c_ in t.columns])
         if {"ext_px", "leg_hi_px"} <= set(t.columns):
             rel = ((t.leg_hi_px - t.ext_px).abs() / t.ext_px.abs()).fillna(0.0)
-            t = t.assign(_rel=rel.where(~lead_row, -rel)).sort_values(["entry_time", "_rel"], kind="stable")
-            out = t.groupby(["date", "_sk"], sort=False).head(1).drop(columns=["_rel", "_sk"]).sort_values("entry_time")
+            t = t.assign(_rel=rel.where(~lead_row, -rel)).sort_values((["entry_time", "_pref"] if "_pref" in t.columns else ["entry_time"]) + ["_rel"], kind="stable")
+            out = t.groupby(["date", "_sk"], sort=False).head(1).drop(columns=["_rel", "_sk"] + (["_pref"] if "_pref" in t.columns else [])).sort_values("entry_time")
     if out is None:
-        t = t.assign(_weak=t.smt.eq(True)).sort_values(["entry_time", "_weak"])
-        out = t.groupby(["date", "_sk"], sort=False).head(1).drop(columns=["_weak", "_sk"]).sort_values("entry_time")
+        t = t.assign(_weak=t.smt.eq(True)).sort_values((["entry_time", "_pref"] if "_pref" in t.columns else ["entry_time"]) + ["_weak"])
+        out = t.groupby(["date", "_sk"], sort=False).head(1).drop(columns=["_weak", "_sk"] + (["_pref"] if "_pref" in t.columns else [])).sort_values("entry_time")
     if one_market and len(out):
         first = out.sort_values("entry_time", kind="stable").groupby("date").symbol.first()
         out = out[out.symbol == out.date.map(first)]
