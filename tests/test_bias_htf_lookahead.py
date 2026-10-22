@@ -27,6 +27,19 @@ WIN = {
     "rare": [("2024-08-19", "2024-09-13"), ("2024-02-26", "2024-03-25")],      # B9 objective_neutral='both' after the caption-gap levels pass: 0 trades in
 }                                                      # the other windows, 2 in the first (2024-08-26 / 09-09); T13 require_judas_news (a Judas sweep within 30 minutes
                                                        # of a scheduled release AND a full setup): 1 trade in the second, none in the common windows
+# Selective switches whose default-window run has no trade (the full-suite run after setups_models#7/7 found them): the test pins what it needs to
+# trade - PINS (extra Params the switch needs to be reachable at all; not a change of any default) and SEL_WIN (single months where the narrow switch fires).
+PINS = {"M12-setup-selection-order": dict(htf_bias="react"),                    # turtle_soup="cc_limit" needs a bias side (ctx.cur_bias); SM_POST has draw_lock off
+        "OT-one-state-tool-pairing_expansion_ob": dict(htf_bias="react"),       # the expansion state needs the bias side
+        "M13-pattern1-full-sequence-ote-fvg": dict(ote_need_s=False)}           # ote_need_s + the FVG overlap together leave no order in these windows; the overlap rule alone is checked
+SEL_WIN = {"OT-one-state-tool-pairing_expansion_ob": [("2023-09-01", "2023-10-01"), ("2024-10-01", "2024-10-16")],
+           "M13-pattern1-full-sequence-ote-fvg": [("2023-07-01", "2023-08-01"), ("2023-06-01", "2023-07-01")],
+           "new-clarity-filter-pass-if-arguing": [("2024-02-01", "2024-03-01"), ("2024-04-01", "2024-05-01")],
+           "OT-M17-cc09_001-checklist_gate": [("2023-10-01", "2023-11-01")]}
+# No trade in 7 years of quarterly windows even with the enabling switches: the check runs on the surrogate (the same state / trigger code computed without the filter).
+ZERO_OK = {"OT-one-state-tool-pairing_retracement_void": dict(pairing="all", state_tag=True),
+           "OT-one-state-tool-pairing_consolidation_eq": dict(pairing="all", state_tag=True),
+           "M13-ote-needs-bias-trigger-structure": dict(ote_need_trigger=False)}
 RARE = ("B9_objective_neutral", "T13-judas-news-driver_require")
 LONG_HISTORY = ("wpr", "qshift", "mwd", "B22", "B20.3", "B10")
 LA_COLS = ["entry_time", "entry", "stop", "t1", "side", "day_tags", "dw_tags"]
@@ -51,7 +64,7 @@ def _bars(tf, a, b):
     (the 1m ES file is ~2.7M rows: several xdist workers holding it exhaust the memory)."""
     if tf not in _CACHE:
         raw = B.load("ES", tf, source="databento")
-        wins = {(x, y) for v in WIN.values() for (x, y) in v} | {("2024-01-22", "2024-02-02")}
+        wins = {(x, y) for v in WIN.values() for (x, y) in v} | {("2024-01-22", "2024-02-02")} | {w for v in SEL_WIN.values() for w in v}
         _CACHE[tf] = {(x, y): raw[(raw.index >= x) & (raw.index < y)].copy() for (x, y) in wins}
         del raw
     return _CACHE[tf][(a, b)]
@@ -83,7 +96,15 @@ def _check(name, tf, windows, p, need=None, max_cuts=3):
 def test_no_look_ahead_each_variant_5m(name):
     wins = (WIN["long"] if any(k in name for k in LONG_HISTORY) else []) + WIN["def"] + WIN["wide"] + WIN["long"]
     wins += WIN["rare"] if any(k in name for k in RARE) else []
-    _check(name, 5, wins, _params(name))
+    wins = SEL_WIN.get(name, []) + wins
+    p = _params(name, **PINS.get(name, {}))
+    if name in ZERO_OK:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if any(len(B.run(_bars(5, a, b), 5, "ES", p)) for a, b in WIN["def"] + WIN["wide"]):
+                return _check(name, 5, wins, p)                 # (it does trade after all: the strict check)
+        p = _params(name, **ZERO_OK[name])
+    _check(name, 5, wins, p)
 
 
 GROUPS = {
