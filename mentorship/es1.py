@@ -629,7 +629,7 @@ def breaker_refine(sd, sw, bz, i: int, p):
 
 def ob_in_vi_add(sd, pos, i: int, p):
     """A5-ob-in-vi-over-newer-fvg (009 ~12:07): while adding to an open long after the sell-side is cleared (the sweep preceded the fill): a down-close candle (a bullish OB) of this pullback (after the fill)
-    whose low traded into a VI - touch allowed, the VI's bottom not pierced - is the add, at the OB's MT; the VI bottom is the floor / stop reference. Returns (mt, floor) or None."""
+    whose low traded into a VI - touch allowed, the VI's bottom not pierced - is the add, at the OB's MT; the VI bottom is the floor / stop reference. Returns (mt, floor, body_bottom) or None."""
     f = pos["fill_i"]
     best = None
     if pos.get("ext_i") is not None and not pos["ext_i"] < f:
@@ -653,7 +653,11 @@ def ob_in_vi_add(sd, pos, i: int, p):
     if best is None:
         return None
     hit("add_ob_in_vi")
-    return best[0], best[1]
+    k_ = best[2]
+    j_ = k_
+    while j_ - 1 > f and sd.c[j_ - 1] < sd.o[j_ - 1]:
+        j_ -= 1
+    return best[0], best[1], float(sd.c[j_:k_ + 1].min())          # (mt, floor, the OB's body bottom = the formation price of the add-cutoff test)
 
 
 def cisd_runs(sd, f: int, i: int):

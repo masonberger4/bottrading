@@ -277,8 +277,13 @@ def test_ob_grade_a_b_and_the_size_multiplier():
     base = one(day(rows, spike=True), hist, **k)
     assert len(base) == 1 and "ob_grade" not in base[0].lv_tags
     b = one(day(rows, spike=True), hist, ob_grade_mult=(1.0, 0.5), **k)
-    assert len(b) == 1 and "ob_grade_B" in b[0].lv_tags and b[0].shares == pytest.approx(base[0].shares / 2, abs=1)
-    assert b[0].entry_risk_pct == pytest.approx(base[0].entry_risk_pct / 2, rel=0.01)
+    # review fix (look-ahead): the fill bar's own stab is not known at the fill - the fill is graded A (fill price 100.0 >= the MT) at full size and the trade keeps that tag; the stab regrades the
+    # position to B once the bar has closed (it scales later adds only)
+    assert len(b) == 1 and "ob_grade_A" in b[0].lv_tags and "ob_grade_B" not in b[0].lv_tags and b[0].shares == base[0].shares
+    assert b[0].entry_risk_pct == pytest.approx(base[0].entry_risk_pct, rel=0.01)
+    gi = es2.grade_inputs(sd_of([(100.0, 100.5, 99.9, 100.2)] * 3 + [(100.2, 100.5, 99.6, 100.1)] * 3), dict(ob_mt=99.4, arm_i=2), 5, 100.0)
+    assert gi == (pytest.approx(99.6), pytest.approx(100.1))                                          # the closed bars after the arming bar (3, 4) and the fill price - never bar 5 itself
+    assert es2.grade_inputs(sd_of([(100.0, 100.5, 99.0, 99.2)] * 6), dict(ob_mt=99.4, arm_i=4), 5, 100.0) == (100.0, 100.0)    # no closed bar between the arming and the fill: the fill price
     a = one(day(A_ROWS, spike=True), hist, ob_grade_mult=(0.5, 1.0), **k)                              # the plain retest (low 99.9 >= MT) is an A: scaled by the first multiplier
     a0 = one(day(A_ROWS, spike=True), hist, **k)
     assert len(a) == 1 and "ob_grade_A" in a[0].lv_tags and a[0].shares == pytest.approx(a0[0].shares / 2, abs=1)
@@ -511,7 +516,8 @@ def test_entry_fvg_min_tf_uses_only_the_bigger_bars_fvgs():
     ctx = SimpleNamespace(idx=idx, tf=5, start=0)
     sw = dict(ext_i=0)
     assert es2.min_tf_gaps(ctx, sd, sw, 11, Params(es_pt=1.0, entry_fvg_min_tf=5)) is None                      # not coarser than the base bars: the switch does not apply
-    assert es2.min_tf_gaps(ctx, sd, sw, 11, Params(es_pt=1.0, entry_fvg_min_tf=7)) is None                      # not a multiple
+    with pytest.raises(ValueError):
+        es2.min_tf_gaps(ctx, sd, sw, 11, Params(es_pt=1.0, entry_fvg_min_tf=7))                                  # not a multiple of the base bars: an error, not a silent no-op (review fix)
     z = es2.min_tf_gaps(ctx, sd, dict(ext_i=-1), 11, Params(es_pt=1.0, entry_fvg_min_tf=15))
     assert z is not None and [(round(x.bottom, 2), round(x.top, 2)) for x in z] == [(100.6, 101.3), (101.5, 103.0)]      # at 15 only the 15m FVGs are entry gaps: [09:30 high 100.6, 10:00 low 101.3] and [09:45 high 101.5, 10:15 low 103.0]
     assert all(x.i <= 11 for x in z)
@@ -525,9 +531,12 @@ def test_entry_fvg_min_tf_uses_only_the_bigger_bars_fvgs():
 def test_e4_wick_redelivery_counts():
     sd = sd_of([(100.0, 100.4, 99.6, 100.3), (100.3, 100.6, 100.2, 100.5), (100.5, 100.5, 99.5, 99.8), (99.8, 100.0, 99.4, 99.9)])
     # the last up-close candle before bar 2 is bar 1 (low 100.2): bar 2 trades down across its full range (low 99.5 <= 100.2)
-    assert es2.wick_redelivery(sd, 2) is True
-    assert es2.wick_redelivery(sd_of([(100.0, 100.4, 99.6, 100.3), (100.3, 100.6, 100.2, 100.5), (100.5, 100.5, 100.4, 100.45)]), 2) is False      # did not trade down to bar 1's low
-    assert es2.wick_redelivery(sd_of([(100.0, 100.4, 99.6, 99.7), (99.7, 100.0, 99.5, 99.6)]), 1) is False                                       # no up-close candle at all
+    # review fix (look-ahead): judged on the fill PRICE and the closed bars before the fill bar - never on the fill bar's own later low
+    assert es2.wick_redelivery(sd, 2, 100.1) is True                                                  # the fill price 100.1 is already under bar 1's low (100.2)
+    assert es2.wick_redelivery(sd, 2) is False and es2.wick_redelivery(sd, 2, 100.3) is False         # the fill bar's own low (99.5) is NOT read; a fill above the low is no redelivery yet
+    assert es2.wick_redelivery(sd, 3, 99.9) is True                                                   # bar 2 (closed) already traded across bar 1's range
+    assert es2.wick_redelivery(sd_of([(100.0, 100.4, 99.6, 100.3), (100.3, 100.6, 100.2, 100.5), (100.5, 100.5, 100.4, 100.45)]), 2, 100.45) is False      # did not trade down to bar 1's low
+    assert es2.wick_redelivery(sd_of([(100.0, 100.4, 99.6, 99.7), (99.7, 100.0, 99.5, 99.6)]), 1, 99.0) is False                                  # no up-close candle at all
     # _retrace_ok: retrace_candle "intrabar" wants the fill bar to open over the limit; with e4_wick_ok the wick redelivery also passes
     o = dict(i=0, entry=99.0)
     p0 = Params(es_pt=1.0, retrace_candle="intrabar")
@@ -576,19 +585,19 @@ def test_vi_ob_add_arms_at_the_candle_mt_and_holds_under_the_vi():
     assert z and (z[0].bottom, z[0].top) == (100.9, 101.4)
     pos = dict(fill_i=1, basis=100.0 * 10, n=10, stop=99.0, add=None, t1_done=False, left=10)
     armed = []
-    arm = lambda px, floor=None: (pos.__setitem__("add", {}) or armed.append((px, floor)) or True)
+    arm = lambda px, floor=None, form=None: (pos.__setitem__("add", {}) or armed.append((px, floor)) or True)
     es2.add_locations(SimpleNamespace(), sd, pos, SimpleNamespace(), 5, Params(es_pt=1.0, vi_ob_add=True), arm)
     assert armed == [(pytest.approx(101.65), pytest.approx(100.9))] and pos["add"] == {"hold_es2": pytest.approx(100.9)}       # the MT (101.8 + 101.5) / 2; cancelled by a body close under the VI bottom
     # not yet validated (the bar after the candle does not close above its open): nothing
     pos2 = dict(fill_i=1, basis=1000.0, n=10, stop=99.0, add=None, t1_done=False, left=10)
     armed2 = []
-    es2.add_locations(SimpleNamespace(), sd_of(rows[:5]), pos2, SimpleNamespace(), 4, Params(es_pt=1.0, vi_ob_add=True), lambda px, floor=None: armed2.append(px) or True)
+    es2.add_locations(SimpleNamespace(), sd_of(rows[:5]), pos2, SimpleNamespace(), 4, Params(es_pt=1.0, vi_ob_add=True), lambda px, floor=None, form=None: armed2.append(px) or True)
     assert armed2 == []
     # a body close under the VI bottom kills it
     dead = sd_of(rows[:5] + [(101.5, 101.6, 100.0, 100.5)])
     pos3 = dict(fill_i=1, basis=1000.0, n=10, stop=99.0, add=None, t1_done=False, left=10)
     armed3 = []
-    es2.add_locations(SimpleNamespace(), dead, pos3, SimpleNamespace(), 5, Params(es_pt=1.0, vi_ob_add=True), lambda px, floor=None: armed3.append(px) or True)
+    es2.add_locations(SimpleNamespace(), dead, pos3, SimpleNamespace(), 5, Params(es_pt=1.0, vi_ob_add=True), lambda px, floor=None, form=None: armed3.append(px) or True)
     assert armed3 == []
 
 
@@ -610,7 +619,7 @@ def test_vi_add_early_arms_above_the_vi_and_fills_only_on_a_down_bar():
     sd = sd_of(rows)                                                                      # VI [100.8, 101.2] at bar 3; bar 4 is a down candle heading to it
     pos = dict(fill_i=0, basis=1000.0, n=10, stop=99.0, add=None, t1_done=False, left=10)
     armed = []
-    arm = lambda px, floor=None: (pos.__setitem__("add", {}) or armed.append((px, floor)) or True)
+    arm = lambda px, floor=None, form=None: (pos.__setitem__("add", {}) or armed.append((px, floor)) or True)
     es2.add_locations(SimpleNamespace(), sd, pos, SimpleNamespace(), 4, Params(es_pt=1.0, vi_add_early_pts=0.3), arm)
     assert armed == [(pytest.approx(101.5), pytest.approx(100.8))] and pos["add"] == {"down_only": True}       # VI top 101.2 + 0.3 pt
     pos2 = dict(fill_i=0, basis=1000.0, n=10, stop=99.0, add=None, t1_done=False, left=10)
@@ -702,7 +711,7 @@ def test_add_on_ifvg_arms_at_the_near_edge_once():
     sd = SimpleNamespace(ifvgs=lambda: [L.Zone("bull", 102.0, 101.4, 5, 4), L.Zone("bull", 99.0, 98.6, 2, 1)], c=np.array([103.0] * 8), l=np.array([102.5] * 8), h=np.array([103.5] * 8), o=np.array([103.0] * 8), vis=lambda k="bull": [])
     pos = dict(fill_i=3, stop=99.5, add=None, t1_done=False)
     armed = []
-    arm = lambda px, floor=None: (pos.__setitem__("add", {}) or armed.append((px, floor)) or True)
+    arm = lambda px, floor=None, form=None: (pos.__setitem__("add", {}) or armed.append((px, floor)) or True)
     p = Params(es_pt=1.0, add_on_ifvg=True)
     es2.add_locations(SimpleNamespace(), sd, pos, SimpleNamespace(), 6, p, arm)
     assert armed == [(102.0, 101.4)]                                                              # (the IFVG at bar 2 formed before the fill: not an add)
@@ -716,7 +725,7 @@ def test_add_locations_far_edge_wick_retouch_and_htf_fvg():
     sd = sd_of(rows)
     pos = dict(fill_i=0, stop=98.5, add=None, t1_done=False, fvg_bottom=99.8, basis=1000.0, n=10)
     armed = []
-    arm = lambda px, floor=None: (pos.__setitem__("add", {}) or armed.append((px, floor)) or True)
+    arm = lambda px, floor=None, form=None: (pos.__setitem__("add", {}) or armed.append((px, floor)) or True)
     es2.add_locations(SimpleNamespace(), sd, pos, SimpleNamespace(), 3, Params(es_pt=1.0, add_far_edge=True), arm)
     assert armed == [(pytest.approx(99.8 + 0.25), pytest.approx(99.8))]                          # the entry FVG's far edge + 1 tick, no body closed under it
     armed.clear(); pos["add"] = None

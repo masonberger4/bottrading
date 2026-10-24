@@ -681,7 +681,10 @@ def adv_breaker_order(ctx, sd, sw, i, p, session, risk_mult, ref_i, ref, real_re
         if lad7 is not None:
             return S._finish_order(ctx, sd, i, p, session, sw, lad7[0][0], sw["ext"] - p.pad, risk_mult, sd.h[sw["ext_i"]:i + 1].max(),
                                    dict(tags, ladder=list(lad7[0]), ladder_fracs=lad7[1]), skip_leg_pd=True, fixed=fixed)
-    return S._finish_order(ctx, sd, i, p, session, sw, mt, sw["ext"] - p.pad, risk_mult,
+    stop_ = sw["ext"] - p.pad
+    if p.bz_higher_array:                              # caption-gap A13-breaker-close-beyond-higher-array (review fix): the advanced breaker's stop beyond L2 goes beyond a higher array too (no zone ladder: the entry IS the A-B MT)
+        stop_ = S._ES2.breaker_tail(ctx, sd, i, p, S._ES2._Z(sw["ext"], mt), mt, stop_, tags)
+    return S._finish_order(ctx, sd, i, p, session, sw, mt, stop_, risk_mult,
                            sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True, fixed=fixed)
 
 
@@ -720,7 +723,10 @@ def cc_breaker_order(ctx, sd, sw, i, p, session, risk_mult, ref):
     if p.breaker_iofed and entry + p.tick < sd.c[i]:
         entry += p.tick                                # caption-gap E2-iofed-breaker-exact-match (043 ~00:16:21): 1 tick inside the level, so an exact match fills
         S._ES2.hit("breaker_iofed")
-    return S._finish_order(ctx, sd, i, p, session, sw, entry, sw["ext"] - p.pad, risk_mult,
+    stop = sw["ext"] - p.pad
+    if p.bz_higher_array or p.in_zone_ladder:          # caption-gap A13-breaker-close-beyond-higher-array / E12-in-zone-larger-second (review fix): the breaker swing is a breaker entry too - zone = new low .. the retest level [our interpretation]
+        stop = S._ES2.breaker_tail(ctx, sd, i, p, S._ES2._Z(sw["ext"], (ref + sw["ext"]) / 2), entry, stop, tags)
+    return S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult,
                            sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True)
 
 

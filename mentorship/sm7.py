@@ -1475,7 +1475,7 @@ def fill_note(state: dict, o: dict) -> None:
 
 def any_re_orders(ctx, p) -> bool:
     r7 = getattr(ctx, "re7", None)
-    if r7 is not None and r7.get("pending") and r7["kind"] in ("trail_win", "reverse"):
+    if r7 is not None and r7.get("pending") and (r7["kind"] in ("trail_win", "reverse") or (r7["kind"] == "win" and p.breakaway_chase)):
         return True
     rc = getattr(ctx, "re_ctx_now", None)
     return bool(rc and rc.get("pending") and p.reentry_trigger == "sibi_return")
@@ -1512,6 +1512,8 @@ def re_order(ctx, sd, i: int, p, session: str, risk_mult: float):
         return None
     kind = r7["kind"]
     hit("re_order_eval")
+    if kind == "win":
+        return chase_order(ctx, sd, i, p, session, risk_mult, r7) if (p.breakaway_chase and r7["side"] == sidename) else None
     if kind == "trail_win":
         if getattr(ctx, "cur_sloppy", "") or (getattr(ctx, "chop", None) is not None and ctx.chop.on):
             return None
@@ -1567,6 +1569,51 @@ def re_order(ctx, sd, i: int, p, session: str, risk_mult: float):
                 r7["armed"] = True
             return o
     return None
+
+
+def chase_pick(sd, i: int, p, r7: dict):
+    """The pure pick of the chase (E5-breakaway-gap-chase): (gap, entry, stop) or None. Reads only bars <= i (gaps complete by i, pivots known by i)."""
+    draw = r7.get("draw")
+    if draw is None:
+        return None
+    fi, ei = int(r7["fill_i"]), int(r7["exit_i"])
+    if float(sd.h[fi:i + 1].max()) >= float(draw) - MIN1:
+        return None
+    g = None
+    for z in sorted((z for z in sd.gaps if ei < z.i - 2 and z.i <= i), key=lambda z: z.i):
+        if any(q.known <= z.i - 1 and q.i < z.i - 2 and sd.c[z.i - 1] > q.price + MIN1 for q in sd.ph):
+            g = z
+            break
+    if g is None or sd.c[g.i + 1:i + 1].min(initial=np.inf) < g.bottom - MIN1:
+        return None
+    entry, stop = float(g.top), float(g.bottom) - p.pad
+    if not (stop < entry < sd.c[i]) or entry - stop < p.min_risk_pts * p.es_pt or float(draw) <= entry:
+        return None
+    return g, entry, stop
+
+
+def chase_order(ctx, sd, i: int, p, session: str, risk_mult: float, r7: dict):
+    """E5-breakaway-gap-chase (049 ~00:05:01), review fix - the standalone chase path: after a closed winner (the X14 win state, the draw still untouched) the FIRST same-direction FVG formed after the exit by a
+    displacement that closed beyond a short-term high (the breakaway gap) is picked DIRECTLY - no fresh sweep / MSS, whatever the normal fvg_pick would choose [our interpretation of "breakaway-tagged":
+    the gap's middle candle closes over a pivot high confirmed before it]. A limit at its near edge (top), the stop under its bottom, the target the original draw; unfilled after breakaway_chase_bars bars
+    it becomes a market order at the next open (strategy.run_day -> es2.convert_pending, which drops it if the stop was pierced). Armed once per win."""
+    if r7.get("armed"):
+        return None
+    if r7.get("draw") is not None and float(sd.h[int(r7["fill_i"]):i + 1].max()) >= float(r7["draw"]) - MIN1:
+        r7["dead"] = True
+        return None
+    pk = chase_pick(sd, i, p, r7)
+    if pk is None:
+        return None
+    g, entry, stop = pk
+    S = _S()
+    _dh("breakaway_chase_direct")
+    o = sm4._order(ctx, sd, i, p, session, risk_mult, "breakaway_chase", entry, stop, level=entry, ext=float(stop + p.pad), ext_i=int(r7["exit_i"]), broke=i, fvg_bottom=float(g.bottom), fvg_ce=float(g.mid),
+                   fixed=[(float(S._exit_px(r7["draw"], "pool", p)), "pool")], lv=("breakaway_chase",), fvg_i=int(g.i), chase_bars=int(p.breakaway_chase_bars), sm7=dict(kind="win_chase"))
+    if o is not None:
+        r7["armed"] = True
+        hit("breakaway_chase_direct")
+    return o
 
 
 # --- the position loop ------------------------------------------------------------------------------------------------------------------------------

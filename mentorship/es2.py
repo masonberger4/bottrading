@@ -129,15 +129,15 @@ def add_locations(ctx, sd, pos, tr, i: int, p, arm) -> None:
         zs = [z for z in sd.ifvgs() if f < z.i <= i and z.i not in used and z.bottom > pos["stop"] and z.top < c[i]]
         if zs:
             z = max(zs, key=lambda z: z.top)
-            used.add(z.i)
             if arm(float(z.top), floor=float(z.bottom)):
+                used.add(z.i)                                            # review fix: spent only when an add was really armed
                 hit("add_on_ifvg")
                 return
     if p.ifvg_ob_add and pos.get("kind") == "ifvg" and not pos.get("es2_ifvg_ob_used"):
         r = _ifvg_ob_overlap(sd, pos, i, p)
         if r is not None:
-            pos["es2_ifvg_ob_used"] = True
             if arm(float(r[0]), floor=float(r[1])):
+                pos["es2_ifvg_ob_used"] = True
                 hit("ifvg_ob_add")
                 return
     if p.add_far_edge and not pos.get("es2_far_used"):
@@ -205,8 +205,8 @@ def _vi_early(sd, pos, i: int, p, arm) -> None:
         if px < sd.c[i] and (best is None or px > best[0]):
             best = (px, float(z.bottom), z.i)
     if best is not None:
-        used.add(best[2])
         if arm(best[0], floor=best[1]):
+            used.add(best[2])                                            # review fix: spent only when an add was really armed
             pos["add"]["down_only"] = True
             hit("vi_add_early")
 
@@ -229,8 +229,8 @@ def _vi_ob_add(sd, pos, tr, i: int, p, arm) -> None:
                 continue
             mt = float((o[k] + c[k]) / 2)
             if c[k + 1:i + 1].max(initial=-np.inf) > o[k] and mt < c[i] and mt > pos["stop"]:
-                used.add(k)
-                if arm(mt, floor=float(z.bottom)):
+                if arm(mt, floor=float(z.bottom), form=float(c[k])):      # review fix: the OB's body bottom (down candle: its close) is the formation price of the add-cutoff test
+                    used.add(k)
                     pos["add"]["hold_es2"] = float(z.bottom)
                     hit("vi_ob_add")
                     return
@@ -300,8 +300,8 @@ def post_partial_add(ctx, sd, pos, tr, i: int, p, arm_sized) -> None:
         px, size, fl = float(S._EN.add_px(g, p)), part, float(g.bottom)
     if not (pos["stop"] < px < sd.c[i]):
         return
-    pos["post_partial_adds"] = pos.get("post_partial_adds", 0) + 1
     if arm_sized(px, int(size), fl):
+        pos["post_partial_adds"] = pos.get("post_partial_adds", 0) + 1          # review fix: the one allowed add is spent only when it was armed
         pos["add"]["post_partial"] = True
         hit("add_after_partial_" + p.add_after_partial)
 
@@ -406,7 +406,19 @@ def ob_swept_entry(sd, ob: dict, p) -> float | None:
 
 def ob_grade_tags(ob: dict) -> dict:
     """definitions 151: the OB's MT and body height, stored with the order for the fill-time grade."""
-    return dict(ob_mt=float(ob["mt"]), ob_body=float(max(ob["body_top"] - ob["body_low"], 1e-9)))
+    return dict(ob_mt=float(ob["mt"]), ob_body=float(max(ob["body_top"] - ob["body_low"], 1e-9)), ob_k=int(ob["k"]))
+
+
+def grade_inputs(sd, st: dict, i: int, fill: float):
+    """definitions 151, review fix (look-ahead): the grade may use only what is known when the limit fills - the fill PRICE and the CLOSED bars after the OB's last candle (through i-1). The fill bar's own low / close
+    are unknown at that moment (its low is only bounded by the fill price), so the retest low = min(fill, the lows of the closed bars since the OB) and the close test reads the closed bars only.
+    Returns (low, close) for ob_grade; with no closed bar since the arming the close is taken at the fill price [our interpretation]. A limit above the MT fills before the MT is touched, so at the fill
+    the grade is mostly A; the deeper retest that follows is graded by grade_update once its bars have closed (tag + add size only)."""
+    a = int(st["arm_i"]) + 1 if st.get("arm_i") is not None else i              # the retest = the closed bars after the arming bar (the bar that left the OB), before the fill bar
+    lows, closes = sd.l[a:i], sd.c[a:i]
+    low = min(float(fill), float(lows.min())) if len(lows) else float(fill)
+    close = float(closes.min()) if len(closes) else float(fill)
+    return low, close
 
 
 def ob_grade(st: dict, low: float, close: float, p) -> str:
@@ -424,10 +436,13 @@ def ob_grade(st: dict, low: float, close: float, p) -> str:
 
 def min_tf_gaps(ctx, sd, sw, i: int, p) -> list | None:
     """definitions 186 (cc12_004 ~5:00: "15 minute minimum, the best is to get it down until five minute"): entry_fvg_min_tf = m > the base bar size: the entry FVGs are those of the m-minute bars built from
-    the base bars (formed after the sweep, complete by bar i, not closed through). None = the switch does not apply (m <= the base bars or not a multiple of them)."""
+    the base bars (formed after the sweep, complete by bar i, not closed through). None = the switch does not apply (m <= the base bars); a non-multiple m raises ValueError (review fix).
+    Scope [our interpretation]: the m-minute bars replace the entry FVG pick (and, via the same list, the FVG/IFVG zone list the pick runs on); VI, OB, breaker and array entries keep the base-bar zones."""
     m = int(p.entry_fvg_min_tf)
-    if m <= ctx.tf or m % ctx.tf:
+    if m <= ctx.tf:
         return None
+    if m % ctx.tf:
+        raise ValueError(f"entry_fvg_min_tf {m} is not a multiple of the base bar size ({ctx.tf} min): the m-minute bars cannot be built")
     from . import sm4
     hit("entry_fvg_min_tf")
     return [z for z in sm4._tf_fvgs(ctx, sd, m) if z.i <= i and z.src > sw["ext_i"] and sm4._alive(sd, z, i)]
@@ -512,7 +527,36 @@ def far_on_breaker_stop(ctx, sd, sw, g, bz, coarse: bool, i: int, p):
     if not lows:
         return None
     hit("far_on_breaker")
+    if coarse and ctx.tf < 5:
+        hit("far_on_breaker_1m")                       # the 5m edges are absolute prices: the same limit rests on the 1m chart (the 5m -> 1m carry)
     return float(g.bottom) + p.tick, min(lows) - p.pad
+
+
+def far_raise_tags(sd, g, bz, i: int, p, stop: float):
+    """models 18, second half (018 ~00:00:09: "once the short-term high breaks the stop moves to the bottom of the breaker, staying below the breaker MT"): the order tag for the post-break stop raise - the
+    nearest confirmed short-term high above the gap (known by bar i), the new stop level = the overlapped breaker's bottom - pad, kept under its MT. None = no breaker overlap / no short-term high."""
+    if bz is None or not g.overlaps(bz):
+        return None
+    hs = [float(q.price) for q in sd.ph if q.known <= i and q.price > float(g.top)]
+    if not hs:
+        return None
+    new = min(float(bz.bottom) - p.pad, float(bz.mt) - p.tick)
+    if not new > stop:
+        return None
+    hit("far_raise_tag")
+    return dict(ph=min(hs), level=float(new))
+
+
+def far_raise_update(sd, pos, i: int, p) -> None:
+    """Per bar (position hook): the short-term high of the far_raise tag broke by a body close (bar i closed) -> the stop rises to the breaker bottom (never lowered, kept under the close)."""
+    S = _S()
+    st = (pos.get("es2") or {}).get("far_raise")
+    if not st or pos.get("far_raised") or i <= pos["fill_i"]:
+        return
+    if sd.c[i] > st["ph"] + MIN1 and pos["stop"] < st["level"] < sd.c[i]:
+        pos["far_raised"] = True
+        S._MG.raise_stop(pos, float(st["level"]))
+        hit("far_on_breaker_raise")
 
 
 def fri_shallow_pick(ctx, sd, sw, gaps: list, i: int, p):
@@ -528,6 +572,8 @@ def fri_shallow_pick(ctx, sd, sw, gaps: list, i: int, p):
     if leg <= 0 or not 0 < draw - float(sd.c[i]) < leg:
         return None
     g = min(gaps, key=lambda z: z.i, default=None)
+    if g is not None and not g.top < sd.c[i]:
+        return None                                                                      # review fix: the first gap must lie under the market (a buy limit at its near edge); else the normal pick stands
     if g is not None:
         hit("fri_shallow")
     return g
@@ -539,21 +585,36 @@ def convert_pending(o: dict, sd, i: int) -> dict:
     order: it fills at bar i's open."""
     if o.get("market") or i - 1 <= o["i"]:
         return o
+    kind = None
     if o.get("mot") and sd.l[i - 1] <= o["entry"] + 1e-12:
-        hit("mot_market")
-        return dict(o, market=True)
-    if o.get("chase_bars") is not None and i - o["i"] > o["chase_bars"]:
-        hit("chase_market")
-        return dict(o, market=True)
-    return o
+        kind = "mot_market"
+    elif o.get("chase_bars") is not None and i - o["i"] > o["chase_bars"]:
+        kind = "chase_market"
+    if kind is None:
+        return o
+    st = o.get("stop")
+    if st is not None:
+        # review fix: a market order is never better than the resting limit it replaces. A bar since the arming that traded to the stop (the touch bar included), or an open at / under the stop, kills the
+        # order - the fill would sit under the stop and the same-bar stop exit would book a phantom gain; an open farther over the entry than the planned risk is skipped too [our interpretation: risk <= 2x]
+        if float(sd.l[o["i"] + 1:i].min()) <= float(st) + 1e-12 or float(sd.o[i]) <= float(st) + 1e-12:
+            hit("market_dead_stop")
+            return dict(o, es2_dead=True)
+        if float(sd.o[i]) - float(o["entry"]) > float(o["entry"]) - float(st) + 1e-12:
+            hit("market_dead_gap")
+            return dict(o, es2_dead=True)
+    hit(kind)
+    return dict(o, market=True)
 
 
-def wick_redelivery(sd, i: int) -> bool:
-    """models 30 (026 ~01:57:39: "it doesn't need to close with an up candle if it was a recent down closed candle"): the fill bar trades across the full range of the most recent opposite-colour candle (side
-    space: down through the low of the last up-close candle) - the redelivery counts whatever the colour of the fill bar."""
+def wick_redelivery(sd, i: int, fill: float | None = None) -> bool:
+    """models 30 (026 ~01:57:39: "it doesn't need to close with an up candle if it was a recent down closed candle"): price trades across the full range of the most recent opposite-colour candle (side
+    space: down through the low of the last up-close candle) - the redelivery counts whatever the colour of the fill bar. Review fix (look-ahead): judged on what is known at the fill - the CLOSED bars k+1 .. i-1
+    after that candle, and the fill price itself (`fill`: min(limit, open); the fill bar's own later low is not known) [our interpretation]."""
     for k in range(i - 1, max(-1, i - 60), -1):
         if sd.c[k] > sd.o[k]:
-            return bool(sd.l[i] <= sd.l[k] + MIN1)
+            if i - 1 > k and float(sd.l[k + 1:i].min()) <= float(sd.l[k]) + MIN1:
+                return True
+            return bool(fill is not None and float(fill) <= float(sd.l[k]) + MIN1)
     return False
 
 
@@ -589,6 +650,27 @@ def wick_ce_of(sd, g, p):
     return (bb + float(sd.l[k])) / 2, float(sd.l[k])
 
 
+def intraday_obs(ctx, sd, i: int, back: int = 120) -> list:
+    """Intraday bullish order blocks known by bar i (side space), (top, bottom) of the body [our interpretation]: a down-close candle k (one of the last `back` bars) whose high a LATER closed bar closed above
+    within 5 bars (the displacement that confirms it), with no body close under its low since. Only bars <= i are read."""
+    out = []
+    if not hasattr(sd, "o"):
+        return out
+    c, o, h, l = sd.c, sd.o, sd.h, sd.l
+    st = max(int(getattr(ctx, "start", 0) or 0), i - back)
+    for k in range(st, i - 1):
+        if not c[k] < o[k]:
+            continue
+        up = np.flatnonzero(c[k + 1:min(i, k + 5) + 1] > h[k])
+        if not len(up):
+            continue
+        j = k + 1 + int(up[0])
+        if c[j + 1:i + 1].min(initial=np.inf) < l[k] - MIN1:
+            continue
+        out.append((float(o[k]), float(c[k])))
+    return out
+
+
 def higher_array(ctx, sd, bz, i: int, p):
     """management 105 (081 ~00:14:11: "give it permission ... to trade just outside"): a same-polarity OB / FVG within bz_higher_pts beyond the breaker's far edge (side space: its top within that distance
     under the breaker bottom): its far edge (bottom) is the stop level / the abort level of the breaker trade. Intraday FVGs and the Confluence HTF arrays count; None = none."""
@@ -599,6 +681,9 @@ def higher_array(ctx, sd, bz, i: int, p):
         if g.i <= i and lo - MIN1 <= g.top <= hi and sd.c[g.i + 1:i + 1].min(initial=np.inf) >= g.bottom - MIN1:
             if best is None or g.top > best[0]:
                 best = (float(g.top), float(g.bottom))
+    for top, bot in intraday_obs(ctx, sd, i):                                # review fix: the intraday order blocks count too
+        if lo - MIN1 <= top <= hi and (best is None or top > best[0]):
+            best = (top, bot)
     if getattr(ctx, "conf", None) is not None:
         kb = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
         for top, bot, _ in S._ts_arrays(ctx, sd, i, kb):
@@ -608,6 +693,30 @@ def higher_array(ctx, sd, bz, i: int, p):
         return None
     hit("bz_higher_array")
     return best[1]
+
+
+class _Z:
+    """A minimal breaker-like zone (bottom / mt) for the breaker order paths that have no levels.Zone."""
+    def __init__(self, bottom: float, mt: float):
+        self.bottom, self.mt = float(bottom), float(mt)
+
+
+def breaker_tail(ctx, sd, i: int, p, zone, entry: float, stop: float, tags: dict) -> float:
+    """management 105 (A13-breaker-close-beyond-higher-array) and stops 4 (E12-in-zone-larger-second) for EVERY breaker entry path (breaker order, unicorn, cc breaker swing, advanced breaker; review fix):
+    a higher same-polarity array beyond the zone's far edge moves the stop (and the abort level, tag bz_higher) beyond it; a zone ladder rests 1/3 at the near edge and 2/3 at the zone MT. `zone` has
+    .bottom and .mt. Returns the (possibly lowered) stop; the order tags are updated in place."""
+    S = _S()
+    if p.bz_higher_array:
+        hf_ = higher_array(ctx, sd, zone, i, p)
+        if hf_ is not None:
+            stop = min(stop, hf_ - p.pad)
+            lvx_ = dict(tags.get("lvx") or {})
+            lvx_["bz_higher"] = (float(hf_), False)
+            tags.update(lvx=lvx_, bz_mt=None, fvg_bottom=float(hf_))
+    if p.in_zone_ladder and not tags.get("ladder") and entry > zone.mt + p.tick and zone.mt > stop:
+        tags.update(ladder=[entry, float(zone.mt)], ladder_fracs=(1.0 / 3.0, 2.0 / 3.0), zone_ladder=True)
+        hit("in_zone_ladder")
+    return stop
 
 
 def gap_risk_adjust(ctx, sd, sw, i: int, p, entry: float, stop: float):
@@ -672,13 +781,35 @@ def rescale(pos, tr, fill: float, mult: float, p) -> int:
     return q
 
 
+GRADE_RANK = {"A": 0, "B": 1, "X": 2}
+
+
+def grade_update(sd, pos, tr, i: int, p) -> None:
+    """definitions 151, after the fill (review fix, look-ahead): the retest depth of the bars from the fill bar through the CLOSED bar i regrades the OB (the worst grade stands). A worse grade sets pos["es2_add_mult"]
+    (the multiplier of the new grade, A / B only): it applies to LATER ADDS only - the fill size was fixed with the information known at the fill. The trade's lv_tags keep the FILL-time grade (a tag
+    rewritten by later bars would differ between a full run and a run cut at the fill: the regrade is a position state and a counter, not a record on the trade)."""
+    st = pos.get("es2") or {}
+    cur = pos.get("es2_grade")
+    if st.get("ob_mt") is None or cur is None or p.ob_grade_mult == (1.0, 1.0) or i <= pos["fill_i"]:
+        return
+    f = pos["fill_i"]
+    g = ob_grade(st, float(sd.l[f:i + 1].min()), float(sd.c[f:i + 1].min()), p)
+    if GRADE_RANK[g] <= GRADE_RANK[cur]:
+        return
+    pos["es2_grade"] = g
+    pos["es2_add_mult"] = float(p.ob_grade_mult[0 if g == "A" else 1]) if g in ("A", "B") else 1.0
+    hit("ob_grade_regrade_" + g)
+
+
 def on_fill(ctx, sd, pos, tr, o: dict, i: int, p, fill: float) -> None:
     """Fill-time hooks of the chunk's orders (pos["es2"]): the OB grade (151), the FVG-then-OB add (38), the zone-ladder add base (4)."""
     S = _S()
     st = dict(o.get("es2") or {})
+    st["arm_i"] = int(o["i"])
     pos["es2"] = st
     if st.get("ob_mt") is not None and p.ob_grade_mult != (1.0, 1.0):
-        gr = ob_grade(st, float(sd.l[i]), float(sd.c[i]), p)
+        gr = ob_grade(st, *grade_inputs(sd, st, i, fill), p)
+        pos["es2_grade"] = gr
         tr.lv_tags = "|".join(x for x in (tr.lv_tags, "ob_grade_" + gr) if x)
         hit("ob_grade_" + gr)
         if gr in ("A", "B"):

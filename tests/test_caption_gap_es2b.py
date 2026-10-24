@@ -85,7 +85,8 @@ def test_look_ahead_synthetic(case):
 def test_look_ahead_gappy_synthetic(seed):
     """Books WITH event gaps (the continuous ES frame has none) and the partner index: every switch of the chunk on at once, cuts at entry AND exit times."""
     x, y = _gappy(seed)
-    p = Params(**{**SYN, **SYN_BASE, **ALL_ON, "ob_entry": "post_mss"})
+    # (mot_next_open=False: the market-at-the-next-open conversion drops the book's only trade - its stop was pierced by the touch bar, review fix; that conversion has its own ES case "mot_dead")
+    p = Params(**{**SYN, **SYN_BASE, **ALL_ON, "ob_entry": "post_mss", "mot_next_open": False})
     full, added = _la(x, 5, "RW", p, COLS, every=2, partner=y)
     assert len(full) >= 1, full
     _HITS.setdefault("gappy%d" % seed, set()).update(added)
@@ -104,7 +105,8 @@ ADDS_A = dict(SMP, add_after_partial="inv_fvg", vi_ob_add=True, vi_add_early_pts
 ES_CASES = {
     # name: (window, base, switches, the sm2.HITS counters the full run must have bumped)
     "obpre_a": (W0, ES_OBPRE, OBPRE_ALL, ("ob_session_ok", "ob_session_skip", "ob_mt_if_swept", "ob_arm_intrabar", "ob_grade_X", "ob_mt_dead")),
-    "obpre_b": (W2, ES_OBPRE, OBPRE_ALL, ("ob_grade_A", "ob_grade_B")),
+    "obpre_b": (W2, ES_OBPRE, OBPRE_ALL, ("ob_grade_A", "ob_grade_regrade_X")),          # (the fill is graded with fill-time information; the retest after the fill regrades it)
+    "mot_dead": (W1, ES_NB, dict(SMP, entry_order="market_on_touch"), ("mot_market", "market_dead_stop")),          # a touched order whose stop was pierced (or gapped through) is dropped, never filled under it
     "ob_arr_session": (W1, ES_NB, dict(entry_arrays=("ob",), ob_session_filter=True, **SMP), ("ob_session_ok", "ob_session_skip")),
     "ob_arr_grade": (W0, ES_NB, dict(entry_arrays=("ob",), ob_grade_mult=(0.5, 1.0), **SMP), ("ob_grade_A",)),
     "ob_arr_swept": (W0, ES_NB, dict(entry_arrays=("ob",), ob_mt_if_swept=True, **SMP), ("ob_mt_if_swept",)),
@@ -121,7 +123,7 @@ ES_CASES = {
     "breaker_higher": (W1, ES_NB, dict(SMP, breaker_entry="fallback", bz_higher_array=True, bz_higher_pts=10.0), ("bz_higher_array",)),
     "breaker_zone": (W1, ES_NB, dict(SMP, breaker_entry="fallback", in_zone_ladder=True), ("in_zone_ladder",)),
     "lock_a": (W1, ES_LOCK, dict(close_proximity=True, close_prox_windows=((570, 720),), vi_first=True), ("close_proximity", "vi_first")),
-    "lock_b": (W9, ES_LOCK, dict(fri_shallow=True), ("fri_shallow",)),
+    "lock_b": (W5, ES_LOCK, dict(fri_shallow=True), ("fri_shallow",)),
     "adds_a": (W0, ES_NB, dict(SMP, add_sizes="equal_or_less", add_far_edge=True, add_htf_fvg_edge=True), ("add_sizes", "add_far_edge", "add_htf_fvg_edge")),
     "adds_a2": (W0, ES_NB, dict(SMP, add_wick_retouch=True), ("add_wick_retouch",)),
     "adds_b": (W2, ES_NB, dict(SMP, add_ladder="067", add_on_ifvg=True, add_stop_under_array=True, ifvg_entries=True), ("add_sizes", "add_on_ifvg", "add_stop_under_array")),
@@ -132,7 +134,7 @@ ES_CASES = {
     "chase": (W3, ES_NB, dict(SMP, breakaway_chase=True), ("reentry_win_eval",)),
     "wide": (W0, ES_B, dict(SMP, max_stop_pts=6.0, stop_mode="ce2", evolve_fvg=True), ("stop_too_wide",)),
 }
-ES1M = Path("data/mentorship/ES_1min_db.csv").exists()
+ES1M = (B.DATA / "ES_1min_db.csv").exists()          # mirrors the loader (backtest.load reads backtest.DATA), not a second hard-coded path
 ES_CASES_1M = {
     # the 1m book: the E4 wick redelivery (a fill bar that gaps under the limit) is only reached on 1m bars
     "e4_1m": (("2023-03-06", "2023-03-18"), ES_NB, dict(SMP, retrace_candle="intrabar", e4_wick_ok=True), ("e4_wick_ok",)),
@@ -182,11 +184,12 @@ SWITCH_HIT = {
 }
 # switches whose OUTCOME path no data window reaches (their evaluation runs in the cases above or the synthetic books; the outcome code is unit-tested in test_caption_gap_es2a.py)
 EXCEPTIONS = {
-    "e4_color": "an alias of retrace_candle='intrabar' (built): covered by test_e4_wick_redelivery_counts",
-    "rb_ctx_mult": "no rejection-block sweep (rb_pools) with a trade in 14 ES windows (5m and 1m) - the gate runs in the synthetic books; test_rb_ctx_mult_grades_a_rejection_block_entry_lower",
-    "vi_ob_add": "an intact VI formed after the fill with a down-close candle trading into it before T1 is not reached in 14 ES windows (small VIs are closed through at once); test_vi_ob_add_through_the_engine",
-    "vi_add_early_pts": "same (a down candle heading to an intact VI above the stop); test_vi_add_early_through_the_engine",
-    "add_day_mode": "a clean trend day (no FOMC / CPI / jobs, away from the open without a retrace) with an open position before T1 is not reached in 14 ES windows; test_trend_day_update_classifier / test_trend_day_waives_the_add_cuts_through_the_engine",
+    # no ES data window reaches these outcome paths; each is run in a FORCED hand-made book of test_caption_gap_es2c.py (a full run vs runs truncated at every bar, with the executed-path counter asserted)
+    "e4_color": "surrogate of the bar colour (retrace_candle='intrabar'): es2c test_look_ahead_forced_e4_colour_and_market_on_touch (counter retrace_intrabar_ok)",
+    "rb_ctx_mult": "no rejection-block sweep (rb_pools) with a trade in 14 ES windows: es2c test_look_ahead_forced_rb_ctx_mult (counter rb_ctx_lower)",
+    "vi_ob_add": "an intact VI formed after the fill with a down-close candle trading into it is not reached in 14 ES windows: es2c test_look_ahead_forced_vi_ob_add (counter vi_ob_add)",
+    "vi_add_early_pts": "same, a down candle heading to an intact VI: es2c test_look_ahead_forced_vi_add_early (counter vi_add_early)",
+    "add_day_mode": "a clean trend day with an open position before T1 is not reached in 14 ES windows: es2c test_look_ahead_forced_trend_day_adds_real_classifier (the real classifier, counters trend_day_adds / trend_day_far)",
 }
 EXTRA_VALUES = {("entry", "auto2"): "auto2_ce", ("entry", "far_on_breaker"): "far_on_breaker", ("entry_order", "market_on_touch"): "mot_market", ("add_ladder", "067"): "add_sizes",
                 ("ifvg_stop", "far"): "ifvg_stop_far", ("ob_arm", "intrabar_htf"): "ob_arm_intrabar"}
@@ -210,5 +213,9 @@ def test_every_switch_of_the_chunk_has_an_executed_path_case():
         if s_ not in SWITCH_HIT or not _ran_by(s_, SWITCH_HIT[s_]):
             missing.append(s_)
     assert not missing, missing
+    import test_caption_gap_es2c as c_
+    for name in ("test_look_ahead_forced_e4_colour_and_market_on_touch", "test_look_ahead_forced_rb_ctx_mult", "test_look_ahead_forced_vi_ob_add", "test_look_ahead_forced_vi_add_early",
+                 "test_look_ahead_forced_trend_day_adds_real_classifier"):
+        assert callable(getattr(c_, name)), name                                                   # the forced-path books named in EXCEPTIONS exist
     for (field, value), hit_ in EXTRA_VALUES.items():
         assert any(field in kw and kw[field] == value and hit_ in need for kw, need in _RUN_KW.values()), (field, value)

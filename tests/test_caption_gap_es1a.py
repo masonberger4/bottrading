@@ -430,7 +430,7 @@ def test_add_prefers_the_ob_that_traded_into_a_vi():
     pos = dict(fill_i=0)
     p = Params(es_pt=1.0)
     r = es1.ob_in_vi_add(sd, pos, 4, p)
-    assert r == (pytest.approx(100.6), pytest.approx(99.8))                                                   # the MT of the down-close OB (100.9 -> 100.3) that traded into the VI; the VI bottom = the floor
+    assert r[:2] == (pytest.approx(100.6), pytest.approx(99.8)) and r[2] == pytest.approx(100.3)                                                   # the MT of the down-close OB (100.9 -> 100.3) that traded into the VI; the VI bottom = the floor
     assert es1.ob_in_vi_add(sd, pos, 3, p) is None                                                            # the OB candle is bar 3: it needs a later bar to be judged
     rows2 = rows[:3] + [(100.9, 101.0, 99.7, 100.3)] + rows[4:]                                               # the OB pierced the VI bottom: not an add
     assert es1.ob_in_vi_add(sd_of(rows2), pos, 4, p) is None
