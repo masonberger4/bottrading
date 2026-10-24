@@ -61,8 +61,10 @@ OTE_B = dict(ote="limit", ote_nested=True, ote_parent_third=True)
 FVG_A = dict(fvg_edge="remaining", ob_ce_confluence=True, ob_ce_tol_pts=2.0, mit_iofed_edge=True, entry="ce")
 FVG_B = dict(entry="iofed", iofed_strict=True, fvg_skip_below_pool_short=True, fvg_pool_gap_pts=2.0, vi_stop=True, vi_tol="ce", vi_arrays=True)
 FVG_C = dict(gap_tf_mode="widen_up", fvg_targets=True, breaker_entry="fallback", breaker_refine=True, add_pref_ob_in_vi=True, adds=(0.5, 0.33))
-HTF_A = dict(htf_entry_arrays=(15, 60), gap_tf_mode="refine_down", far_edge_reach=True, ob_wick_ltf_entry=True, htf_depth_mult=(1.0, 1.0, 0.5))
+HTF_A = dict(htf_ob_anchor="open", htf_entry_arrays=(15, 60), gap_tf_mode="refine_down", far_edge_reach=True, ob_wick_ltf_entry=True, htf_depth_mult=(1.0, 1.0, 0.5))
 HTF_B = dict(htf_ob_anchor="open", htf_targets=("15m", "1h", "4h", "D"), htf_depth_mult=(1.0, 1.0, 0.5), entry_arrays=("broken_wick_ce",))
+OUT = dict(prop_entry=True, prop_mt_exit=True, prop_mt_test="wick", prop_fail_flip=True, prop_deep_mult=0.5, prop_deep_cut=0.3, ob_vi_overshoot=True, ob_entry="both", cisd_ob_entries=True,
+           cisd_ob_px="open", cisd_adds=True, adds=(0.5, 0.33), add_pref_ob_in_vi=True, ob_wick_ltf_entry=True, htf_entry_arrays=(15, 60))
 PROP = dict(prop_entry=True, prop_mt_exit=True, prop_mt_test="wick", prop_fail_flip=True, prop_deep_mult=0.5, prop_deep_cut=0.3)
 ORIGIN = dict(no_origin_retest=True, turtle_soup="2023", eq_tol_pts=4.0)
 ORIGIN_CC = dict(no_origin_retest=True, turtle_soup="cc_limit", eq_tol_pts=4.0, htf_bias="react")
@@ -98,6 +100,12 @@ ES_CASES = {
     "htf_a2": (W4, 5, ES_NB, HTF_A, ("htf_depth_far",), "ES"),
     "htf_b": (W1, 5, ES_B, HTF_B, ("broken_wick_ce", "htf_depth_far"), "ES"),
     "prop": (W4, 5, ES_NB, PROP, ("prop_depth_eval",), "ES"),
+    # review fix: windows whose OUTCOME paths run (found by scanning 3-week ES windows): the PB-wick exit + the flip + the failed block as an array, the deep-PB skip / size cut, the VI-overshoot stop, the OB-in-VI add
+    "prop_flip": (("2022-05-16", "2022-06-06"), 5, ES_NB, PROP, ("prop_wick_exit", "prop_fail_flip", "prop_fail_array"), "ES"),
+    "prop_flip2": (("2024-04-08", "2024-04-29"), 5, ES_NB, PROP, ("prop_wick_exit", "prop_fail_flip"), "ES"),
+    "prop_deep": (("2022-02-21", "2022-03-14"), 5, ES_NB, PROP, ("prop_deep",), "ES"),
+    "out_overshoot": (("2024-11-25", "2024-12-16"), 5, ES_NB, OUT, ("ob_vi_overshoot", "cisd_open_wait"), "ES"),
+    "out_add_vi": (W6, 5, ES_NB, OUT, ("add_ob_in_vi",), "ES"),
     "origin": (W6, 5, ES_B, ORIGIN, ("no_origin_drop",), "ES"),
     "origin_cc": (W4, 5, ES_B, ORIGIN_CC, ("no_origin_level",), "ES"),
     "scan": (W7, 5, ES_NB, SCAN, ("scan_tfs", "fvg_near_pool"), "ES"),
@@ -106,7 +114,7 @@ ES_CASES = {
 }
 SYN_CASES = {
     # name: (seed, switches, the HITS counters the full run must have bumped)
-    "all_a": (3, {**ALL_ON, "ob_entry": "post_mss"}, ()),
+    "all_a": (4, {**ALL_ON, "ob_entry": "post_mss"}, ()),
     "all_b": (5, {**ALL_ON, "ob_entry": "post_mss", "leg_pd": 0.0}, ()),
     "ob": (3, {**OB_PRE, "ob_entry": "both", "ob_entry_px": "mt", "ob_mt_range": "range", "ob_entries": "prefer"}, ()),
 }
@@ -123,7 +131,7 @@ def test_look_ahead_synthetic(case):
     _HITS.setdefault("syn_" + case, set()).update(added)
 
 
-@pytest.mark.parametrize("seed", [3, 5])
+@pytest.mark.parametrize("seed", [4, 5])
 def test_look_ahead_gappy_synthetic(seed):
     """Books WITH event gaps (the continuous ES frame has none) and the partner index: every switch of the chunk on at once, cuts at entry AND exit times."""
     x, y = _gappy(seed)
@@ -163,17 +171,16 @@ def test_ob_reach_changes_the_real_table(window):
 # the sm2.HITS counter that proves a switch's code path RAN (an outcome counter where a window reaches it, else the counter of the evaluation that precedes the outcome - the outcome is then unit-tested)
 SWITCH_HIT = {
     "no_origin_retest": "no_origin_drop", "entry_pd_frame": "pd_frame_prev_day", "ob_need_fvg": "ob_potential", "cisd_ob_px": "cisd_open", "cisd_adds": "cisd_add", "mt_break": "mt_warn_traded",
-    "breaker_refine": "breaker_refine", "iofed_strict": "iofed_ce_exit", "add_pref_ob_in_vi": "add_ob_vi_eval", "gap_tf_mode": "gap_widen_up", "vi_tol": "vi_tol", "prop_mt_test": "prop_depth_eval",
-    "prop_fail_flip": "prop_depth_eval", "prop_deep_mult": "prop_depth_eval", "mit_iofed_edge": "mit_iofed_edge", "leg_pd_anchor": "pd_target", "far_edge_reach": "far_edge_protected",
+    "breaker_refine": "breaker_refine", "iofed_strict": "iofed_ce_exit", "add_pref_ob_in_vi": "add_ob_in_vi", "gap_tf_mode": "gap_widen_up", "vi_tol": "vi_tol", "prop_mt_test": "prop_wick_exit",
+    "prop_fail_flip": "prop_fail_flip", "prop_deep_mult": "prop_deep", "mit_iofed_edge": "mit_iofed_edge", "leg_pd_anchor": "pd_target", "far_edge_reach": "far_edge_protected",
     "fvg_edge": "fvg_remaining", "ob_ce_confluence": "ob_ce_confluence", "leg_fib": "pd_body", "htf_depth_mult": "htf_depth_near", "ob_need_narrative": "ob_narrative", "ob_wick_ltf_entry": "ob_wick_eval",
     "htf_ob_anchor": "htf_ob_open", "scan_tfs": "scan_tfs", "two_min_ce": "two_min_ce", "fvg_skip_below_pool_short": "fvg_near_pool", "mtf_hold": "mtf_hold_eval", "ote_gate_4th": "ote_gate_open",
-    "ote_reanchor": "ote_reanchor", "ote_nested": "ote_child", "ote_parent_third": "ote_third_eval", "ob_mt_range": "ob_mt_range", "ob_vi_overshoot": "ob_potential", "ob_reach": "ob_reach_body",
+    "ote_reanchor": "ote_reanchor", "ote_nested": "ote_child", "ote_parent_third": "ote_third_eval", "ob_mt_range": "ob_mt_range", "ob_vi_overshoot": "ob_vi_overshoot", "ob_reach": "ob_reach_body",
 }
-# switches whose OUTCOME path (the wick entry found, the strict-IOFED swing confirmed, the deep PB skipped, the PB-wick exit / flip, the OB-in-VI add armed, the VI overshoot stop) no data window reaches: the
-# evaluation counters run in the full-vs-truncated cases; the outcome code is unit-tested in test_caption_gap_es1a.py (test_vi_far_edge_and_overshoot_engine, test_prop_depth_and_wick_exit_and_flip,
-# test_add_prefers_the_ob_that_traded_into_a_vi, test_htf_ob_anchor_and_the_ltf_wick_entry, test_iofed_strict_arm_gate_and_ce_stop)
-OUTCOME_UNREACHED = {"ob_vi_overshoot": "ob_potential", "ob_wick_ltf_entry": "ob_wick_eval", "add_pref_ob_in_vi": "add_ob_vi_eval", "prop_mt_test": "prop_depth_eval", "prop_fail_flip": "prop_depth_eval",
-                     "prop_deep_mult": "prop_depth_eval"}
+# switches whose OUTCOME path no data window reaches: ob_wick_ltf_entry (a stubby HTF-OB wick holding an LTF FVG: 0 of ~45 scanned 3-week ES windows) - the evaluation counter runs in the full-vs-truncated cases and
+# the outcome code is unit-tested in test_caption_gap_es1a.py (test_htf_ob_anchor_and_the_ltf_wick_entry). Every other outcome (PB-wick exit + flip + failed-block array, deep-PB cut, VI-overshoot stop, OB-in-VI add,
+# strict-IOFED swing) has an ES window above that executes it.
+OUTCOME_UNREACHED = {"ob_wick_ltf_entry": "ob_wick_eval"}
 EXTRA_VALUES = {("entry_arrays", "broken_wick_ce"): "broken_wick_ce", ("entry_pd_frame", "prev_ny"): "pd_frame_prev_ny", ("entry_pd_frame", "any"): "pd_frame_any", ("leg_pd_anchor", "retrace_range"): "pd_retrace_range",
                 ("gap_tf_mode", "refine_down"): "gap_refine_down", ("mt_mode", "sensitive"): "ob_potential", ("htf_depth_mult", (1.0, 1.0, 0.5)): "htf_depth_far"}
 # (ob_reach also reads the htf.table reaction column - no counter there: test_ob_reach_body_in_the_htf_table / test_ob_reach_changes_the_real_table; the executed path of the run is the premise sweep in sm3)
@@ -185,7 +192,7 @@ for _c, (_s, _kw, _need) in SYN_CASES.items():
     _RUN_KW["syn_" + _c] = (_kw, _need)
 
 
-DEFAULT_ON = {"htf_ob_anchor"}                       # the switch whose DEFAULT is the new rule ("open", the A12 2023 level; "extreme" is the earlier build): every run executes it
+DEFAULT_ON = set()                                   # (htf_ob_anchor defaults to the built "extreme" until the owner confirms "open": it is a switch value now)
 
 
 def _on(kw, switch):

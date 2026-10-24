@@ -60,7 +60,9 @@ def mt_of(p, sd, ob) -> float:
 
 
 def dict_mt(p, sd, ob: dict, default: float) -> float:
-    """The same for an OB dict of strategy._ob_at_low (j = the first candle of the run, k = the last). The built "range" value is left as it was for this path (the dict MT was always the body mean)."""
+    """The same for an OB dict of strategy._ob_at_low (j = the first candle of the run, k = the last); review fix: "range" is the full range mid here too (D4 full source tally)."""
+    if p.mt_mode == "range":
+        return float((ob["hi"] + ob["lo"]) / 2)
     if p.mt_mode == "sensitive":
         return float((ob["hi"] + sd.o[ob["j"]]) / 2)
     if p.mt_mode == "body_single_range_blended":
@@ -106,7 +108,10 @@ def htf_contains(ctx, sd, sw, i: int, lo: float, hi: float, p) -> bool:
     S = _S()
     kq = ctx.idx[sw["ext_i"]] + pd.Timedelta(minutes=ctx.tf)
     tol = _tol(p)
-    return any(bot - tol <= lo and hi <= top + tol for top, bot, _ in S._ts_arrays(ctx, sd, i, kq))
+    arrs = S._ts_arrays(ctx, sd, i, kq)
+    if not arrs:
+        hit("ob_htf_array_missing")                 # review fix: no HTF array source at all (no Confluence table, no 15m / 60m zones) - every narrative OB fails here, logged
+    return any(bot - tol <= lo and hi <= top + tol for top, bot, _ in arrs)
 
 
 def narrative_ok(ctx, sd, sw, ob: dict, i: int, p) -> bool:
@@ -157,7 +162,7 @@ def ob_ce_entry(ctx, sd, sw, g, top: float, bottom: float, i: int, p) -> float |
         return None
     ce = (top + bottom) / 2
     tol = p.ob_ce_tol_pts * p.es_pt
-    cands = [z for z in sd.zones_tf(ctx.idx, ctx.tf, 15) if z.mt == z.mt and z.i <= i and abs(z.top - ce) <= tol + MIN1]
+    cands = [z for z in sd.zones_tf(ctx.idx, ctx.tf, 15) if z.mt == z.mt and z.i <= i and abs(z.top - ce) <= tol + MIN1]      # [our interpretation]: any 15m OB known by bar i whose high is within the tolerance of the CE (no same-move link: the spec ties it only to the CE of the entry FVG)
     if not cands:
         return None
     z = min(cands, key=lambda z: abs(z.top - ce))
@@ -618,6 +623,8 @@ def ob_in_vi_add(sd, pos, i: int, p):
     whose low traded into a VI - touch allowed, the VI's bottom not pierced - is the add, at the OB's MT; the VI bottom is the floor / stop reference. Returns (mt, floor) or None."""
     f = pos["fill_i"]
     best = None
+    if pos.get("ext_i") is not None and not pos["ext_i"] < f:
+        return None                                  # review fix: the sell-side sweep (the swept extreme) must precede the first fill
     hit("add_ob_vi_eval")
     for z in sd.vis("bull"):
         if z.i > i or z.i <= f - 1:
@@ -661,19 +668,27 @@ def cisd_add(sd, pos, tr, i: int, p, arm) -> None:
     for j, k in cisd_runs(sd, pos["fill_i"], i):
         if j in used:
             continue
+        wait = st.setdefault("cisd_wait", set())
         ref = float(sd.o[j])
         lo = float(sd.l[j:k + 1].min())
         if sd.c[k + 1:i + 1].min(initial=np.inf) < lo - MIN1:
             used.add(j)
             continue
         hit_bars = np.flatnonzero(sd.h[k + 1:i + 1] >= ref + p.tick - MIN1)
-        if not len(hit_bars) or k + 1 + int(hit_bars[0]) != i:
+        if not len(hit_bars):
+            continue
+        first_ = k + 1 + int(hit_bars[0])
+        if first_ != i and not (first_ < i and j in wait):
+            continue
+        if ref >= sd.c[i]:
+            wait.add(j)                              # review fix: the CISD bar closed at / under the run's open - the add limit would sit above the market; the run's CISD is kept until a bar closes above the open
+            hit("cisd_add_wait")
             continue
         used.add(j)
-        if ref < sd.c[i]:
-            hit("cisd_add")
-            arm(ref, lo)
-            return
+        wait.discard(j)
+        hit("cisd_add")
+        arm(ref, lo)
+        return
 
 
 def htf_depth_tier(ctx, sd, sw, i: int, p) -> str | None:
@@ -778,15 +793,45 @@ def manage(ctx, sd, pos, tr, i: int, ts, p) -> None:
             hit("iofed_swing_ok")
 
 
+def prop_zone_real(sd, sw, g_top: float, i: int, p):
+    """The propulsion block under the entry gap (the one entries.prop_block picks) as a REAL-price (low, high), or None. Used by prop_fail_flip to remember the block that failed."""
+    pz = [z for z in sd.propulsions() if z.i <= i and z.i > sw["ext_i"] and z.bottom <= g_top and z.top >= sw["ext"]]
+    if not pz:
+        return None
+    z = max(pz, key=lambda z: z.top)
+    if p.prop_zone == "range":
+        a, b = float(z.bottom), float(z.top)
+    else:
+        a, b = float(min(sd.o[z.src], sd.c[z.src])), float(max(sd.o[z.src], sd.c[z.src]))
+    ra, rb = sd.x(a), sd.x(b)
+    return float(min(ra, rb)), float(max(ra, rb))
+
+
 def after_close(ctx, pos, tr, done, key: str, state: dict, p) -> None:
-    """A16-propulsion-block-full prop_fail_flip: the long (short) failed on the propulsion block's MT - no more longs this session (shorts only), the session slot re-opens for the opposite side."""
+    """A16-propulsion-block-full prop_fail_flip: the long (short) failed on the propulsion block's MT - no more longs this session (shorts only; this also overrides an only_side already set by
+    reverse_in_session / a flipped leg), the session slot re-opens for the opposite side, and the failed block is remembered as a reclaimed block of the opposite side: state["pb_flip"][session] =
+    {sign, lo, hi} (real prices), which setups.array_cands offers as the "pb_flip" entry array (the retrace into the failed block)."""
     if not p.prop_fail_flip or not tr.exits or tr.exits[-1][3] not in ("prop_mt", "prop_wick"):
         return
     side = 1 if tr.side == "long" else -1
-    if state.setdefault("only_side", {}).get(tr.session) is None:
-        done[key] = False
-        state["only_side"][tr.session] = -side
-        hit("prop_fail_flip")
+    done[key] = False
+    state.setdefault("only_side", {})[tr.session] = -side
+    z = ((pos or {}).get("es1") or {}).get("prop_zone")
+    if z is not None:
+        state.setdefault("pb_flip", {})[tr.session] = dict(sign=-side, lo=float(z[0]), hi=float(z[1]), i=int(pos["fill_i"]))
+        hit("prop_fail_array")
+    hit("prop_fail_flip")
+
+
+def pb_flip_cand(ctx, sd, i: int, p):
+    """The failed propulsion block as an entry array of the flipped side: (entry, far edge, "pb_flip") in side space - the near edge is the first the retrace reaches, the far edge the stop side. None unless
+    this session holds a failed block for sd's side."""
+    pf = getattr(ctx, "pb_flip", None)
+    if not p.prop_fail_flip or not pf or pf["sign"] != sd.sign:
+        return None
+    a, b = sd.sign * pf["lo"], sd.sign * pf["hi"]
+    hit("pb_flip_cand")
+    return (float(max(a, b)), float(min(a, b)), "pb_flip")
 
 
 # --- A23-broken-wick-ce-inversion (043 ~10:45, ~17:20; 044 ~46:41) -------------------------------------------------------------------------------

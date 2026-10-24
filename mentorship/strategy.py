@@ -2517,7 +2517,7 @@ class Params:
     vi_tol: str = "none"                 # A9-vi-retest-tolerance (026 ~1:34:23; 027 ~16:27): the VI stop - "none" (built) / "ce" (retests up to the VI CE stay valid: invalidation = the VI far edge) / "adjacent_extreme" (a small VI may overshoot to the adjacent candle's extreme)
     vi_tol_small_pts: float = 2.0        # ... "small VI" = at most this many points [our interpretation]
     prop_mt_test: str = "close"          # A16-propulsion-block-full (019, 075, 079 / 027, cc04_008): the propulsion invalidation - "close" (a body close under the PB MT, built) / "wick" (any trade through it)
-    prop_fail_flip: bool = False         # ... on a failure: no more longs this session (shorts only), the PB is a reclaimed bearish block
+    prop_fail_flip: bool = False         # ... on a failure (prop_mt / prop_wick exit): no more longs this session (shorts only; overrides an earlier only_side), the PB becomes a reclaimed bearish block = the "pb_flip" entry array of the flipped side (state pb_flip -> setups.array_cands)
     prop_deep_mult: float = 1.0          # A16-propulsion-depth-grade (079 ~12:00): the risk multiplier of a deep PB (depth = (K_high - P_low) / (K_high - K_low) > prop_deep_cut); 0 = skip
     prop_deep_cut: float = 0.5           # ... the cut [our interpretation]
     mit_iofed_edge: bool = False         # A15-mitigation-definition-and-iofed (012 ~11:39): after a mitigation-block tag the next FVG below is entered at its near edge (entry="edge"), never the CE
@@ -2532,14 +2532,14 @@ class Params:
     ob_need_narrative: bool = False      # A12-ob-requires-narrative (059 ~19:00; 064 ~51:56; 065 ~1:28:02): an OB qualifies only with the bias this way, a transitional event (a pool swept, or an array traded into) before or by it, and (ob_need_htf_array) lying inside an HTF array
     ob_need_htf_array: bool = True       # ... (2) the OB lies inside a same-side HTF array [our interpretation: the array contains the OB bodies, tolerance eq_tol_pts]
     ob_wick_ltf_entry: bool = False      # A12-ob-open-anchor-ltf-wick (061 ~26:10): an HTF OB with a stubby wick (< 25% of its range) - the entry is an LTF FVG / OB inside [open, low] of it; the wick area does not invalidate
-    htf_ob_anchor: str = "open"          # A12-ob-anchor-level (cc03_001 ~28:18; cc06_004; cc10_005; 072): the HTF OB level - "open" (A12 2023) / "extreme" (CC swing: the OB candle's high / highest high of the series)
+    htf_ob_anchor: str = "extreme"       # A12-ob-anchor-level (default kept at the built "extreme" until the owner confirms "open", see build_log owner questions) (cc03_001 ~28:18; cc06_004; cc10_005; 072): the HTF OB level - "open" (A12 2023) / "extreme" (CC swing: the OB candle's high / highest high of the series)
     scan_tfs: tuple = (1,)               # new-multi-tf-scan (070 ~30:37; 072 ~11:09): minutes of the extra bar sizes whose FVGs join the entry gaps ((1, 2, 3, 4, 5) = 1m..5m; 120 = 2h); 1 = the base bars only
     two_min_ce: bool = False             # new-2m-fvg-ce (062 ~40:09): a 1m FVG whose displacement is two same-direction 1m candles enters at the CE of the 2m FVG
     fvg_skip_below_pool_short: bool = False   # A5-skip-fvg-near-stop-pool (060 ~1:11:00): skip an entry FVG within fvg_pool_gap_pts of an untaken short-term extreme that lies between it and the protective extreme (side-space mirror: covers both directions)
-    mtf_hold: bool = False               # A5-multitf-hold-test (064 ~1:32:01): a 5m entry gap is judged on the 1-4m bars - two or more bar closes inside it on any of them cancel the entry
-    ote_gate_4th: bool = False           # M13-swing-confirm-gate (cc01_004 ~13:58, ~21:38, ~28:18): the OTE watch starts only once the leg's far extreme is a 3-candle swing confirmed by the 4th candle; a new extreme before EQ redoes the gate
+    mtf_hold: bool = False               # (scope: only on bars finer than 5m, a coarse 5m gap judged on the 1-4m closes - nothing on 5m base bars) A5-multitf-hold-test (064 ~1:32:01): a 5m entry gap is judged on the 1-4m bars - two or more bar closes inside it on any of them cancel the entry
+    ote_gate_4th: bool = False           # (scope: the FVG path through ote_adjust, and the "ote" entry array) M13-swing-confirm-gate (cc01_004 ~13:58, ~21:38, ~28:18): the OTE watch starts only once the leg's far extreme is a 3-candle swing confirmed by the 4th candle; a new extreme before EQ redoes the gate
     ote_reanchor: bool = False           # M13-reanchor-parent (cc01_004 ~13:58, ~37:30): on a new swing high above H with no trade under L the leg is re-anchored (EQ / 62 / 70.5 / 79 recomputed, gate redone)
-    ote_nested: bool = False             # M13-nested-ranges (cc01_004 ~23:31; cc01_005 ~8:28): child legs from a reaction level are kept; a child stopped out falls back to the parent leg's OTE
+    ote_nested: bool = False             # (scope: the FVG path through ote_adjust only; the "ote" array keeps the parent band) M13-nested-ranges (cc01_004 ~23:31; cc01_005 ~8:28): child legs from a reaction level are kept; a child stopped out falls back to the parent leg's OTE
     ote_parent_third: bool = False       # ... (cc01_006 ~13:16) the high-probability long is in the lower third of the parent swing AND under the EQ of the current small range
     ob_mt_range: str = "body"            # A12-ltf-ob-upper-half (cc02_002 ~6:24): the "mt" OB entry price - "body" (the body mean, built) / "range" ((high + low) / 2 of the candle)
     ob_reach: str = "wick"               # A12-ob-reached-body (cc03_002 ~8:33): an OB counts as reached on a WICK (built) or only when a BODY enters it (min(open, close) <= OB high)
@@ -5623,7 +5623,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     _SM.ep01_manage(ctx, sd, pos, tr, i, p, bool(can_add))   # M5.1: the Ep 01 sequence
                     new, can_add = [], False
                 ov_ = None
-                if can_add and p.add_pref_ob_in_vi and new and p.add_mode == "fvg" and _nadds(pos, tr) < len(p.adds):
+                if can_add and p.add_pref_ob_in_vi and p.add_mode == "fvg" and _nadds(pos, tr) < len(p.adds):
                     ov_ = _ES1.ob_in_vi_add(sd, pos, i, p)           # caption-gap A5-ob-in-vi-over-newer-fvg (009 ~12:07): the OB that traded into a VI is the add, not the newer small FVG
                 if new:
                     g = new[-1]
@@ -5644,6 +5644,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                             and _SM.add_ok(sd, pos, apx, i, p)):
                         _arm_add(pos, tr, apx, i, p, ctx.equity, floor=g.bottom, g=g, pos_g=True)
                         can_add = pos["add"] is None
+                if ov_ is not None and not new and can_add and _SM.add_ok(sd, pos, ov_[0], i, p):
+                    _arm_add(pos, tr, ov_[0], i, p, ctx.equity, floor=ov_[1])        # review fix (A5-ob-in-vi-over-newer-fvg): the OB-in-VI add also stands when no newer FVG printed
+                    can_add = pos["add"] is None
                 if can_add and p.cisd_adds and (pos.get("es1") or {}).get("cisd") and _nadds(pos, tr) < len(p.adds):
                     _ES1.cisd_add(sd, pos, tr, i, p, lambda px, fl: _SM.add_ok(sd, pos, px, i, p) and _arm_add(pos, tr, px, i, p, ctx.equity, floor=fl) is None)    # caption-gap A12-cisd-open-buy-level (032 ~55:30): each later CISD run's open is an add
                     can_add = pos["add"] is None
@@ -5972,6 +5975,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             if r7_ is not None and r7_.get("pending") and r7_["kind"] in ("win", "trail_win", "ts_re") and sname != r7_["side"]:
                 continue                              # caption-gap X14 / X13 re-entries (setups_models #7/7): the same direction only
             ctx.re7, ctx.re_ctx_now, ctx.pend_now = r7_, rc_, pending
+            ctx.pb_flip = state.get("pb_flip", {}).get(session)          # caption-gap A16-propulsion-block-full: the failed propulsion block (an entry array of the flipped side)
             if p.weekly_bias and ctx.wbias == -sd.sign:
                 continue
             w_ = _BD.want_at(ctx, p, session, i) if want is not None else 0     # B3: the bias known at THIS bar (pre-09:30 sessions: their own cut)
@@ -6912,7 +6916,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         if i - _fvg_wait_from(sw) >= wait:
             sd.sweep = None
             _f("x_no_fvg_after_mss")
-            if p.entry_arrays or p.reclaimed_ob or "ob" in p.irl_entries or p.org_entry_array or p.wick_ce_mode == "retrace" or p.ote == "ob62":   # setups_models M0.5 (+ the ote "ob62" body stall): any PD array (caption-gap M11-wick-ce-fade-short: the retrace variant's wick CE)
+            if p.entry_arrays or p.reclaimed_ob or p.prop_fail_flip or "ob" in p.irl_entries or p.org_entry_array or p.wick_ce_mode == "retrace" or p.ote == "ob62":   # setups_models M0.5 (+ the ote "ob62" body stall): any PD array (caption-gap M11-wick-ce-fade-short: the retrace variant's wick CE)
                 sw["_nofvg"] = True
                 bz_a = bz if (bz is not None or nn or "breaker" not in p.entry_arrays) else \
                     _breaker(ctx, sd, sw, ref_i, real_ref, i, p)
@@ -7121,6 +7125,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         pb = _EN.prop_block(sd, sw, g.top, i, p)
         if pb is not None:
             ztop, prop_exit = pb
+            if p.prop_fail_flip:
+                es_x["prop_zone"] = _ES1.prop_zone_real(sd, sw, g.top, i, p)      # caption-gap A16-propulsion-block-full: the block that fails becomes a bearish array of the flipped side
             if p.prop_entry and sw["ext"] < ztop - p.tick < c[i]:
                 entry = ztop - p.tick         # the new support: its high - 1 tick (a limit below the market)
     if p.prop_deep_mult != 1.0:               # caption-gap A16-propulsion-depth-grade (079 ~12:00): a deep PB is weaker
@@ -7273,7 +7279,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         tags["cancel_low"] = float(ob.bottom)          # A12: the OB low must hold
     if p.breaker_entry == "classic" and bz is not None and bz.top > entry and not sw.get("bz_sent"):
         return _breaker_order(ctx, sd, sw, bz, i, p, session, risk_mult)   # M4.1: the breaker comes first
-    if p.entry_arrays or p.reclaimed_ob or "ob" in p.irl_entries or p.org_entry_array or p.ote == "ob62":       # M0.5: an array the retrace reaches before the FVG
+    if p.entry_arrays or p.reclaimed_ob or p.prop_fail_flip or "ob" in p.irl_entries or p.org_entry_array or p.ote == "ob62":       # M0.5: an array the retrace reaches before the FVG
         o2 = _SM.array_order(ctx, sd, sw, i, p, session, risk_mult, entry, bz)
         if o2 is not None:
             return o2
@@ -7371,8 +7377,9 @@ def _ob_pre(ctx, sd, sw, i, p, session, risk_mult):
     entry = _EN.ob_entry_price(ob, sd, p, i)       # Ep03.9 / A12: body_top, mt, range_top|high, open, ob_zone (+ caption-gap ob_anchor_rule)
     if entry >= sd.c[i]:
         entry = ob["body_top"]                     # [our interpretation] never a limit above the market
-    stop = ob["mt"] - p.pad if p.ob_stop == "mt" else sw["ext"] - p.pad
-    mt_close = (float(ob["mt"]), float(ob["lo"])) if p.ob_stop == "mt" else None
+    mt_stop_ = p.ob_stop == "mt" or p.mt_break != "off"          # review fix (D4-mt-source-tally): mt_break also governs the pre-break OB (trade = the stop at the MT, close / warn = the far-edge stop + the MT close / warning)
+    stop = ob["mt"] - p.pad if mt_stop_ else sw["ext"] - p.pad
+    mt_close = (float(ob["mt"]), float(ob["lo"])) if mt_stop_ else None
     if entry - stop < p.min_risk_pts * p.es_pt or entry <= stop:
         stop = sw["ext"] - p.pad        # [our interpretation] fallback to the sweep extreme
         mt_close = None
@@ -8372,7 +8379,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     if pd_top is not None:
         order["pd_top"] = float(pd_top)                  # caption-gap A21-post-cisd-range-retrace: the fixed top of the dealing range
     if p.leg_pd_anchor == "target" and p.leg_pd and not tags.get("no_leg_wait"):
-        t_pd = float(order["t1"])                        # caption-gap A21-implied-range-to-target (025 ~41:59): the implied range = the sweep extreme .. the stated draw (the first ladder target)
+        t_pd = float(draw) if (order.get("single_exit") and draw is not None) else float(order["t1"])      # caption-gap A21-implied-range-to-target (025 ~41:59): the implied range = the sweep extreme .. the stated draw (the first ladder target; review fix: the draw when a single_exit replaces t1)
         if t_pd > leg_lo + 1e-9:
             ln_pd = _ES1.frame_line(ctx, sd, p, leg_lo + p.leg_pd * (t_pd - leg_lo))
             if not skip_leg_pd and p.leg_pd_at == "arm" and entry > ln_pd:

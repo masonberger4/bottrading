@@ -1926,7 +1926,7 @@ Engine glue in `mentorship/es1.py` (hooks in `strategy.py`: `_finish_order` gate
 - definitions#84 A8-htf-gap-resistance-grade | done | `htf_depth_mult` (near, ce, far) | (1,1,1) | tags `htf_depth_*`; risk multiplier through `es1_mult`
 - definitions#87 A12-ob-requires-narrative | done | `ob_need_narrative`, `ob_need_htf_array` | False, True | bias + transitional event + HTF array; array containment is [our interpretation]
 - definitions#88 A12-ob-open-anchor-ltf-wick | done | `ob_wick_ltf_entry` | False | stubby wick (< 25% of range): LTF FVG / OB inside [open, low]
-- definitions#89 A12-ob-anchor-level | done | `htf_ob_anchor` "open"/"extreme" | "open" | 2023 open level is the default, Core Content extreme a switch
+- definitions#89 A12-ob-anchor-level | done | `htf_ob_anchor` "open"/"extreme" | "extreme" (review round: the built level stays the default until the owner decides) | the 2023 open level is the switch value "open"
 - definitions#92 new-multi-tf-scan | done | `scan_tfs` | (1,) | extra bar sizes' FVGs join the entry gaps
 - definitions#97 new-2m-fvg-ce | done | `two_min_ce` | False |
 - definitions#100 A5-skip-fvg-near-stop-pool | done | `fvg_skip_below_pool_short`, `fvg_pool_gap_pts` 2.0 | False | side-space mirror covers both directions
@@ -1941,7 +1941,7 @@ Engine glue in `mentorship/es1.py` (hooks in `strategy.py`: `_finish_order` gate
 
 ### Owner questions (caption-gap pass, entries_stops_sizing#1/3)
 
-1. A12 OB level: the 2023 `open` level is the default (`htf_ob_anchor`), Core Content's `extreme` is a switch.
+1. A12 OB level (`htf_ob_anchor`): the spec and the 2023-over-Core-Content rule make the OB `open` the default, but that moves the HTF-OB target levels of the DEFAULT engine; until the owner confirms, the default stays the built `extreme` and `open` is the switch (see the review round below).
 2. A21 P/D leg: displacement leg stays default; implied range to target and post-CISD retrace range are `leg_pd_anchor` values.
 3. D4 MT break: trade-based (028 / 036) vs close-based (B7 / 058 / 065A / 101) failure; default `mt_break="off"` keeps the built behaviour, spec default 'trade = warning, close = failure' is `"warn"`/`"close"`.
 4. A12 CISD entry: M11b post-CISD EQ (`"eq"`, default) vs 032's open (`"open"`).
@@ -1953,4 +1953,28 @@ Engine glue in `mentorship/es1.py` (hooks in `strategy.py`: `_finish_order` gate
 
 `tests/test_caption_gap_es1a.py` + `tests/test_caption_gap_es1b.py` (69: defaults / validation, a unit test per spec, synthetic + gappy + ES look-ahead cases) passed; the generic `test_bias_htf_lookahead.py` for the 48 new DECISIONS variants passed. Existing files for the touched code: see the commit message.
 
-8. Default change (check): `htf_ob_anchor` defaults to "open" (the 2023 Mentorship level, per the owner rule 2023 over Core Content), which moves HTF OB target levels of the DEFAULT engine (the golden window's t2 levels changed, 23 trades unchanged). `study.PRE_OWNER` now sets `htf_ob_anchor="extreme"` so the golden regression (833350f) still reproduces. Owner: keep "open" as the default, or default to "extreme" (the pre-pass behaviour)?
+8. (superseded by the review round below) `htf_ob_anchor` was briefly defaulted to "open" with a `study.PRE_OWNER` override; the review round reverted that - the default is "extreme" again and PRE_OWNER no longer lists it. Owner: switch the default to "open" (the 2023 Mentorship level; moves a default run's HTF-OB target levels, the golden window's t2 levels, 23 trades unchanged)?
+
+### Review round (entries_stops_sizing chunk 1/3, caption-gap review fixes)
+
+Fixed (majors):
+- definitions#89 `htf_ob_anchor`: the default is the built "extreme" again (no hidden default change; `study.PRE_OWNER` no longer sets it; the golden regression reproduces without an override). "open" is the switch value; owner question 1 / 8 decides the default.
+- definitions#42 `prop_fail_flip`: on a prop_mt / prop_wick exit the session now flips to the opposite side even when `only_side` was already set (it overrides), AND the failed propulsion block is kept as a reclaimed block of the flipped side: the order carries `es1.prop_zone` (real low / high), `es1.after_close` stores `state["pb_flip"][session]`, `run_day` exposes it as `ctx.pb_flip`, and `setups.array_cands` offers it as the "pb_flip" entry array (`es1.pb_flip_cand`; near edge = the first the retrace reaches, far edge = the stop side). Counters `prop_fail_array`, `pb_flip_cand`.
+- definitions#7 `cisd_ob_px="open"`: a CISD bar that closes at / under the run's open no longer consumes the CISD - `sw["cisd_open_wait"]` keeps it and the buy limit at the open is armed on the first later bar that closes above the open (a body close under the run low voids it via the floor). Same for `cisd_adds` (`es1.cisd_add` keeps the run in `cisd_wait` until a close above its open). Counters `cisd_open_wait`, `cisd_add_wait`.
+- definitions#131 `ote_nested`: engine tests with exact entries (parent sweet spot 99.18 vs the child's 99.885, a traded-under child replaced by the new lower child 98.9 -> 99.8145, `ote_parent_third` rejecting / accepting, no child = the parent run); the vacuous `>= 0` asserts are gone. A child can only be "dropped" in the engine by a lower pivot replacing it (a 3-candle low is confirmed on the arming bar), so "child stop-out -> parent" is covered by the unit test of `ote_children` plus the replacement run.
+
+Fixed (minors):
+- definitions#26 `add_pref_ob_in_vi`: evaluated whenever `add_mode == "fvg"` (also with no newer FVG); the sweep must precede the first fill (`pos["ext_i"] < fill_i`).
+- definitions#4 / #87: the OB gates (`ob_need_fvg`, `ob_need_narrative`) now also guard the `array_cands` "ob" array, the "ob_post" array and the CISD OB (the other OB paths - reclaimed_ob, ob_secondary, HTF OB zones - are zone arrays of an HTF/previous structure, not a last-down-close candle, and stay ungated: NOT BUILT). A missing HTF array source is counted (`ob_htf_array_missing`).
+- definitions#11 `mt_break` also governs the pre-break OB when `ob_stop != "mt"` (trade = stop at the MT, close / warn = far-edge stop + MT close / warning); `dict_mt` with `mt_mode="range"` is now the full range mid on the `_ob_at_low` path too.
+- definitions#79 `leg_fib="body"`: the OTE band and the `leg_pd_strict` check in `ote_adjust` use the body leg too (`leg_pd_min` is not read by `ote_adjust`; unchanged).
+- definitions#55: the implied range reads the draw when `single_exit` replaces t1. definitions#78 `ob_ce_confluence`: the 15m OB must complete at / after the sweep extreme [our interpretation: same move]. definitions#100/#102/#129/#130: the "ote" entry array obeys `ote_gate_4th`; scope notes in the Params comments (`ote_nested` is the FVG path only, `mtf_hold` acts only on bars finer than 5m).
+- Look-ahead: ES windows that EXECUTE the outcome paths were added to `test_caption_gap_es1b` (`prop_flip`, `prop_flip2`, `prop_deep`, `out_overshoot`, `out_add_vi`: PB-wick exit + flip + array, deep-PB cut, VI-overshoot stop, OB-in-VI add); `OUTCOME_UNREACHED` is down to `ob_wick_ltf_entry` (0 of ~45 scanned 3-week ES windows reach a stubby HTF-OB wick holding an LTF FVG; unit-tested).
+
+Not built / partial (recorded):
+- definitions#92 `scan_tfs`: PARTIAL - FVGs of the extra bar sizes join the entry gaps; OBs on those timeframes, their projection as targets and the "meaningful point in delivery" filter are not built (only a 3m-only gap test was added: `test_scan_tfs_finds_a_gap_only_the_3m_chart_shows`).
+- definitions#9 `ob_vi_overshoot`: the "short entries at the VI" part of the interpretation is not built (only the stop / exit is extended to the VI far edge; the VI must be a base-bar VI).
+- definitions#39 `vi_tol`: only the helper (`vi_stop_level`) is tested at unit level; no engine test of a wick to the CE.
+- definitions#4/#87 other OB paths, #42 array when the flipped side has no FVG context: see above.
+
+Tests (review round): `tests/test_caption_gap_es1c.py` (12) + the new ES cases in `test_caption_gap_es1b.py`; `test_caption_gap_es1a/es1b/es1c` and the existing files covering the touched code were re-run (see the commit message). The full suite is NOT run here (once per package).

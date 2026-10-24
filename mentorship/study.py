@@ -247,8 +247,6 @@ PRE_OWNER = dict(ob_entry="post_mss", draw_lock="off", htf_resist_cap=False, new
                  # owner answers 2026-10-18 (year end against December; stand aside on sloppy days)
                  # came after the golden numbers were recorded
                  year_end="off", sloppy_mode="off",
-                 # caption-gap entries_stops_sizing#1/3 (A12-ob-anchor-level): the HTF OB level defaults to the 2023 open now; the old engine used the candle extreme
-                 htf_ob_anchor="extreme",
                  # entries_stops_sizing defaults (Ep08.17 one-tick pad; E12f no adds on NFP days)
                  stop_tick_pts=0.0, nfp_no_adds=False, add_arrays=(),
                  # news_calendar_times defaults (N3.5 no re-entry on FOMC, N1 no first hour on NFP, N5.5 chair days)

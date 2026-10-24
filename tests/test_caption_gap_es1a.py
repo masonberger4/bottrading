@@ -39,7 +39,7 @@ def test_new_switch_defaults_and_validation():
     assert (p.prop_mt_test, p.prop_fail_flip, p.prop_deep_mult, p.prop_deep_cut, p.mit_iofed_edge, p.leg_pd_anchor, p.broken_wick_stop, p.far_edge_reach, p.fvg_edge, p.ob_ce_confluence, p.ob_ce_tol_pts,
             p.leg_fib, p.htf_depth_mult) == ("close", False, 1.0, 0.5, False, "displacement_leg", "body_edge", False, "original", False, 1.0, "wick", (1.0, 1.0, 1.0))
     assert (p.ob_need_narrative, p.ob_need_htf_array, p.ob_wick_ltf_entry, p.htf_ob_anchor, p.scan_tfs, p.two_min_ce, p.fvg_skip_below_pool_short, p.mtf_hold, p.ote_gate_4th, p.ote_reanchor, p.ote_nested,
-            p.ote_parent_third, p.ob_mt_range, p.ob_reach, p.mt_mode) == (False, True, False, "open", (1,), False, False, False, False, False, False, False, "body", "wick", "body")
+            p.ote_parent_third, p.ob_mt_range, p.ob_reach, p.mt_mode) == (False, True, False, "extreme", (1,), False, False, False, False, False, False, False, "body", "wick", "body")
     for kw in (dict(entry_pd_frame="x"), dict(cisd_ob_px="x"), dict(mt_break="x"), dict(gap_tf_mode="x"), dict(vi_tol="x"), dict(prop_mt_test="x"), dict(leg_pd_anchor="x"), dict(broken_wick_stop="x"),
                dict(fvg_edge="x"), dict(leg_fib="x"), dict(htf_ob_anchor="x"), dict(ob_mt_range="x"), dict(ob_reach="x"), dict(mt_mode="x"), dict(prop_deep_cut=1.0), dict(prop_deep_mult=-1),
                dict(htf_depth_mult=(1, 1)), dict(htf_depth_mult=(1, 1, -1)), dict(scan_tfs=()), dict(scan_tfs=(0,)), dict(ob_ce_tol_pts=-1), dict(vi_tol_small_pts=-1), dict(entry_arrays=("nope",))):
@@ -75,7 +75,7 @@ def test_mt_modes_on_a_blended_block_and_a_single_candle():
     assert es1.dict_mt(Params(mt_mode="sensitive"), sd, d, 99.6) == pytest.approx(101.25)
     assert es1.dict_mt(Params(mt_mode="body_single_range_blended"), sd, d, 99.6) == pytest.approx(99.75)
     assert es1.dict_mt(Params(mt_mode="body_single_range_blended"), sd, dict(d, k=0), 99.6) == pytest.approx(99.6)
-    assert es1.dict_mt(Params(mt_mode="range"), sd, d, 99.6) == pytest.approx(99.6)    # (the dict path never followed "range": unchanged)
+    assert es1.dict_mt(Params(mt_mode="range"), sd, d, 99.6) == pytest.approx(99.75)   # review fix: "range" is the full range mid on the dict path too
     assert es1.candle_mt(Params(mt_mode="sensitive"), 100.0, 103.0, 99.0, 102.0) == 101.5 and es1.candle_mt(Params(), 100.0, 103.0, 99.0, 102.0) == 101.0
     assert es1.candle_mt(Params(mt_mode="range"), 100.0, 103.0, 99.0, 102.0) == 101.0
     # a mean threshold from a Side mirrored to a short
@@ -510,6 +510,10 @@ def test_prop_depth_and_wick_exit_and_flip():
     trd = SimpleNamespace(exits=[("t", 99.0, 10, "prop_wick")], side="long", session="AM")
     es1.after_close(None, None, trd, done, "AM", state, Params(prop_fail_flip=True))
     assert done["AM"] is False and state["only_side"]["AM"] == -1
+    # (review fix) an only_side already set the other way (a flipped leg) is overridden, and the failed block is kept as the flipped side's array
+    d3, s3 = {"AM": True}, {"only_side": {"AM": 1}}
+    es1.after_close(None, dict(fill_i=3, es1=dict(prop_zone=(98.0, 99.5))), trd, d3, "AM", s3, Params(prop_fail_flip=True))
+    assert d3["AM"] is False and s3["only_side"]["AM"] == -1 and s3["pb_flip"]["AM"] == dict(sign=-1, lo=98.0, hi=99.5, i=3)
     d2, s2 = {"AM": True}, {}
     es1.after_close(None, None, trd, d2, "AM", s2, Params())
     assert d2["AM"] is True and not s2
@@ -645,8 +649,8 @@ def test_htf_ob_anchor_and_the_ltf_wick_entry():
     assert es1.wick_ltf_entry(None, sd, L.Zone("bull", 102.0, 100.0, 4, 0), sw, 4, p) is None                       # not an OB zone (no mt / open)
     assert es1.wick_ltf_entry(None, sd, g, sw, 3, p) is None                                                           # the FVG is not complete at bar 3
     # htf_ob_anchor: an HTF OB enters at its open under "open" (the A12 2023 default) and at its candle extreme under "extreme"
-    assert es1.htf_open_top(g, Params()) == pytest.approx(101.8) and es1.htf_open_top(g, Params(htf_ob_anchor="extreme")) == pytest.approx(102.0)
-    assert es1.htf_open_top(L.Zone("bull", 102.0, 100.0, 4, 0), Params()) == 102.0                                  # a plain FVG zone: its top
+    assert es1.htf_open_top(g, Params(htf_ob_anchor="open")) == pytest.approx(101.8) and es1.htf_open_top(g, Params()) == pytest.approx(102.0)
+    assert es1.htf_open_top(L.Zone("bull", 102.0, 100.0, 4, 0), Params(htf_ob_anchor="open")) == 102.0                                  # a plain FVG zone: its top
     # the Confluence target level of an HTF OB: the open, or the extreme of the candle
     from mentorship import confluence as CF
     cf = CF.Confluence.__new__(CF.Confluence)

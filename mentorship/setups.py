@@ -435,6 +435,11 @@ def ote_adjust(sd, sw, i, p, entry, stop, kind, lvt):
     e = sw["ext_i"]
     leg_hi = float(sd.h[e:i + 1].max())
     base = S._LD.leg_low(sd, sw, i, p, leg_hi)       # caption-gap A21 leg_anchor: the dealing range's low ("mss_leg" = the sweep extreme)
+    if p.leg_fib == "body":                          # review fix (A21-intraday-fib-bodies, 058 ~41:48): the OTE band / leg_pd_strict read the same body leg as leg_pd (the lowest min(o, c) .. highest max(o, c) since the sweep extreme)
+        b_lo, b_hi = S._ES1.body_leg(sd, sw, i)
+        leg_hi = b_hi
+        if p.leg_anchor != "energetic":
+            base = b_lo
     if p.ote_gate_4th and p.ote != "off" and not S._ES1.ote_gate_ok(sd, sw, i, p):
         S._f("x_ote_gate")                           # caption-gap M13-swing-confirm-gate: the far extreme is not yet a 3-candle swing confirmed by the 4th candle - earlier dips are ignored
         sw["_ote_wait"] = True                       # (the caller keeps the sweep alive: the same gap is judged again on the next bar)
@@ -500,6 +505,8 @@ def array_cands(ctx, sd, sw, i, p, bz) -> list:
     out = []
     if "ob" in ea:
         ob = S._ob_at_low(sd, sw, i, p, ctx)
+        if ob is not None and (p.ob_need_fvg or p.ob_need_narrative) and not S._ES1.ob_gate(ctx, sd, sw, ob, i, p):
+            ob = None                                         # review fix (A12-ob-requires-signatures / narrative): the array "ob" is a potential OB until the gates pass
         if ob is not None:
             out.append((ob["body_top"], ob["body_low"], "ob"))
     if p.cons_ob_open or "cons_ob_open" in ea:       # caption-gap A12: the open of the last candle before a 1h consolidation is support
@@ -508,7 +515,7 @@ def array_cands(ctx, sd, sw, i, p, bz) -> list:
                 out.append((v, v, "cons_ob_open"))
     if "breaker" in ea and bz is not None:
         out.append((bz.top, bz.bottom, "breaker"))
-    if "ote" in ea:
+    if "ote" in ea and (not p.ote_gate_4th or S._ES1.ote_gate_ok(sd, sw, i, p)):     # review fix (M13-swing-confirm-gate): the OTE array waits for the 4th candle too
         out.append((L.ote_band(ext, float(sd.h[e:i + 1].max()))[2], ext, "ote"))
     if "broken_wick_ce" in ea and sw.get("broke") is not None and sw.get("ref_i") is not None:     # caption-gap A23-broken-wick-ce-inversion (043 ~10:45; 044 ~46:41): the swing the MSS broke - the CE of its wick is now support
         r_ = S._ES1.broken_wick_cand(sd, sw, i, p)
@@ -520,6 +527,8 @@ def array_cands(ctx, sd, sw, i, p, bz) -> list:
         out.append((L.wick_ce(sd.o, sd.l, sd.c, e), ext, "wick_ce"))
     if "ob_post" in ea and sw.get("broke") is not None:      # caption-gap M1-ob-entry-after-mss (020 ~00:06:14): the first down-close candle of the pullback after the MSS
         r = S._SM4.ob_post_cand(ctx, sd, sw, i, p)
+        if r is not None and (p.ob_need_fvg or p.ob_need_narrative) and not S._ES1.ob_gate(ctx, sd, sw, dict(k=int(sw["_ob_post_k"]), body_top=r[0], body_low=r[1]), i, p):
+            r = None                                          # review fix (A12-ob-requires-signatures / narrative): the post-MSS OB candle needs the same signatures / narrative
         if r is not None:
             S._SM2.hit("ob_post")
             out.append(r)
@@ -527,6 +536,10 @@ def array_cands(ctx, sd, sw, i, p, bz) -> list:
         out += S._SM5.htf_cands(ctx, sd, sw, i, p)
     if "mitigation" in ea:                                   # caption-gap A15-mitigation-block-entry (098 ~00:45:55)
         r_ = S._SM5.mit_cand(ctx, sd, sw, i, p)
+        if r_ is not None:
+            out.append(r_)
+    if p.prop_fail_flip:                                     # caption-gap A16-propulsion-block-full: the failed propulsion block, a reclaimed array of the flipped side
+        r_ = S._ES1.pb_flip_cand(ctx, sd, i, p)
         if r_ is not None:
             out.append(r_)
     out += S._SM6.arr_cands6(ctx, sd, sw, i, p, ea)           # caption-gap setups_models #6/7: ob_secondary / propulsion / last_offer arrays, the ote "ob62" body stall
@@ -813,6 +826,8 @@ def _cisd_ob(ctx, sd, sw, i, p, session, risk_mult):
     ob = L.order_block_blend(o, h, l, c, e - 5, e, "bull")
     if ob is None:
         return None
+    if (p.ob_need_fvg or p.ob_need_narrative) and not S._ES1.ob_gate(ctx, sd, sw, dict(k=int(ob.src), body_top=float(ob.top), body_low=float(ob.bottom)), i, p):
+        return None                                 # review fix (A12-ob-requires-signatures / narrative): the CISD OB is a potential OB until the gates pass
     if p.cisd_need_htf and not S._SM5.cisd_htf_ok(ctx, sd, sw, i, p):
         return None                                 # caption-gap M11-cisd-ob-stop-skip-rearm: the sweep must sit in a same-side HTF array
     top, _ = _ob_body(o, c, ob, e)
@@ -826,11 +841,19 @@ def _cisd_ob(ctx, sd, sw, i, p, session, risk_mult):
         S._SM2.hit("cisd_rearm")
     sw["cisd_floor"] = fl
     hit = np.flatnonzero(h[fl + 1:i + 1] >= top + p.tick - 1e-9) if open_mode else np.flatnonzero(h[fl + 1:i + 1] > top)       # (open mode: CISD = high >= open_ref + 1 tick)
-    if not len(hit) or fl + 1 + int(hit[0]) != i:
-        return None                                 # arm on the CISD bar itself, once
-    sw["cisd_sent"] = True
+    if not len(hit):
+        return None
+    first_ = fl + 1 + int(hit[0])
+    if first_ != i and not (open_mode and first_ < i and sw.get("cisd_open_wait") == fl):
+        return None                                 # arm on the CISD bar itself, once (open mode: or on a later bar while the wait below holds)
     rng_hi = float(h[e:i + 1].max())
     entry = top if open_mode else min((sw["ext"] + rng_hi) / 2, ob.top)
+    if open_mode and entry >= c[i]:
+        sw["cisd_open_wait"] = fl                   # review fix (A12-cisd-open-buy-level): the CISD bar closed back at / under the open - the buy limit would sit above the market; the CISD is NOT consumed, the order is armed on the first later bar that closes above the open (a body close under the run low voids it, floor)
+        S._ES1.hit("cisd_open_wait")
+        return None
+    sw["cisd_sent"] = True
+    sw["cisd_open_wait"] = None
     if entry >= c[i]:
         return None
     tags = dict(unicorn=False, fvg_bottom=ob.bottom, fvg_ce=ob.mid, entry_kind="cisd_ob", mitigation=False,
