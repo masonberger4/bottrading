@@ -807,6 +807,29 @@ def inversion_fvgs(h, l, c, min_gap: float = 0.0) -> list[Zone]:
     return sorted(out, key=lambda z: z.i)
 
 
+def two_way_range(o, h, l, c, i: int, lookback: int = 60):
+    """E6-bpr-75-stop (075 ~01:07:19) [our interpretation of "a range traded both ways"]: the most recent pair of adjacent opposite-colour legs (maximal runs of up-close / down-close candles, bars before
+    i) whose ranges overlap and whose combined span [lo, hi] the close of bar i is ABOVE -> (lo, hi, last bar of the pair), else None. Known at bar i's close; bullish terms (shorts run mirrored)."""
+    a = max(0, int(i) - int(lookback))
+    legs = []
+    for k in range(a, int(i)):
+        up = bool(c[k] >= o[k])
+        if legs and legs[-1][4] == up:
+            legs[-1][1] = k
+            legs[-1][2] = min(legs[-1][2], float(l[k]))
+            legs[-1][3] = max(legs[-1][3], float(h[k]))
+        else:
+            legs.append([k, k, float(l[k]), float(h[k]), up])
+    for q in range(len(legs) - 1, 0, -1):
+        A, B = legs[q - 1], legs[q]
+        if not (A[2] < B[3] and B[2] < A[3]):
+            continue
+        lo, hi = min(A[2], B[2]), max(A[3], B[3])
+        if c[i] > hi:
+            return float(lo), float(hi), int(B[1])
+    return None
+
+
 def voids(h, l) -> list[Zone]:
     """Liquidity voids: a true price gap between two consecutive candles, no overlap at all
     (028 ~36:17). Bullish: low[i] > high[i-1]. Known at candle i."""

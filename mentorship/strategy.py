@@ -67,7 +67,7 @@ MACROS = ((530, 550), (590, 610), (650, 670), (710, 730), (790, 820), (890, 910)
 NEWS_1000 = {"ism_manufacturing", "ism_services", "jolts", "sentiment"}
 NEWS_0830 = {"cpi", "jobs", "ppi", "pce", "retail_sales", "gdp"}
 STOP_MODES = ("ob_mt", "fvg", "ob_near", "fvg_candle", "ce2", "fvg_c1_low", "fvg_bodies", "fvg_open", "sweep",
-              "ob_mt_pure")       # E6 / E6b / E6c / Ep01.20 / M2.5
+              "ob_mt_pure", "wick_ce", "m2_auto", "three_pd", "next_pd", "bpr75", "fixed")       # E6 / E6b / E6c / Ep01.20 / M2.5 / caption-gap entries_stops_sizing #3/3
 ENTRY_MODES = ("edge", "ce", "edge_1tick", "iofed", "ladder")      # D11 / E2
 # Ep07.2: the Ep 07 model in one preset (OB bodies before the break and VIs as entry zones, the body-midpoint
 # stop, body exit and swing trail of Ep 07, VI holds, one tick inside the gap edge, VIs as adds)
@@ -2595,6 +2595,56 @@ class Params:
     add_day_mode: str = "eq_cutoff"      # E12-trend-day-adds (038 ~01:15:27): "eq_cutoff" (the built add cuts) / "trend_day" (a clean trending day keeps adding until the far daily extreme)
     trend_day_adr: float = 0.5           # ... trend day: price >= this x ADR5 from the 09:30 open without trading back through it, no FOMC / CPI / jobs day [our interpretation]
     add_low_end_size: str = "smallest"   # E12-low-end-add-conditions (006 ~00:52:14): the add_low_end size - "smallest" (the smallest earlier add, built) / "ladder" (the next add fraction)
+    # --- caption-gap pass, entries_stops_sizing #3/3 (stops_sizing_scaling_in.md items 11-62; every switch defaults off / to the built behaviour; the gap id is the comment's first word; es3.py) ---
+    add_dig_mult: float = 1.0            # E12-repeat-dig-smaller-add (003 ~00:44:27): < 1 = an add at an FVG that price already dug into twice (a bar low under the top after a close above it) is cut to this fraction (0.67: 3 -> 2)
+    add_momentum: bool = False           # E12-single-add-variants (020 ~00:01:40): after an OB-before-break entry ONE add at market (the next open) once a bar closes add_mom_r x the initial risk above the fill; no later OB-retest adds
+    add_mom_r: float = 0.5
+    add_mom_frac: float = 0.25
+    add_wick_ce: bool = False            # E12-wick-ce-add-5m (010 ~00:58:28): a limit at the CE of the latest add_wick_tf-minute wick (lower wick for a long) formed since the fill, even while executing on 1m
+    add_wick_tf: int = 5
+    vi_ladder: bool = False              # E12-631-vi-wickce-invalidation (026 ~01:48:03): rung 1 = the next VI after the fill, rung 2 = the latest wick CE, only beyond the entry VI; a weak wick-CE reaction caps the last add at 1 contract (use add_ladder="631")
+    vi_ladder_exit: bool = False         # ... price trading to the MT of the OB before the displacement (before the first partial) exits everything at that level
+    add_void: bool = False               # E12-liquidity-void-add (018 ~00:04:01): a 1m liquidity void formed after the fill, overlapping the 5m FVG CE band and above the entry OB MT = an add at the void bottom + 1 tick
+    add_gate_wick: bool = False          # X8-downclose-wickce-add (085 ~00:10:04): a body closing through the open of the opposing-close candle in the way (between the entry and T1) = a stop-direction add at that candle's target-side wick CE
+    ifvg_mohawk_add: bool = False        # E12-mohawk-add-ifvg (102 ~01:14:30): an untouched (one-pass) IFVG entry also rests a smaller add mohawk_add_ticks beyond the far edge - filled only by a mohawk
+    mohawk_add_ticks: int = 2
+    add_reclaimed_ob: bool = False       # E12-mm-sell-model-adds (104 ~00:53:29): one add at the retest of a reclaimed OB (levels.reclaimed_obs, both sides) - size min(first unit, add fraction 0)
+    daily_loss_pct: float = 0.0          # E11-funded-account-caps (040 ~00:01:56; 050 ~00:48:18): > 0 = the day's loss limit (fraction of the start-of-day equity, 0.02 on a 150k account): a new order / add that could reach it is skipped, a position is flattened at the close that reaches it
+    max_exposure_pct: float = 0.0        # E11-portfolio-exposure-cap (cc05_013 ~00:26:39; cc06_002 ~00:12:27): > 0 = backtest.combine drops a trade whose entry risk would push the open risk of all concurrent trades over this fraction of equity
+    alloc_frac: float = 1.0              # E8-alloc-30pct (cc05_013 ~00:04:16): risk_pct / max_total_risk_pct apply to this fraction of the equity (CC: 0.30; 1.0 = the 2023 whole-account rule)
+    htf_near_risk_pct: float = 0.0       # E8-E9-5pct-near-htf (102 ~01:24:11): > 0 = the per-unit risk (first unit and each add) when the trade runs toward a stored HTF level within htf_near_pts ES pts (research switch; away from them min(risk_pct, 0.015))
+    htf_near_pts: float = 30.0
+    htf_near_cap_pct: float = 0.20       # ... and the total-risk cap of such a trade
+    class_risk: dict = field(default_factory=dict)   # E8-risk-by-trade-class (cc09_006 ~00:05:42; cc06_006; cc05_018): {"scalp": 0.005, "day": 0.012, "swing": 0.015, "position": 0.01} per-unit risk by trade class (scalp = a single fixed exit at <= 1.5R); empty = off
+    max_lev: float = 0.0                 # E8-leverage-cap-3x (cc06_006 ~00:15:32): > 0 = position notional (first unit + adds) <= max_lev x equity
+    stop_fixed_pts: float = 0.0          # E8-new-trader-drill (042 ~00:32:11; 001 ~00:55:20): stop_mode="fixed" - the stop this many ES pts under the entry
+    fixed_units: int = 0                 # ... > 0 = the first unit is exactly this many contracts (x lot units) whatever the equity / risk %
+    t1_fixed_r: float = 0.0              # E8-2pct-new-trader (cc02_001 ~00:16:41): with t1_fixed_all, the single exit at this many R (the cc_starter preset: 1R)
+    trader_mode: str = ""                # E8-new-trader-graduation (042 ~00:21:02): "new" = 1 contract per trade, +1 after each grad_block closed trades with a positive net (backtest.run); wide stops (E6-new-trader-wide-stops)
+    grad_block: int = 20
+    grad_max: int = 4
+    deep_run_mult: float = 1.0           # E9-deep-discount-reduced (099 ~00:28:59): < 1 = a with-trend trade after a deep_run_weeks one-way weekly run into the bottom / top quarter of the 13-week range is sized by this and takes no adds (htf.table column deep_run)
+    deep_run_weeks: int = 3
+    freq_ref: float = 0.0                # E9-frequency-small-size (101 ~00:44:29): > 0 = risk x min(1, freq_ref / trades in the last 5 sessions) (set by backtest.run through freq_recent)
+    freq_recent: int = 0                 # ... runtime input: the trades of the last 5 sessions (backtest.run fills it each day)
+    probe_mult: float = 0.0              # new-probe-position (026 ~00:16:16): > 0 = on an indecisive session (bias set, nothing by probe_t) a market probe of this fraction of the normal size toward the bias; no adds
+    probe_t: int = 630
+    probe_cut: float = 0.5               # ... closed early when price trades this fraction of the stop distance against the entry
+    wick_ce_tol_ticks: int = 1           # E6-wick-ce-stop (022 ~01:14:11; 085; 089): stop_mode="wick_ce" - beyond the defending wick's CE by the pad + this many ticks (a tick through the CE is tolerated)
+    trail_wick_ce: bool = False          # ... each new defending wick after the fill raises the stop to its CE - pad (never lowers)
+    mt_pad_ticks: int = 2                # M2-stop-by-fvg-choice (022 ~00:53:59): stop_mode="m2_auto" - the OB MT minus this many ticks when the FVG has VI + OB confluence, else the leg extreme - 1 tick
+    stop_old_low_body: bool = False      # E6-old-low-rejection-body (022 ~02:50:25): an old low under the stop moves the stop below that low's rejection body (the lowest open / close of its 3-bar swing) - 1 tick
+    stop_gap_edge: str = ""              # E6-nwog-stop (050 ~00:54:56): "own" = beyond the far edge of the opening gap the entry array sits in, "all" = beyond every opening gap within the max risk
+    three_pd_n: int = 3                  # E6-three-pd-arrays (098 ~00:47:02): stop_mode="three_pd" - behind this many protecting PD arrays (the outermost found when fewer)
+    bpr75_ref: str = "upper"             # E6-bpr-75-stop (075 ~01:07:19): stop_mode="bpr75" - inside the cleared two-way range at its 75 % level measured from the "upper" (H - 25 %) or "lower" (L + 25 %) end
+    new_max_risk_pts: float = 15.0       # E6-new-trader-wide-stops (102 ~01:52:49): trader_mode="new" - the max risk (a 15-pt stop is fine at micro size)
+    tight_stop_pts: float = 3.0          # ... a stop tighter than this: no immediate same-direction re-entry after it (experienced only) [our interpretation], and with stop_widen_new it is pushed out
+    stop_widen_new: bool = False
+    stop_htf_anchor: bool = False        # E6-refined-stop-htf (cc02_002 ~00:06:34): a sweep into an HTF array keeps the stop beyond min(sweep extreme, that array's bottom) - the LTF refinement moves the entry only
+    ob_stop_kind: str = ""               # E6-ob-body-stop (cc04_003 ~00:10:44): the OB-before-break stop - "" (the built MT / sweep stop) / "body" (under the OB body low = the close) / "wick" (under the OB wick low)
+    ob_anchor: str = "highest_open"      # A12-ob-anchor (cc05_015 ~00:16:48): multi-candle OB top / entry anchor - "highest_open" (the series' highest = first open, built) / "last_open" (the last down candle's open, ultra tight)
+    mit_entries: bool = False            # E6-mitigation-block-stop (cc04_004 ~00:14:00): a mitigation block (levels.mitigation_blocks) is an entry array - limit at its body edge, stop beyond its far extreme + 1 tick
+    prop_stop: str = ""                  # E6-propulsion-mt (cc04_008 ~00:05:21): "mt" = a prop_entry order's stop just beyond the propulsion candle's MT - 1 tick
 
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
@@ -2837,7 +2887,7 @@ class Params:
                              "cc_ob_offset_ticks, breaker_leave_pts, offer_step_pts, sweep_leave_bars, sweep_leave_pts >= 0; clarity_overlap, consol_width_adr > 0; 0 < consol_eq_band < 0.5")
         # caption-gap pass (setups_models #7/7)
         for name, ok in (("combine_prefer", ("none", "es")), ("lc_mode", ("failure_swing", "mss")), ("trail_reentry_entry", ("ifvg_ce", "breaker")),
-                         ("reentry_trigger", ("new_array", "sibi_return")), ("reentry_stop", ("array", "wick_ce")),
+                         ("reentry_trigger", ("new_array", "sibi_return")), ("reentry_stop", ("array", "wick_ce", "ob_low")),
                          ("reverse_after_failure", ("off", "inversion", "at_stop", "prop_fail", "sick_sister", "all")),
                          ("allow_opposite_after_target", ("off", "lod", "split", "both")), ("m0950_branch", ("off", "tag", "rev", "cont", "both")),
                          ("cc09_gate", ("off", "tag", "gate")), ("pairing", ("all", "expansion_ob", "retracement_void", "reversal_pool", "consolidation_eq"))):
@@ -2866,6 +2916,8 @@ class Params:
         # caption-gap pass (entries_stops_sizing #2/3)
         from . import es2 as _es2_check
         _es2_check.check_params(self)
+        from . import es3 as _es3_check                  # caption-gap pass (entries_stops_sizing #3/3)
+        _es3_check.check_params(self)
         if self.e4_color and self.retrace_candle == "off":
             self.retrace_candle = "intrabar"          # E4 candle colour = the built retrace_candle "intrabar" (a short fills on an up-close bar: the fill bar opens beyond the limit and trades into it)
         if self.vi_ob_entry and "vi_ob" not in self.entry_arrays:
@@ -3185,19 +3237,23 @@ def resolve_session_close(p: "Params", df: pd.DataFrame, symbol: str):
 
 
 def _risk_budget(p: "Params", eq: float) -> float:
-    return p.risk_dollars if p.risk_dollars is not None else p.risk_pct * eq
+    return p.risk_dollars if p.risk_dollars is not None else p.risk_pct * eq * p.alloc_frac      # caption-gap E8-alloc-30pct: the risk percent applies to alloc_frac of the equity
 
 
 def _total_cap(p: "Params", eq: float) -> float:
-    return p.max_total_risk if p.max_total_risk is not None else p.max_total_risk_pct * eq
+    return p.max_total_risk if p.max_total_risk is not None else p.max_total_risk_pct * eq * p.alloc_frac
 
 
 def _first_units(p: "Params", eq: float, risk: float, entry: float, risk_mult: float = 1.0,
                  extra_cap: float = 0.0) -> int:
     """Owner #12: the first unit risks risk_pct (1.2%) of equity, never more than the total cap.
     extra_cap (E9 size_up_cap_pct x equity) raises the cap for an order a size-up rule fired on."""
+    if p.fixed_units > 0:
+        return _ES3.fixed_first_units(p)                  # caption-gap E8-new-trader-drill / -graduation: exactly N contracts whatever the equity
+    if p.alloc_frac != 1.0:
+        _ES3.hit("alloc_frac")                            # (executed-path counter: the first unit was sized on the allocation fraction)
     return _lots(min(risk_mult * _risk_budget(p, eq) / risk, (_total_cap(p, eq) + extra_cap) / risk,
-                     p.max_notional / abs(entry)), p.lot)
+                     _ES3.notional_cap(p, eq) / abs(entry)), p.lot)
 
 
 def adr5(days: list) -> float | None:
@@ -4490,9 +4546,11 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
                 done["PM"] = True
     gross, costs = tr.pnl(p.cost_per_share)
     net_ = gross - costs
+    state["day_net"] = state.get("day_net", 0.0) + net_            # caption-gap E11-funded-account-caps: the day's realized P&L
+    tight_ = lost is not None and _ES3.tight_loss(tr, p)           # caption-gap E6-new-trader-wide-stops: no immediate re-entry after a tight-stop loss (trader_mode "new")
     key = pos.get("done_key", tr.session)
     reopened = False
-    if (lost is not None and p.reentry_half and not state["reentered"].get(tr.session)
+    if (lost is not None and p.reentry_half and not tight_ and not state["reentered"].get(tr.session)
             and not (p.fomc_day_stop and "fomc" in events(tr.date))):            # N3.5: none on an FOMC day
         # X13b / D18: one more try, same direction, half risk (reentry_gate: only while the idea is intact); the flag of
         # the trade's OWN done key is re-opened (an SB_AM loss no longer re-opens the plain AM slot)
@@ -4513,7 +4571,7 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
         done[key] = False
         state["reversed"][tr.session] = True
         state.setdefault("only_side", {})[tr.session] = -1 if tr.side == "long" else 1
-    if ctx is not None and _SM7.any_after7(p):
+    if ctx is not None and _SM7.any_after7(p) and not tight_:
         reopened = _SM7.after_close(ctx, pos, tr, lost, net_, done, key, state, i, p, reopened) or reopened     # caption-gap setups_models #7/7: win / trail-win re-entries, reversals, the turtle-soup re-entry, the lod reopen
     if p.prop_fail_flip:
         _ES1.after_close(ctx, pos, tr, done, key, state, p)         # caption-gap A16-propulsion-block-full: a failed propulsion block ends the longs of the session
@@ -5171,6 +5229,9 @@ def _ob_at_low(sd, sw, i, p=None, ctx=None):
     if p is not None and (p.ob_pick != "blend" or p.ob_skip_encapsulated):    # caption-gap A12 ob_pick / ob_skip_encapsulated
         j, k, mt_ = _LD.ob_run(ctx, sd, sw, j, k, i, p)
     top, low = float(sd.o[j:k + 1].max()), float(sd.c[j:k + 1].min())
+    if p is not None and p.ob_anchor == "last_open":
+        top = float(sd.o[k])                                 # caption-gap A12-ob-anchor (cc05_015 ~00:16:48): the last candle's open - the ultra-tight anchor
+        _ES3.hit("ob_anchor_last_open")
     d_ = dict(k=k, j=j, body_top=top, body_low=low, mt=(top + low) / 2 if mt_ is None else mt_,
               hi=float(sd.h[j:k + 1].max()), lo=float(sd.l[j:k + 1].min()))
     if p is not None and mt_ is None and p.mt_mode in ("sensitive", "body_single_range_blended"):
@@ -5455,7 +5516,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         pre_windows.append(("NEWS", 540, 570))
     if p.pre_0900 and not nfp_hour and not am0830:
         pre_windows.append(("PRE9", 540, 570))
-    state = {"day": day, "reentered": {}, "re_ctx": {}, "re7": {}, "only_side": {}, "reversed": {}, "day_pts": 0.0, "day_loss": False,
+    state = {"day": day, "reentered": {}, "re_ctx": {}, "re7": {}, "only_side": {}, "reversed": {}, "day_pts": 0.0, "day_loss": False, "day_net": 0.0,
              "rs": (risk_state if risk_state is not None else _EN.new_risk_state()) if p.loss_halving else None,
              "ext": list(_ext or ())}              # run_day fixed point: the extras' trades of the previous pass
     ctx.ext_other = [t_ for t_ in (_ext or ()) if t_.setup.startswith("sb_")]   # Ma Deuce reads the SB's (it runs first)
@@ -5513,6 +5574,17 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                         or _EN.add_cut_passed(sd, pos, i - 1, p)      # E12e: the cut passed on a closed bar
                         or (p.late_cutoff and t >= p.late_cutoff)):    # T11: no adds in the last 15 minutes
                     pos["add"] = None
+                elif a.get("now"):                    # caption-gap E12-single-add-variants (020 ~00:01:40): the momentum add - a market buy at the open after the arming close
+                    px = float(o)
+                    tr.adds.append((ts, sd.x(px), a["q"]))
+                    pos["left"] += a["q"]; pos["basis"] += px * a["q"]; pos["n"] += a["q"]
+                    pos["add"] = None
+                elif a.get("up"):                     # caption-gap X8-downclose-wickce-add (085 ~00:10:04): a stop-direction add - filled when the bar trades UP to the wick CE (side space)
+                    if h >= a["px"]:
+                        px = max(float(o), float(a["px"]))
+                        tr.adds.append((ts, sd.x(px), a["q"]))
+                        pos["left"] += a["q"]; pos["basis"] += px * a["q"]; pos["n"] += a["q"]
+                        pos["add"] = None
                 elif a.get("market"):                 # E1 add_order "market": the open after a retest bar
                     if i - 1 > a["i"] and sd.l[i - 1] <= a["px"]:
                         px = float(o)
@@ -5534,7 +5606,11 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             stop = pos["stop"]
             if p.ambiguous == "target" and o > stop and not pos["t1_done"] and h >= pos["t1"]:
                 stop = -np.inf                        # optimistic bound: target before stop
-            if o <= stop:
+            es3x_ = _ES3.exit_hit(pos, o, l) if (pos.get("es3_exits") and i > pos["fill_i"]) else None
+            if es3x_ is not None and l > stop:
+                tr.exits.append((ts, sd.x(es3x_[0]), pos["left"], es3x_[1])); pos["left"] = 0     # caption-gap new-probe-position / E12-631-vi-wickce-invalidation: a resting early exit (the probe cut, the OB MT before the displacement)
+                _ES3.hit("exit_" + es3x_[1])
+            elif o <= stop:
                 tr.exits.append((ts, sd.x(o), pos["left"], "stop_gap")); pos["left"] = 0
             elif l <= stop:
                 tr.exits.append((ts, sd.x(stop), pos["left"], "be" if pos["t1_done"] else "stop")); pos["left"] = 0
@@ -5674,6 +5750,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 tr.exits.append((ts, sd.x(c), pos["left"], "consol_out")); pos["left"] = 0   # N8.3: consolidation-day AM out by 11:00
             if pos["left"] and t + tf >= flat:
                 tr.exits.append((ts, sd.x(c), pos["left"], "eod")); pos["left"] = 0
+            if pos["left"] and p.daily_loss_pct > 0 and _ES3.daily_loss_hit(ctx, state, pos, tr, sd, i, ts, p):
+                tr.exits.append((ts, sd.x(c), pos["left"], "daily_loss")); pos["left"] = 0     # caption-gap E11-funded-account-caps (050 ~00:48:18): the day's loss limit is reached - flat at this close
+                _ES3.hit("daily_loss_flat")
             if pos["left"]:                            # #12: open risk against the current stop
                 eq = ctx.equity
                 if eq:
@@ -5692,13 +5771,19 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     _ES2.far_raise_update(sd, pos, i, p)                # caption-gap E2-far-edge-fvg-over-breaker (018 ~00:00:09): the short-term high broke - the stop rises to the breaker bottom (under its MT)
                 if p.add_day_mode == "trend_day":
                     _ES2.trend_day_update(ctx, sd, pos, i, p)           # caption-gap E12-trend-day-adds (038 ~1:15:27): pos["td_ok"] / ["td_block"]
+                if p.trail_wick_ce and not pos.get("day_trade"):
+                    _ES3.trail_wick(sd, pos, i, p)                      # caption-gap E6-wick-ce-stop (022 ~01:14:11): the managed variant - each new defending wick raises the stop
+                pos["dl_room"] = _ES3.dl_room(ctx, state, p, pos, tr, sd, i, ts) if p.daily_loss_pct > 0 else None     # caption-gap E11-funded-account-caps: an add's risk stays inside the day's loss limit
                 can_add0 = (p.adds and pos["add"] is None and not pos.get("no_adds")
+                            and (pos["dl_room"] is None or pos["dl_room"] > 0)
                             and not (chop.on and p.sloppy_mode == "stand_aside")
                             and not _EN.adds_blocked(ctx, sd, pos, i, p)                 # E12f
                             and not (state["day_loss"] and (not p.after_loss_adds or p.no_max_after_loss))   # Ep08.12
                             and not _EN.add_cut_passed(sd, pos, i, p)                     # E12e / D12
                             and not (p.late_cutoff and t >= p.late_cutoff))                # T11
                 can_add = can_add0 and not pos["t1_done"]
+                if can_add and p.add_momentum and _nadds(pos, tr) < len(p.adds) and _ES3.momentum_add(pos, tr, sd, i, p, ctx.equity):
+                    can_add = False                                     # caption-gap E12-single-add-variants (020 ~00:01:40): the one market add as price runs from the OB
                 if can_add0 and pos["t1_done"] and p.add_after_partial and _nadds(pos, tr) < len(p.adds) + 1:
                     _ES2.post_partial_add(ctx, sd, pos, tr, i, p, lambda px, size, fl: (_SM.add_ok(sd, pos, px, i, p) and _arm_add(pos, tr, px, i, p, ctx.equity, floor=fl, size=size) is None
                                                                                          and pos["add"] is not None))     # caption-gap E12-adds-after-partials-intraday
@@ -5757,6 +5842,10 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 if can_add and _nadds(pos, tr) < len(p.adds) and _ES2.add_loc_on(p):          # caption-gap E12 add locations (far edge / wick retouch / 30m FVG / IFVG / IFVG-OB / VI early / VI-OB)
                     _ES2.add_locations(ctx, sd, pos, tr, i, p, lambda px, floor=None, form=None: (_SM.add_ok(sd, pos, px, i, p, form=floor if form is None else form) and _arm_add(pos, tr, px, i, p, ctx.equity, floor=floor) is None
                                                                                         and pos["add"] is not None))
+                    can_add = pos["add"] is None
+                if can_add and _nadds(pos, tr) < len(p.adds) and _ES3.add_locs3_on(p):          # caption-gap entries_stops_sizing #3/3: 5m wick CE / VI ladder / void / gate-candle wick / reclaimed-OB adds
+                    _ES3.add_locations3(ctx, sd, pos, tr, i, p, lambda px, floor=None, size=None: (_SM.add_ok(sd, pos, px, i, p, form=floor) and _arm_add(pos, tr, px, i, p, ctx.equity, floor=floor, size=size) is None
+                                                                                                    and pos["add"] is not None))
                     can_add = pos["add"] is None
                 if can_add and p.add_on == "retest":                            # Ep01.18
                     _EN.retest_add(sd, pos, tr, i, p, lambda px: _arm_add(pos, tr, px, i, p, ctx.equity, floor=pos["fvg_bottom"]))
@@ -5842,6 +5931,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                    pending.get("leg_lo", pending["ext"]) + p.leg_pd * ((pending["leg_hi0"] if pending.get("no_new_extreme") else
                                                 sd.h[pending["ext_i"]:i].max()) - pending.get("leg_lo", pending["ext"])))):
                 pass                                 # not yet in the leg's discount: wait (M2.4: leg high frozen)
+            elif p.daily_loss_pct > 0 and pos is None and _ES3.dl_blocks_order(pending, ctx, state, p):
+                pending = None                       # caption-gap E11-funded-account-caps: the closed losses of the day + this order's risk would reach the day's loss limit
+                _f("x_daily_loss")
             elif (pos is None and _NC.fill_ok(pending, t, tf) and _fill_at(sd, pending, i) is not None
                   and _retrace_ok(sd, pending, i, p)):
                 o = pending
@@ -5885,6 +5977,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     _SM7.on_fill(ctx, sd, pos, tr, o, i, p)           # caption-gap setups_models #7/7: hold-to-close, the at_stop reversal watch, the breakaway re-entry stop drop
                 if o.get("es1"):
                     _ES1.on_fill(ctx, sd, pos, tr, o, i, p)           # caption-gap entries_stops_sizing #1/3: the PB-wick exit, the MT warn tag, the strict IOFED watch, the CISD adds
+                _ES3.on_fill(ctx, sd, pos, tr, o, i, p, fill)             # caption-gap entries_stops_sizing #3/3: initial risk, the OB MT / probe exits, the gate candle, the near-HTF room
                 if o.get("es2"):
                     _ES2.on_fill(ctx, sd, pos, tr, o, i, p, fill)      # caption-gap entries_stops_sizing #2/3: the OB grade, the FVG-then-OB add, the zone-ladder add base
                 _SM7.fill_note(state, o)                              # caption-gap setups_models #7/7: the re-entry / reversal context is no longer pending
@@ -5934,6 +6027,10 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 pending = o_x
         if _SM7.any_special7(p) and pending is None and pos is None:
             o_x = _SM7.special7(ctx, sides, i, p, state, pos, pending, _risk_mult(state, "AM", p), done)     # caption-gap setups_models #7/7: the London-close scalp, the 10:50 macro, the lunch macro, the NY expansion turtle soup
+            if o_x is not None:
+                pending = o_x
+        if p.probe_mult > 0 and want is not None and pending is None and pos is None and am_lo <= t < am_hi and not _MG.blocked_now(state, "AM"):
+            o_x = _ES3.probe_order(ctx, sides, i, p, state, trades, done, _BD.want_at(ctx, p, "AM", i), ctx.lock.get("AM"))     # caption-gap new-probe-position (026 ~00:16:16): a small market probe on an indecisive session
             if o_x is not None:
                 pending = o_x
         session = None
@@ -6229,17 +6326,25 @@ def _arm_add(pos, tr, px, i, p, eq, floor=None, g=None, pos_g=False, size=None, 
     E11 max_contracts_total caps the units; E1 add_order "market" fills at the open after a retest."""
     k = _nadds(pos, tr)
     base = pos.get("add_base") or pos.get("plan_shares") or tr.shares        # a ladder trade: the full planned size, not rung 0 (caption-gap E12-in-zone-larger-second: the zone ladder's first leg)
-    q = _lots(base * p.adds[min(k, len(p.adds) - 1)] * pos.get("es2_add_mult", 1.0), p.lot) if size is None else size
+    dm_ = _ES3.dig_mult(pos_sd(pos), px, g, i, p) if p.add_dig_mult < 1.0 else 1.0     # caption-gap E12-repeat-dig-smaller-add: an FVG price dug into twice
+    q = _lots(base * p.adds[min(k, len(p.adds) - 1)] * pos.get("es2_add_mult", 1.0) * dm_, p.lot) if size is None else size
     at_risk = max(0.0, pos["basis"] - pos["stop"] * pos["n"])
     d = px - pos["stop"]
     if d <= 0:
         return
+    if p.vi_ladder and pos.get("zone_top") is not None and px <= pos["zone_top"]:
+        return                                         # caption-gap E12-631-vi-wickce-invalidation: adds only beyond the entry VI (the position stays net from it)
     if not _SM.add_pd_ok(pos, px, p):
         _f("x_add_not_in_pd")                          # M2.6 add_in_pd: every add path, not only add_ok
         return
-    room = _total_cap(p, eq) + extra_room * eq - at_risk
+    room = _total_cap(p, eq) + (extra_room + pos.get("es3_room", 0.0)) * eq - at_risk
     if d * q > room:
         q = _lots(max(room, 0.0) / d, p.lot)
+    if pos.get("dl_room") is not None and d * q > pos["dl_room"]:
+        q = _lots(max(pos["dl_room"], 0.0) / d, p.lot)        # caption-gap E11-funded-account-caps: the add's risk stays inside the day's loss limit
+    lr_ = _ES3.lev_room_units(p, eq, pos["n"], px)
+    if lr_ is not None and q > lr_:
+        q = _lots(lr_, p.lot)                                 # caption-gap E8-leverage-cap-3x: first unit + adds <= max_lev x equity
     q = _EN.cap_add(q, pos["n"], p)
     if q >= p.lot and q >= 1:
         pos["add"] = dict(px=px, q=q, i=i, market=p.add_order == "market",
@@ -6268,7 +6373,7 @@ def _ob_add(sd, pos, tr, i, p, eq):
     j = k
     while j - 1 > pos["fill_i"] and sd.c[j - 1] < sd.o[j - 1]:
         j -= 1
-    top = float(sd.o[j:k + 1].max())
+    top = float(sd.o[k]) if p.ob_anchor == "last_open" else float(sd.o[j:k + 1].max())     # caption-gap A12-ob-anchor: the add's zone top
     if not _SM.add_ok(sd, pos, top, i, p, form=float(sd.c[j:k + 1].min())):           # setups_models add rules (M2 / Ep05.4); the add-cutoff test reads the OB's body bottom (review fix)
         return
     if sd.l[j:k + 1].min() >= pos["stop"] and sd.c[i] > top:
@@ -6571,6 +6676,10 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         o_ = _SM6.extra6(ctx, sd, i, p, session, risk_mult)                  # caption-gap setups_models #6/7: consolidation EQ, void trades, failed-turtle continuation, rejection block, range fades, vacuum block
     if o_ is None and sd.sweep is None and _SM7.any_extra7(p):
         o_ = _SM7.extra7(ctx, sd, i, p, session, risk_mult)                  # caption-gap setups_models #7/7: or_ref, am_array_open, lh_ob_pullback, the 09:50 continuation, missed_5m
+    if p.reentry_stop == "ob_low" and (getattr(ctx, "re_ctx_now", None) or {}).get("pending"):
+        o2_ = _ES3.ob_low_order(ctx, sd, i, p, session, risk_mult)             # caption-gap E6-attempt-based-stop (cc02_005 ~00:01:47): the re-entry is the first new OB after the stop-out
+        if o2_ is not None:
+            o_ = o2_
     if o_ is None and _SM7.any_re_orders(ctx, p):
         o_ = _SM7.re_order(ctx, sd, i, p, session, risk_mult)                # caption-gap X13 / X14 (setups_models #7/7): the trail-win IFVG CE / breaker retest, the reversal inversion / at-stop orders, the sibi return
     if o_ is not None and p.entry_discipline != "any" and p.entry_discipline_only and not _SM6.discipline_ok(o_, p):
@@ -7341,6 +7450,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     elif p.stop_mode in ("sweep", "ob_mt_pure"):   # E6c / M2.5
         s_ = _EN.gap_stop(sd, g, sw, i, p, ob, p.stop_mode)
         stop = stop if s_ is None else s_
+    if p.stop_mode in ("wick_ce", "m2_auto", "three_pd", "next_pd", "bpr75") or p.prop_stop:
+        stop = _ES3.stop_adjust(ctx, sd, sw, g, ob, mt, entry, stop, i, p, prop_exit)       # caption-gap entries_stops_sizing #3/3: wick CE / M2 auto / three PD arrays / next PD array / BPR 75 % stops, the propulsion MT stop
     if p.ob_vi_overshoot and ob is not None:        # caption-gap A12-ob-overshoot-to-vi (050 ~33:56): the invalidation runs to the adjacent VI's far edge
         d_ = _ES1.zone_dict(sd, ob)
         vf_ = _ES1.vi_far_edge(sd, d_["lo"], d_["hi"], d_["j"], i, p)
@@ -7443,6 +7554,10 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         tags.update(uni_t)
     if es2_t:
         tags["es2"] = es2_t
+    if p.vi_ladder_exit and mt is not None:
+        tags["es3"] = dict(tags.get("es3") or {}, ob_mt=float(mt))       # caption-gap E12-631-vi-wickce-invalidation: the OB MT whose trade (before the displacement) voids the idea
+    if p.ifvg_mohawk_add and is_ifvg and not (sd.l[g.i + 1:i] <= g.top).any():
+        tags["es3_rung"] = float(g.bottom) - p.mohawk_add_ticks * p.tick   # caption-gap E12-mohawk-add-ifvg (102 ~01:14:30): the one-pass IFVG's mohawk add beyond the far edge
     if chase_ is not None:
         tags["chase_bars"] = chase_
     if cp_:
@@ -7584,6 +7699,10 @@ def _ob_pre(ctx, sd, sw, i, p, session, risk_mult):
     if p.ob_mt_two_sided and mt_stop_ and _ES2.ob_mt_dead(sd, int(ob["k"]), float(ob["mt"]), i):
         stop, mt_close = ob["lo"] - p.pad, None    # caption-gap A12-mt-worked-both-sides (cc09_008 ~14:37): no MT level any more - the stop at the OB low
         _ES2.hit("ob_mt_dead")
+    osk_ = _ES3.ob_stop_for(ob, p)                 # caption-gap E6-ob-body-stop (cc04_003 ~00:10:44): under the OB body low (the close) / wick low instead of the MT
+    if osk_ is not None and entry - osk_ >= p.min_risk_pts * p.es_pt:
+        stop, mt_close = osk_, None
+        _ES3.hit("ob_stop_" + p.ob_stop_kind)
     if entry - stop < p.min_risk_pts * p.es_pt or entry <= stop:
         stop = sw["ext"] - p.pad        # [our interpretation] fallback to the sweep extreme
         mt_close = None
@@ -8058,6 +8177,11 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
                                             # the order stays an ordinary session trade (stop unchanged)
     stop = _SM3.stop_adjust(ctx, sd, sw, i, p, entry, stop, tags)            # caption-gap setups_models #3/7: the A23 wick CE / eq_hunt stops
     stop = _EN.refine_stop(ctx, sd, sw, i, p, entry, stop, tags, lvx, lvt)   # A4 / A12 / E6d / E6f
+    if p.stop_mode == "fixed" and p.stop_fixed_pts > 0:
+        stop = entry - p.stop_fixed_pts * p.es_pt                            # caption-gap E8-new-trader-drill (042 ~00:32:11): a fixed stop (5 ES pts) under the final entry
+        _ES3.hit("stop_fixed")
+    if p.stop_old_low_body or p.stop_gap_edge or p.stop_htf_anchor or (p.stop_widen_new and p.trader_mode == "new"):
+        stop = _ES3.stop_post(ctx, sd, sw, i, p, entry, stop, tags)          # caption-gap E6-old-low-rejection-body / E6-nwog-stop / E6-refined-stop-htf / E6-new-trader-wide-stops
     if p.gap_risk != "off":
         st_g = _ES2.gap_risk_adjust(ctx, sd, sw, i, p, entry, stop)          # caption-gap A6-voids-fill-holding-range (cc04_002 ~1:41): an unfilled gap under the entry in a consolidation
         if st_g is None:
@@ -8495,8 +8619,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         _f("x_lh_engaged")
         return None
     lv, kinds = [v for v, _ in keep], [k for _, k in keep]
-    if p.t1_fixed_pts > 0:             # Ep03.24 test (owner #2: not the goal, default off)
-        f = entry + p.t1_fixed_pts * p.es_pt
+    if p.t1_fixed_pts > 0 or p.t1_fixed_r > 0:             # Ep03.24 test (owner #2: not the goal, default off); caption-gap E8-2pct-new-trader: t1_fixed_r = a fixed R multiple (the cc_starter single exit at 1R)
+        f = entry + (p.t1_fixed_r * risk if p.t1_fixed_r > 0 else p.t1_fixed_pts * p.es_pt)
         if p.t1_fixed_all:
             lv, kinds = [min(f, lv[0])], [kinds[0]]
         elif f < lv[0] - p.es_pt and f - entry >= p.min_rr * risk:
@@ -8516,9 +8640,14 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     risk_mult *= _EN.size_mult(ctx, sd, sw, i, p, session, entry, htf, getattr(ctx, "cur_sloppy", ""), lvt)   # E9
     risk_mult *= float(tags.pop("es1_mult", 1.0))        # caption-gap entries_stops_sizing #1/3: HTF gap reaction depth / deep propulsion block
     risk_mult *= float(tags.pop("es2_mult", 1.0))        # caption-gap entries_stops_sizing #2/3: rejection-block context
+    x3_ = 0.0
+    if p.class_risk or p.htf_near_risk_pct > 0 or p.deep_run_mult != 1.0 or p.freq_ref > 0:
+        m3_, x3_ = _ES3.order_risk(ctx, sd, sw, i, p, entry, risk, scalp, draw, tags, lvt)        # caption-gap E8-risk-by-trade-class / E8-E9-5pct-near-htf / E9-deep-discount-reduced / E9-frequency-small-size
+        risk_mult *= m3_
     rungs = []
     lad = tags.pop("ladder", None)                  # E2 / D11 ladder: FVG high, 75%, CE (one order, later rungs)
     xcap = p.size_up_cap_pct * ctx.equity if (p.size_up_cap_pct and any(x.startswith("size_up_") for x in lvt)) else 0.0
+    xcap += x3_ * ctx.equity                         # caption-gap E8-E9-5pct-near-htf: the near-HTF total-risk cap
     plan = None                                     # the planned full size (all ladder rungs together)
     lad_fr = tags.pop("ladder_fracs", None)         # caption-gap E12-070-rung-order: the advanced breaker's own rung sizes
     if lad and not stop_cc and all(px > stop for px in lad):    # a stop-cc order is one stop: no ladder
@@ -8534,6 +8663,12 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     if shares < 1:
         return None
     plan = plan or shares
+    er_ = tags.pop("es3_rung", None)
+    if er_ is not None and p.ifvg_mohawk_add and not rungs and not stop_cc:
+        mr_ = _ES3.mohawk_rung(shares, er_, stop, shares * (entry - stop), p, ctx.equity)     # caption-gap E12-mohawk-add-ifvg: the smaller resting add beyond the IFVG far edge
+        if mr_ is not None:
+            rungs = [mr_]
+            _ES3.hit("ifvg_mohawk_add")
     if tags.pop("zone_ladder", False):
         _ES2.tag(tags, add_base=int(shares))             # caption-gap E12-in-zone-larger-second: later adds are sized from the first leg (1x)
     _f("4_order")
@@ -8754,3 +8889,4 @@ from . import sm6 as _SM6  # noqa: E402  (caption-gap pass, setups_models #6/7: 
 from . import sm7 as _SM7  # noqa: E402  (caption-gap pass, setups_models #7/7: engine glue)
 from . import es1 as _ES1  # noqa: E402  (caption-gap pass, entries_stops_sizing #1/3: engine glue)
 from . import es2 as _ES2  # noqa: E402  (caption-gap pass, entries_stops_sizing #2/3: engine glue)
+from . import es3 as _ES3  # noqa: E402  (caption-gap pass, entries_stops_sizing #3/3: engine glue)

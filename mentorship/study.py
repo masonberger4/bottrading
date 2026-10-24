@@ -2045,7 +2045,68 @@ _ES2_DECISIONS = {
     "E12-low-end-add-conditions": dict(add_low_end=True, add_low_end_size="ladder", **SM_POST),
 }
 DECISIONS.update(_ES1_DECISIONS)
+
+# --- caption-gap pass, entries_stops_sizing #3/3 (stops_sizing_scaling_in.md items 11-62): one variant per gap id ---
+_OBPRE = dict(ob_entry="pre_break", htf_resist_cap=False, draw_lock="off")
+_ES3_DECISIONS = {
+    "E12-repeat-dig-smaller-add": dict(add_dig_mult=0.67, add_on="retest", **SM_POST),
+    "E12-single-add-variants": dict(add_momentum=True, add_mom_r=0.25, ob_adds=True, **_OBPRE),
+    "E12-wick-ce-add-5m": dict(add_wick_ce=True, **SM_POST),
+    "E12-631-vi-wickce-invalidation": dict(vi_ladder=True, vi_ladder_exit=True, add_ladder="631", **SM_POST),
+    "E12-liquidity-void-add": dict(add_void=True, **SM_POST),
+    "X8-downclose-wickce-add": dict(add_gate_wick=True, **SM_POST),
+    "E12-mohawk-add-ifvg": dict(ifvg_entries=True, ifvg_mohawk_add=True, **SM_POST),
+    "E12-mm-sell-model-adds": dict(add_reclaimed_ob=True, **SM_POST),
+    "E11-funded-account-caps": dict(daily_loss_pct=0.02, **SM_POST),
+    "E11-portfolio-exposure-cap": dict(max_exposure_pct=0.02, **SM_POST),
+    "E8-alloc-30pct": dict(alloc_frac=0.30, risk_pct=0.01, max_total_risk_pct=0.011, **SM_POST),
+    "E8-alloc-30pct_2pct": dict(alloc_frac=0.30, risk_pct=0.02, max_total_risk_pct=0.021, **SM_POST),
+    "E8-2pct-new-trader": dict(risk_pct=0.015, max_total_risk_pct=0.016, t1_fixed_r=1.0, t1_fixed_all=True, **SM_POST),
+    "E8-E9-5pct-near-htf": dict(htf_near_risk_pct=0.05, **SM_POST),
+    "E8-risk-by-trade-class": dict(class_risk={"scalp": 0.005, "day": 0.012}, t1_fixed_r=1.0, t1_fixed_all=True, **SM_POST),
+    "E8-leverage-cap-3x": dict(max_lev=3.0, **SM_POST),
+    "E8-new-trader-drill": dict(stop_mode="fixed", stop_fixed_pts=5.0, t1_fixed_pts=5.0, t1_fixed_all=True, fixed_units=1, entry="edge_1tick", adds=(), **SM_POST),
+    "E8-new-trader-graduation": dict(trader_mode="new", grad_block=3, grad_max=4, **SM_POST),
+    "E9-deep-discount-reduced": dict(deep_run_mult=0.5, deep_run_weeks=2, **SM_POST),
+    "E9-frequency-small-size": dict(freq_ref=1.0, **SM_POST),
+    "new-probe-position": dict(probe_mult=0.25, probe_t=600, htf_bias="react", **SM_POST),
+    "E6-wick-ce-stop": dict(stop_mode="wick_ce", trail_wick_ce=True, **SM_POST),
+    "M2-stop-by-fvg-choice": dict(stop_mode="m2_auto", fvg_pick="2022", **SM_POST),
+    "E6-old-low-rejection-body": dict(stop_old_low_body=True, **SM_POST),
+    "E6-nwog-stop": dict(stop_gap_edge="own", gap_mode="ict", **SM_POST),
+    "E6-nwog-stop_all": dict(stop_gap_edge="all", gap_mode="ict", **SM_POST),
+    "E6-three-pd-arrays": dict(stop_mode="three_pd", **SM_POST),
+    "E6-next-pd-array": dict(stop_mode="next_pd", **SM_POST),
+    "E6-bpr-75-stop": dict(stop_mode="bpr75", **SM_POST),
+    "E6-bpr-75-stop_lower": dict(stop_mode="bpr75", bpr75_ref="lower", **SM_POST),
+    "E6-new-trader-wide-stops": dict(trader_mode="new", stop_widen_new=True, reentry_half=True, **SM_POST),
+    "E6-refined-stop-htf": dict(stop_htf_anchor=True, **SM_POST),
+    "E6-attempt-based-stop": dict(reentry_half=True, reentry_stop="ob_low", **SM_POST),
+    "E6-ob-body-stop": dict(ob_stop_kind="body", **_OBPRE),
+    "E6-ob-body-stop_wick": dict(ob_stop_kind="wick", **_OBPRE),
+    "A12-ob-anchor": dict(ob_anchor="last_open", ob_adds=True, **_OBPRE),
+    "E6-mitigation-block-stop": dict(mit_entries=True, **SM_POST),
+    "E6-propulsion-mt": dict(prop_entry=True, prop_stop="mt", **SM_POST),
+}
 DECISIONS.update(_ES2_DECISIONS)
+DECISIONS.update(_ES3_DECISIONS)
+
+
+def risk_grid(base: Params | None = None) -> list:
+    """E8-2pct-new-trader (cc02_001 ~00:03:41, ~00:16:41; 022 ~1:38:24): the risk-per-trade grid - risk_pct in (1.0, 1.2, 1.5, 2.0) % with max_total_risk_pct = risk_pct + 0.1 %; every other field of `base` unchanged."""
+    base = base or Params()
+    return [replace(base, risk_pct=r, max_total_risk_pct=round(r + 0.001, 6)) for r in (0.010, 0.012, 0.015, 0.020)]
+
+
+def cc_starter(base: Params | None = None) -> Params:
+    """E8-2pct-new-trader (cc02_001 ~00:16:41): the CC starter model - 1.5 % risk, a single exit at 1R (t1_fixed_r with t1_fixed_all), aiming at 6 % a month."""
+    return replace(base or Params(), risk_pct=0.015, max_total_risk_pct=0.016, t1_fixed_r=1.0, t1_fixed_all=True)
+
+
+def deploy_gate(trades) -> dict:
+    """E8-new-trader-graduation (048 ~02:26:37): the paper / demo deployment gate as a report (months at 1 micro, share of non-negative weeks; PASS at >= 6 months and >= 70 %)."""
+    from . import es3
+    return es3.deploy_gate(trades)
 SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): their look-ahead tests are in test_silver_bullet.py
 
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)

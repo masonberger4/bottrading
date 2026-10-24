@@ -1405,6 +1405,8 @@ def reentry_idea_ok(ctx, sd, i: int, p, o: dict, rc: dict) -> bool:
 def loss_reentry_ok(ctx, sd, i: int, p, o: dict, rc: dict) -> bool:
     """X13b gate of an order while the loss re-entry context is pending (run_day): the idea-intact test when reentry_idea_gate is on OR the trigger is sibi_return (review fix: the sibi return order
     carries ext_i == stop_i and could never pass the old restored-sweep test, so the trigger alone was dead), else the old restored-sweep / FVG test."""
+    if p.reentry_stop == "ob_low":
+        return (o.get("sm7") or {}).get("kind") == "ob_low"              # caption-gap E6-attempt-based-stop: the re-entry order IS the new OB (es3.ob_low_order)
     if p.reentry_idea_gate or p.reentry_trigger == "sibi_return":
         return reentry_idea_ok(ctx, sd, i, p, o, rc)
     return _S()._MG.reentry_order_ok(o, sd, rc, p)

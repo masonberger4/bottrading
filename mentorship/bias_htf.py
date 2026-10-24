@@ -87,6 +87,8 @@ def bx_string(p) -> str:
         x["onr"] = 1
     if p.matrix_tf_lower or p.react_tf_tag:
         x["rtf"] = 1
+    if p.deep_run_mult != 1.0:                 # caption-gap E9-deep-discount-reduced (099 ~00:28:59): the weekly deep_run column
+        x["deep"] = p.deep_run_weeks
     return json.dumps(x, sort_keys=True, separators=(",", ":")) if x else ""
 
 
@@ -538,6 +540,13 @@ def add_columns(out: pd.DataFrame, X: dict, d: pd.DataFrame, w: pd.DataFrame, ar
             hh, ll = wh[seg].max(), wl[seg].min()
             vals.append(float(-100.0 * (hh - wc[done[-1]]) / (hh - ll)) if hh > ll else nan)
         out["wpr"] = vals
+    # --- E9-deep-discount-reduced (099 ~00:28:59): +1 = a deep PREMIUM after n straight higher weekly closes (the latest completed close in the top quarter of the last-13-week range), -1 = deep DISCOUNT
+    # after n straight lower closes (bottom quarter), 0 otherwise. Completed weeks only [our interpretation of "3-4 weeks of steady one-direction"; fewer than 13 weeks: the range of those available]
+    if "deep" in X:
+        from . import es3 as _ES3
+        wh, wl, wc = w.high.values.astype(float), w.low.values.astype(float), w.close.values.astype(float)
+        wlast = np.array([kpos.get(t.date(), -1) for t in w["last"]])
+        out["deep_run"] = _ES3.deep_run_column(wh, wl, wc, wlast, ks, int(X["deep"]))
     # --- B9 next array on fail (react through the next weekly array) and persistence
     if "nof" in X:
         out = _next_array(out, X["nof"], d, arrs, ks, px, on, o, h, l, c)

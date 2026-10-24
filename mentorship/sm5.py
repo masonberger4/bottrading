@@ -766,8 +766,13 @@ def mit_cand(ctx, sd, sw, i: int, p):
         mt = float(z.mt) if z.mt == z.mt else float((z.top + z.bottom) / 2)
         adj = [float(g.bottom) for g in gaps if g.bottom <= z.top + tol and g.top >= z.bottom - tol]
         ref = min([mt] + adj)
-        if best is None or z.top > best[0]:
-            best = (float(z.top), float(ref), "mitigation")
+        top_ = float(z.top)
+        if p.mit_entries and z.src >= 0:
+            top_ = min(top_, float(max(sd.o[z.src], sd.c[z.src])))     # caption-gap E6-mitigation-block-stop (cc04_004 ~00:14:00): the limit at the mitigation candle's BODY edge (side space: the body top) ...
+            ref = float(z.bottom)                                       # ... and the stop beyond the candle's far extreme (+ the pad)
+            _S()._ES3.hit("mit_entries")
+        if best is None or top_ > best[0]:
+            best = (top_, float(ref), "mitigation")
     if best is not None:
         hit("mit_entry_array")
     return best

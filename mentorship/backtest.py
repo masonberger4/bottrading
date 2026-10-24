@@ -13,6 +13,7 @@ import pandas as pd
 from claude_hf.daytypes import JOBS, is_trading_day
 from . import htf
 from . import sm4 as _SM4
+from . import es3 as _ES3
 from .entries import new_risk_state
 from .strategy import ROUND_STEP, SMT_PICKS, Params, resolve_session_close, run_day
 
@@ -413,6 +414,8 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             if p.risk_basis == "equity":               # #12: start-of-day equity, closed trades only
                 eq = p.account_equity + sum(r["net"] for r in rows)
             kw = day_kwargs(pr, k, eq, (intermarket or INTERMARKET()).get(d), week_state(rows, d) if p.dw_needs_week else None)
+            if p.trader_mode or p.freq_ref > 0:       # caption-gap E8-new-trader-graduation / E9-frequency-small-size: the track record and the last 5 sessions size the day
+                kw["p"] = _ES3.day_params(kw["p"], rows, {x.index[0].date() for x in ds[max(0, k - 5):k]})
             day_trades = run_day(partner=pa, partner2=pa2, locks=locks, skips=skips, risk_state=rs, objective=objective, **kw)
             if p.max_trades_week:                        # X15: the week's budget is applied in ENTRY-time order (run_day did it
                 day_trades = sorted(day_trades, key=lambda t_: t_.entry_time)[:p.max_trades_week - n_wk]   # already; the main loop first, then
@@ -653,7 +656,7 @@ def _group_pick(t: pd.DataFrame, pick: str) -> pd.DataFrame:
 
 def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, sb_one_market: bool = False,
             sb_am_done: bool = False, laggard_consol_only: bool = False, dual_deal: str = "", exec_exclude: tuple = ("YM",), prefer: str = "none",
-            max_exec: int = 2) -> pd.DataFrame:
+            max_exec: int = 2, max_exposure_pct: float = 0.0) -> pd.DataFrame:
     """Caption-gap OT-D15-default-instrument / OT-max-two-correlated-markets (028 ~00:23:58; 055 ~00:27:38; setups_models #7/7): `exec_exclude` (Params.combine_exec_exclude, default ("YM",)) = the
     symbols that are never EXECUTED - their rows are dropped before the pick (YM is the Dow: a reference for SMT only, it already enters as partner2 / smt2, so the bot's trades do not change; the
     "middle" pick, which ranks all three indices, drops them AFTER the pick); `prefer` (Params.combine_prefer) "es" = on a same-bar tie (same entry_time) keep the S&P row (ES / SPX / SPY) over
@@ -671,9 +674,8 @@ def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, 
         raise ValueError(f"prefer {prefer!r}: expected 'none' or 'es'")
     kw = dict(pick=pick, one_market=one_market, sb_one_market=sb_one_market, sb_am_done=sb_am_done, laggard_consol_only=laggard_consol_only, exec_exclude=tuple(exec_exclude), prefer=prefer,
               max_exec=int(max_exec))
-    if dual_deal:
-        return _combine_dual(runs, dual_deal, kw)
-    return _combine(*runs, **kw)
+    out = _combine_dual(runs, dual_deal, kw) if dual_deal else _combine(*runs, **kw)
+    return _ES3.exposure_filter(out, max_exposure_pct) if max_exposure_pct else out       # caption-gap E11-portfolio-exposure-cap (Params.max_exposure_pct): open risk of all concurrent trades + the new one <= the cap
 
 
 SPX_SYMS = frozenset({"ES", "SPX", "SPY", "MES"})           # the S&P instruments (OT-max-two-correlated-markets)
