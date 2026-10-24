@@ -198,9 +198,15 @@ def premise_sweep(ctx, sd, i: int, p, session: str):
         return None
     sent = sd.__dict__.setdefault("_prem_sent", set())
     best = None
+    ob_keys = set()
+    if p.ob_reach == "body":                      # caption-gap A12-ob-reached-body (cc03_002 ~8:33): an order block is reached when a BODY enters it (min(open, close) <= its top), not by a wick alone
+        ob_keys = {(round(float(t_), 6), round(float(b_), 6)) for t_, b_, _ in S._ts_arrays(ctx, sd, i, kb, names, (1,))}
     for top, bot, kn in arrs:
         key = (round(float(top), 6), round(float(bot), 6))
-        if key in sent or not (sd.l[i] <= top + MIN1 and sd.c[i] >= bot - MIN1 and sd.c[i - 1] > top):
+        lo_i = min(sd.o[i], sd.c[i]) if key in ob_keys else sd.l[i]
+        if key in sent or not (lo_i <= top + MIN1 and sd.c[i] >= bot - MIN1 and sd.c[i - 1] > top):
+            if key in ob_keys and key not in sent and sd.l[i] <= top + MIN1 and sd.c[i] >= bot - MIN1 and sd.c[i - 1] > top:
+                hit("ob_reach_body")              # a wick-only touch: not a reach of the block
             continue
         if best is None or top > best[0]:
             best = (float(top), float(bot), key)

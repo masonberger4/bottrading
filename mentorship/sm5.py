@@ -481,7 +481,8 @@ def breaker_last_1m(ctx, sd, sw, bz, i: int, p):
     if not ks:
         return None
     k = ks[-1]
-    mt = float((sd.o[k] + sd.c[k]) / 2) if p.mt_mode == "body" else float((sd.h[k] + sd.l[k]) / 2)
+    from .es1 import candle_mt
+    mt = float((sd.o[k] + sd.c[k]) / 2) if p.mt_mode == "body" else candle_mt(p, sd.o[k], sd.h[k], sd.l[k], sd.c[k])
     if mt >= sd.c[i] - MIN1:
         return None
     hit("breaker_last_1m")

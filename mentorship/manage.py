@@ -401,7 +401,7 @@ def exits(ctx, sd, pos, tr, i: int, ts, p, state, extras: bool = False) -> None:
             k = _leg_candle(sd, pos["ext_i"], i)
             if k is not None:
                 pos["leg_k"] = k
-                pos["leg_mt"] = float((sd.o[k] + sd.c[k]) / 2 if p.mt_mode == "body" else (sd.h[k] + sd.l[k]) / 2)
+                pos["leg_mt"] = float((sd.o[k] + sd.c[k]) / 2 if p.mt_mode == "body" else S._ES1.candle_mt(p, sd.o[k], sd.h[k], sd.l[k], sd.c[k]))
         if k is not None and i > k and c < pos["leg_mt"]:
             _exit(tr, sd, ts, c, pos["left"], "leg_mt", pos)
             return

@@ -247,6 +247,8 @@ PRE_OWNER = dict(ob_entry="post_mss", draw_lock="off", htf_resist_cap=False, new
                  # owner answers 2026-10-18 (year end against December; stand aside on sloppy days)
                  # came after the golden numbers were recorded
                  year_end="off", sloppy_mode="off",
+                 # caption-gap entries_stops_sizing#1/3 (A12-ob-anchor-level): the HTF OB level defaults to the 2023 open now; the old engine used the candle extreme
+                 htf_ob_anchor="extreme",
                  # entries_stops_sizing defaults (Ep08.17 one-tick pad; E12f no adds on NFP days)
                  stop_tick_pts=0.0, nfp_no_adds=False, add_arrays=(),
                  # news_calendar_times defaults (N3.5 no re-entry on FOMC, N1 no first hour on NFP, N5.5 chair days)
@@ -1937,6 +1939,59 @@ _SM7_DECISIONS = {
     "new-ny-runs-london-extreme-news": dict(london_ext_guard=True, **SM_POST),
 }
 DECISIONS.update(_SM7_DECISIONS)
+
+# --- caption-gap pass, entries_stops_sizing #1/3 (bias_htf_intermarket.md, definitions_pd_arrays_structure.md): one variant per gap id (name prefix = the gap id) ---
+_ES1_DECISIONS = {
+    "NEW-no-return-to-origin-ob": dict(no_origin_retest=True, turtle_soup="2023", **SM_POST),
+    "NEW-no-return-to-origin-ob_cc_limit": dict(no_origin_retest=True, turtle_soup="cc_limit", htf_bias="react", **SM_POST),
+    "B5-prior-day-ny-range-retracement": dict(entry_pd_frame="prev_day", **SM_POST),
+    "B5-prior-day-ny-range-retracement_ny": dict(entry_pd_frame="prev_ny", **SM_POST),
+    "B5-prior-day-ny-range-retracement_any": dict(entry_pd_frame="any", **SM_POST),
+    "A12-ob-requires-signatures": dict(ob_need_fvg=True),
+    "A12-ob-requires-signatures_anchor": dict(ob_need_fvg=True, ob_entries="prefer", **SM_POST),
+    "A12-cisd-open-buy-level": dict(cisd_ob_entries=True, cisd_ob_px="open", **SM_POST),
+    "A12-cisd-open-buy-level_adds": dict(cisd_ob_entries=True, cisd_ob_px="open", cisd_adds=True, adds=(0.5, 0.33), **SM_POST),
+    "A12-ob-overshoot-to-vi": dict(ob_vi_overshoot=True, vi_arrays=True),
+    "A12-ob-overshoot-to-vi_fvg": dict(ob_vi_overshoot=True, **SM_POST),
+    "D4-mt-source-tally": dict(mt_mode="sensitive", mt_break="close", **SM_POST),
+    "D4-mt-source-tally_blended_warn": dict(mt_mode="body_single_range_blended", mt_break="warn", **SM_POST),
+    "D4-mt-source-tally_trade": dict(mt_break="trade", **SM_POST),
+    "A13-breaker-fvg-refinement": dict(breaker_entry="fallback", breaker_refine=True, **SM_POST),
+    "E2-iofed-full-definition": dict(entry="iofed", iofed_strict=True, **SM_POST),
+    "A5-ob-in-vi-over-newer-fvg": dict(add_pref_ob_in_vi=True, adds=(0.5, 0.33), **SM_POST),
+    "A5-mtf-gap-refinement": dict(gap_tf_mode="refine_down", htf_entry_arrays=(15,), **SM_POST),
+    "A5-mtf-gap-refinement_widen": dict(gap_tf_mode="widen_up", fvg_targets=True, **SM_POST),
+    "A9-vi-retest-tolerance": dict(vi_stop=True, vi_tol="ce", vi_arrays=True, **SM_POST),
+    "A9-vi-retest-tolerance_adjacent": dict(vi_stop=True, vi_tol="adjacent_extreme", vi_arrays=True, **SM_POST),
+    "A16-propulsion-block-full": dict(prop_entry=True, prop_mt_exit=True, prop_mt_test="wick", prop_fail_flip=True, **SM_POST),
+    "A16-propulsion-depth-grade": dict(prop_entry=True, prop_deep_mult=0.5, prop_deep_cut=0.4, **SM_POST),
+    "A15-mitigation-definition-and-iofed": dict(mit_iofed_edge=True, entry="ce", **SM_POST),
+    "A21-implied-range-to-target": dict(leg_pd_anchor="target", **SM_POST),
+    "A21-post-cisd-range-retrace": dict(leg_pd_anchor="retrace_range", **SM_POST),
+    "A23-broken-wick-ce-inversion": dict(entry_arrays=("broken_wick_ce",), broken_wick_stop="body_edge", **SM_POST),
+    "A23-broken-wick-ce-inversion_swing": dict(entry_arrays=("broken_wick_ce",), broken_wick_stop="swing", **SM_POST),
+    "A5-far-edge-reach-conditions": dict(far_edge_reach=True, htf_entry_arrays=(15, 60), **SM_POST),
+    "A5-partial-reprice-shrink": dict(fvg_edge="remaining", **SM_POST),
+    "A12-ob-edge-at-fvg-ce": dict(ob_ce_confluence=True, ob_ce_tol_pts=2.0, **SM_POST),
+    "A21-intraday-fib-bodies": dict(leg_fib="body", **SM_POST),
+    "A8-htf-gap-resistance-grade": dict(htf_depth_mult=(1.0, 1.0, 0.5), **SM_POST),
+    "A12-ob-requires-narrative": dict(ob_need_narrative=True, htf_bias="react"),
+    "A12-ob-requires-narrative_no_array": dict(ob_need_narrative=True, ob_need_htf_array=False, htf_bias="react"),
+    "A12-ob-open-anchor-ltf-wick": dict(ob_wick_ltf_entry=True, htf_ob_anchor="open", htf_entry_arrays=(15, 60), **SM_POST),
+    "A12-ob-anchor-level": dict(htf_ob_anchor="open", htf_targets=("15m", "1h", "4h", "D"), **SM_POST),
+    "new-multi-tf-scan": dict(scan_tfs=(1, 2, 3, 4, 5, 15), **SM_POST),
+    "new-2m-fvg-ce": dict(two_min_ce=True, **SM_POST),
+    "A5-skip-fvg-near-stop-pool": dict(fvg_skip_below_pool_short=True, fvg_pool_gap_pts=2.0, **SM_POST),
+    "A5-multitf-hold-test": dict(mtf_hold=True, entry_tf="5m", **SM_POST),
+    "M13-swing-confirm-gate": dict(ote="limit", ote_gate_4th=True, **SM_POST),
+    "M13-reanchor-parent": dict(ote="limit", ote_reanchor=True, ote_cancel=True, **SM_POST),
+    "M13-nested-ranges": dict(ote="limit", ote_nested=True, **SM_POST),
+    "M13-nested-ranges_third": dict(ote="filter", ote_nested=True, ote_parent_third=True, **SM_POST),
+    "M13-short-ote-mirror": dict(ote="limit", **SM_POST),
+    "A12-ltf-ob-upper-half": dict(ob_entry_px="mt", ob_mt_range="range"),
+    "A12-ob-reached-body": dict(ob_reach="body", allow_htf_array_premise=True, htf_bias="react"),
+}
+DECISIONS.update(_ES1_DECISIONS)
 SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): their look-ahead tests are in test_silver_bullet.py
 
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)

@@ -1898,3 +1898,59 @@ New switches: `missed_kz` ((500, 660),), `missed_lon` (False), `missed_lon_ratio
 Tests: `tests/test_caption_gap_sm7c.py` (19: missed target / kill zone / London lunch / runner, the dual combine with YM, the bias gate, sibi alone, win re-entry limit only, armed flags, prop_fail MT, breaker add sizes, state tag, lc exit, OR / AM array freshness, trail_ref guard, SMT window + hold, PM nest edge, lunch program window); `sm7a` updated (09:50 premium FVG in real prices incl. the mirror and the discount-FVG negative, adv rung weights, breaker add, defaults); `sm7b` gained the outcome cases (`lon`, `rev_inv`, `rev_prop`, `ts_re`, `time_d`, `time_e`, `time_f`; `time_a` / `time_b` moved to windows the bias gate still reaches) whose required counters are OUTCOMES (`re7_fill_reverse`, `re7_fill_ts_re`, `missed_5m_lon`, `m0950_rev_target`). Switches whose outcome no window reaches (ES 2022-01 .. 2024-06 in 3-week windows and 24 synthetic seeds): `reentry_after_win` (never armed) and `breakaway_reentry` (never two MSSs + a retrace): their evaluation counters run in the look-ahead cases, the outcome code is unit-tested (`OUTCOME_UNREACHED` in sm7b).
 Footer: 29fe401 carries "Co-Authored-By: Claude Sonnet 5.5" (the host's attribution line); history is not rewritten, this review-fix commit carries the required "Claude Opus 5.5 (1M context)" line.
 Test runs (review round): `test_caption_gap_sm7a / sm7b / sm7c` 90 passed (40 + 31 + 19). Existing files covering the touched code, each in full: `test_caption_gap_sm1a / sm1c / sm2a / sm3a / sm4a / sm4c / sm5a / sm5c / sm6a / sm6c` + `test_owner_directives.py` + `test_bias_htf.py` + `test_targets_partials.py` 465 passed; `test_entries_stops.py` + `test_news_calendar.py` + `test_day_week_scenarios.py` + `test_day_week_context.py` + `test_silver_bullet.py` + `test_review_fixes.py` + `test_strategy.py` + `test_management_exits.py` + `test_portability.py` 461 passed; `test_setups_models.py` + `test_mentorship.py` 78 passed. Default behaviour: the trades of 3 ES windows x 3 configurations (default Params; a breaker-pyramid / `ts_adds_breakers` / two-chance / trail / loss re-entry mix; a lunch / reverse_in_session mix) are byte-identical to the tree of 29fe401 (md5 of the trade tables).
+
+## Caption-gap pass: entries_stops_sizing#1/3
+
+Engine glue in `mentorship/es1.py` (hooks in `strategy.py`: `_finish_order` gate, fill and manage hooks; `setups.py` / `entries.py` / `htf.py` / `confluence.py` for the gap scans and the HTF arrays). Every switch defaults to the built behaviour. Rulebook fixes are in `mentorship_rules.md` ("Caption-gap fix (<gap id>)" lines + conflicts item 30).
+
+- bias_htf_intermarket#118 NEW-no-return-to-origin-ob | done | `no_origin_retest` | False | after >= 2 tests of a daily low and a daily close above the last daily pivot high, the origin low / OB is dropped from the HTF-array entries (`es1.drop_origin`); the swing's 25-50% arrays stay
+- bias_htf_intermarket#196 B5-prior-day-ny-range-retracement | done | `entry_pd_frame` | "leg" | "prev_day" / "prev_ny" (08:30-16:00 [our interpretation]) / "any"
+- definitions#4 A12-ob-requires-signatures | done | `ob_need_fvg` | False | an OB order arms only after an FVG with c1 on the OB candle (or the next) has closed
+- definitions#7 A12-cisd-open-buy-level | done | `cisd_ob_px` "eq", `cisd_adds` | "eq", False | "open" = open of the down-close run, CISD = high >= open + 1 tick; later runs are adds
+- definitions#9 A12-ob-overshoot-to-vi | done | `ob_vi_overshoot` | False | stop = VI far edge - 1 tick
+- definitions#11 D4-mt-source-tally | done | `mt_mode` ("sensitive", "body_single_range_blended" added), `mt_break` ("off"/"close"/"trade"/"warn"), `mt_warn` tag | "body", "off" | contested trade- vs close-based failure kept as `mt_break` (owner question 3)
+- definitions#14 A13-breaker-fvg-refinement | done | `breaker_refine` | False | FVG / VI inside the breaker is the entry; cancelled on a body close under its low
+- definitions#23 E2-iofed-full-definition | done | `iofed_strict` | False | CE untouched since formation, fill above CE, CE exit before a 3-bar swing low confirms
+- definitions#26 A5-ob-in-vi-over-newer-fvg | done | `add_pref_ob_in_vi` | False | add at the MT of a down-close OB that traded into a VI
+- definitions#34 A5-mtf-gap-refinement | done | `gap_tf_mode` "refine_down" / "widen_up" | "" | HTF entry gap -> LTF FVG; target FVG widened to the HTF far edge
+- definitions#39 A9-vi-retest-tolerance | done | `vi_tol` "ce" / "adjacent_extreme", `vi_tol_small_pts` 2.0 | "none" | small-VI size is [our interpretation]
+- definitions#42 A16-propulsion-block-full | done | `prop_mt_test` "close"/"wick", `prop_fail_flip` | "close", False | wick exit and no-more-longs flip after failure
+- definitions#44 A16-propulsion-depth-grade | done | `prop_deep_mult` 1.0, `prop_deep_cut` 0.5 | 1.0 / 0.5 | deep PB risk multiplier (0 = skip); cut is [our interpretation]
+- definitions#45 A15-mitigation-definition-and-iofed | done | `mit_iofed_edge` | False | after a mitigation tag the next FVG below is entered at its near edge
+- definitions#55 A21-implied-range-to-target | done | `leg_pd_anchor` "target" | "displacement_leg" | sweep extreme .. first ladder target
+- definitions#59 A23-broken-wick-ce-inversion | done | `entry_arrays` "broken_wick_ce", `broken_wick_stop` "body_edge"/"swing" | off, "body_edge" |
+- definitions#76 A5-far-edge-reach-conditions | done | `far_edge_reach` | False | layering / inner BPR / residual sub-gap at the far edge of HTF entry arrays
+- definitions#77 A5-partial-reprice-shrink | done | `fvg_edge` "remaining" | "original" | top shrinks to the lowest low since formation
+- definitions#78 A12-ob-edge-at-fvg-ce | done | `ob_ce_confluence`, `ob_ce_tol_pts` 1.0 | False | 15m OB edge near the entry FVG CE becomes the entry
+- definitions#79 A21-intraday-fib-bodies | done | `leg_fib` "body" | "wick" |
+- definitions#84 A8-htf-gap-resistance-grade | done | `htf_depth_mult` (near, ce, far) | (1,1,1) | tags `htf_depth_*`; risk multiplier through `es1_mult`
+- definitions#87 A12-ob-requires-narrative | done | `ob_need_narrative`, `ob_need_htf_array` | False, True | bias + transitional event + HTF array; array containment is [our interpretation]
+- definitions#88 A12-ob-open-anchor-ltf-wick | done | `ob_wick_ltf_entry` | False | stubby wick (< 25% of range): LTF FVG / OB inside [open, low]
+- definitions#89 A12-ob-anchor-level | done | `htf_ob_anchor` "open"/"extreme" | "open" | 2023 open level is the default, Core Content extreme a switch
+- definitions#92 new-multi-tf-scan | done | `scan_tfs` | (1,) | extra bar sizes' FVGs join the entry gaps
+- definitions#97 new-2m-fvg-ce | done | `two_min_ce` | False |
+- definitions#100 A5-skip-fvg-near-stop-pool | done | `fvg_skip_below_pool_short`, `fvg_pool_gap_pts` 2.0 | False | side-space mirror covers both directions
+- definitions#102 A5-multitf-hold-test | done | `mtf_hold` | False | two or more 1-4m closes inside a 5m gap cancel the entry
+- definitions#109 A21-post-cisd-range-retrace | done | `leg_pd_anchor` "retrace_range" | "displacement_leg" | shares the switch with #55
+- definitions#129 M13-swing-confirm-gate | done | `ote_gate_4th` | False |
+- definitions#130 M13-reanchor-parent | done | `ote_reanchor` (+ `ote_cancel`) | False |
+- definitions#131 M13-nested-ranges | done | `ote_nested`, `ote_parent_third` | False, False |
+- definitions#132 M13-short-ote-mirror | already built (side-space mirroring of the OTE band) | none | n/a | pinned by a test
+- definitions#136 A12-ltf-ob-upper-half | done | `ob_mt_range` "range" | "body" | `ob_entry_px="mt"` price from the candle range mid
+- definitions#141 A12-ob-reached-body | done | `ob_reach` "body" | "wick" |
+
+### Owner questions (caption-gap pass, entries_stops_sizing#1/3)
+
+1. A12 OB level: the 2023 `open` level is the default (`htf_ob_anchor`), Core Content's `extreme` is a switch.
+2. A21 P/D leg: displacement leg stays default; implied range to target and post-CISD retrace range are `leg_pd_anchor` values.
+3. D4 MT break: trade-based (028 / 036) vs close-based (B7 / 058 / 065A / 101) failure; default `mt_break="off"` keeps the built behaviour, spec default 'trade = warning, close = failure' is `"warn"`/`"close"`.
+4. A12 CISD entry: M11b post-CISD EQ (`"eq"`, default) vs 032's open (`"open"`).
+5. A16 PB invalidation: close under MT (default) vs any trade through it (`"wick"`).
+6. A12 OB qualification: bare last-opposite candle (default) vs signatures (`ob_need_fvg`) vs full narrative (`ob_need_narrative`).
+7. B5 prior NY session range is 08:30-16:00 [our interpretation].
+
+### Tests (caption-gap pass, entries_stops_sizing#1/3)
+
+`tests/test_caption_gap_es1a.py` + `tests/test_caption_gap_es1b.py` (69: defaults / validation, a unit test per spec, synthetic + gappy + ES look-ahead cases) passed; the generic `test_bias_htf_lookahead.py` for the 48 new DECISIONS variants passed. Existing files for the touched code: see the commit message.
+
+8. Default change (check): `htf_ob_anchor` defaults to "open" (the 2023 Mentorship level, per the owner rule 2023 over Core Content), which moves HTF OB target levels of the DEFAULT engine (the golden window's t2 levels changed, 23 trades unchanged). `study.PRE_OWNER` now sets `htf_ob_anchor="extreme"` so the golden regression (833350f) still reproduces. Owner: keep "open" as the default, or default to "extreme" (the pre-pass behaviour)?

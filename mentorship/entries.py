@@ -84,7 +84,7 @@ def gap_stop(sd, g, sw, i, p, ob, mode: str):
     if mode == "ob_mt_pure":
         if ob is None:
             return None
-        mt = ob.mt if p.mt_mode == "body" else ob.mid
+        mt = S._ES1.mt_of(p, sd, ob)                # (caption-gap D4-mt-source-tally: body / range / sensitive / blended)
         return float(mt) - p.ob_mt_pure_pad_pts * p.es_pt
     if g is None or g.i - 2 < 0:
         return None
@@ -103,12 +103,16 @@ def refine_stop(ctx, sd, sw, i, p, entry: float, stop: float, tags: dict, lvx: d
     Each only ever moves the stop further away (E7: a stop is never tightened by these)."""
     pad = p.pad
     mtc = tags.pop("mt_close", None)
-    if p.mt_close_stop and mtc is not None:
+    if (p.mt_close_stop or p.mt_break in ("close", "warn")) and mtc is not None:
         mt, far = mtc
         if abs(stop - (mt - pad)) < 1e-9 and far - pad < stop:
             stop = far - pad                       # hard stop at the OB far edge ...
-            lvx["ob_mt_close"] = (float(mt), False)    # ... a body CLOSE below the MT exits (wicks may poke)
-            lvt.append("mt_close")
+            if p.mt_break == "warn":               # caption-gap D4-mt-source-tally: a trade under the MT is a warning (a tag), the failure is the far edge
+                tags["es1"] = dict(tags.get("es1") or {}, mt_warn=float(mt))
+                lvt.append("mt_warn")
+            else:
+                lvx["ob_mt_close"] = (float(mt), False)    # ... a body CLOSE below the MT exits (wicks may poke)
+                lvt.append("mt_close")
     if p.stop_all_ineff:
         c = []
         e = sw["ext_i"]
@@ -189,6 +193,8 @@ def ob_entry_price(ob: dict, sd, p, i: int | None = None) -> float:
     px = p.ob_entry_px
     if px == "open":
         return float(sd.o[ob["j"]])
+    if px == "mt" and p.ob_mt_range == "range":
+        return S._ES1.ob_mt_price(ob)           # caption-gap A12-ltf-ob-upper-half (cc02_002 ~6:24): the midpoint of the candle's high and low
     return float({"body_top": ob["body_top"], "mt": ob["mt"], "range_top": ob["hi"], "high": ob["hi"]}[px])
 
 

@@ -435,7 +435,25 @@ def ote_adjust(sd, sw, i, p, entry, stop, kind, lvt):
     e = sw["ext_i"]
     leg_hi = float(sd.h[e:i + 1].max())
     base = S._LD.leg_low(sd, sw, i, p, leg_hi)       # caption-gap A21 leg_anchor: the dealing range's low ("mss_leg" = the sweep extreme)
+    if p.ote_gate_4th and p.ote != "off" and not S._ES1.ote_gate_ok(sd, sw, i, p):
+        S._f("x_ote_gate")                           # caption-gap M13-swing-confirm-gate: the far extreme is not yet a 3-candle swing confirmed by the 4th candle - earlier dips are ignored
+        sw["_ote_wait"] = True                       # (the caller keeps the sweep alive: the same gap is judged again on the next bar)
+        return None
     lo, hi, sweet = L.ote_band(base, leg_hi)
+    if p.ote_nested and p.ote != "off":              # caption-gap M13-nested-ranges: the parent swing and its live child legs; the band is the one that holds the entry (limit: the nearest sweet spot under the market)
+        if p.ote == "filter":
+            b_ = S._ES1.ote_band_for(sd, sw, i, p, entry, base, leg_hi)
+            if b_ is None:
+                S._f("x_ote")
+                return None
+            base = b_
+        else:
+            bs_ = [(L.ote_band(b_, leg_hi)[2], b_) for b_ in S._ES1.ote_children(sd, sw, i) + [base]]
+            bs_ = [t_ for t_ in bs_ if t_[0] < sd.c[i]]
+            if bs_ and max(bs_)[1] != base:
+                S._ES1.hit("ote_child")
+                base = max(bs_)[1]
+        lo, hi, sweet = L.ote_band(base, leg_hi)
     if p.ote == "limit":
         if p.ote_need_trigger and not S._SM6.ote_trigger_ok(sd, sw, i, hi):
             S._f("x_ote_no_trigger")                 # caption-gap M13-ote-needs-bias-trigger-structure: OTE is context, not an entry - wait for an LTF MSS inside the band
@@ -453,6 +471,9 @@ def ote_adjust(sd, sw, i, p, entry, stop, kind, lvt):
         return None
     if p.ote_need_s and not S._SM7.ote_s_ok(sd, sw, i, p):
         S._f("x_ote_no_s")                           # caption-gap M13-pattern1-full-sequence-ote-fvg: no short-term low S taken before the order = the lower-probability version
+        return None
+    if p.ote_parent_third and not S._ES1.parent_third_ok(sd, sw, i, p, entry, leg_hi, base):
+        S._f("x_ote_parent_third")                   # caption-gap M13-nested-ranges (cc01_006 ~13:16): not in the lower third of the parent swing and under the EQ of the small range
         return None
     if p.leg_pd_strict and not entry < base + 0.5 * (leg_hi - base) - 0.25 * p.es_pt + 1e-12:
         S._f("x_leg_pd_strict")
@@ -489,6 +510,10 @@ def array_cands(ctx, sd, sw, i, p, bz) -> list:
         out.append((bz.top, bz.bottom, "breaker"))
     if "ote" in ea:
         out.append((L.ote_band(ext, float(sd.h[e:i + 1].max()))[2], ext, "ote"))
+    if "broken_wick_ce" in ea and sw.get("broke") is not None and sw.get("ref_i") is not None:     # caption-gap A23-broken-wick-ce-inversion (043 ~10:45; 044 ~46:41): the swing the MSS broke - the CE of its wick is now support
+        r_ = S._ES1.broken_wick_cand(sd, sw, i, p)
+        if r_ is not None:
+            out.append(r_)
     if p.wick_ce_mode == "retrace" and sw.get("_nofvg") and "wick_ce" not in ea:
         S._SM2.hit("wick_ce_retrace")
     if "wick_ce" in ea or (p.wick_ce_mode == "retrace" and sw.get("_nofvg")):     # caption-gap M11-wick-ce-fade-short (042 ~00:33:56): after an MSS that left no FVG the sweep candle's wick CE is the entry
@@ -538,6 +563,8 @@ def array_order(ctx, sd, sw, i, p, session, risk_mult, fvg_entry, bz):
     S._SM6.array_tags(sw, kind, tags)                  # caption-gap A12-secondary-ob / A16-propulsion-entries: a body close under the candle's MT cancels
     if kind == "ob_post" and sw.get("_ob_post_mt") is not None:
         tags["cancel_close"] = float(sw["_ob_post_mt"])           # a body close under the candle's MT invalidates (A12)
+    if kind == "broken_wick_ce":
+        tags["cancel_close"] = float(sw["_bwc_edge"])             # caption-gap A23-broken-wick-ce-inversion: a body close beyond the wick's body edge voids the inversion level
     if kind == "reclaimed_ob" and p.reclaimed_def != "strict":
         tags["lv_tags"] = ["reclaimed_" + p.reclaimed_def]         # caption-gap A18-reclaimed-ob-codeable: which definition was used (the strict default stays untagged, as built)
     o_ = S._finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult,
@@ -789,22 +816,31 @@ def _cisd_ob(ctx, sd, sw, i, p, session, risk_mult):
     if p.cisd_need_htf and not S._SM5.cisd_htf_ok(ctx, sd, sw, i, p):
         return None                                 # caption-gap M11-cisd-ob-stop-skip-rearm: the sweep must sit in a same-side HTF array
     top, _ = _ob_body(o, c, ob, e)
+    open_mode = p.cisd_ob_px == "open"
+    if open_mode:
+        top = float(o[ob.src])                       # caption-gap A12-cisd-open-buy-level (032 ~53:04): open_ref = the open of the first (highest) candle of the down-close run
     fl = S._SM5.cisd_floor(sw, e, ob.bottom, sd, i, p)       # caption-gap M11-cisd-ob-stop-skip-rearm: a trade under the OB low voids the setup; the next CISD must come after it
     if sw.get("cisd_sent") and not fl > sw.get("cisd_floor", e):
         return None
     if fl > sw.get("cisd_floor", e):
         S._SM2.hit("cisd_rearm")
     sw["cisd_floor"] = fl
-    hit = np.flatnonzero(h[fl + 1:i + 1] > top)
+    hit = np.flatnonzero(h[fl + 1:i + 1] >= top + p.tick - 1e-9) if open_mode else np.flatnonzero(h[fl + 1:i + 1] > top)       # (open mode: CISD = high >= open_ref + 1 tick)
     if not len(hit) or fl + 1 + int(hit[0]) != i:
         return None                                 # arm on the CISD bar itself, once
     sw["cisd_sent"] = True
     rng_hi = float(h[e:i + 1].max())
-    entry = min((sw["ext"] + rng_hi) / 2, ob.top)
+    entry = top if open_mode else min((sw["ext"] + rng_hi) / 2, ob.top)
     if entry >= c[i]:
         return None
     tags = dict(unicorn=False, fvg_bottom=ob.bottom, fvg_ce=ob.mid, entry_kind="cisd_ob", mitigation=False,
                 propulsion=False, cancel_low=ob.bottom, no_leg_wait=True)
+    if open_mode:                                   # a buy limit at open_ref (a 1-tick print through fills, E3); valid while no BODY closes under the run low
+        tags.pop("cancel_low")
+        tags.update(cancel_close=float(ob.bottom), through=float(p.tick), lvx={"cisd_run_low": (float(ob.bottom), False)})
+        S._ES1.hit("cisd_open")
+    if p.cisd_adds:
+        tags["es1"] = {"cisd": True}                # each later CISD run's open is an add (strategy run_day -> es1.cisd_add)
     return S._finish_order(ctx, sd, i, p, session, sw, entry, ob.bottom - p.pad, risk_mult, rng_hi,
                            tags, skip_leg_pd=True)
 

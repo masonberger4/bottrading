@@ -72,35 +72,36 @@ def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=F
     Caption-gap A12-void-up-down-ob (cc02_007 ~13:33; `void_rt`, 4h and higher only - the caller decides): a one-sided rally followed at once by a
     one-sided drop through the same range is ONE order block (levels.void_round_trip_obs), invalidated like any OB at its MT."""
     rows = []
+    nan = float("nan")
     vi_dead = {}
     for z in L.fvgs(h, l, o, c, c2_dir):
         s = 1 if z.kind == "bull" else -1
-        rows.append((s, z.top, z.bottom, z.bottom if s > 0 else z.top, z.i, 0))
+        rows.append((s, z.top, z.bottom, z.bottom if s > 0 else z.top, z.i, 0, nan))
         ob = L.order_block_blend(o, h, l, c, z.i - 4, z.i - 2, z.kind)
         if ob is not None:
             disp = c[z.i - 1]
             if (s > 0 and disp > ob.top) or (s < 0 and disp < ob.bottom):
-                rows.append((s, ob.top, ob.bottom, ob.mt, z.i, 1))
+                rows.append((s, ob.top, ob.bottom, ob.mt, z.i, 1, float(o[ob.src])))      # (caption-gap A12-ob-anchor-level: the OB's open, the htf_ob_anchor "open" level)
     if void_rt:
         for z in L.void_round_trip_obs(o, h, l, c):
-            rows.append((1 if z.kind == "bull" else -1, z.top, z.bottom, z.mt, z.i, 1))
+            rows.append((1 if z.kind == "bull" else -1, z.top, z.bottom, z.mt, z.i, 1, nan))
     if vi:
         for z in L.volume_imbalances(o, h, l, c, vi_min_gap, vi_wick_overlap, vi_multi):
             s = 1 if z.kind == "bull" else -1
             if vi_body_death:
                 vi_dead[len(rows)] = L.vi_body_dead(o, c, z, end=None if max_bars is None else z.i + max_bars,
                                                     rule=vi_dead_rule)
-            rows.append((s, z.top, z.bottom, z.bottom if s > 0 else z.top, z.i, 3))
+            rows.append((s, z.top, z.bottom, z.bottom if s > 0 else z.top, z.i, 3, nan))
     if breakers:
         for z in L.breakers(o, h, l, c, 1):
             s = 1 if z.kind == "bull" else -1
-            rows.append((s, z.top, z.bottom, z.mt, z.i, 4))
+            rows.append((s, z.top, z.bottom, z.mt, z.i, 4, nan))
     for s, top, bottom, k in gaps or ():
-        rows.append((s, top, bottom, bottom if s > 0 else top, k, 2))
+        rows.append((s, top, bottom, bottom if s > 0 else top, k, 2, nan))
     if not rows:
         return None
     a = np.array(rows, dtype=float)
-    kind, top, bottom, inv, i, src = a[:, 0], a[:, 1], a[:, 2], a[:, 3], a[:, 4].astype(int), a[:, 5]
+    kind, top, bottom, inv, i, src, opn = a[:, 0], a[:, 1], a[:, 2], a[:, 3], a[:, 4].astype(int), a[:, 5], a[:, 6]
     # first later close beyond the invalidation level
     dead = np.full(len(a), np.inf)
     n = len(c)
@@ -116,7 +117,7 @@ def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=F
         if len(hit):
             dead[j] = end_times[i[j] + 1 + hit[0]]
     known = end_times[i]
-    return dict(kind=kind, top=top, bottom=bottom, known=known, dead=dead, src=src)
+    return dict(kind=kind, top=top, bottom=bottom, known=known, dead=dead, src=src, open=opn)
 
 
 class Confluence:
@@ -124,7 +125,8 @@ class Confluence:
                  breakers: bool = False, c2_dir: bool = False, vi_min_gap: float = 0.0,
                  vi_body_death: bool = False, vi_wick_overlap: bool = True, vi_multi: bool = False,
                  vi_dead_rule: str = "full_span", ipda_first20: bool = False, nwog_cfd_src: str = "auto",
-                 void_rt_ob: bool = False, tf_lookback: dict | None = None):
+                 void_rt_ob: bool = False, tf_lookback: dict | None = None, ob_anchor: str = "extreme"):
+        self.ob_anchor = ob_anchor            # caption-gap A12-ob-anchor-level (cc03_001 ~28:18; 072): the level of an HTF order block as a TARGET - its candle extreme (built) or its open (A12 2023)
         # caption-gap new-lookback-per-tf-topdown: tf_lookback {tf: trading days} replaces the array LIFE of that timeframe (calendar days = x 7 / 5)
         life = dict(LIFE)
         for k_, n_ in (tf_lookback or {}).items():
@@ -196,7 +198,7 @@ class Confluence:
                     continue
                 add = dict(kind=np.where(og.up.values[m], 1.0, -1.0), top=og.high.values[m],
                            bottom=og.low.values[m], known=known[m], dead=np.asarray(dead)[m],
-                           life=np.full(m.sum(), np.inf), src=np.full(m.sum(), 2.0))
+                           life=np.full(m.sum(), np.inf), src=np.full(m.sum(), 2.0), open=np.full(m.sum(), np.nan))
                 z = self.z.get(tf)
                 self.z[tf] = add if z is None else {k: np.concatenate([z[k], add[k]]) for k in add}
 
@@ -276,6 +278,9 @@ def _targets_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs, far_edge
         else:
             m &= z["top"] < beyond
             near = z["top"][m]
+        if getattr(self, "ob_anchor", "extreme") == "open" and "open" in z:     # caption-gap A12-ob-anchor-level: an HTF order block is reached at its open
+            op = z["open"][m]
+            near = np.where(np.isfinite(op), op, near)
         ce = (z["top"][m] + z["bottom"][m]) / 2
         out += list(near) + list(ce)
         if far_edge:

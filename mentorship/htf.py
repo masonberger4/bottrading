@@ -262,8 +262,10 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
           vi_dead_rule: str = "full_span", vi_two_sided: bool = False, ipda_first20: bool = False,
           nwog_cfd_src: str = "auto", single_pass_draw: bool = False, void_rt_ob: bool = False, htf_ob_ltf_drill: bool = False,
           balance_tf: str = "own", tf_lookback: dict | None = None, monthly_arrays: bool = False, rb_closes: bool = False,
-          ipda_window: str | None = None) -> pd.DataFrame:
+          ipda_window: str | None = None, ob_reach: str = "wick") -> pd.DataFrame:
     """One row per trading day: react / draw / pd / combo bias and the draw levels.
+    Caption-gap A12-ob-reached-body (cc03_002 ~8:33; `ob_reach`): "body" = an order block counts as reached only when a BODY of the last `react_days` COMPLETED sessions enters it
+    (min(open, close) <= its top; max(open, close) >= its bottom for a bearish block) - a wick through the whole block does not; "wick" (built) uses the lows / highs and tonight's range.
     `cut_min`: the row describes the market as known at that minute of the day - the overnight
     high/low/last use only bars that have CLOSED by cut_min (bar start + bar length <= cut_min).
     The default 570 (09:30) gives the original table; the draw lock (owner #9) builds one table
@@ -391,6 +393,9 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
             # reaction in the last react_days completed days or tonight
             rl = np.append(l[max(s, k - react_days):k], ol)
             rh = np.append(h[max(s, k - react_days):k], oh)
+            if ob_reach == "body" and a.typ == "ob":
+                bl_, bh_ = np.minimum(o, c)[max(s, k - react_days):k], np.maximum(o, c)[max(s, k - react_days):k]
+                rl, rh = (bl_ if len(bl_) else np.array([np.inf])), (bh_ if len(bh_) else np.array([-np.inf]))
             if a.kind == "bull" and rl.min() <= a.top and px > a.ce:
                 react += wt
                 ru += wt

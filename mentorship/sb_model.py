@@ -544,7 +544,8 @@ def _conf_levels(ctx, sd, k0, i, g, ob, p) -> tuple | None:
             lv += [(float(z.top), "vi"), (float(z.bottom), "vi")]
     mt = None
     if ob is not None and ob.mt == ob.mt:
-        mt = float(ob.mt if p.mt_mode == "body" else ob.mid)
+        from .es1 import mt_of
+        mt = float(mt_of(p, sd, ob))
         lv.append((mt, "mt"))
     lv = sorted(x for x in lv if x[0] <= g.top)
     if mt is not None:                                 # the idea is "support where they agree with the MT" (090)
@@ -808,7 +809,8 @@ def _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, pr
             return None
     fi = g.i - 2 if g is not None else i
     ob = L.order_block_blend(o, h, l, c, li - 3, fi, "bull")
-    mt_ob = None if (ob is None or ob.mt != ob.mt) else float(ob.mt if p.mt_mode == "body" else ob.mid)
+    from .es1 import mt_of
+    mt_ob = None if (ob is None or ob.mt != ob.mt) else float(mt_of(p, sd, ob))
     if "confluence" in p.sb_entry_arrays and g is not None:
         conf = _conf_levels(ctx, sd, k0, i, g, ob, p)
         if conf is not None:

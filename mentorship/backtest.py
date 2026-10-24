@@ -265,6 +265,8 @@ def table_kw(p: Params) -> dict:
         kw["rb_closes"] = True
     if p.ipda_arrays:
         kw["ipda_window"] = p.ipda_anchor     # B21 ipda_arrays: the table's daily arrays / swing draws only from the IPDA window of the anchor
+    if p.ob_reach == "body":
+        kw["ob_reach"] = "body"         # caption-gap A12-ob-reached-body: htf.table only
     kw["balance_tf"] = p.balance_tf     # always explicit (review fix #75: the default is now "own", so the cache file of the old default must not be reused)
     return kw
 
@@ -313,7 +315,8 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
     cf = None
     if confluence and ov:
         from .confluence import Confluence
-        cf = Confluence(df, tf, p.es_pt, vi=p.vi_arrays, breakers=p.conf_breakers, **htf_kw(p))
+        cf = Confluence(df, tf, p.es_pt, vi=p.vi_arrays, breakers=p.conf_breakers, **htf_kw(p),
+                        **({"ob_anchor": "open"} if p.htf_ob_anchor == "open" else {}))      # (caption-gap A12-ob-anchor-level)
     ds = days(df, tf, partial_last, p.session_close)
     eth = None
     ipda_on = p.ipda_pools or p.ipda_next or p.ipda_eq_day != "off"
@@ -366,7 +369,7 @@ def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: d
                 gaps=htf.gaps_for_day(pr.og, d, p.nwog_keep, p.nwog_days, p.nwog_skip_holiday,
                                       p.nwog_trading_days, reb=pr.reb, holiday_pick=p.nwog_holiday_pick,
                                       ref_px=float(g.open.iloc[0])) if pr.og is not None else None,
-                prev_full=pr.ds[k - 1] if (k > 0 and (p.prev_london_pool or p.london_lr_zone != "off" or p.prev_eq_long)) else None,
+                prev_full=pr.ds[k - 1] if (k > 0 and (p.prev_london_pool or p.london_lr_zone != "off" or p.prev_eq_long or p.entry_pd_frame != "leg")) else None,
                 eth=pr.eth,
                 closes=pr.closes, evening=_evening(pr.df, d) if p.globex_pool else None,
                 intermarket=({**(intermarket or {}), "ext_midnight": pr.midnight_map[d]}
