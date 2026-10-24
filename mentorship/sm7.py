@@ -1260,7 +1260,7 @@ REV_VARIANTS = {"inversion", "at_stop", "prop_fail", "sick_sister"}
 
 
 def any_after7(p) -> bool:
-    return bool(p.reentry_after_win or p.reentry_after_trail_win or p.reverse_after_failure != "off" or p.reentry_ts or p.allow_opposite_after_target != "off"
+    return bool(p.reentry_after_win or p.breakaway_chase or p.reentry_after_trail_win or p.reverse_after_failure != "off" or p.reentry_ts or p.allow_opposite_after_target != "off"
                 or p.reentry_idea_gate or p.reentry_trigger != "new_array")
 
 
@@ -1300,7 +1300,7 @@ def after_close(ctx, pos, tr, lost, net: float, done: dict, key: str, state: dic
     if reopened:
         return False
     net_pos = lost is None and net > 0
-    if net_pos and p.reentry_after_win:
+    if net_pos and (p.reentry_after_win or p.breakaway_chase):
         hit("reentry_win_eval")
     if net_pos and p.reentry_after_trail_win:
         hit("trail_win_eval")
@@ -1308,7 +1308,7 @@ def after_close(ctx, pos, tr, lost, net: float, done: dict, key: str, state: dic
         hit("reverse_eval")
     if lost is not None and p.reentry_ts:
         hit("ts_re_eval")
-    if p.reentry_after_win and net_pos and re.fullmatch(r"t\d+", reason) and not tr.final_hit and untouched and state.setdefault("win_n", {}).get(sess, 0) < p.reentry_win_max:
+    if (p.reentry_after_win or p.breakaway_chase) and net_pos and re.fullmatch(r"t\d+", reason) and not tr.final_hit and untouched and state.setdefault("win_n", {}).get(sess, 0) < p.reentry_win_max:
         state["win_n"][sess] = state["win_n"].get(sess, 0) + 1
         re7[sess] = dict(kind="win", side=tr.side, exit_i=i, fill_i=fill_i, draw=float(draw), key=key, pending=True, ext=float(pos["ext"]))
         done[key] = False

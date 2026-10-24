@@ -49,6 +49,10 @@ def entry_px(sd, g, top: float, bottom: float, p, mode: str | None = None) -> fl
     not reach CE"), or per iofed_ref "tick" / "q75"; ladder = the first rung (the edge; the other
     rungs are placed by the caller from ladder_rungs)."""
     mode = mode or p.entry
+    if mode == "auto2":                        # caption-gap E2-iofed-depth-second-gap: resolved with the gap context in strategy._scan_core; any other caller keeps the CE
+        mode = "ce"
+    elif mode == "far_on_breaker":             # caption-gap E2-far-edge-fvg-over-breaker: the near edge unless _scan_core finds the breaker overlap
+        mode = "edge"
     tk = p.tick
     mid = (top + bottom) / 2
     if mode in ("edge", "ladder"):
@@ -463,6 +467,8 @@ def add_cut_passed(sd, pos, i, p) -> bool:
     add_cutoff 0.25 = 75% covered)."""
     if not (p.add_cut or p.add_cutoff):
         return False
+    if pos.get("td_ok"):
+        return False                       # caption-gap E12-trend-day-adds (038 ~1:15:27): a clean trending day keeps adding past the EQ / 75 % cut
     r = add_range(pos, p) if p.add_cut != "leg75" else (S._SM.add_leg(pos) or None)
     if r is None:
         return False
@@ -610,6 +616,9 @@ def low_end_add(sd, pos, tr, i, p, arm) -> None:
         return
     sizes = [q for _, _, q in tr.adds[pos.get("rung_fills", 0):]]
     size = min(sizes) if sizes else S._lots(tr.shares * p.adds[-1], p.lot)
+    if p.add_low_end_size == "ladder":         # caption-gap E12-low-end-add-conditions (006 ~00:52:14): the "smallest" earlier add is the built size; "ladder" = the next add fraction of the first unit
+        size = S._lots((pos.get("add_base") or pos.get("plan_shares") or tr.shares) * p.adds[min(S._nadds(pos, tr), len(p.adds) - 1)], p.lot)
+        S._ES2.hit("add_low_end_ladder")
     pos["low_end_used"] = True
     arm(px, size)
 

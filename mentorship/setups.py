@@ -398,6 +398,9 @@ def ifvg_stop(sd, g, entry: float, stop: float, p, i: int | None = None):
         stop = (g.bottom if ps == "none" else ce) - p.pad
     if p.ifvg_stop_pts:
         stop = ce - p.ifvg_stop_pts * p.es_pt - p.pad
+    if p.ifvg_stop == "far":                 # caption-gap M10-ifvg-stop-below-whole-ifvg (067 ~01:19:07): "my stop loss is below the inversion fair value gap" - the whole IFVG, never tightened inside it
+        stop = g.bottom - p.pad
+        S._ES2.hit("ifvg_stop_far")
     if stop >= entry:
         stop = g.bottom - p.pad
     return entry, stop
@@ -505,10 +508,12 @@ def array_cands(ctx, sd, sw, i, p, bz) -> list:
     out = []
     if "ob" in ea:
         ob = S._ob_at_low(sd, sw, i, p, ctx)
-        if ob is not None and (p.ob_need_fvg or p.ob_need_narrative) and not S._ES1.ob_gate(ctx, sd, sw, ob, i, p):
+        if ob is not None and S._ES1.ob_gate_on(p) and not S._ES1.ob_gate(ctx, sd, sw, ob, i, p):
             ob = None                                         # review fix (A12-ob-requires-signatures / narrative): the array "ob" is a potential OB until the gates pass
         if ob is not None:
-            out.append((ob["body_top"], ob["body_low"], "ob"))
+            sw_e = S._ES2.ob_swept_entry(sd, ob, p)           # caption-gap A12-mt-retrace-after-stop-run: a swept OB candle is bought at its body MT
+            out.append((sw_e if sw_e is not None else ob["body_top"], ob["body_low"], "ob"))
+            sw["_es2_ob"] = ob
     if p.cons_ob_open or "cons_ob_open" in ea:       # caption-gap A12: the open of the last candle before a 1h consolidation is support
         for v, kd in S._LD.cons_ob_levels(ctx, sd, i, p):
             if kd == ("bull" if sd.sign > 0 else "bear"):
@@ -527,7 +532,7 @@ def array_cands(ctx, sd, sw, i, p, bz) -> list:
         out.append((L.wick_ce(sd.o, sd.l, sd.c, e), ext, "wick_ce"))
     if "ob_post" in ea and sw.get("broke") is not None:      # caption-gap M1-ob-entry-after-mss (020 ~00:06:14): the first down-close candle of the pullback after the MSS
         r = S._SM4.ob_post_cand(ctx, sd, sw, i, p)
-        if r is not None and (p.ob_need_fvg or p.ob_need_narrative) and not S._ES1.ob_gate(ctx, sd, sw, dict(k=int(sw["_ob_post_k"]), body_top=r[0], body_low=r[1]), i, p):
+        if r is not None and S._ES1.ob_gate_on(p) and not S._ES1.ob_gate(ctx, sd, sw, dict(k=int(sw["_ob_post_k"]), body_top=r[0], body_low=r[1]), i, p):
             r = None                                          # review fix (A12-ob-requires-signatures / narrative): the post-MSS OB candle needs the same signatures / narrative
         if r is not None:
             S._SM2.hit("ob_post")
@@ -543,6 +548,10 @@ def array_cands(ctx, sd, sw, i, p, bz) -> list:
         if r_ is not None:
             out.append(r_)
     out += S._SM6.arr_cands6(ctx, sd, sw, i, p, ea)           # caption-gap setups_models #6/7: ob_secondary / propulsion / last_offer arrays, the ote "ob62" body stall
+    if "vi_ob" in ea:                                      # caption-gap E12-second-stage-ob-at-MT (009 ~00:11:15): the down-close candle that traded into an intact VI of the leg, standalone
+        r_ = S._ES2.vi_ob_cand(sd, sw, i, p)
+        if r_ is not None:
+            out.append(r_)
     if "vi" in ea:
         vs = [z for z in sd.vis("bull") if e <= z.i <= i and not (p.vi_breakaway and S._LD3.vi_is_breakaway(sd, sw, z, i))]   # A9 vi_breakaway
         if vs:
@@ -573,6 +582,8 @@ def array_order(ctx, sd, sw, i, p, session, risk_mult, fvg_entry, bz):
         stop = sw["ext"] - p.pad
     tags = dict(unicorn=False, fvg_bottom=bottom, fvg_ce=(entry + bottom) / 2, entry_kind="arr_" + kind,
                 mitigation=False, propulsion=False)
+    if kind == "ob" and p.ob_grade_mult != (1.0, 1.0) and sw.get("_es2_ob") is not None:
+        S._ES2.tag(tags, **S._ES2.ob_grade_tags(sw["_es2_ob"]))     # caption-gap A12-mt-grading
     S._SM6.array_tags(sw, kind, tags)                  # caption-gap A12-secondary-ob / A16-propulsion-entries: a body close under the candle's MT cancels
     if kind == "ob_post" and sw.get("_ob_post_mt") is not None:
         tags["cancel_close"] = float(sw["_ob_post_mt"])           # a body close under the candle's MT invalidates (A12)
@@ -706,6 +717,9 @@ def cc_breaker_order(ctx, sd, sw, i, p, session, risk_mult, ref):
     tags = dict(unicorn=False, fvg_bottom=sw["ext"], fvg_ce=(ref + sw["ext"]) / 2, entry_kind="cc_breaker_swing",
                 mitigation=False, propulsion=False, no_leg_wait=True)
     entry = S._SM6.near_ob_entry(sd, sw, i, ref, p) if p.cc_near_ob else ref      # caption-gap M4-retest-nearer-ob-or-none: OCO with the break leg's nearer OB
+    if p.breaker_iofed and entry + p.tick < sd.c[i]:
+        entry += p.tick                                # caption-gap E2-iofed-breaker-exact-match (043 ~00:16:21): 1 tick inside the level, so an exact match fills
+        S._ES2.hit("breaker_iofed")
     return S._finish_order(ctx, sd, i, p, session, sw, entry, sw["ext"] - p.pad, risk_mult,
                            sd.h[sw["ext_i"]:i + 1].max(), tags, skip_leg_pd=True)
 
@@ -826,7 +840,7 @@ def _cisd_ob(ctx, sd, sw, i, p, session, risk_mult):
     ob = L.order_block_blend(o, h, l, c, e - 5, e, "bull")
     if ob is None:
         return None
-    if (p.ob_need_fvg or p.ob_need_narrative) and not S._ES1.ob_gate(ctx, sd, sw, dict(k=int(ob.src), body_top=float(ob.top), body_low=float(ob.bottom)), i, p):
+    if S._ES1.ob_gate_on(p) and not S._ES1.ob_gate(ctx, sd, sw, dict(k=int(ob.src), body_top=float(ob.top), body_low=float(ob.bottom)), i, p):
         return None                                 # review fix (A12-ob-requires-signatures / narrative): the CISD OB is a potential OB until the gates pass
     if p.cisd_need_htf and not S._SM5.cisd_htf_ok(ctx, sd, sw, i, p):
         return None                                 # caption-gap M11-cisd-ob-stop-skip-rearm: the sweep must sit in a same-side HTF array
@@ -1542,9 +1556,13 @@ def add_pd_ok(pos, px, p) -> bool:
     return px <= ext + p.add_pd_level * (hi - ext) + 1e-9
 
 
-def add_ok(sd, pos, px, i, p) -> bool:
+def add_ok(sd, pos, px, i, p, form=None) -> bool:
+    if pos.get("td_block"):
+        return False                              # caption-gap E12-trend-day-adds: price is at the far daily extreme
+    if not S._ES2.form_eq_ok(sd, pos, px, form, p):
+        return False                              # caption-gap E12-add-cutoff-definition (092 ~01:16:43): the add array formed on the draw side of the implied range EQ
     leg = add_leg(pos)
-    if p.add_leg_cut and leg:
+    if p.add_leg_cut and leg and not pos.get("td_ok"):
         ext, hi = leg
         lg = hi - ext
         if px > ext + 0.5 * lg or sd.h[pos["fill_i"]:i + 1].max() > ext + 0.75 * lg:

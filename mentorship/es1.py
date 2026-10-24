@@ -144,8 +144,17 @@ def vi_far_edge(sd, lo: float, top: float, j: int, i: int, p) -> float | None:
     return best
 
 
+def ob_gate_on(p) -> bool:
+    return bool(p.ob_need_fvg or p.ob_need_narrative or p.ob_session_filter)
+
+
 def ob_gate(ctx, sd, sw, ob: dict, i: int, p) -> bool:
-    """The pre-break / anchor OB order gates of the chunk: ob_need_fvg (4) and ob_need_narrative (87). False = the OB does not arm (yet)."""
+    """The pre-break / anchor OB order gates of the chunk: ob_need_fvg (4) and ob_need_narrative (87), and (entries_stops_sizing #2/3) the London / NY session filter (ob_session_filter). False = the OB does not arm (yet)."""
+    if p.ob_session_filter:
+        from . import es2
+        if not es2.ob_session_ok(ctx, sd, sw, ob, p):
+            _S()._f("x_ob_session")
+            return False
     if p.ob_need_fvg and not ob_fvg_ok(sd, int(ob["k"]), i):
         hit("ob_potential")
         return False

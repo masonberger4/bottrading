@@ -2543,6 +2543,58 @@ class Params:
     ote_parent_third: bool = False       # ... (cc01_006 ~13:16) the high-probability long is in the lower third of the parent swing AND under the EQ of the current small range
     ob_mt_range: str = "body"            # A12-ltf-ob-upper-half (cc02_002 ~6:24): the "mt" OB entry price - "body" (the body mean, built) / "range" ((high + low) / 2 of the candle)
     ob_reach: str = "wick"               # A12-ob-reached-body (cc03_002 ~8:33): an OB counts as reached on a WICK (built) or only when a BODY enters it (min(open, close) <= OB high)
+    # --- caption-gap pass, entries_stops_sizing #2/3 (every switch defaults off / to the built behaviour; the gap id is the comment's first word; es2.py) ---
+    ob_session_filter: bool = False      # NEW-new-ob-session-filter (cc03_003 ~41:41): an OB entry needs the OB candle in a London / NY window (ob_session_windows) or a run below a prior London / NY session low
+    ob_session_windows: tuple = ((120, 300), (420, 660))   # ... London 02:00-05:00, NY 07:00-11:00 ET [our interpretation]
+    ob_grade_mult: tuple = (1.0, 1.0)    # A12-mt-grading (cc04_003 ~9:59 / ~10:35 / ~24:21): the size multiplier of an OB retest graded A (low at / above the MT) / B (slightly under it, no body close under); (1, 1) = no grade tag
+    ob_grade_tol: float = 0.10           # ... "slightly" = at most this share of the body height [our interpretation]
+    gap_risk: str = "off"                # A6-voids-fill-holding-range (cc04_002 ~1:41): in a CONSOLIDATION an unfilled FVG between the entry and the stop (or just under it) will fill - "widen" the stop under it / "skip" the order
+    gap_risk_near_pts: float = 2.0       # ... "just below the stop" = within this many points [our interpretation]
+    rb_ctx_mult: float = 1.0             # A17-rb-trend-context (cc04_006 ~5:14): the risk multiplier of a rejection-block entry that is not (bias this way AND at an HTF array); 0.5 = graded lower [our interpretation]
+    entry_fvg_min_tf: int = 1            # B5-execution-tf-15m-min (cc12_004 ~5:00; contradicts the 2023 1m execution): the entry FVGs come from bars of at least this many minutes (5, 15 tested)
+    ob_mt_two_sided: bool = False        # A12-mt-worked-both-sides (cc09_008 ~14:37): an OB whose MT price has traded on both sides of is no MT level - the stop falls back to the OB low
+    stop_bpr_mt: bool = False            # A11-bpr-mt-overshoot-cap (026 ~00:59:14): a BPR just beyond the entry gap's far edge caps the overshoot at its MT - the stop beyond that MT
+    bpr_adj_pts: float = 1.0             # ... "directly beyond" = the BPR's near edge within this many points of the gap's far edge
+    fvg_wick_ce: bool = False            # new-fvg-wick-ce (075 ~01:04:11): an entry FVG whose first candle has a long lower wick (wick >= body) is entered at the wick CE (entry="ladder": CE then wick CE); body close under the wick CE exits, the hard stop at the wick low
+    ob_mt_if_swept: bool = False         # A12-mt-retrace-after-stop-run (cc04_003 ~00:32:47): an OB candle that ran a prior pivot low is bought at its body MT instead of the open
+    bz_higher_array: bool = False        # A13-breaker-close-beyond-higher-array (081 ~00:14:11): a same-polarity OB / FVG within bz_higher_pts beyond the breaker's far edge: the stop and the abort go beyond that array, not the breaker
+    bz_higher_pts: float = 5.0
+    fri_shallow: bool = False            # new-friday-near-draw-shallow-entry (070 ~00:47:11): on a Friday closer to the draw than the A-B leg is tall the first FVG of the leg is entered at its near edge (no leg_pd, no deep retrace)
+    vi_ob_add: bool = False              # E12-second-stage-ob-at-MT (009 ~00:11:15): the down-close candle whose low trades into an intact VI above the entry is a bullish OB - an add at its MT, cancelled on a body close under the VI
+    vi_ob_entry: bool = False            # ... standalone: the same pattern after an MSS as an entry array ("vi_ob" is appended to entry_arrays)
+    vi_add_early_pts: float = 0.0        # E12-add-while-falling-toward-VI (009 ~00:08:03): > 0 = a down candle heading to an intact VI: the add limit at VI top + this many points, filled only on a down bar (no VI touch needed)
+    close_proximity: bool = False        # E1-close-proximity-entries (022 ~03:08:33): in a macro window with a session lock the entry is the VI / FVG of the shift nearest the market, at its near edge (no breaker retest, no M2 EQ filter)
+    close_prox_windows: tuple = ((650, 670),)   # ... 10:50-11:10
+    vi_first: bool = False               # E2-vi-primary-entry-array (025 ~00:49:04; 026 ~01:36:42): after the MSS a VI of the leg at / beyond the leg EQ is the entry zone (near edge); the FVG pick is the fallback
+    wick_ce_refine: bool = False         # A5-wick-ce-inside-fvg-exact-entry (025 ~01:08:00): a wick CE of the bars before the leg lying inside the entry gap sets the limit (CE + 1 tick)
+    wick_ce_lookback: int = 120
+    e4_color: bool = False               # E4 candle colour (already built: retrace_candle="intrabar" is set when this is on and retrace_candle is off)
+    e4_wick_ok: bool = False             # E4-redelivery-wick-suffices (026 ~01:57:39): a fill bar that trades across the full range of the most recent opposite-colour candle counts as the redelivery whatever its colour
+    fvg_then_ob: bool = False            # E2-fvg-first-then-ob-open (032 ~00:23:46): entry #1 in the FVG, entry #2 (an add) at the OB candle's open when the OB lies beyond the FVG; one stop beyond the OB
+    breakaway_chase: bool = False        # E5-breakaway-gap-chase (049 ~00:05:01): after a closed winner (the X14 win re-entry state) the next breakaway-tagged FVG gets a near-edge limit; unfilled after breakaway_chase_bars -> market at the next open
+    breakaway_chase_bars: int = 3
+    breaker_iofed: bool = False          # E2-iofed-breaker-exact-match (043 ~00:16:21): the breaker limit sits 1 tick inside (market side of) the breaker extreme, so an exact match fills under E3
+    ifvg_stop: str = "ce"                # M10-ifvg-stop-below-whole-ifvg (067 ~01:19:07): the IFVG stop - "ce" (built: CE + pts) / "far" (beyond the whole IFVG: the far edge - pad)
+    ifvg_ob_add: bool = False            # ... an add where the IFVG overlaps a reclaimed OB (levels.reclaimed_obs)
+    iofed_gap_bars: int = 5              # E2-iofed-depth-second-gap (074 ~00:36:02): entry="auto2" - the near edge (IOFED) when another same-side gap lies within this many bars ...
+    iofed_gap_pts: float = 3.0           # ... and this many points beyond the picked gap, else the CE
+    mot_next_open: bool = True           # E1-market-on-touch (089 ~00:04:20; cc04_003 ~00:07:43): entry_order="market_on_touch" - the first bar touching the level (no tick through) -> a market buy at the NEXT bar's open; False = at the level
+    entry_offset_ticks: int = 0          # E3-entry-spread-offset (cc02_001 ~00:21:13; cc04_003): every limit moves this many ticks toward the market (a touch of the original level fills)
+    add_sizes: str = "decreasing"        # E12-equal-size-adds (001 ~00:39:05; 013 ~00:27:18): "decreasing" (adds) / "equal_or_less" (add_max_n adds of the first unit's size, the 1.3 % cap shrinks them) / "equal_013" (10 / 10 / 5 / 5)
+    add_max_n: int = 3
+    add_far_edge: bool = False           # ... add location: a limit at the entry FVG's far edge while no body closed under it (001)
+    add_wick_retouch: bool = False       # ... add location: a limit at the prior retrace's wick extreme (096)
+    add_htf_fvg_edge: bool = False       # ... add location: the near edge of the nearest 30m FVG under the price (002)
+    add_ladder: str = ""                 # E12-ladder-631 / E12-067-citation-wrong (021, 026, 060, 070, 067): "" (adds) / "631" / "6421" / "6321" / "067" (8, then 5/5/2/5/5 at reclaimed OB / IFVG retests)
+    add_on_ifvg: bool = False            # ... an IFVG formed after the fill, a limit at its near edge (067)
+    add_stop_under_array: bool = False   # ... each add raises the stop to the add array's bottom - pad when that is higher and leaves >= min_risk_pts (never lowers)
+    in_zone_ladder: bool = False         # E12-in-zone-larger-second (103 ~00:34:22): a breaker entry rests as two limits - 1/3 at the near edge and 2/3 at the breaker MT; later adds are sized from the first leg
+    add_after_partial: str = ""          # E12-adds-after-partials-intraday (071 ~00:15:58; 092 ~01:30:08): "" (none, 006) / "inv_fvg" (one add at the broken FVG's edge) / "high_vol" (partials added back in a high-volatility regime)
+    add_hv_mult: float = 1.2             # ... high volatility = ADR5 above this x the median of the last 20 daily ranges [our interpretation]
+    add_form_eq: bool = False            # E12-add-cutoff-definition (092 ~01:16:43): an add array must have FORMED on the H side of the EQ of the implied range H .. T (the draw); the rest is calibration only (add_cut_ref="range" / add_cutoff are built)
+    add_day_mode: str = "eq_cutoff"      # E12-trend-day-adds (038 ~01:15:27): "eq_cutoff" (the built add cuts) / "trend_day" (a clean trending day keeps adding until the far daily extreme)
+    trend_day_adr: float = 0.5           # ... trend day: price >= this x ADR5 from the 09:30 open without trading back through it, no FOMC / CPI / jobs day [our interpretation]
+    add_low_end_size: str = "smallest"   # E12-low-end-add-conditions (006 ~00:52:14): the add_low_end size - "smallest" (the smallest earlier add, built) / "ladder" (the next add fraction)
 
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
@@ -2683,7 +2735,7 @@ class Params:
                          ("draw_lock_neutral", ("skip", "both")), ("draw_lock_levels", ("frozen", "live")),
                          ("draw_lock_pick", ("nearest", "ordered", "largest")),
                          ("ob_entry", ("pre_break", "post_mss", "both")),
-                         ("ob_entry_px", ("body_top", "mt", "range_top", "open", "high")), ("ob_arm", ("leave", "touch")),
+                         ("ob_entry_px", ("body_top", "mt", "range_top", "open", "high")), ("ob_arm", ("leave", "touch", "intrabar_htf")),
                          ("ob_stop", ("mt", "ext")), ("risk_basis", ("fixed", "equity")),
                          ("price_frame", ("front_month", "back_adjusted", "raw")),
                          ("sloppy_mode", ("off", "stand_aside", "scalp")),
@@ -2746,8 +2798,8 @@ class Params:
                              "(B8f = Params.stop_flip)")
         if self.stop_mode not in STOP_MODES:
             raise ValueError(f"stop_mode {self.stop_mode!r}: expected one of {STOP_MODES}")
-        for name, ok in (("entry", ENTRY_MODES), ("sb_entry", ENTRY_MODES[:-1]), ("iofed_ref", ("c2_high", "tick", "q75")),
-                         ("run_cancel", ("t1", "last", "off")), ("entry_order", ("limit", "stop_cc")),
+        for name, ok in (("entry", ENTRY_MODES + ("far_on_breaker", "auto2")), ("sb_entry", ENTRY_MODES[:-1]), ("iofed_ref", ("c2_high", "tick", "q75")),
+                         ("run_cancel", ("t1", "last", "off")), ("entry_order", ("limit", "stop_cc", "market_on_touch")),
                          ("add_order", ("limit", "market")), ("retrace_candle", ("off", "closed", "intrabar")),
                          ("ob_zone", ("", "range", "sensitive")), ("ob_cisd", ("off", "tag", "cancel")),
                          ("prop_zone", ("range", "body")), ("ob_entries", ("off", "fallback", "prefer")),
@@ -2768,13 +2820,13 @@ class Params:
             raise ValueError(f"entry_ladder_fracs {self.entry_ladder_fracs!r}: expected >= 2 fractions summing to 1")
         if self.fvg_pick not in ("last", "first", "2022"):
             raise ValueError(f"fvg_pick {self.fvg_pick!r}")
-        bad = set(self.entry_arrays) - {"ob", "breaker", "ote", "wick_ce", "vi", "reclaimed_ob", "cons_ob_open", "bpr_ce", "ob_post", "htf", "mitigation", "ob_secondary", "propulsion", "last_offer", "or_ref", "broken_wick_ce"}
+        bad = set(self.entry_arrays) - {"ob", "breaker", "ote", "wick_ce", "vi", "reclaimed_ob", "cons_ob_open", "bpr_ce", "ob_post", "htf", "mitigation", "ob_secondary", "propulsion", "last_offer", "or_ref", "broken_wick_ce", "vi_ob"}
         if bad:
             raise ValueError(f"entry_arrays {sorted(bad)}")
         bad = set(self.void_trades) - {"fill", "range", "cont", "void_fill_gap"}
         if bad:
             raise ValueError(f"void_trades {sorted(bad)}")
-        bad = set(self.entry_arrays_order) - {"ob", "breaker", "ote", "wick_ce", "vi", "reclaimed_ob", "cons_ob_open", "bpr_ce", "ob_post", "htf", "mitigation", "ob_secondary", "propulsion", "last_offer", "ob62", "broken_wick_ce"}
+        bad = set(self.entry_arrays_order) - {"ob", "breaker", "ote", "wick_ce", "vi", "reclaimed_ob", "cons_ob_open", "bpr_ce", "ob_post", "htf", "mitigation", "ob_secondary", "propulsion", "last_offer", "ob62", "broken_wick_ce", "vi_ob"}
         if bad:
             raise ValueError(f"entry_arrays_order {sorted(bad)}")
         if (self.consol_max_pts <= 0 or self.void_idle_bars < 1 or self.ts_cont_bars < 1 or self.cc_ob_tf not in (5, 15, 60) or any(int(m) not in (5, 15, 60) for m in self.refine_tfs)
@@ -2811,6 +2863,13 @@ class Params:
         if (self.vi_tol_small_pts < 0 or self.prop_deep_mult < 0 or not 0 < self.prop_deep_cut < 1 or self.ob_ce_tol_pts < 0 or len(self.htf_depth_mult) != 3
                 or any(m_ < 0 for m_ in self.htf_depth_mult) or not self.scan_tfs or any(int(m_) < 1 for m_ in self.scan_tfs)):
             raise ValueError("entries_stops_sizing #1/3: vi_tol_small_pts, prop_deep_mult, ob_ce_tol_pts >= 0; 0 < prop_deep_cut < 1; htf_depth_mult three multipliers >= 0; scan_tfs minutes >= 1")
+        # caption-gap pass (entries_stops_sizing #2/3)
+        from . import es2 as _es2_check
+        _es2_check.check_params(self)
+        if self.e4_color and self.retrace_candle == "off":
+            self.retrace_candle = "intrabar"          # E4 candle colour = the built retrace_candle "intrabar" (a short fills on an up-close bar: the fill bar opens beyond the limit and trades into it)
+        if self.vi_ob_entry and "vi_ob" not in self.entry_arrays:
+            self.entry_arrays = tuple(self.entry_arrays) + ("vi_ob",)
         if any(len(w_) != 2 or not 0 <= w_[0] < w_[1] <= 1440 for w_ in self.missed_kz):
             raise ValueError(f"missed_kz {self.missed_kz!r}: expected (start_minute, end_minute) pairs")
         for name in ("london_close", "lc_fs_win", "lunch_macro_win", "lunch_long_win"):
@@ -5177,8 +5236,14 @@ def _retrace_ok(sd, o, i, p) -> bool:
         return True
     if p.retrace_candle == "closed":
         a = o["i"] + 1
-        return bool((sd.c[a:i] < sd.o[a:i]).any())
-    return bool(sd.o[i] > o["entry"])
+        ok_ = bool((sd.c[a:i] < sd.o[a:i]).any())
+    else:
+        ok_ = bool(sd.o[i] > o["entry"])
+    if not ok_ and p.e4_wick_ok:
+        ok_ = _ES2.wick_redelivery(sd, i)            # caption-gap E4-redelivery-wick-suffices (026 ~01:57:39): trading across the full range of the last opposite-colour candle is the redelivery
+        if ok_:
+            _ES2.hit("e4_wick_ok")
+    return ok_
 
 
 def _fill_at(sd, o, i):
@@ -5192,6 +5257,10 @@ def _fill_at(sd, o, i):
     th = o.get("through", 0.0)
     if th:
         return float(min(o["entry"], sd.o[i])) if sd.l[i] <= o["entry"] - th + 1e-12 else None
+    if o.get("mot"):                                 # caption-gap E1-market-on-touch (mot_next_open): no resting-limit fill - the touch turns the order into a market order at the next open (run_day)
+        return None
+    if o.get("touch"):                               # caption-gap E1-market-on-touch (mot_next_open off): the first touch of the level fills at the level - no tick through
+        return float(min(o["entry"], sd.o[i])) if sd.l[i] <= o["entry"] + 1e-12 else None
     return float(min(o["entry"], sd.o[i])) if sd.l[i] < o["entry"] else None
 
 
@@ -5217,6 +5286,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
     pass only."""
     if p.entry_discipline != "any":
         p = _SM6.apply_discipline(p)             # caption-gap M12-setup-selection-order: the discipline preset of the path switches
+    if _ES2.sizing_on(p):
+        p = _ES2.apply_sizing(p)                 # caption-gap entries_stops_sizing #2/3 (E12-equal-size-adds / E12-ladder-631 / E12-067-citation-wrong): the add fractions of the day
     if p.nq_overshoot_mult != 1.0:
         p = _SM7.nq_params(p, symbol)            # caption-gap OT-D15-default-instrument: NQ / NDX / QQQ get a wider overshoot tolerance (sweep_ticks, mohawk_ticks)
     kw = dict(partner=partner, live=live, bias=bias, conf=conf, gaps=gaps, closes=closes, evening=evening,
@@ -5435,8 +5506,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     pos["rungs"] = keep_r
             a = pos["add"]
             if a is not None:                         # pending pyramid add
-                if (pos["t1_done"] or i - a["i"] > max(1, p.pending_minutes // tf) or chop_before
+                if ((pos["t1_done"] and not a.get("post_partial")) or i - a["i"] > max(1, p.pending_minutes // tf) or chop_before
                         or (a.get("hold") is not None and i - 1 > a["i"] and sd.c[i - 1] < a["hold"])   # E12b add_hold
+                        or (a.get("hold_es2") is not None and i - 1 > a["i"] and sd.c[i - 1] < a["hold_es2"])   # caption-gap E12-second-stage-ob-at-MT: a body close under the VI cancels the OB add
                         or _EN.add_cut_passed(sd, pos, i - 1, p)      # E12e: the cut passed on a closed bar
                         or (p.late_cutoff and t >= p.late_cutoff)):    # T11: no adds in the last 15 minutes
                     pos["add"] = None
@@ -5448,7 +5520,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                         pos["add"] = None
                         if a.get("stop_to") is not None and a["stop_to"] < px:
                             pos["stop_to_next"] = (a["stop_to"], i)
-                elif _prints_through(l, a["px"], p):
+                elif _prints_through(l, a["px"], p) and (not a.get("down_only") or o > a["px"]):     # (caption-gap E12-add-while-falling-toward-VI: filled only on a down bar - one that opens above the limit and trades down into it)
                     px = min(a["px"], o)
                     tr.adds.append((ts, sd.x(px), a["q"]))
                     pos["left"] += a["q"]; pos["basis"] += px * a["q"]; pos["n"] += a["q"]
@@ -5613,12 +5685,18 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 if p.htf_resist_live and ctx.conf is not None and p.htf_resist_cap and _TP.resist_cfg(p)[0]:
                     _resist_live(ctx, sd, pos, i, p)
                 new = [g for g in sd.gaps if g.i == i and g.i - 2 > pos["fill_i"]]
-                can_add = (p.adds and not pos["t1_done"] and pos["add"] is None and not pos.get("no_adds")
-                           and not (chop.on and p.sloppy_mode == "stand_aside")
-                           and not _EN.adds_blocked(ctx, sd, pos, i, p)                 # E12f
-                           and not (state["day_loss"] and (not p.after_loss_adds or p.no_max_after_loss))   # Ep08.12
-                           and not _EN.add_cut_passed(sd, pos, i, p)                     # E12e / D12
-                           and not (p.late_cutoff and t >= p.late_cutoff))                # T11
+                if p.add_day_mode == "trend_day":
+                    _ES2.trend_day_update(ctx, sd, pos, i, p)           # caption-gap E12-trend-day-adds (038 ~1:15:27): pos["td_ok"] / ["td_block"]
+                can_add0 = (p.adds and pos["add"] is None and not pos.get("no_adds")
+                            and not (chop.on and p.sloppy_mode == "stand_aside")
+                            and not _EN.adds_blocked(ctx, sd, pos, i, p)                 # E12f
+                            and not (state["day_loss"] and (not p.after_loss_adds or p.no_max_after_loss))   # Ep08.12
+                            and not _EN.add_cut_passed(sd, pos, i, p)                     # E12e / D12
+                            and not (p.late_cutoff and t >= p.late_cutoff))                # T11
+                can_add = can_add0 and not pos["t1_done"]
+                if can_add0 and pos["t1_done"] and p.add_after_partial and _nadds(pos, tr) < len(p.adds) + 1:
+                    _ES2.post_partial_add(ctx, sd, pos, tr, i, p, lambda px, size, fl: (_SM.add_ok(sd, pos, px, i, p) and _arm_add(pos, tr, px, i, p, ctx.equity, floor=fl, size=size) is None
+                                                                                         and pos["add"] is not None))     # caption-gap E12-adds-after-partials-intraday
                 if p.pm_ep01_adds and pos.get("kind") == "pm_ep01":
                     _SM.ep01_manage(ctx, sd, pos, tr, i, p, bool(can_add))   # M5.1: the Ep 01 sequence
                     new, can_add = [], False
@@ -5637,11 +5715,11 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                             pos["trail_ref"] = (float(g.bottom), float(g.top), int(g.i))      # caption-gap X13-reentry-after-trail-stop-in-profit: the structure the stop was trailed under (recorded only when the stop rose)
                         pos["stop"] = max(pos["stop"], ref_ - p.trail_pad)
                     apx = _EN.add_px(g, p)                         # E12 add_points
-                    if ov_ is not None and can_add and _SM.add_ok(sd, pos, ov_[0], i, p):
+                    if ov_ is not None and can_add and _SM.add_ok(sd, pos, ov_[0], i, p, form=ov_[1]):
                         _arm_add(pos, tr, ov_[0], i, p, ctx.equity, floor=ov_[1])
                         can_add = pos["add"] is None
                     elif (can_add and p.add_mode == "fvg" and _nadds(pos, tr) < len(p.adds)
-                            and _SM.add_ok(sd, pos, apx, i, p)):
+                            and _SM.add_ok(sd, pos, apx, i, p, form=float(g.bottom))):
                         _arm_add(pos, tr, apx, i, p, ctx.equity, floor=g.bottom, g=g, pos_g=True)
                         can_add = pos["add"] is None
                 if ov_ is not None and not new and can_add and _SM.add_ok(sd, pos, ov_[0], i, p):
@@ -5671,11 +5749,17 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                                                               and pos["add"] is not None)
                     _EN.more_add_arrays(ctx, sd, pos, tr, i, p, arm_)
                     can_add = pos["add"] is None
+                if can_add and _nadds(pos, tr) < len(p.adds) and _ES2.add_loc_on(p):          # caption-gap E12 add locations (far edge / wick retouch / 30m FVG / IFVG / IFVG-OB / VI early / VI-OB)
+                    _ES2.add_locations(ctx, sd, pos, tr, i, p, lambda px, floor=None: (_SM.add_ok(sd, pos, px, i, p, form=floor) and _arm_add(pos, tr, px, i, p, ctx.equity, floor=floor) is None
+                                                                                        and pos["add"] is not None))
+                    can_add = pos["add"] is None
                 if can_add and p.add_on == "retest":                            # Ep01.18
                     _EN.retest_add(sd, pos, tr, i, p, lambda px: _arm_add(pos, tr, px, i, p, ctx.equity, floor=pos["fvg_bottom"]))
                     can_add = pos["add"] is None
                 if can_add and (p.add_low_end or p.add_fvg_low_end or p.add_fvg_low):   # E12c / E12 / Ep04.10
                     _EN.low_end_add(sd, pos, tr, i, p, lambda px, size: _arm_add(pos, tr, px, i, p, ctx.equity, size=size))
+                if p.add_form_eq and pos.get("es2_cal") and "cal_check" not in (tr.lv_tags or ""):
+                    tr.lv_tags = "|".join(x for x in (tr.lv_tags, "cal_check") if x)      # caption-gap E12-add-cutoff-definition (092 ~1:16:43): an array formed on the draw side of the implied EQ is a calibration check only
         # --- 2. pending limit order
         held_ = state.get("fomc_held")
         if held_ is not None and t >= _NC.first_pm_minute(p):    # N3.1 fomc_observe: arm the order seen in 14:00 - fomc_pm_from
@@ -5707,6 +5791,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 np_ = _ES1.ote_reprice(sd, pending, i - 1, p)       # caption-gap M13-reanchor-parent: a new swing high above H (no trade under L) moves the band
                 if np_ is not None:
                     pending = np_
+            pending = _ES2.convert_pending(pending, sd, i)           # caption-gap E1-market-on-touch / E5-breakaway-gap-chase: a touched / N-bar-old order becomes a market order at this bar's open
             ob_pre = pending.get("ob_pre", False)
             mkt = pending.get("market") or pending.get("stop_entry")
             if t >= cut or (i - max(pending["i"], pending.get("anchor_i", -1)) > max(1, p.pending_minutes // tf) and not pending.get("no_expire")):
@@ -5795,6 +5880,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     _SM7.on_fill(ctx, sd, pos, tr, o, i, p)           # caption-gap setups_models #7/7: hold-to-close, the at_stop reversal watch, the breakaway re-entry stop drop
                 if o.get("es1"):
                     _ES1.on_fill(ctx, sd, pos, tr, o, i, p)           # caption-gap entries_stops_sizing #1/3: the PB-wick exit, the MT warn tag, the strict IOFED watch, the CISD adds
+                if o.get("es2"):
+                    _ES2.on_fill(ctx, sd, pos, tr, o, i, p, fill)      # caption-gap entries_stops_sizing #2/3: the OB grade, the FVG-then-OB add, the zone-ladder add base
                 _SM7.fill_note(state, o)                              # caption-gap setups_models #7/7: the re-entry / reversal context is no longer pending
                 if p.mss_on_side == "tag" and _SM.on_side_since(sd, o, i):   # A19.4
                     tr.lv_tags = "|".join(x for x in (tr.lv_tags, "on_side") if x)
@@ -6136,7 +6223,7 @@ def _arm_add(pos, tr, px, i, p, eq, floor=None, g=None, pos_g=False, size=None, 
     extra_room extra open risk (fraction of equity) above the total cap (owner #7 htf_add_extra_risk_pct)
     E11 max_contracts_total caps the units; E1 add_order "market" fills at the open after a retest."""
     k = _nadds(pos, tr)
-    base = pos.get("plan_shares") or tr.shares        # a ladder trade: the full planned size, not rung 0
+    base = pos.get("add_base") or pos.get("plan_shares") or tr.shares        # a ladder trade: the full planned size, not rung 0 (caption-gap E12-in-zone-larger-second: the zone ladder's first leg)
     q = _lots(base * p.adds[min(k, len(p.adds) - 1)], p.lot) if size is None else size
     at_risk = max(0.0, pos["basis"] - pos["stop"] * pos["n"])
     d = px - pos["stop"]
@@ -6152,6 +6239,9 @@ def _arm_add(pos, tr, px, i, p, eq, floor=None, g=None, pos_g=False, size=None, 
     if q >= p.lot and q >= 1:
         pos["add"] = dict(px=px, q=q, i=i, market=p.add_order == "market",
                           hold=floor if (p.add_hold and floor is not None) else None)
+        if p.add_stop_under_array and floor is not None and floor - p.pad > pos["stop"] and px - (floor - p.pad) >= p.min_risk_pts * p.es_pt:
+            pos["add"]["stop_to"] = float(floor - p.pad)   # caption-gap E12-067-citation-wrong: the stop under the add's array (never lowers; E7)
+            _ES2.hit("add_stop_under_array")
         if g is not None and p.add_body_stop:         # Ep01.19: under the bodies of the add's FVG candles
             pos["add"]["stop_to"] = float(min(min(pos_sd(pos).o[k_], pos_sd(pos).c[k_])
                                               for k_ in range(g.i - 2, g.i + 1))) - p.trail_pad
@@ -6587,6 +6677,19 @@ def _breaker_order(ctx, sd, sw, bz, i, p, session, risk_mult):
         if r5_ is not None:
             entry = r5_[0]
             tags.update(through=float(p.tick), lv_tags=["breaker_last_1m"])
+    if p.breaker_iofed and entry + p.tick < sd.c[i]:
+        entry += p.tick                           # caption-gap E2-iofed-breaker-exact-match (043 ~00:16:21): the limit 1 tick inside (market side of) the breaker extreme - an exact match fills under E3
+        _ES2.hit("breaker_iofed")
+    if p.bz_higher_array:
+        hf_ = _ES2.higher_array(ctx, sd, bz, i, p)
+        if hf_ is not None:                       # caption-gap A13-breaker-close-beyond-higher-array (081 ~00:14:11): the stop and the abort beyond the higher same-polarity array
+            stop = min(stop, hf_ - p.pad)
+            lvx_ = dict(tags.get("lvx") or {})
+            lvx_["bz_higher"] = (float(hf_), False)
+            tags.update(lvx=lvx_, bz_mt=None, fvg_bottom=float(hf_))
+    if p.in_zone_ladder and entry > bz.mt + p.tick and bz.mt > stop:
+        tags.update(ladder=[entry, float(bz.mt)], ladder_fracs=(1.0 / 3.0, 2.0 / 3.0), zone_ladder=True)     # caption-gap E12-in-zone-larger-second (103 ~00:34:22): 1/3 at the near edge, 2/3 at the breaker MT
+        _ES2.hit("in_zone_ladder")
     return _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult,
                          sd.h[sw["ext_i"]:i + 1].max(), tags, pctx_free=True)
 
@@ -6819,6 +6922,11 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         else:                        # nested: 1m FVG inside a live 5m FVG or 5m order block
             live5 = [z for z in z5 if z.i <= i and c[z.i + 1:i + 1].min(initial=np.inf) >= z.bottom]
             gaps = [g for g in gaps if any(g.overlaps(z) for z in live5)]
+    if p.entry_fvg_min_tf > ctx.tf:    # caption-gap B5-execution-tf-15m-min (cc12_004 ~5:00): only the FVGs of the m-minute bars arm entries
+        mg_ = _ES2.min_tf_gaps(ctx, sd, sw, i, p)
+        if mg_ is not None:
+            gaps = [z for z in mg_ if sw.get("ev_g") is None or z.i > sw["ev_g"]]
+            coarse_ids |= {id(z) for z in gaps}
     if p.ifvg_entries:                 # bearish gaps inverted by the move up from the sweep
         ifz_ = sd.ifvgs() if not p.ifvg_tf else _SM4.ifvg_tf_zones(ctx, sd, sw, i, p)       # (caption-gap A8-ifvg-5m-to-1m-handoff: the 5m SIBIs as the reference gaps)
         gaps = sorted(gaps + [z for z in ifz_ if sw["ext_i"] < z.i <= i], key=lambda z: z.i)
@@ -7028,6 +7136,21 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     if p.unicorn_only and not (uni and g in uni):
         _f("x_unicorn_only")
         return None
+    cp_ = False                                # caption-gap E1-close-proximity-entries / new-friday-near-draw-shallow-entry: no leg_pd (M2 EQ filter) for these picks
+    if p.close_proximity or p.fri_shallow or p.vi_first:
+        g2_, k2_ = None, ""
+        if p.close_proximity:
+            g2_, k2_ = _ES2.close_prox_pick(ctx, sd, sw, fresh, i, p, session), "close_prox"
+        if g2_ is None and p.fri_shallow:
+            g2_, k2_ = _ES2.fri_shallow_pick(ctx, sd, sw, fresh, i, p), "fri_shallow"
+        if g2_ is None and p.vi_first:
+            g2_, k2_ = _ES2.vi_first_pick(ctx, sd, sw, i, p), "vi_first"      # E2-vi-primary-entry-array: the VI of the leg first, the FVG pick is the fallback
+        if g2_ is not None:
+            g = g2_
+            sm_tags.append(k2_)
+            if not any(g is z for z in gaps):
+                xz = list(xz) + [g]                        # a VI is an entry zone (entry_kind "vi"), not an FVG
+            cp_ = k2_ in ("close_prox", "fri_shallow")
     if p.gap_tf_mode == "refine_down" and id(g) in coarse_ids:         # caption-gap A5-mtf-gap-refinement (044 ~45:31; 046 ~19:32): an HTF entry gap is replaced by the LTF FVG of the same displacement inside it
         b_ = _ES1.refine_down(ctx, sd, sw, g, i, p)
         if b_ is not None:
@@ -7064,7 +7187,14 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
                 top = max(top, z.top)
             elif lk_ == "down":
                 bottom = min(bottom, z.bottom)
-    entry = _EN.entry_px(sd, g, top, bottom, p)       # D11 / E2: edge, ce, edge_1tick, iofed, ladder
+    em_ = p.entry                                     # caption-gap E2-iofed-depth-second-gap: "auto2" = the near edge when another gap lies close beyond the picked one, else the CE; far_on_breaker takes the edge here
+    if em_ == "auto2":
+        em_ = "edge" if _ES2.second_gap_near(sd, g, i, p) else "ce"
+        _ES2.hit("auto2_" + em_)
+    elif em_ == "far_on_breaker":
+        em_ = "edge"
+    entry = _EN.entry_px(sd, g, top, bottom, p, em_)       # D11 / E2: edge, ce, edge_1tick, iofed, ladder
+    es2_t, es2_stop, es2_lvx, wick_ce2, chase_ = {}, None, {}, None, None
     exp_ = bool(p.expansion_ce_entry and vi_exact is None and _SM3.single_expansion(ctx, p, i))
     if exp_:
         entry = (top + bottom) / 2                    # caption-gap M1-inside-fvg-expansion-only (009 ~3:49): a single-expansion day enters inside the FVG toward its middle
@@ -7100,7 +7230,33 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
                 _f("x_iofed_ce")
                 return None
             es_x["iofed"] = dict(ce=float(g.mid), top=float(g.top), bottom=float(g.bottom))
+        if p.wick_ce_refine and g in sd.gaps:
+            wr_ = _ES2.wick_ce_refine(ctx, sd, sw, g, top, bottom, i, p)         # caption-gap A5-wick-ce-inside-fvg-exact-entry (025 ~01:08:00)
+            if wr_ is not None and wr_ < c[i]:
+                entry = wr_
+                sm_tags.append("wick_ce_refine")
+        if p.entry == "far_on_breaker" and g in sd.gaps:
+            fb_ = _ES2.far_on_breaker_stop(ctx, sd, sw, g, bz, id(g) in coarse_ids, i, p)         # caption-gap E2-far-edge-fvg-over-breaker (018 ~00:00:09)
+            if fb_ is not None and fb_[0] < c[i]:
+                entry, es2_stop = fb_
+                sm_tags.append("far_on_breaker")
+        if p.fvg_wick_ce and g in sd.gaps:
+            wick_ce2 = _ES2.wick_ce_of(sd, g, p)                                  # caption-gap new-fvg-wick-ce (075 ~01:04:11): the retrace runs through the gap to the wick CE
+            if wick_ce2 is not None and wick_ce2[0] < c[i]:
+                entry = wick_ce2[0]
+                sm_tags.append("fvg_wick_ce")
+                _ES2.hit("fvg_wick_ce")
+            else:
+                wick_ce2 = None
+        if p.breakaway_chase and ba is not None and g is ba and (getattr(ctx, "re7", None) or {}).get("pending") and ctx.re7.get("kind") == "win":
+            entry = top                                                           # caption-gap E5-breakaway-gap-chase (049 ~00:05:01): the breakaway gap of the winner's continuation, a near-edge limit (market after N bars)
+            chase_ = int(p.breakaway_chase_bars)
+            sm_tags.append("breakaway_chase")
+            _ES2.hit("breakaway_chase")
     ladder = _EN.ladder_rungs(top, bottom, p) if p.entry == "ladder" else None
+    if ladder is not None and wick_ce2 is not None:
+        ladder = [(top + bottom) / 2, wick_ce2[0]]                                # the FVG CE, then the wick CE (the ladder fractions truncate to the two rungs)
+        entry = ladder[0]
     bz_mt = None
     if uni and g in uni:
         if p.unicorn_entry == "overlap" or p.unicorn_rules:   # Ep05.4 / M4.2: entry inside the breaker
@@ -7142,8 +7298,12 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     mt = None if ob is None else _ES1.mt_of(p, sd, ob)          # (caption-gap D4-mt-source-tally: body / range / sensitive / blended)
     mt_bind = None
     if (p.stop_mode == "ob_mt" or p.mt_break != "off") and mt is not None and mt < entry - p.min_risk_pts * p.es_pt:
-        stop = min(stop, mt - p.pad)
-        mt_bind = (float(mt), float(ob.bottom))        # A12 / Ep02.3 mt_close_stop reads it in _finish_order
+        if p.ob_mt_two_sided and _ES2.ob_mt_dead(sd, _ES1.zone_dict(sd, ob)["k"], float(mt), i):
+            stop = min(stop, float(ob.bottom) - p.pad)  # caption-gap A12-mt-worked-both-sides (cc09_008 ~14:37): the MT has worked on both sides - the stop falls back to the OB low
+            _ES2.hit("ob_mt_dead")
+        else:
+            stop = min(stop, mt - p.pad)
+            mt_bind = (float(mt), float(ob.bottom))        # A12 / Ep02.3 mt_close_stop reads it in _finish_order
     if p.ep07_stop:                    # down-close candle nearest the sweep low, body midpoint
         e = sw["ext_i"]
         cand = [k for k in range(max(0, e - 3), min(i, e + 2) + 1) if c[k] < sd.o[k]]
@@ -7192,7 +7352,21 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
             stop = min(prev_ + [g.mid]) - p.pad
             _SM2.hit("mss_rearm_ce2")
         sw.setdefault("rg", []).append((g.i, float(g.mid)))
-    if is_ifvg and (p.ifvg_entry != "edge" or p.ifvg_depth or p.ifvg_stop_pts):   # M10 / A8
+    if p.stop_bpr_mt and not is_ifvg and g in sd.gaps:      # caption-gap A11-bpr-mt-overshoot-cap (026 ~00:59:14): the BPR directly beyond the gap caps the overshoot at its MT
+        bs_ = _ES2.bpr_stop(sd, g, i, p)
+        if bs_ is not None and bs_ < stop:
+            stop = bs_
+    if wick_ce2 is not None:                               # new-fvg-wick-ce: a body close under the wick CE exits, the hard stop at the wick low
+        stop = min(stop, wick_ce2[1] - p.pad)
+        es2_lvx["wick_ce_close"] = (float(wick_ce2[0] - p.tick), False)
+    if es2_stop is not None:
+        stop = min(stop, es2_stop)                         # E2-far-edge-fvg-over-breaker: under the overlapped VI / breaker
+    if p.fvg_then_ob and ob is not None and g in sd.gaps:  # caption-gap E2-fvg-first-then-ob-open (032 ~00:23:46): the OB beyond the FVG gets a second entry (an add) at its open; one stop beyond the OB
+        ob_d_ = _ES1.zone_dict(sd, ob)
+        if ob_d_["body_top"] < entry - p.tick + 1e-9:       # the OB open lies beyond (deeper than) the FVG entry
+            es2_t["then_ob"] = (float(ob_d_["body_top"]), float(ob.bottom))
+            stop = min(stop, float(ob.bottom) - p.pad)
+    if is_ifvg and (p.ifvg_entry != "edge" or p.ifvg_depth or p.ifvg_stop_pts or p.ifvg_stop == "far"):   # M10 / A8
         r_ = _SM.ifvg_stop(sd, g, entry, stop, p, i)
         if r_ is None:
             _f("x_ifvg_depth")
@@ -7214,7 +7388,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     lvt = list(sm_tags)
     if p.td_fvg_hold and _LD4.td_hold(ctx, sd, g, i, p) and _fvg_state(sd, g, i) != "open":
         lvt.append("td_hold")                          # caption-gap new-time-distortion (a): the gap lives on the body hold
-    lvx = dict(es_lvx)
+    lvx = dict(es_lvx, **es2_lvx)
     if p.prop_mt_exit and prop_exit is not None:
         if p.prop_mt_test == "wick":
             es_x["prop_wick"] = float(prop_exit)      # caption-gap A16-propulsion-block-full: any trade through the PB MT exits (027, cc04_008)
@@ -7257,6 +7431,12 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
                 bz_side=None if bz is None else (bz.top, bz.bottom))
     if mt_bind is not None:
         tags["mt_close"] = mt_bind
+    if es2_t:
+        tags["es2"] = es2_t
+    if chase_ is not None:
+        tags["chase_bars"] = chase_
+    if cp_:
+        tags["no_leg_wait"] = True
     if es_x:
         if "es1_prop_depth" in es_x:
             tags["es1_prop_depth"] = es_x.pop("es1_prop_depth")
@@ -7268,13 +7448,15 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         tags["sm4"] = dict(kind="implied", implied_eq=float(imp_eq))     # caption-gap M2-implied-range-eq-gate: adds only under the implied EQ (side space)
     if any(g is z for z in leg_tf_z):
         lvt.append(f"leg_tf_{sw.get('leg_tf', 0)}m")
-    if p.entry == "ce" and vi_exact is None:
+    if em_ == "ce" and vi_exact is None:
         tags["ce_entry"] = True                        # E6f ce_stop_pad_pts
     if exp_:
         tags["expansion"] = True                       # caption-gap M1-inside-fvg-expansion-only: _finish_order sets the bulk / rest ladder
         tags["ce_entry"] = True
     if ladder is not None:
         tags["ladder"] = ladder
+        if wick_ce2 is not None:
+            tags["ladder_fracs"] = (0.5, 0.5)
     if p.ob_cisd == "cancel" and ob is not None:
         tags["cancel_low"] = float(ob.bottom)          # A12: the OB low must hold
     if p.breaker_entry == "classic" and bz is not None and bz.top > entry and not sw.get("bz_sent"):
@@ -7288,7 +7470,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         rl_inv = float(mt) if mt is not None else (float(ob.bottom) if ob is not None else float(sw["ext"]))
         tags["no_expire"], tags["cancel_close"] = True, rl_inv
     o_ = _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult,
-                       h[sw["ext_i"]:i + 1].max(), tags, pctx_free=True)
+                       h[sw["ext_i"]:i + 1].max(), tags, pctx_free=True, skip_leg_pd=cp_)
     if o_ is None and p.max_stop_pts and sw.pop("_wide_stop", False) and sd.sweep is None:
         sd.sweep = sw                                  # caption-gap E5-stop-feasibility (item 44): a too-wide stop keeps the sweep alive - only a NEWER gap (a second break) re-arms it
         sw["ev_g"], sw["ev_i"] = max(g_.i for g_ in gaps), i
@@ -7371,15 +7553,27 @@ def _ob_pre(ctx, sd, sw, i, p, session, risk_mult):
         return None
     if p.ob_arm == "leave" and not sd.c[i] > ob["body_top"]:
         return None
-    if (p.ob_need_fvg or p.ob_need_narrative) and not _ES1.ob_gate(ctx, sd, sw, ob, i, p):
+    if p.ob_arm == "intrabar_htf":
+        if not sd.h[i] > ob["body_top"]:
+            return None                            # caption-gap A12-same-candle-retrace (cc04_003 ~00:04:04): the trade-through of the OB high validates it - armed at once, not at a candle close
+        _ES2.hit("ob_arm_intrabar" if not sd.c[i] > ob["body_top"] else "ob_arm_intrabar_close")
+    if _ES1.ob_gate_on(p) and not _ES1.ob_gate(ctx, sd, sw, ob, i, p):
         return None                                # caption-gap A12-ob-requires-signatures / A12-ob-requires-narrative: a potential OB, not yet an order block
     sw["ob_sent"] = sw["ob_frozen"] = True
     entry = _EN.ob_entry_price(ob, sd, p, i)       # Ep03.9 / A12: body_top, mt, range_top|high, open, ob_zone (+ caption-gap ob_anchor_rule)
+    sw_e = _ES2.ob_swept_entry(sd, ob, p)          # caption-gap A12-mt-retrace-after-stop-run (cc04_003 ~00:32:47): a candle that ran a prior low is bought at its body MT
+    if sw_e is not None:
+        entry = sw_e
     if entry >= sd.c[i]:
         entry = ob["body_top"]                     # [our interpretation] never a limit above the market
     mt_stop_ = p.ob_stop == "mt" or p.mt_break != "off"          # review fix (D4-mt-source-tally): mt_break also governs the pre-break OB (trade = the stop at the MT, close / warn = the far-edge stop + the MT close / warning)
     stop = ob["mt"] - p.pad if mt_stop_ else sw["ext"] - p.pad
     mt_close = (float(ob["mt"]), float(ob["lo"])) if mt_stop_ else None
+    if sw_e is not None and entry < sd.c[i]:
+        stop, mt_close = ob["lo"] - p.pad, None    # caption-gap A12-mt-retrace-after-stop-run: a body-MT entry takes the stop under the OB low
+    if p.ob_mt_two_sided and mt_stop_ and _ES2.ob_mt_dead(sd, int(ob["k"]), float(ob["mt"]), i):
+        stop, mt_close = ob["lo"] - p.pad, None    # caption-gap A12-mt-worked-both-sides (cc09_008 ~14:37): no MT level any more - the stop at the OB low
+        _ES2.hit("ob_mt_dead")
     if entry - stop < p.min_risk_pts * p.es_pt or entry <= stop:
         stop = sw["ext"] - p.pad        # [our interpretation] fallback to the sweep extreme
         mt_close = None
@@ -7400,6 +7594,8 @@ def _ob_pre(ctx, sd, sw, i, p, session, risk_mult):
         tags["mt_close"] = mt_close                # A12 / Ep02.3 mt_close_stop
     if es_lvx:
         tags["lvx"] = es_lvx
+    if p.ob_grade_mult != (1.0, 1.0):
+        _ES2.tag(tags, **_ES2.ob_grade_tags(ob))   # caption-gap A12-mt-grading (cc04_003): the fill-time grade A / B
     if p.ob_cisd != "off" and sd.c[i] > ob["body_top"]:
         tags["lv_tags"] = ["ob_cisd"]              # A12: price closed through the open of the last down candle
     if p.ob_cisd == "cancel":
@@ -7416,7 +7612,7 @@ def _ob_anchor(ctx, sd, sw, i, p, session, risk_mult):
     ob = _LD.ob_blend(ctx, sd, sw, i, p, sw["ext_i"] - 3, sw["broke"] - 1, None)       # caption-gap A12 ob_pick (ob_outside_fvg: outside the displacement FVG)
     if ob is None:
         return None
-    if (p.ob_need_fvg or p.ob_need_narrative) and not _ES1.ob_gate(ctx, sd, sw, _ES1.zone_dict(sd, ob), i, p):
+    if _ES1.ob_gate_on(p) and not _ES1.ob_gate(ctx, sd, sw, _ES1.zone_dict(sd, ob), i, p):
         sw["ob2_sent"] = False                     # caption-gap A12-ob-requires-signatures / -narrative: not yet an order block - tried again on the next bar
         return None
     entry = float(sd.o[ob.src])
@@ -7800,6 +7996,9 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     if p.ir_accel_hold and tags.get("entry_kind") == "ir":     # caption-gap M11-immediate-rebalance-management (100 ~1:36:14): half at the nearest pivot, the rest only on acceleration
         tags["fracs"] = (0.5, 0.5)
         tags["sm3"] = dict(tags.get("sm3") or {}, ir_accel=True)
+    if p.entry_offset_ticks and p.entry_order != "stop_cc" and entry < c[i]:      # caption-gap E3-entry-spread-offset (cc02_001 ~00:21:13): every limit moves toward the market, a touch of the original level fills
+        entry = max(entry, min(entry + p.entry_offset_ticks * p.tick, float(c[i]) - p.tick))
+        _ES2.hit("entry_offset")
     if p.round_step_pts:                 # L17: limit entries rounded toward price; stops are not
         entry = _round_px(ctx, sd, i, entry, p, up=True)
     zone_top = float(tags.get("zone_top", entry))        # Ep01.18: the entry zone top (retest add)
@@ -7843,6 +8042,12 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
                                             # the order stays an ordinary session trade (stop unchanged)
     stop = _SM3.stop_adjust(ctx, sd, sw, i, p, entry, stop, tags)            # caption-gap setups_models #3/7: the A23 wick CE / eq_hunt stops
     stop = _EN.refine_stop(ctx, sd, sw, i, p, entry, stop, tags, lvx, lvt)   # A4 / A12 / E6d / E6f
+    if p.gap_risk != "off":
+        st_g = _ES2.gap_risk_adjust(ctx, sd, sw, i, p, entry, stop)          # caption-gap A6-voids-fill-holding-range (cc04_002 ~1:41): an unfilled gap under the entry in a consolidation
+        if st_g is None:
+            _f("x_gap_risk")
+            return None
+        stop = st_g
     if p.protect_macro_ext or p.london_ext_guard:
         stop = _SM7.stop_adjust7(ctx, sd, sw, i, p, entry, stop, tags, session)      # caption-gap setups_models #7/7: the protected macro extreme, the London-extreme stop cap
     risk = entry - stop
@@ -7982,6 +8187,11 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             return None
     if _ES1.any_gate_es1(p):
         rj_ = _ES1.order_gate_es1(ctx, sd, sw, i, p, entry, stop, session, lvt, lvx, tags)      # caption-gap entries_stops_sizing #1/3 tags / multipliers (HTF gap reaction depth, deep propulsion block)
+        if rj_:
+            _f(rj_)
+            return None
+    if _ES2.any_gate_es2(p):
+        rj_ = _ES2.order_gate_es2(ctx, sd, sw, i, p, entry, stop, session, cf, htf, lvt, tags)       # caption-gap entries_stops_sizing #2/3 multipliers (rejection-block context)
         if rj_:
             _f(rj_)
             return None
@@ -8289,6 +8499,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         return None
     risk_mult *= _EN.size_mult(ctx, sd, sw, i, p, session, entry, htf, getattr(ctx, "cur_sloppy", ""), lvt)   # E9
     risk_mult *= float(tags.pop("es1_mult", 1.0))        # caption-gap entries_stops_sizing #1/3: HTF gap reaction depth / deep propulsion block
+    risk_mult *= float(tags.pop("es2_mult", 1.0))        # caption-gap entries_stops_sizing #2/3: rejection-block context
     rungs = []
     lad = tags.pop("ladder", None)                  # E2 / D11 ladder: FVG high, 75%, CE (one order, later rungs)
     xcap = p.size_up_cap_pct * ctx.equity if (p.size_up_cap_pct and any(x.startswith("size_up_") for x in lvt)) else 0.0
@@ -8307,6 +8518,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     if shares < 1:
         return None
     plan = plan or shares
+    if tags.pop("zone_ladder", False):
+        _ES2.tag(tags, add_base=int(shares))             # caption-gap E12-in-zone-larger-second: later adds are sized from the first leg (1x)
     _f("4_order")
     t = ctx.t[i]
     lh = p.last_hour[0] <= t < p.last_hour[1]
@@ -8362,6 +8575,9 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     order.update(zone_top=zone_top, plan_shares=plan)    # plan: adds are sized from the FULL ladder
     if stop_cc:
         order.update(stop_entry=True)                    # entry is already the stop price (top + 1 tick)
+    elif p.entry_order == "market_on_touch":
+        order["mot" if p.mot_next_open else "touch"] = True      # caption-gap E1-market-on-touch (089 ~00:04:20): the first touch fills at market (the next open) / at the level
+        _ES2.hit("mot_order")
     order.update(tags)
     lvt += _LD4.late_tags(ctx, sd, p, entry, lv)         # caption-gap m_ohlc / expansion
     order["lv_tags"] = "|".join(dict.fromkeys(lvt))
@@ -8521,3 +8737,4 @@ from . import sm5 as _SM5  # noqa: E402  (caption-gap pass, setups_models #5/7: 
 from . import sm6 as _SM6  # noqa: E402  (caption-gap pass, setups_models #6/7: engine glue)
 from . import sm7 as _SM7  # noqa: E402  (caption-gap pass, setups_models #7/7: engine glue)
 from . import es1 as _ES1  # noqa: E402  (caption-gap pass, entries_stops_sizing #1/3: engine glue)
+from . import es2 as _ES2  # noqa: E402  (caption-gap pass, entries_stops_sizing #2/3: engine glue)
