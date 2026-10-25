@@ -2575,6 +2575,8 @@ class Params:
     fvg_then_ob: bool = False            # E2-fvg-first-then-ob-open (032 ~00:23:46): entry #1 in the FVG, entry #2 (an add) at the OB candle's open when the OB lies beyond the FVG; one stop beyond the OB
     breakaway_chase: bool = False        # E5-breakaway-gap-chase (049 ~00:05:01): after a closed winner (the X14 win re-entry state) the next breakaway-tagged FVG gets a near-edge limit; unfilled after breakaway_chase_bars -> market at the next open
     breakaway_chase_bars: int = 3
+    mot_dead_mult: float = 1.0           # E1-market-on-touch (089 ~00:04:20) / E5-breakaway-gap-chase: a converted market order is dead when the next open lies farther over the entry than this many times the planned risk (entry - stop) [our interpretation: 1 = total risk at most 2x]
+    fri_shallow_edge: str = "fvg"         # new-friday-near-draw-shallow-entry (070 ~00:47:11): the shallow entry - "fvg" the first FVG of the leg at its near edge / "breaker" the breaker's upper edge (the FVG when there is no breaker under the market)
     breaker_iofed: bool = False          # E2-iofed-breaker-exact-match (043 ~00:16:21): the breaker limit sits 1 tick inside (market side of) the breaker extreme, so an exact match fills under E3
     ifvg_stop: str = "ce"                # M10-ifvg-stop-below-whole-ifvg (067 ~01:19:07): the IFVG stop - "ce" (built: CE + pts) / "far" (beyond the whole IFVG: the far edge - pad)
     ifvg_ob_add: bool = False            # ... an add where the IFVG overlaps a reclaimed OB (levels.reclaimed_obs)
@@ -6334,7 +6336,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 np_ = _ES1.ote_reprice(sd, pending, i - 1, p)       # caption-gap M13-reanchor-parent: a new swing high above H (no trade under L) moves the band
                 if np_ is not None:
                     pending = np_
-            pending = _ES2.convert_pending(pending, sd, i)           # caption-gap E1-market-on-touch / E5-breakaway-gap-chase: a touched / N-bar-old order becomes a market order at this bar's open
+            pending = _ES2.convert_pending(pending, sd, i, p)           # caption-gap E1-market-on-touch / E5-breakaway-gap-chase: a touched / N-bar-old order becomes a market order at this bar's open
             ob_pre = pending.get("ob_pre", False)
             mkt = pending.get("market") or pending.get("stop_entry")
             if pending.get("es2_dead") or t >= cut or (i - max(pending["i"], pending.get("anchor_i", -1)) > max(1, p.pending_minutes // tf) and not pending.get("no_expire")):
@@ -7754,7 +7756,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         if p.close_proximity:
             g2_, k2_ = _ES2.close_prox_pick(ctx, sd, sw, fresh, i, p, session), "close_prox"
         if g2_ is None and p.fri_shallow:
-            g2_, k2_ = _ES2.fri_shallow_pick(ctx, sd, sw, fresh, i, p), "fri_shallow"
+            g2_, k2_ = _ES2.fri_shallow_pick(ctx, sd, sw, fresh, i, p, bz), "fri_shallow"
         if g2_ is None and p.vi_first:
             g2_, k2_ = _ES2.vi_first_pick(ctx, sd, sw, i, p), "vi_first"      # E2-vi-primary-entry-array: the VI of the leg first, the FVG pick is the fallback
         if g2_ is not None:
@@ -8064,6 +8066,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         if lv_u:
             tags["lvx"] = dict(tags.get("lvx") or {}, **lv_u)
         tags.update(uni_t)
+    if p.ob_grade_mult != (1.0, 1.0) and ob is not None:
+        es2_t = dict(es2_t, **_ES2.ob_grade_tags(_ES1.zone_dict(sd, ob)))      # caption-gap A12-mt-grading (cc04_003), review fix: the FVG-path OB (ob_blend) is graded at the fill too [our interpretation: the retest depth of the OB's MT during the retrace to the gap]
     if es2_t:
         tags["es2"] = es2_t
     if p.vi_ladder_exit and mt is not None:

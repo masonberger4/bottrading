@@ -23,7 +23,7 @@ NEW_SWITCHES = (
     "add_after_partial", "add_form_eq", "add_day_mode", "add_low_end_size",
 )
 KNOBS = ("ob_session_windows", "ob_grade_tol", "gap_risk_near_pts", "bpr_adj_pts", "bz_higher_pts", "close_prox_windows", "wick_ce_lookback", "breakaway_chase_bars", "iofed_gap_bars", "iofed_gap_pts",
-         "add_max_n", "add_hv_mult", "trend_day_adr")
+         "add_max_n", "add_hv_mult", "trend_day_adr", "mot_dead_mult", "fri_shallow_edge")
 
 
 # --- defaults / validation ------------------------------------------------------------------------------------------------------------

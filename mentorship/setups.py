@@ -584,6 +584,9 @@ def array_order(ctx, sd, sw, i, p, session, risk_mult, fvg_entry, bz):
                 mitigation=False, propulsion=False)
     if kind == "ob" and p.ob_grade_mult != (1.0, 1.0) and sw.get("_es2_ob") is not None:
         S._ES2.tag(tags, **S._ES2.ob_grade_tags(sw["_es2_ob"]))     # caption-gap A12-mt-grading
+    if kind == "ob" and p.ob_mt_two_sided and sw.get("_es2_ob") is not None and S._ES2.ob_mt_dead(sd, int(sw["_es2_ob"]["k"]), float(sw["_es2_ob"]["mt"]), i):
+        stop = min(stop, float(sw["_es2_ob"]["lo"]) - p.pad)    # caption-gap A12-mt-worked-both-sides (cc09_008 ~14:37), review fix: the array OB's MT has worked on both sides - the stop falls back to the OB (wick) low [our interpretation: the array stop sits at the body low, the dead MT widens it]
+        S._ES2.hit("ob_mt_dead")
     S._SM6.array_tags(sw, kind, tags)                  # caption-gap A12-secondary-ob / A16-propulsion-entries: a body close under the candle's MT cancels
     if kind == "ob_post" and sw.get("_ob_post_mt") is not None:
         tags["cancel_close"] = float(sw["_ob_post_mt"])           # a body close under the candle's MT invalidates (A12)

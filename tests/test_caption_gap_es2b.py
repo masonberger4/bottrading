@@ -132,6 +132,9 @@ ES_CASES = {
     "adds_e": (W9, ES_NB, ADDS_A, ("add_after_partial_inv_fvg",)),
     "voe": (W5, ES_NB, dict(SMP, vi_ob_entry=True, vi_entries=True), ("vi_ob_cand",)),
     "chase": (W3, ES_NB, dict(SMP, breakaway_chase=True), ("reentry_win_eval",)),
+    "ob_fvg_grade": (W0, ES_NB, dict(SMP, ob_grade_mult=(0.5, 1.0), stop_mode="ob_mt"), ("ob_grade_A",)),          # review fix A12-mt-grading: the FVG-path OB (ob_blend) is graded at the fill too
+    "ob_arr_dead": (W0, ES_NB, dict(entry_arrays=("ob",), ob_mt_two_sided=True, **SMP), ("ob_mt_dead",)),            # review fix A12-mt-worked-both-sides: the array OB stop falls back to the OB low
+    "lock_c": (W5, ES_LOCK, dict(fri_shallow=True, fri_shallow_edge="breaker", breaker_entry="fallback"), ("fri_shallow_breaker",)),
     "wide": (W0, ES_B, dict(SMP, max_stop_pts=6.0, stop_mode="ce2", evolve_fvg=True), ("stop_too_wide",)),
 }
 ES1M = (B.DATA / "ES_1min_db.csv").exists()          # mirrors the loader (backtest.load reads backtest.DATA), not a second hard-coded path

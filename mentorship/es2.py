@@ -64,6 +64,8 @@ def check_params(p) -> None:
     for t_ in tuple(p.ob_session_windows) + tuple(p.close_prox_windows):
         if len(t_) != 2 or not (0 <= int(t_[0]) < int(t_[1]) <= 1440):
             raise ValueError(f"window {t_!r}: expected (start_minute, end_minute) pairs inside the day")
+    if p.fri_shallow_edge not in ("fvg", "breaker") or p.mot_dead_mult <= 0:
+        raise ValueError("fri_shallow_edge expected 'fvg' or 'breaker'; mot_dead_mult > 0")
     if (p.ob_grade_tol < 0 or p.rb_ctx_mult <= 0 or p.entry_fvg_min_tf < 1 or p.bpr_adj_pts < 0 or p.bz_higher_pts < 0 or p.vi_add_early_pts < 0 or p.wick_ce_lookback < 1
             or p.breakaway_chase_bars < 1 or p.iofed_gap_bars < 0 or p.iofed_gap_pts < 0 or p.entry_offset_ticks < 0 or p.add_max_n < 1 or p.add_hv_mult <= 0
             or p.trend_day_adr <= 0 or p.gap_risk_near_pts < 0):
@@ -371,6 +373,7 @@ def ob_session_ok(ctx, sd, sw, ob: dict, p) -> bool:
     t = int(ctx.t[int(ob["k"])])
     ok = any(a <= t < b for a, b in p.ob_session_windows) or str(sw.get("key", "")) in SESSION_LOW_KEYS
     hit("ob_session_ok" if ok else "ob_session_skip")
+    hit("ob_session_block_%d" % L.session_block(t))      # caption-gap new-ob-session-filter: levels.session_block of the OB candle (counter; HTF / prior-day OB zones are exempt - they are daily / weekly arrays, not session OBs)
     return ok
 
 
@@ -559,7 +562,7 @@ def far_raise_update(sd, pos, i: int, p) -> None:
         hit("far_on_breaker_raise")
 
 
-def fri_shallow_pick(ctx, sd, sw, gaps: list, i: int, p):
+def fri_shallow_pick(ctx, sd, sw, gaps: list, i: int, p, bz=None):
     """management 129 (070 ~00:47:11: "it's really close to that June 16th high anyway so we don't want to see any deep retracements"): on a Friday with the price closer to the HTF draw than the A-B leg is
     tall (draw proxy: the session's locked draw; leg: the sweep extreme .. the highest high since), the first FVG of the leg is entered at its near edge - no deep retrace, no breaker MT. None = not active."""
     if ctx.day.weekday() != 4:
@@ -571,6 +574,9 @@ def fri_shallow_pick(ctx, sd, sw, gaps: list, i: int, p):
     draw = float(sd.x(lk["target"]))
     if leg <= 0 or not 0 < draw - float(sd.c[i]) < leg:
         return None
+    if p.fri_shallow_edge == "breaker" and bz is not None and bz.top < sd.c[i]:
+        hit("fri_shallow_breaker")
+        return bz                                                                        # the breaker's upper edge is the shallow entry (070 ~00:47:11) [our interpretation: the zone's top, a limit under the market]
     g = min(gaps, key=lambda z: z.i, default=None)
     if g is not None and not g.top < sd.c[i]:
         return None                                                                      # review fix: the first gap must lie under the market (a buy limit at its near edge); else the normal pick stands
@@ -579,7 +585,7 @@ def fri_shallow_pick(ctx, sd, sw, gaps: list, i: int, p):
     return g
 
 
-def convert_pending(o: dict, sd, i: int) -> dict:
+def convert_pending(o: dict, sd, i: int, p=None) -> dict:
     """models 92 (089 ~00:04:20: "here's the market trade up into the fair value gap here I marketed in") / models 52 (049 ~00:05:01): at the start of bar i (bars through i-1 are closed) a pending order that
     (a) is a market_on_touch order (`mot`) and whose level the bar BEFORE touched (no trade through needed) or (b) is a breakaway-chase order unfilled for more than `chase_bars` bars becomes a MARKET
     order: it fills at bar i's open."""
@@ -599,7 +605,7 @@ def convert_pending(o: dict, sd, i: int) -> dict:
         if float(sd.l[o["i"] + 1:i].min()) <= float(st) + 1e-12 or float(sd.o[i]) <= float(st) + 1e-12:
             hit("market_dead_stop")
             return dict(o, es2_dead=True)
-        if float(sd.o[i]) - float(o["entry"]) > float(o["entry"]) - float(st) + 1e-12:
+        if float(sd.o[i]) - float(o["entry"]) > (1.0 if p is None else p.mot_dead_mult) * (float(o["entry"]) - float(st)) + 1e-12:        # caption-gap E1-market-on-touch: mot_dead_mult
             hit("market_dead_gap")
             return dict(o, es2_dead=True)
     hit(kind)
