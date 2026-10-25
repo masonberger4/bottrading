@@ -2764,7 +2764,7 @@ class Params:
     defended_bars: int = 200
     # --- caption-gap pass: targets_partials #3/4 (digests/rulebook_gaps/levels_liquidity_targets.md 106 .. 178 and management_partials_trailing_exits.md 1 .. 43; tp3.py; every new switch off unless noted; the gap id is the comment's first word) ---------------
     min_rr_final: float = 0.0            # L15-min-3r-final-draw (cc02_001 ~00:05:22): the order is skipped unless the reward to the final target (the locked draw, else the last ladder rung) is >= min_rr_final x the risk (test 2, 3, 5); T1's min_rr is unchanged
-    void_legs: bool = False              # new-void-fill-target (cc01_006 ~00:10:28): the CE and the top (the final fill) of the nearest unfilled one-sided down leg (levels.one_sided_legs) on 5m / 15m / 1h are targets; "void_targets" (gap-like voids) is the built twin
+    void_legs: bool = False              # new-void-fill-target (cc01_006 ~00:10:28): the CE and the top (the final fill) of the nearest unfilled one-sided down leg (levels.one_sided_legs) on 5m / 15m / 1h are targets; "void_targets" (gap-like voids) is the built twin - an independent switch here (the spec says "with void_targets"; the two target sets are separate, either one alone works, both together add both)
     void_leg_mult: float = 1.5           # ... "large" candle = range >= void_leg_mult x the mean range of the 20 bars before it [our interpretation]
     void_max_opp: int = 1                # ... at most void_max_opp up-close candles inside the leg [our interpretation]
     ob_target_order: bool = False        # X1-bullish-objective-order (cc03_002 ~00:20:14): an OB entry's rungs: the nearest bearish OB candle's low, its high + 1 tick, the near edge of the nearest 1h / 4h / D bearish OB
@@ -2773,6 +2773,8 @@ class Params:
     grades60: bool = False               # new-60day-range-grades (cc07_006 ~00:10:09): the nine grade lines (0 .. 100 % in 12.5 % steps) of the 60-day range are targets (kind grade); the final target is the next grade unless a nearer pool exists; lv_tags gradeN = the entry's band
     grades60_src: str = "body"           # ... the range from the candle "body" (cc07_005 / cc07_006) or the "wick" extremes (cc05_003)
     target_past_eq60: bool = False       # L14-target-past-eq (cc07_005 ~00:08:07): an entry on the premium side of the 60-day body range targets the first untraded opposing M / W / D array at or beyond the EQ
+    grades60_range_only: bool = False    # new-60day-range-grades (cc07_006 ~00:10:09): the grade ladder only in a range-bound daily market (the 60 sessions net moved < drr_net_frac of their range) [our interpretation of the B17 / N8 classifier]; off = any market. The next grade is the final target only after the grade below the entry was traded through without a reaction since the sweep
+    proj_ext_sym: bool = False           # L13-cc-extension-projections (cc07_003 ~00:30:54): also the 100% symmetrical swing (1.0 x the measured swing) as a rung; off = the 1.27 / proj_ext2 extensions only
     proj_ext_anchor: str = "leg"         # L13-cc-extension-projections (cc06_008 ~00:28:08; cc07_003 ~00:30:54): "leg" = the built proj_ext (MSS leg) / "stop_run" (swing high before the sweep -> sweep low) / "midweek" (Wednesday's extreme, from Wednesday); the multiples are (1.27, proj_ext2), kept only where they overlap an opposing 15m .. 4h array
     proj_ext2: float = 1.62              # ... second extension: 1.62 (cc06_008) | 1.68 (cc07_003)
     daily_breaker_cap: bool = False      # new-swing-target-breaker-cap (cc06_004 ~00:29:06): the ladder ends at the nearest daily bearish breaker above (its low = the final target) unless a daily close above it exists
@@ -2784,19 +2786,19 @@ class Params:
     adr_anchor: str = "day_low"          # ... the ADR low: "day_low" or "london_low" (once London is complete)
     pm_am_leg: bool = False              # LLT3-pm-measured-move-am-leg (cc10_013 ~00:02:31): a PM trade with the lunch low above the AM low adds (sweep / PM swing low) + (AM high - AM low) as a projection rung
     consol_overnight_targets: bool = False   # LLT3-consolidation-day-overnight-targets (cc10_008 ~00:16:19): on a consolidation day the only target is the nearest untaken overnight pool (London, overnight H/L, overnight 5m pivots), AM only, not after 11:00
-    wide_or_draw: bool = False           # LLT3-wide-or-bias-end (cc10_010 ~00:06:15): after 10:30 a wide OR60 makes the OR60 end in the bias direction the draw (pool)
+    wide_or_draw: bool = False           # LLT3-wide-or-bias-end (cc10_010 ~00:06:15): after 10:30 a wide OR60 makes the OR60 end in the bias direction the draw (pool) - the order's final target AND the session lock (_lock_step) for the rest of the day. NEEDS a bias (htf_bias != 'off'): with the default htf_bias='off' the switch is inert (cc10_010: without a bias no target from this rule)
     wide_or_mult: float = 1.5            # ... "wide" = >= wide_or_mult x the median OR60 range of the last 20 sessions [our interpretation]
     pm_am_rb: bool = False               # LLT3-pm-target-am-rejection-block (cc10_012 ~00:04:34): PM trades: the nearest untraded AM rejection block above: body edge (array), wick tip (pool), then the AM high
     pm_launch_filter: bool = False       # LLT3-pm-reversal-launch-array-filter (cc10_013 ~00:08:50): PM: the array the AM move launched from - 4h / D / W: its near edge is the final target; 15m .. 1h: the ladder runs beyond it to the next pool
     session_obj_tf: bool = False         # LLT3-session-targets-15m-60m (cc10_014 ~00:04:18): the session lock prefers the nearest opposing 15m / 1h array (obj_<tf>) over pools; a PM trade to it is held to 15:45 (hold_to_obj)
     fvg_target_level: str = "before_edge"   # X2-pdarray-exit-at-or-inside-edge (003 ~00:53:30; 041 ~00:01:45; 049 ~00:05:37): a gap target exits "before_edge" (exit_before_pts, built) / "at_edge" (exactly at the near edge) / "deep" (at the edge, the last rung - the runner - near + fvg_deep_frac x height)
     fvg_deep_frac: float = 0.75          # ... [our interpretation] the far quarter of the gap
-    pool_exit: str = "beyond"            # X2-pool-exit-at-or-before (006 ~00:33:37; 037 ~00:53:34; 063 ~00:29:41; 102 ~01:32:29): a pool exits "beyond" (pool_beyond_pts, built) / "at" (exactly) / "before" (pool_before_ticks ticks short): derives pool_beyond_pts
+    pool_exit: str = "beyond"            # X2-pool-exit-at-or-before (006 ~00:33:37; 037 ~00:53:34; 063 ~00:29:41; 102 ~01:32:29): a pool exits "beyond" (pool_beyond_pts, built) / "at" (exactly) / "before" (pool_before_ticks ticks short): derives pool_beyond_pts (so an 'at' / 'before' mode REPLACES an explicit pool_beyond_pts, and the same offset reaches every engine that reads pool_beyond_pts: the pre-open / SB / sm6 pool exits)
     pool_before_ticks: int = 2
-    pool_exit_fomc_before: bool = False  # ... (065 ~05:43:00) on an FOMC day the pools exit "before" whatever pool_exit says
+    pool_exit_fomc_before: bool = False  # ... (065 ~05:43:00) on an FOMC day the pools exit "before" whatever pool_exit says ('beyond' or 'at')
     proj_kind: bool = False              # X2-projection-target-1tick-before (012 ~00:29:40; 030 ~00:24:14): SD / measured-move / projection levels exit proj_before_pts before the level (rung kinds proj*); Trade.near_miss reports the stops just short of one
     proj_before_pts: float = 0.25
-    adr_before_frac: float = 0.0         # X2-exit-buffer-before-day-extreme (cc09_007 ~00:17:04; cc12_004 ~00:18:54): the adr_target rung (kind adr) exits this share of ADR5 before the level (or at a 15m / 1h array edge inside the buffer minus exit_before_pts, the nearer to price); 0 = off (the spec value is 0.15, study grid {0.10, 0.15, 0.20})
+    adr_before_frac: float = 0.15        # X2-exit-buffer-before-day-extreme (cc09_007 ~00:17:04; cc12_004 ~00:18:54): the adr_target rung (kind adr) exits this share of ADR5 before the level (or at a 15m / 1h array edge inside the buffer minus exit_before_pts, the nearer to price); 0 = off (the spec default 0.15 - only acts with adr_target; study grid {0.10, 0.15, 0.20})
     partial_mode: str = ""               # X3-new-vs-experienced-partials (022 ~00:53:36; 065 ~02:34:01; 067 ~01:03:59): "" (today) / "experienced" (today) / "new" (cut at the first pool, new_first of the units at the first partial) / "terminus" (one rung at the last level) / "quarters" (X3-gradient-ladder-htf-target: quarter-point rungs of the HTF gap / pool-to-HTF range / two pools)
     new_first: float = 0.8
     exit_mode2: str = ""                 # X3-full-pull-vs-mandatory-partial (076 ~00:26:32; 092 ~01:30:11; 102 ~02:18:40): "pay_first" (the first pool rung >= 0.5) / "full_pull" (one rung at the first pool) / "hold_runner" (the final rung only, the stop never moved, out by 15:45)
@@ -5556,7 +5558,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         p = _ES2.apply_sizing(p)                 # caption-gap entries_stops_sizing #2/3 (E12-equal-size-adds / E12-ladder-631 / E12-067-citation-wrong): the add fractions of the day
     if p.nq_overshoot_mult != 1.0:
         p = _SM7.nq_params(p, symbol)            # caption-gap OT-D15-default-instrument: NQ / NDX / QQQ get a wider overshoot tolerance (sweep_ticks, mohawk_ticks)
-    if p.pool_exit_fomc_before and p.pool_exit == "beyond" and "fomc" in events(df.index[0].date()):
+    if p.pool_exit_fomc_before and p.pool_exit != "before" and "fomc" in events(df.index[0].date()):
         p = replace(p, pool_exit="before")       # caption-gap X2-pool-exit-at-or-before (065 ~5:43:00): an FOMC day exits the pools short of the level
         _TP3.hit("pool_exit_fomc")
     kw = dict(partner=partner, live=live, bias=bias, conf=conf, gaps=gaps, closes=closes, evening=evening,
@@ -5829,13 +5831,18 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 xt_ = p.exit_fill_through * p.tick          # E3: a target needs N ticks of print through it
                 while pos["k"] < len(lv_) and pos["left"]:
                     k = pos["k"]
-                    hit_, px_ = _TP.rung_hit(pos, k, lv_[k], h, c, t, tf, p, xt_)     # Ep06.4 sd_close_hit
-                    if not hit_:
-                        break
-                    if pos.get("tp3") and _TP3.speed_defer(pos, k, lv_, h, c, o, l, i, sd, p):      # caption-gap X3-full-pull-vs-mandatory-partial (092 ~1:30:11): large bars through the first pool - hold for the deeper target
+                    sp_ = _TP3.speed_state(pos, k, lv_, i, sd, p) if pos.get("tp3") else None    # caption-gap X3-full-pull-vs-mandatory-partial (092 ~1:30:11): the pool touched on the bar before is decided on the bar after (both closed)
+                    if sp_ == "skip":
                         fr = pos["fracs"]
                         pos["k"] += 1
                         continue
+                    hit_, px_ = _TP.rung_hit(pos, k, lv_[k], h, c, t, tf, p, xt_)     # Ep06.4 sd_close_hit
+                    if sp_ == "pay":
+                        hit_, px_ = True, lv_[k]
+                    if not hit_:
+                        break
+                    if sp_ is None and pos.get("tp3") and _TP3.speed_hold(pos, k, i, sd, p):    # the touch bar: the pool is pending until the next bar closes
+                        break
                     last = (k == len(lv_) - 1 and not pos.get("runner")) or _TP2.close_here(pos, k, tr, t, tf, p, ctx, sd, i, pctx, psides, ppos)   # Ep04.3 po3_runner; caption-gap L12-prior-session-swing-htf-extreme: a proj_htf rung with an SMT after 11:00 closes the trade
                     if last:
                         tr.final_hit = True                           # Ep04.13: every rung taken
@@ -5959,7 +5966,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                         tr.exits.append((ts, sd.x(c), pos["left"], "am_exit")); pos["left"] = 0
                     else:
                         _MG.raise_stop(pos, new)               # X5c: a day trade keeps its stop
-            if pos["left"] and tr.session == "PM" and p.pm_done_by and pos["t1_done"] and t + tf >= p.pm_done_by and not _SM7.held(pos):
+            if pos["left"] and tr.session == "PM" and p.pm_done_by and pos["t1_done"] and t + tf >= p.pm_done_by and not _SM7.held(pos) and not (pos.get("tp3") or {}).get("hold_obj"):
                 tr.exits.append((ts, sd.x(c), pos["left"], "pm_done")); pos["left"] = 0
             if pos["left"] and ff and pos["fill_t"] < ff and t + tf >= ff:
                 tr.exits.append((ts, sd.x(c), pos["left"], "fomc_flat")); pos["left"] = 0   # N3.2: never hold into the release
@@ -6200,7 +6207,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 _ES3.on_fill(ctx, sd, pos, tr, o, i, p, fill)             # caption-gap entries_stops_sizing #3/3: initial risk, the OB MT / probe exits, the gate candle, the near-HTF room
                 if o.get("tp2") or p.sd_anchor == "entry_low":
                     _TP2.on_fill(ctx, sd, pos, tr, o, i, p)               # caption-gap targets_partials #2/4: the lingering window, the entry-low anchor
-                if o.get("tp3_speed"):
+                if o.get("tp3_speed") or o.get("tp3_hold"):
                     _TP3.on_fill(ctx, sd, pos, tr, o, i, p)               # caption-gap targets_partials #3/4: the pay_first speed exception
                 if o.get("es2"):
                     _ES2.on_fill(ctx, sd, pos, tr, o, i, p, fill)      # caption-gap entries_stops_sizing #2/3: the OB grade, the FVG-then-OB add, the zone-ladder add base
@@ -6666,6 +6673,25 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
             if lk["side"] == 0:
                 if p.draw_lock_neutral == "skip":
                     done[s_] = True
+                continue
+        if p.dt_proj:                                  # caption-gap new-double-top-projection (cc04_014 ~11:53): the projection traded - the draw is the nearest sell-side pool
+            nl = _TP3.dt_relock(ctx, p, lk, i, spent)
+            if nl is not None:
+                all_locks.append(dict(lk, failed=True))
+                ctx.lock[s_] = lk = nl
+                _f("x_dt_relock")
+                if pending is not None and pending["side"].sign != nl["side"] and                         ("LH" if pending.get("done_key") == "LH" else pending["session"]) == s_:
+                    pending = None
+                continue
+        if p.wide_or_draw:                             # caption-gap LLT3-wide-or-bias-end (cc10_010 ~6:15): the OR60 end in the bias direction is the locked draw from 10:30
+            nl = _TP3.wide_or_relock(ctx, p, lk, i, s_)
+            if nl is not None:
+                all_locks.append(dict(lk, failed=True))
+                ctx.lock[s_] = lk = nl
+                _f("x_wide_or_lock")
+                if pending is not None and pending["side"].sign != nl["side"] and \
+                        ("LH" if pending.get("done_key") == "LH" else pending["session"]) == s_:
+                    pending = None
                 continue
         hit = ctx.h[i] >= lk["target"] if lk["side"] > 0 else ctx.l[i] <= lk["target"]
         if not hit and p.cond_draw:                   # L14e: the draw failed - switch once to the other side (the failed target spent)

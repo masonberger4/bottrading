@@ -22,6 +22,7 @@ NEW_SWITCHES = (
     "min_rr_final", "void_legs", "ob_target_order", "weekly_beyond_mode", "dt_proj", "grades60", "target_past_eq60", "proj_ext_anchor", "daily_breaker_cap", "adr_conv_target", "adr_t2_htf", "adr_ext",
     "adr_anchor", "pm_am_leg", "consol_overnight_targets", "wide_or_draw", "pm_am_rb", "pm_launch_filter", "session_obj_tf", "fvg_target_level", "pool_exit", "pool_exit_fomc_before", "proj_kind",
     "adr_before_frac", "partial_mode", "exit_mode2", "speed_skip", "pool_milestone", "no_collapse_htf", "ladder_preset", "ladder037_ce", "energy_split", "fixed_partials", "mm_anchor",
+    "grades60_range_only", "proj_ext_sym",
 )
 KNOBS = ("void_leg_mult", "void_max_opp", "grades60_src", "proj_ext2", "adr_conv_pts", "adr_conv_last", "wide_or_mult", "fvg_deep_frac", "pool_before_ticks", "proj_before_pts", "new_first", "no_collapse_keep",
          "energy_room_pts", "fixed_partial_fracs")
@@ -71,7 +72,7 @@ def test_new_switch_defaults_and_validation():
     assert (p.consol_overnight_targets, p.wide_or_draw, p.wide_or_mult, p.pm_am_rb, p.pm_launch_filter, p.session_obj_tf, p.fvg_target_level, p.fvg_deep_frac, p.pool_exit, p.pool_before_ticks,
             p.pool_exit_fomc_before, p.proj_kind, p.proj_before_pts, p.adr_before_frac, p.partial_mode, p.new_first, p.exit_mode2, p.speed_skip, p.pool_milestone, p.no_collapse_htf, p.no_collapse_keep,
             p.ladder_preset, p.ladder037_ce, p.energy_split, p.energy_room_pts, p.fixed_partials, p.fixed_partial_fracs) == (
-        False, False, 1.5, False, False, False, "before_edge", 0.75, "beyond", 2, False, False, 0.25, 0.0, "", 0.8, "", False, 0.0, False, 0.2, "", False, False, 5.0, (), (0.25, 0.25))
+        False, False, 1.5, False, False, False, "before_edge", 0.75, "beyond", 2, False, False, 0.25, 0.15, "", 0.8, "", False, 0.0, False, 0.2, "", False, False, 5.0, (), (0.25, 0.25))
     assert p.pool_beyond_pts == 0.25 and p.mm_anchor == "leg" and p.sd_htf_tol == 1.0                              # the built defaults stay
     assert not tp3.any_on(p) and not tp3.raw_on(p) and not tp3.exit_on(p)
     for kw in (dict(fvg_target_level="x"), dict(pool_exit="x"), dict(partial_mode="x"), dict(exit_mode2="x"), dict(ladder_preset="x"), dict(weekly_beyond_mode="x"), dict(grades60_src="x"),
@@ -319,6 +320,26 @@ def test_60day_grades():
     # an entry outside the range gets nothing
     ctx2 = mk(flat(12, 4900.0), hist=_range_hist())
     assert tp3.grade_rungs(ctx2, side(ctx2), 8, p, 4900.0, 4900.0, {}, []) == []
+    # sitting above the 4400 grade from the start is not a crossing: the grades stay stepping stones (no final); a close above it after one at or below it is
+    assert not st.get("grade_through")
+    rows_x = [(4395.0, 4396.0, 4394.0, 4395.0)] * 6 + [(4396.0, 4412.0, 4395.0, 4410.0)] + [(4410.0, 4412.0, 4408.0, 4410.0)] * 5
+    ctx_x = mk(rows_x, hist=_range_hist())
+    st_x, lvt_x = {}, []
+    tp3.grade_rungs(ctx_x, side(ctx_x), 11, p, 4410.0, 4410.0, st_x, lvt_x, dict(ext=4394.0, ext_i=2))
+    assert st_x["grade_through"] and "sub_disc" in lvt_x and "top_seg" not in lvt_x
+    rows_b = rows_x[:6] + [(4396.0, 4412.0, 4395.0, 4410.0), (4410.0, 4411.0, 4390.0, 4396.0)] + [(4396.0, 4397.0, 4395.0, 4396.0)] * 4        # closed back below: a reaction
+    ctx_b = mk(rows_b, hist=_range_hist())
+    st_b = {}
+    tp3.grade_rungs(ctx_b, side(ctx_b), 11, p, 4410.0, 4410.0, st_b, [], dict(ext=4394.0, ext_i=2))
+    assert not st_b.get("grade_through")
+    # range-bound gate: the fixture's 60 sessions net moved 400 of an 800 range (drr_net_frac 0.6: range-bound); a trending history is not
+    p6 = replace(p, drr_net_frac=0.6)
+    assert tp3.range_bound60(ctx_x, p6) and tp3.grade_rungs(ctx_x, side(ctx_x), 11, replace(p6, grades60_range_only=True), 4410.0, 4410.0, {}, [])
+    hs = _range_hist()
+    hs[-1] = hs[-1].assign(close=4790.0)
+    ctx_t = mk(rows_x, hist=hs)
+    assert not tp3.range_bound60(ctx_t, p6) and tp3.grade_rungs(ctx_t, side(ctx_t), 11, replace(p6, grades60_range_only=True), 4410.0, 4410.0, {}, []) == []
+    st = dict(st, grade_through=True)
     # the final target is the next grade unless a nearer pool exists
     kw = dict(ctx=ctx, sd=sd, sw=dict(ext=4400.0, ext_i=2), i=8, session="AM", entry=4410.0, risk=4.0, keep_full=[], draw=4700.0, final_T=False, lvt=[], tags={}, locked=False, fixed=None)
     keep = [(4455.0, "array"), (4560.0, "array"), (4650.0, "array")]
@@ -332,12 +353,17 @@ def test_60day_grades():
 def test_target_first_array_below_eq60():
     # a short (side space: mirrored) from the premium: entry 4430 above the EQ 4400, a weekly BISI 4380-4390 below
     rows = [(4430.0, 4431.0, 4429.0, 4430.0)] * 12
-    cf = conf([(1, 4390.0, 4380.0, np.inf, 0, "W"), (1, 4300.0, 4290.0, np.inf, 0, "W")], tfs=("W",))
+    cf = conf([(1, 4390.0, 4380.0, np.inf, 0, "W"), (1, 4295.0, 4285.0, np.inf, 0, "W")], tfs=("W",))
     ctx = mk(rows, cf, hist=_range_hist())
     sd = side(ctx, -1)
     p = pk(target_past_eq60=True)
     v = tp3.past_eq_final(ctx, sd, 8, p, sd.x(4430.0), {})
     assert v == -4390.0                                                    # final 4390 in real prices
+    # an array that holds a quadrant / eighth 50% line (4350 = 43.75 % of 4000-4800) outranks the nearer one
+    cf_q = conf([(1, 4390.0, 4380.0, np.inf, 0, "W"), (1, 4355.0, 4345.0, np.inf, 0, "W")], tfs=("W",))
+    ctx_q = mk(rows, cf_q, hist=_range_hist())
+    h0 = dict(sm2.HITS)
+    assert tp3.past_eq_final(ctx_q, side(ctx_q, -1), 8, p, sd.x(4430.0), {}) == -4355.0 and sm2.HITS.get("past_eq_quad_priority", 0) > h0.get("past_eq_quad_priority", 0)
     # a long from the discount side mirrors it: entry 4370, a bearish weekly array 4410-4420 above the EQ
     rows_l = [(4370.0, 4371.0, 4369.0, 4370.0)] * 12
     cf_l = conf([(-1, 4420.0, 4410.0, np.inf, 0, "W")], tfs=("W",))
@@ -732,13 +758,15 @@ def test_pool_exit_modes():
     assert S._exit_px(4290.5, "pool_eq", pk(pool_exit="at")) == 4290.5
     assert pk(pool_exit="before").pool_beyond_pts == -0.5 and pk(pool_exit="beyond", pool_beyond_pts=1.25).pool_beyond_pts == 1.25        # 006: 1.25 pts beyond is the same switch
     assert TP._raw(4290.0, "pool", pk(pool_exit="before")) == 4290.5
-    # the REH cluster: all but the highest keep the beyond exit, the highest exits short of its high
+    # the REH cluster: every sub-high exits AT its own price, the highest exits short of its high
     p = pk(pool_exit="before")
     raw, kinds = [4290.5, 4291.0], ["pool_eq", "pool_eq"]
     lv = [S._exit_px(v, k, p) for v, k in zip(raw, kinds)]
     ctx = mk(flat(12))
     out = tp3.exit_post(ctx, side(ctx), 8, p, 4280.0, raw, kinds, lv, {})
-    assert out == [4290.75, 4290.5]
+    assert out == [4290.5, 4290.5]
+    p_at = pk(pool_exit="at")
+    assert tp3.exit_post(ctx, side(ctx), 8, p_at, 4280.0, raw, kinds, [S._exit_px(v, k, p_at) for v, k in zip(raw, kinds)], {}) == [4290.5, 4291.0]      # 'at': the highest exits at its own price too
     # FOMC days
     from claude_hf.daytypes import events
     assert "fomc" in events(date(2024, 1, 31)) and "fomc" not in events(date(2024, 1, 30))
@@ -891,36 +919,55 @@ def test_exit_mode2():
     assert k_ == [(4110.25, "pool")] and tags["fracs"] == (1.0,)
     tags = {}
     why, k_, draw, _ = tp3.late(p=pk(exit_mode2="hold_runner"), tags=tags, lvt=[], **kw)
-    assert k_ == [(4120.25, "pool")] and tags["fracs"] == (1.0,) and tags["day_trade"] and tags["no_adds"] and tags["exit_at"] == 945
+    assert k_ == [(4120.25, "pool")] and tags["fracs"] == (1.0,) and tags["day_trade"] and tags["no_adds"] and tags["exit_at"] == 900
 
 
-def _speed_sd(big_prev=True, big_cur=True, close_beyond=True):
+def _speed_sd(big_touch=True, big_next=True, close_beyond=True):
+    """30 quiet bars (range 1); the touch bar is 28, the bar after it 29."""
     n = 30
     o = np.full(n, 4100.0)
     h, l, c = o + 0.5, o - 0.5, o.copy()
-    if big_prev:
-        h[28], l[28], c[28] = 4104.0, 4099.0, 4103.5                         # range 5 >= 1.5 x 1
-    if big_cur:
-        h[29], l[29], c[29] = 4112.0, 4104.0 - 3.0, 4111.0 if close_beyond else 4104.0
+    if big_touch:
+        h[28], l[28], c[28] = 4112.0, 4099.0, 4111.0                         # range 13 >= 1.5 x 1
+    if big_next:
+        h[29], l[29], c[29] = 4116.0, 4108.0, 4115.0 if close_beyond else 4104.0
     return S.Side(1, o, h, l, c, 1, 0.0)
+
+
+def _two_step(sd, p, pos=None, k=0):
+    pos = pos or dict(fracs=(0.5, 0.5), level_kinds=["pool", "pool"], tp3=dict(speed=True), k=0)
+    lv = [4110.0, 4120.0]
+    assert tp3.speed_hold(pos, k, 28, sd, p) is True and pos["tp3"]["pend"] == (k, 28)     # the touch bar: nothing is decided on its own close
+    assert tp3.speed_state(pos, k, lv, 28, sd, p) is None                                 # still the touch bar
+    return pos, tp3.speed_state(pos, k, lv, 29, sd, p)
 
 
 def test_speed_skip_defers_the_first_pool():
     p = pk(exit_mode2="pay_first", speed_skip=True)
-    pos = dict(fracs=(0.5, 0.5), level_kinds=["pool", "pool"], tp3=dict(speed=True), k=0)
-    assert tp3.speed_defer(pos, 0, [4110.0, 4120.0], 0, 0, 0, 0, 29, _speed_sd(), p) is True
-    assert pos["fracs"] == (0.0, 1.0)
-    # the same rung is not skipped twice; one small bar / a close back below the pool: paid
-    assert tp3.speed_defer(pos, 0, [4110.0, 4120.0], 0, 0, 0, 0, 29, _speed_sd(), p) is False
-    for kw in (dict(big_prev=False), dict(big_cur=False), dict(close_beyond=False)):
-        pos = dict(fracs=(0.5, 0.5), level_kinds=["pool", "pool"], tp3=dict(speed=True), k=0)
-        assert tp3.speed_defer(pos, 0, [4110.0, 4120.0], 0, 0, 0, 0, 29, _speed_sd(**kw), p) is False, kw
-    # the final rung and non-pool rungs are never skipped; a position without the flag is untouched
-    pos = dict(fracs=(0.5, 0.5), level_kinds=["pool", "pool"], tp3=dict(speed=True), k=1)
-    assert tp3.speed_defer(pos, 1, [4110.0, 4120.0], 0, 0, 0, 0, 29, _speed_sd(), p) is False
-    pos = dict(fracs=(0.5, 0.5), level_kinds=["array", "pool"], tp3=dict(speed=True), k=0)
-    assert tp3.speed_defer(pos, 0, [4110.0, 4120.0], 0, 0, 0, 0, 29, _speed_sd(), p) is False
-    assert tp3.speed_defer(dict(fracs=(0.5, 0.5), level_kinds=["pool", "pool"], k=0), 0, [4110.0, 4120.0], 0, 0, 0, 0, 29, _speed_sd(), p) is False
+    pos, r = _two_step(_speed_sd(), p)
+    assert r == "skip" and pos["fracs"] == (0.0, 1.0) and pos["tp3"]["pend"] is None
+    # the same rung is not held twice
+    assert tp3.speed_hold(pos, 0, 28, _speed_sd(), p) is False
+    # one small bar / a close back below the pool: paid at the pool
+    for kw in (dict(big_touch=False), dict(big_next=False), dict(close_beyond=False)):
+        pos, r = _two_step(_speed_sd(**kw), p)
+        assert r == "pay" and pos["fracs"] == (0.5, 0.5), kw
+    # the final rung and non-pool rungs are never held; a position without the flag is untouched; too little history
+    sd = _speed_sd()
+    assert tp3.speed_hold(dict(fracs=(0.5, 0.5), level_kinds=["pool", "pool"], tp3=dict(speed=True), k=1), 1, 28, sd, p) is False
+    assert tp3.speed_hold(dict(fracs=(0.5, 0.5), level_kinds=["array", "pool"], tp3=dict(speed=True), k=0), 0, 28, sd, p) is False
+    assert tp3.speed_hold(dict(fracs=(0.5, 0.5), level_kinds=["pool", "pool"], k=0), 0, 28, sd, p) is False
+    assert tp3.speed_hold(dict(fracs=(0.5, 0.5), level_kinds=["pool", "pool"], tp3=dict(speed=True), k=0), 0, 15, sd, p) is False
+
+
+def test_speed_skip_short_side_is_mirrored():
+    """Side space: a short runs the same code on mirrored prices (the Side object holds the mirrored bars), so the mirrored book gives the same decision."""
+    p = pk(exit_mode2="pay_first", speed_skip=True)
+    sd = _speed_sd()
+    m = S.Side(-1, -sd.o, -sd.l, -sd.h, -sd.c, 1, 0.0)           # raw short bars whose mirror is sd
+    assert (m.h == sd.h).all()
+    pos, r = _two_step(m, p)
+    assert r == "skip"
 
 
 def test_exit_mode2_engine():

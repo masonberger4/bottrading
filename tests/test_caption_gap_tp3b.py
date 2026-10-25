@@ -46,11 +46,12 @@ SYN_CASES = {
     "targets_a5": (5, dict(void_legs=True, mm_targets=True, mm_anchor="reanchor", weekly_beyond_mode="tag", pool_prev_week=True, pool_prev_month=True), ("void_legs", "weekly_beyond", "monthly_beyond")),
     "impulse": (3, dict(mm_targets=True, mm_anchor="impulse"), ("mm_impulse",)),
     "ob_order": (3, dict(ob_target_order=True), ("ob_target_order",)),
-    "pm_leg": (3, dict(pm_am_leg=True, pm_am_rb=True, pm_launch_filter=True), ("pm_am_leg",)),
-    "consol": (3, dict(consol_overnight_targets=True, consol_day_rules="tag", wide_or_draw=True), ("consol_overnight",)),
+    "pm_leg": (3, dict(pm_am_leg=True, pm_am_rb=True, pm_launch_filter=True), ("pm_am_leg",)),         # (the PM rejection block / launch array run on ES data below)
+    "consol": (3, dict(consol_overnight_targets=True, consol_day_rules="tag", wide_or_draw=True), ("consol_overnight", "eval_wide_or")),
     "new": (3, dict(partial_mode="new", energy_split=True, fixed_partials=(2.0, 4.0), no_collapse_htf=True, pool_milestone=0.5), ("partial_new", "fixed_partials", "energy_no_room")),
     "new_b": (5, dict(partial_mode="new", energy_split=True, fixed_partials=(2.0, 4.0), no_collapse_htf=True), ("partial_new", "fixed_partials", "energy_poke")),
-    "pay": (5, dict(exit_mode2="pay_first", speed_skip=True), ("exit_pay_first",)),
+    "pay": (6, dict(exit_mode2="pay_first", speed_skip=True), ("exit_pay_first", "eval_speed", "speed_skip", "speed_paid")),     # the touch bar is held, the next bar decides: skipped once, paid once
+    "dt": (1, dict(dt_proj=True), ("dt_proj", "dt_relock")),                                                                     # the pair scan over the earlier sessions and the lock to the nearest sell-side pool
     "ladder_004": (3, dict(ladder_preset="004"), ("ladder_004",)),
     "ladder_037": (3, dict(ladder_preset="037"), ("ladder_037",)),
     "quarters": (5, dict(partial_mode="quarters"), ("partial_quarters",)),
@@ -81,6 +82,17 @@ def test_look_ahead_gappy_synthetic(seed):
     assert added.get("partial_new")
 
 
+@pytest.mark.parametrize("seed", [1, 4])
+def test_look_ahead_wide_or_lock(monkeypatch, seed):
+    """wide_or_draw needs a bias (htf_bias != 'off'; a random-walk book has no HTF table, so the bias reading is fixed bullish): the OR60 end is the order's final target AND the session lock; the
+    lock moves only on closed bars (full vs truncated runs)."""
+    monkeypatch.setattr(S._BD, "want_at", lambda ctx, p, session, i: 1)
+    x, y = B.synthetic(start="2026-04-06", end="2026-05-08", tf=5, seed=seed)
+    p = Params(**{**SYN, **SYN_BASE, **dict(wide_or_draw=True, wide_or_mult=0.3, htf_bias="draw", draw_lock="session", use_bias=False)})
+    full, added = _la(x, 5, "RW", p, COLS, every=2, partner=y)
+    _check_ran("wide_or_lock", full, added, ("wide_or_draw", "wide_or_relock", "eval_wide_or"))
+
+
 def test_look_ahead_across_an_fomc_day():
     """2024-01-31 is an FOMC day: pool_exit_fomc_before switches the day to the 'before' exits - the days before and after run the usual ones."""
     x, y = B.synthetic(start="2024-01-22", end="2024-02-09", tf=5, seed=3)
@@ -92,6 +104,7 @@ def test_look_ahead_across_an_fomc_day():
 # --- ES windows (5m): the full run must have EXECUTED the code paths named ---------------------------------------------------------------------------------
 
 W2, WL = ("2023-03-06", "2023-03-20"), ("2023-01-09", "2023-03-06")             # WL: ~40 sessions (the 60-day range, the daily breakers and the OR60 median need history)
+W8A, W8B = ("2023-02-06", "2023-04-03"), ("2023-04-03", "2023-05-29")           # eight weeks: the PM rejection block / launch array, the daily breaker cap, the target past the EQ, the grade final and hold_to_obj all RUN in these
 SMP = dict(study.SM_POST)
 SDX = dict(sd_targets=True, sd_levels=(1.0, 1.5, 2.0, 2.5, 3.0))
 HT = ("15m", "1h", "4h", "D")
@@ -101,13 +114,15 @@ ES_CASES = {
     "void_mm": (W2, ES_NB, dict(SMP, void_legs=True, mm_targets=True, mm_anchor="reanchor", min_rr_final=2.0), ("void_legs", "mm_reanchor")),
     "ob_order": (W2, dict(ES_NB, ob_entry="both"), dict(ob_target_order=True, htf_targets=("1h", "4h", "D")), ("ob_target_order",)),
     "weekly_beyond": (W2, ES_NB, dict(SMP, weekly_beyond_mode="tag", pool_prev_week=True, pool_prev_month=True, dt_proj=True), ("weekly_beyond", "eval_dt")),
-    "grades": (WL, ES_NB, dict(SMP, grades60=True, target_past_eq60=True, htf_targets=HTW), ("eval_grades60", "eval_past_eq")),
-    "daily_breaker": (WL, ES_NB, dict(SMP, daily_breaker_cap=True), ("eval_daily_breaker",)),
+    "grades": (WL, ES_NB, dict(SMP, grades60=True, target_past_eq60=True, htf_targets=HTW), ("eval_grades60", "eval_past_eq", "grades60", "grade_through", "grade_final")),
+    "past_eq": (W8A, ES_NB, dict(SMP, grades60=True, target_past_eq60=True, htf_targets=HTW), ("grades60", "past_eq60_final", "past_eq_quad_priority")),
+    "grade_final_b": (W8B, ES_NB, dict(SMP, grades60=True, target_past_eq60=True, htf_targets=HTW), ("grade_through", "grade_final")),
+    "daily_breaker": (W8A, ES_NB, dict(SMP, daily_breaker_cap=True), ("eval_daily_breaker", "daily_breaker_cap")),
     "ext_stop_run": (W2, ES_NB, dict(SMP, proj_ext_anchor="stop_run", htf_targets=HT), ("proj_ext_stop_run",)),
     "ext_midweek": (W2, ES_NB, dict(SMP, proj_ext_anchor="midweek", htf_targets=HT), ("eval_ext_levels",)),
     "adr": (W2, ES_NB, dict(SMP, adr_conv_target=True, adr_target=True, adr_frac=1.0, adr_t2_htf=True, adr_ext=True, adr_before_frac=0.15, **SDX, htf_targets=HT), ("adr_t2_htf", "adr_ext", "adr_before", "eval_adr_conv")),
-    "pm": (W2, ES_NB, dict(SMP, pm_am_leg=True, pm_am_rb=True, pm_launch_filter=True), ("pm_am_leg", "eval_launch")),
-    "session_obj": (W2, dict(ES_NB, draw_lock="session"), dict(session_obj_tf=True), ("eval_obj_lock", "session_obj_lock_rank")),
+    "pm": (W8A, ES_NB, dict(SMP, pm_am_leg=True, pm_am_rb=True, pm_launch_filter=True), ("pm_am_leg", "pm_am_rb", "pm_launch", "pm_launch_arm")),
+    "session_obj": (W8A, dict(ES_NB, draw_lock="session"), dict(session_obj_tf=True), ("eval_obj_lock", "session_obj_lock_rank", "hold_to_obj")),
     "wide_or": (WL, dict(ES_NB, htf_bias="combo", use_bias=True), dict(SMP, wide_or_draw=True), ("eval_wide_or",)),
     "exits": (W2, ES_NB, dict(SMP, fvg_target_level="deep", pool_exit="before", pool_exit_fomc_before=True, proj_kind=True, htf_targets=HTW, **SDX), ("fvg_deep", "eval_exit_post")),
     "milestone": (W2, ES_B, dict(SMP, pool_milestone=0.5, no_collapse_htf=True, htf_targets=HT), ("pool_milestone", "no_collapse")),

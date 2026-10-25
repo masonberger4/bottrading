@@ -66,10 +66,14 @@ def check_params(p) -> None:
     inert = []
     if p.speed_skip and p.exit_mode2 != "pay_first":
         inert.append("speed_skip acts on exit_mode2='pay_first'")
+    if p.wide_or_draw and p.htf_bias == "off":
+        inert.append("wide_or_draw needs a bias (htf_bias != 'off'): it is inert with htf_bias='off'")
+    if p.energy_split and (p.ladder_preset or p.exit_mode2 or p.partial_mode in ("new", "quarters") or p.no_collapse_htf):
+        inert.append("energy_split is applied LAST and replaces the fractions of ladder_preset / partial_mode / no_collapse_htf (including the no-collapse keep share)")
     if p.ladder037_ce and p.ladder_preset != "037":
         inert.append("ladder037_ce acts on ladder_preset='037'")
-    if (p.adr_t2_htf or p.adr_ext or p.adr_before_frac > 0 or p.adr_anchor != "day_low") and not p.adr_target:
-        inert.append("adr_t2_htf / adr_ext / adr_before_frac / adr_anchor act on the adr_target ladder: they need adr_target=True")
+    if (p.adr_t2_htf or p.adr_ext or p.adr_anchor != "day_low") and not p.adr_target:
+        inert.append("adr_t2_htf / adr_ext / adr_anchor act on the adr_target ladder: they need adr_target=True (adr_before_frac, default 0.15, does too)")
     if p.proj_ext_anchor != "leg" and p.proj_ext:
         inert.append("proj_ext_anchor 'stop_run' / 'midweek' takes its multiples from (1.27, proj_ext2), not from proj_ext")
     if p.mm_anchor in ("reanchor", "impulse") and not p.mm_targets:
@@ -90,7 +94,7 @@ def derive_pool_exit(p) -> None:
 
 
 def exit_on(p) -> bool:
-    return bool(p.fvg_target_level != "before_edge" or p.adr_before_frac > 0 or p.pool_exit == "before")
+    return bool(p.fvg_target_level != "before_edge" or (p.adr_before_frac > 0 and p.adr_target) or p.pool_exit == "before")
 
 
 def raw_on(p) -> bool:
@@ -281,8 +285,9 @@ def void_levels(ctx, sd, i: int, p, above: float, st: dict) -> list:
         for z in L.one_sided_legs(o, h, l, c, p.void_leg_mult, p.void_max_opp):
             if z.i >= len(h):
                 continue
-            end = int(ends[z.i])
-            if end > i or z.top <= above or sd.h[end + 1:i + 1].max(initial=-np.inf) >= z.top:
+            end = int(ends[z.i])                       # the bucket after the leg completes: the zone is known from here
+            leg_end = int(ends[z.i - 1]) if z.i >= 1 else end
+            if end > i or z.top <= above or sd.h[leg_end + 1:i + 1].max(initial=-np.inf) >= z.top:      # unfilled since the LEG's end (a fill inside the confirming bucket counts)
                 continue
             if best is None or z.top < best[0]:
                 best = (float(z.top), float((z.top + z.bottom) / 2))
@@ -317,7 +322,9 @@ def mm_levels(ctx, sd, i: int, p, sw: dict, leg_hi: float, entry: float, above: 
 
 def ob_order_levels(ctx, sd, i: int, p, above: float, tags: dict) -> list:
     """X1-bullish-objective-order (cc03_002 ~20:14): for an OB entry, T1 = the low of the nearest bearish OB candle above (the last up-close candle at an untaken swing
-    high), T2 = its high + one tick (the buy stops), T3 = the near edge of the nearest 1h / 4h / D bearish OB. Side space."""
+    high), T2 = its high + one tick (the buy stops), T3 = the near edge of the nearest 1h / 4h / D bearish OB. Side space. [our interpretation] The spec says the three rungs are 'inserted
+    before other rungs, others kept after'; the ladder loop walks its rungs in ascending price (a rung pointer), so the three rungs are merged by price and the other rungs stay where
+    they are (a nearer pool is still paid first) - listed as an owner question in build_log.md."""
     ek = str(tags.get("entry_kind", ""))
     if not (ek.startswith("ob") or ek == "vi_ob"):
         return []
@@ -343,37 +350,87 @@ def ob_order_levels(ctx, sd, i: int, p, above: float, tags: dict) -> list:
     return out
 
 
-def double_tops(ctx, sd, i: int, p, above: float):
-    """new-double-top-projection (cc04_014 ~8:40): the 1h / 4h double tops of the day frame (two consecutive swing highs of the completed buckets within eq_tol_pts), as
-    (pool, projection, reached, booked): R = the higher peak minus the lowest low between the peaks, projection = peak + R (levels.double_top_proj). A pair is known once
-    the bucket after its second peak is complete. reached = the projection has traded; booked = the pool traded one tick through (its projection stays live)."""
-    out = []
+DT_SESSIONS = 5          # new-double-top-projection: the history window of the pair scan (sessions, today's included) [our interpretation: "keep only within the history window passed"]
+
+
+def _wall_ns(idx) -> np.ndarray:
+    """Wall-clock nanoseconds of a (tz-aware) DatetimeIndex whatever its resolution unit."""
+    return idx.tz_localize(None).values.astype("datetime64[ns]").astype(np.int64)
+
+
+def _hist_arrays(ctx, i: int, sign: int):
+    """The wall-clock times (ns), highs and lows (side space of `sign`) of the last DT_SESSIONS sessions of ctx.hist plus the frame's bars through bar i (the previous session + today).
+    Only closed bars: bar i itself has closed when it is used. The earlier sessions are built once per ctx."""
+    c = ctx.__dict__.setdefault("_tp3_hl", {})
+    if "old" not in c:
+        old = list(getattr(ctx, "hist", None) or [])[:-1][-(DT_SESSIONS - 1):]       # hist[-1] is the first part of the frame
+        if old:
+            fr = pd.concat([x[["high", "low"]] for x in old])
+            c["old"] = (_wall_ns(fr.index), fr["high"].values.astype(float), fr["low"].values.astype(float))
+        else:
+            c["old"] = (np.zeros(0, np.int64), np.zeros(0), np.zeros(0))
+        c["wall"] = _wall_ns(ctx.idx)
+    ot, oh, ol = c["old"]
+    t = np.concatenate([ot, c["wall"][:i + 1]])
+    h = np.concatenate([oh, ctx.h[:i + 1]])
+    l = np.concatenate([ol, ctx.l[:i + 1]])
+    if sign < 0:
+        h, l = -l, -h
+    return t, h, l, len(ot)
+
+
+def dt_scan(ctx, sign: int, i: int, p) -> list:
+    """new-double-top-projection (cc04_014 ~8:40): the 1h / 4h double tops of the last DT_SESSIONS sessions (the 1h / 4h buckets of earlier sessions' bars included, each bucket
+    used once COMPLETE) in side space `sign` as (pool, projection, reached, reached_today, booked, minutes of the scan timeframe): the swing highs of the buckets are grouped with
+    levels.equal_clusters (within eq_tol_pts), every neighbouring pair in time of a cluster is a double top, R = the higher peak minus the lowest low between the peaks, projection =
+    peak + R (levels.double_top_proj). A pair is known once the bucket after its second peak is complete; reached = the projection has traded since; reached_today = in this session;
+    booked = the pool traded one tick through (its projection stays live). The 4h buckets are the project's clock-aligned candles (00/04/08/12/16: confluence.py, strategy.htf_bars)."""
+    t, hh, ll, n_old = _hist_arrays(ctx, i, sign)
     tol = p.eq_tol_pts * p.es_pt
+    tf_ns = ctx.tf * 60 * 10 ** 9
+    last_close = int(t[-1]) + tf_ns
+    pos_today = n_old + ctx.start
+    out = []
     for m in (60, 240):
         if m <= ctx.tf:
             continue
-        a = tf_arrays(ctx, sd, i, m)
-        if a is None or len(a[1]) < 3:
+        mns = m * 60 * 10 ** 9
+        key = t // mns
+        cut = np.r_[0, np.flatnonzero(np.diff(key)) + 1]
+        ends = (key[cut] + 1) * mns
+        ok = ends <= last_close
+        if ok.sum() < 3:
             continue
+        h = np.maximum.reduceat(hh, cut)[ok]
+        l = np.minimum.reduceat(ll, cut)[ok]
+        ends = ends[ok]
         hit("eval_dt")
-        o, h, l, c, ends = a
         piv = [k for k in range(1, len(h) - 1) if h[k] > h[k - 1] and h[k] > h[k + 1]]
-        for k1, k2 in zip(piv, piv[1:]):
-            if abs(h[k1] - h[k2]) > tol:
-                continue
-            pool, proj = L.double_top_proj(h, l, (k1, k2))
-            known = int(ends[k2 + 1])
-            reached = bool(sd.h[known + 1:i + 1].max(initial=-np.inf) >= proj)
-            booked = bool(sd.h[known + 1:i + 1].max(initial=-np.inf) >= pool + p.tick)
-            out.append((float(pool), float(proj), reached, booked))
+        if len(piv) < 2:
+            continue
+        for cl in L.equal_clusters([float(h[k]) for k in piv], tol):
+            ks = sorted(piv[q] for q in cl)
+            for k1, k2 in zip(ks, ks[1:]):
+                pool, proj = L.double_top_proj(h, l, (k1, k2))
+                pos = int(np.searchsorted(t, ends[k2 + 1], side="left"))
+                mx = float(hh[pos:].max()) if pos < len(hh) else -np.inf
+                p0 = max(pos, pos_today)
+                mt = float(hh[p0:].max()) if p0 < len(hh) else -np.inf
+                out.append((float(pool), float(proj), mx >= proj, mt >= proj, mx >= pool + p.tick, m))
     return out
+
+
+def double_tops(ctx, sd, i: int, p, above: float) -> list:
+    """dt_scan in the order's side space."""
+    return dt_scan(ctx, sd.sign, i, p)
 
 
 def dt_levels(ctx, sd, i: int, p, above: float, st: dict) -> list:
     out = []
-    for pool, proj, reached, booked in double_tops(ctx, sd, i, p, above):
-        if reached:
+    for pool, proj, reached, today, booked, _m in double_tops(ctx, sd, i, p, above):
+        if today:
             st["dt_reached"] = True
+        if reached:
             continue
         if proj > above:
             out.append((proj, "proj"))
@@ -384,10 +441,65 @@ def dt_levels(ctx, sd, i: int, p, above: float, st: dict) -> list:
     return out
 
 
-def grade_rungs(ctx, sd, i: int, p, above: float, entry: float, st: dict, lvt: list) -> list:
-    """new-60day-range-grades (cc07_006 ~10:09): the nine grade lines of the 60-day range beyond `above` (kind 'grade'); the entry's grade band is tagged."""
+def dt_relock(ctx, p, lk: dict, i: int, spent: list):
+    """new-double-top-projection (cc04_014 ~11:53) draw lock: once a double top's projection (in the lock's direction) has traded in this session, the lock moves ONCE to the nearest
+    marked sell-side pool (the opposite direction; a buy-side lock is replaced by the nearest pool below the close, and the mirror) at least draw_lock_min_pts away. Returns the new
+    lock dict or None. The same-direction entries are stopped by the x_dt_done gate (late)."""
+    if not p.dt_proj or lk.get("dt_used") or not lk["side"] or lk["delivered"]:
+        return None
+    sgn = lk["side"]
+    if not any(r[3] for r in dt_scan(ctx, sgn, i, p)):
+        return None
+    other = -sgn
+    px = float(ctx.c[i])
+    mn = p.draw_lock_min_pts * p.es_pt
+    lv = sorted((abs(v - px), v, kd, nm, dr) for v, kd, nm, dr in lk["marked"]
+                if kd == "pool" and ((v < px - mn) if other < 0 else (v > px + mn)) and abs(v - lk["target"]) > 1e-9 and not _near(v, spent, p.es_pt))
+    if not lv:
+        return None
+    d_, v, kd, nm, dr = lv[0]
+    nl = dict(lk)
+    nl.update(side=other, target=v, kind=kd, name=nm, dt_used=True, delivered=False, delivered_t=None, delivered_i=None)
+    spent.append(lk["target"])
+    hit("dt_relock")
+    return nl
+
+
+def range_bound60(ctx, p) -> bool:
+    """new-60day-range-grades (cc07_006): 'in a range-bound daily market' [our interpretation of the B17/N8 classifier, as daycontext.range_regime applied to the 60 sessions]: the 60 sessions
+    net moved less than drr_net_frac of their own high-low range."""
+    fr = list(getattr(ctx, "hist", None) or [])[-60:]
+    if len(fr) < 20:
+        return False
+    hi = max(float(f.high.max()) for f in fr)
+    lo = min(float(f.low.min()) for f in fr)
+    return hi > lo and abs(float(fr[-1].close.iloc[-1]) - float(fr[0].open.iloc[0])) < p.drr_net_frac * (hi - lo)
+
+
+def grade_through(sd, i: int, g: float, since: int) -> bool:
+    """A grade line g (side space) was TRADED THROUGH without a reaction [our interpretation]: a bar from `since` on closed above it after a close at or below it, and no later closed bar
+    (through bar i) closed back below it - the line did not turn price. Sitting above it from the start is not a crossing."""
+    c = sd.c[since:i + 1]
+    if len(c) < 2:
+        return False
+    below = np.flatnonzero(c[:-1] <= g)
+    if not len(below):
+        return False
+    j = int(below[-1]) + 1                 # the last close at or below the line, the bar after it crossed
+    return bool(c[j] > g and (c[j:] > g).all())
+
+
+def grade_rungs(ctx, sd, i: int, p, above: float, entry: float, st: dict, lvt: list, sw: dict | None = None) -> list:
+    """new-60day-range-grades (cc07_006 ~10:09): the nine grade lines of the 60-day range beyond `above` (kind 'grade'); the entry's grade band is tagged. Further (all [our interpretation]):
+    - the NEXT grade above the entry is the final target (st['grade_through']) only when the grade below the entry was traded through without a reaction since the sweep (grade_through);
+      otherwise the grades are stepping-stone rungs only; no other rung is moved between grades;
+    - grades60_range_only: the whole ladder applies only in a range-bound market (range_bound60);
+    - sub-range scoring (tags): sub_disc / sub_prem = the entry sits in the lower / upper half of its own grade band; top_seg = the band is the top quarter of the range (the strongest
+      bearish reactions, cc07_005 ~18:34; the opposing array bands are the quantification)."""
     r = range60(ctx, p)
     if r is None:
+        return []
+    if p.grades60_range_only and not range_bound60(ctx, p):
         return []
     hit("eval_grades60")
     lo, hi = r
@@ -397,8 +509,18 @@ def grade_rungs(ctx, sd, i: int, p, above: float, entry: float, st: dict, lvt: l
     step = (hi - lo) / 8.0
     band = int(np.clip((sd.x(entry) * sd.sign - lo) // step, 0, 7)) if step > 0 else 0
     lvt.append(f"grade{band}")
+    if step > 0:
+        frac = ((sd.x(entry) * sd.sign - lo) - band * step) / step
+        lvt.append("sub_disc" if frac < 0.5 else "sub_prem")
+        if band >= 6:
+            lvt.append("top_seg")
     hit("grades60")
     st["grades"] = sorted(g for g in gl if g > above)
+    since = int(sw["ext_i"]) if sw and sw.get("ext_i") is not None else ctx.start
+    below = [g for g in gl if g <= sd.x(entry) + 1e-9]
+    if below and grade_through(sd, i, max(below), max(0, since)):
+        st["grade_through"] = True
+        hit("grade_through")
     return [(float(g), "grade") for g in st["grades"]]
 
 
@@ -414,13 +536,26 @@ def past_eq_final(ctx, sd, i: int, p, entry: float, st: dict):
     if not entry < eq:
         return None
     TP = _TP()
-    best = None
+    r_full = range60(ctx, p)
+    lines = [sd.x(g) for g in quad_eighth_lines(r_full)] if r_full is not None else []
+    best, best_pri = None, -1
     for rr in cf.opposing_ext(_now(ctx, i), sd.x(entry), sd.sign, ("D", "W", "M"), (0, 1, 2, 3)):
         near, far = _zone_edges(sd, rr)
         ex = TP.extreme_since(ctx, i, rr["known"] + 1.0, sd.sign > 0)
-        if near >= eq - 1e-9 and not (ex is not None and sd.x(ex) >= near) and (best is None or near < best):
-            best = float(near)
+        if near >= eq - 1e-9 and not (ex is not None and sd.x(ex) >= near):
+            lo_, hi_ = min(near, far), max(near, far)
+            pri = int(any(lo_ - 1e-9 <= ln <= hi_ + 1e-9 for ln in lines))      # 'raise priority when the target overlaps a quadrant / eighth 50% line'
+            if pri > best_pri or (pri == best_pri and near < best):
+                best, best_pri = float(near), pri
+    if best_pri == 1:
+        hit("past_eq_quad_priority")
     return best
+
+
+def quad_eighth_lines(r) -> list:
+    """The quadrant 50% lines (12.5 / 37.5 / 62.5 / 87.5 % of the range) and the eighth 50% lines (6.25 % + k x 12.5 %), real prices (cc07_005: the midpoints of the quarters / eighths)."""
+    lo, hi = r
+    return [lo + (hi - lo) * q for q in (0.125, 0.375, 0.625, 0.875, 0.0625, 0.1875, 0.3125, 0.4375, 0.5625, 0.6875, 0.8125, 0.9375)]
 
 
 def ext_multiples(start: float, end: float, mults) -> list:
@@ -454,6 +589,9 @@ def ext_levels(ctx, sd, i: int, p, sw: dict, above: float) -> list:
         ext_i = sw["ext_i"]
         q = [q for q in sd.ph if q.known <= i and ctx.start <= q.i < ext_i]
         if q:
+            # [our interpretation] the template's H - m x R runs BEYOND the stop-run extreme (spec orientation start = the pivot extreme, end = the sweep). In side space the order is
+            # long, so the sweep extreme is a LOW and that projection would lie below it - never a rung for a long. The rungs are therefore measured from the sweep extreme through the
+            # swing high that preceded it (start = sweep, end = pivot): sweep + m x (pivot - sweep), the same R and the same multiples, run on the side the trade goes.
             start, end = float(sw["ext"]), float(q[-1].price)
     elif ctx.day.weekday() >= 2:
         prev = week_bars(ctx, sd, i)
@@ -477,7 +615,7 @@ def ext_levels(ctx, sd, i: int, p, sw: dict, above: float) -> list:
     tol = p.sd_htf_tol * p.es_pt
     rows = [_zone_edges(sd, r) for r in cf.opposing_ext(_now(ctx, i), sd.x(above), sd.sign, ("15m", "30m", "1h", "4h"), (0, 1, 2, 3))]
     out = []
-    for v in ext_multiples(start, end, (1.27, p.proj_ext2)):
+    for v in ext_multiples(start, end, (1.27, p.proj_ext2) + ((1.0,) if p.proj_ext_sym else ())):      # proj_ext_sym: the 100% symmetrical swing (cc07_003 ~30:54)
         if v > above and any(a - tol <= v <= b + tol for a, b in rows):
             out.append((float(v), "proj"))
     if out:
@@ -496,14 +634,14 @@ def adr_levels(ctx, sd, i: int, p, above: float, entry: float, st: dict) -> list
     out = []
     lo = adr_low(ctx, sd, i, p)
     cf = _conf(ctx)
-    if p.adr_t2_htf and cf is not None:
+    if p.adr_t2_htf and p.adr_target and cf is not None:
         lvl = lo + p.adr_frac * adr
         rows = [_zone_edges(sd, r)[0] for r in cf.opposing_ext(_now(ctx, i), sd.x(lvl), sd.sign, ("1h", "4h"), (0, 1, 2, 3))]
         rows = [v for v in rows if v > lvl]
         if rows:
             out.append((float(min(rows)), "array"))
             hit("adr_t2_htf")
-    if p.adr_ext and cf is not None and sd.h[ctx.start:i + 1].max() >= lo + adr:
+    if p.adr_ext and p.adr_target and cf is not None and sd.h[ctx.start:i + 1].max() >= lo + adr:
         zs = [_zone_edges(sd, r) for r in cf.opposing_ext(_now(ctx, i), sd.x(above), sd.sign, ("15m", "1h"), (0, 1, 2, 3))]
         for e in (1.27, 1.62):
             v = lo + e * adr
@@ -518,8 +656,10 @@ def adr_levels(ctx, sd, i: int, p, above: float, entry: float, st: dict) -> list
         adr_hi = base + adr
         tol = p.adr_conv_pts * p.es_pt
         zs = [_zone_edges(sd, r) for r in cf.opposing_ext(_now(ctx, i), sd.x(above), sd.sign, ("15m", "1h", "4h", "D"), (0, 1, 2, 3))]
-        if any(a - tol <= adr_hi <= b + tol for a, b in zs):
+        zh = next(((a, b) for a, b in zs if a - tol <= adr_hi <= b + tol), None)
+        if zh is not None:
             st["adr_hi"] = adr_hi
+            st["adr_zone"] = zh                    # the zone that holds the projected ADR high: a projection inside it (+/- the tolerance) converges with it
             hit("eval_adr_conv")
     return out
 
@@ -569,9 +709,9 @@ def pm_rb_levels(ctx, sd, i: int, p, above: float, session: str) -> list:
     return [(float(best.bottom), "array"), (float(best.top), "pool")]
 
 
-def or_wide(ctx, sd, i: int, p):
-    """LLT3-wide-or-bias-end (cc10_010 ~6:15): (OR60 high, OR60 low) of today in side space when the 09:30 - 10:30 range is >= wide_or_mult x the median OR60 range of the last 20
-    sessions and the opening range is complete at bar i; else None."""
+def or_wide_real(ctx, i: int, p):
+    """LLT3-wide-or-bias-end (cc10_010 ~6:15): (OR60 high, OR60 low) of today in REAL prices when the 09:30 - 10:30 range is >= wide_or_mult x the median OR60 range of the last 20
+    sessions and the opening range is complete at bar i (closed bars only); else None."""
     S = _S()
     k0, k1 = S._idx_at(ctx, 570), S._idx_at(ctx, 630)
     if not (k0 < k1 <= i + 1 and ctx.t[i] + ctx.tf >= 630):
@@ -584,8 +724,38 @@ def or_wide(ctx, sd, i: int, p):
     if len(rngs) < 10:
         return None
     hit("eval_wide_or")
-    hi, lo = float(sd.h[k0:k1].max()), float(sd.l[k0:k1].min())
+    hi, lo = float(ctx.h[k0:k1].max()), float(ctx.l[k0:k1].min())
     return (hi, lo) if (hi - lo) >= p.wide_or_mult * float(np.median(rngs)) else None
+
+
+def or_wide(ctx, sd, i: int, p):
+    """or_wide_real in side space: (OR60 high, OR60 low) of the order's side, or None."""
+    w = or_wide_real(ctx, i, p)
+    if w is None:
+        return None
+    return (w[0], w[1]) if sd.sign > 0 else (-w[1], -w[0])
+
+
+def wide_or_relock(ctx, p, lk: dict, i: int, session: str):
+    """LLT3-wide-or-bias-end: the OR60 end in the bias direction is the LOCKED draw for the rest of the day (the session lock, once, from 10:30 on) when the OR60 is wide and the end
+    is still untaken. Needs a bias (htf_bias != 'off': without one the rule gives no target, cc10_010). Returns the new lock dict or None."""
+    if not p.wide_or_draw or p.htf_bias == "off" or lk.get("wo_used") or lk["delivered"] or ctx.t[i] + ctx.tf < 630:
+        return None
+    S = _S()
+    want = S._BD.want_at(ctx, p, session, i)
+    w = or_wide_real(ctx, i, p) if want else None
+    if w is None:
+        return None
+    v = w[0] if want > 0 else w[1]
+    k1 = S._idx_at(ctx, 630)
+    if (ctx.h[k1:i + 1].max(initial=-np.inf) >= v) if want > 0 else (ctx.l[k1:i + 1].min(initial=np.inf) <= v):
+        return None
+    if (want > 0 and v <= float(ctx.c[i])) or (want < 0 and v >= float(ctx.c[i])) or (lk["side"] == want and abs(lk["target"] - v) < 1e-9):
+        return None
+    nl = dict(lk)
+    nl.update(side=want, target=float(v), kind="pool", name="wide_or_end", wo_used=True, delivered=False, delivered_t=None, delivered_i=None)
+    hit("wide_or_relock")
+    return nl
 
 
 def raw_post(ctx, sd, i: int, p, session: str, entry: float, risk: float, above: float, sw: dict, leg_hi: float, lv: list, lvt: list, tags: dict, st: dict) -> list:
@@ -602,7 +772,7 @@ def raw_post(ctx, sd, i: int, p, session: str, entry: float, risk: float, above:
     if p.dt_proj:
         add += dt_levels(ctx, sd, i, p, above, st)
     if p.grades60:
-        add += grade_rungs(ctx, sd, i, p, above, entry, st, lvt)
+        add += grade_rungs(ctx, sd, i, p, above, entry, st, lvt, sw)
     if p.proj_ext_anchor != "leg":
         add += ext_levels(ctx, sd, i, p, sw, above)
     if p.adr_t2_htf or p.adr_ext or p.adr_conv_target:
@@ -613,7 +783,8 @@ def raw_post(ctx, sd, i: int, p, session: str, entry: float, risk: float, above:
         add += pm_rb_levels(ctx, sd, i, p, above, session)
     if p.adr_conv_target and "adr_hi" in st:
         ah, tol = st["adr_hi"], p.adr_conv_pts * p.es_pt
-        hits_ = [(v, k) for v, k in out + add if (k.startswith("proj") or k in _TP().SD_KINDS) and abs(v - ah) <= tol + 1e-9]
+        za, zb = st.get("adr_zone", (ah, ah))
+        hits_ = [(v, k) for v, k in out + add if (k.startswith("proj") or k in _TP().SD_KINDS) and za - tol - 1e-9 <= v <= zb + tol + 1e-9]
         if hits_:
             v0 = min(hits_, key=lambda x: abs(x[0] - ah))[0]
             out = [(v, ("proj_htf" if v == v0 else k)) for v, k in out]
@@ -660,12 +831,12 @@ def exit_post(ctx, sd, i: int, p, entry: float, raw: list, kinds: list, lv: list
                 near = [e - p.exit_before_pts * p.es_pt for e in edges if abs(e - px) <= buf + 1e-9]
                 out[j] = float(min([px] + near))
                 hit("adr_before")
-    if p.pool_exit == "before":
+    if p.pool_exit in ("at", "before"):
         eq = sorted((raw[j], j) for j, k in enumerate(kinds) if k == "pool_eq")
         tol = p.eq_tol_pts * p.es_pt
         for a, b in zip(eq, eq[1:]):
             if b[0] - a[0] <= tol + 1e-9:
-                out[a[1]] = float(a[0] + 0.25 * p.es_pt)               # scale out above each sub-high (067 ~1:09:17); the highest keeps the 'before' exit
+                out[a[1]] = float(a[0])                                 # REH cluster (067 ~1:09:17): every sub-high exits AT its own price; the highest keeps the mode's exit ('at' / 'before'). ('beyond': unchanged)
                 hit("reh_cluster_before")
     return out
 
@@ -837,13 +1008,15 @@ def late(ctx, sd, sw, i: int, p, session: str, entry: float, risk: float, keep: 
     if fixed is None and not locked and keep:
         if st.get("adr_final") is not None and st["adr_final"] - entry >= p.min_rr * risk:
             final(S._exit_px(st["adr_final"], "proj_htf", p), "proj_htf", "adr_conv_final")
-        if p.target_past_eq60:
+        # precedence (explicit): the ADR convergence final, then the target past the 60-day EQ, then the void fill, then the next grade - the first one that applies is the final target
+        done_ = lambda: any(t in lvt for t in ("adr_conv_final", "past_eq60_final", "void_final", "grade_final"))
+        if p.target_past_eq60 and not done_():
             pe = past_eq_final(ctx, sd, i, p, entry, st)
             if pe is not None and pe - entry >= p.min_rr * risk:
                 final(S._exit_px(pe, "array", p), "array", "past_eq60_final")
-        if st.get("void_final") is not None and st["void_final"] - entry >= p.min_rr * risk and not any(t in lvt for t in ("adr_conv_final", "past_eq60_final")):
+        if st.get("void_final") is not None and st["void_final"] - entry >= p.min_rr * risk and not done_():
             final(S._exit_px(st["void_final"], "array", p), "array", "void_final")
-        if p.grades60 and st.get("grades"):
+        if p.grades60 and st.get("grades") and st.get("grade_through") and not done_():
             nx = next((g for g in st["grades"] if g - entry >= p.min_rr * risk), None)
             pools_ = [v for v, k in keep if k in POOLK and v - entry >= p.min_rr * risk]
             if nx is not None and not (pools_ and min(pools_) < nx):
@@ -884,9 +1057,9 @@ def late(ctx, sd, sw, i: int, p, session: str, entry: float, risk: float, keep: 
             r = ([first], [1.0])
         elif p.exit_mode2 == "hold_runner":
             r = ([keep[-1]], [1.0])
-            tags["day_trade"] = True              # [our interpretation] the stop is never moved: the day-trade flag blocks the break-even / trail code
+            tags["day_trade"] = True              # [our interpretation] the stop is never moved: the day-trade flag blocks the break-even (manage.be_move, incl. the be_at move) / trail code
             tags["no_adds"] = True
-            tags.setdefault("exit_at", 945)       # out by 15:45 at the latest (X10)
+            tags["exit_at"] = min(int(tags.get("exit_at") or 900), 900)   # spec: out at the final level or 15:00 ("15:00-flat")
         elif p.exit_mode2 == "pay_first":
             r = pay_first(p, keep)
             if p.speed_skip:
@@ -987,7 +1160,8 @@ def fixed_rungs(p, entry: float, keep: list, fr):
 
 def no_collapse(ctx, sd, i: int, p, entry: float, keep: list, fr, st: dict):
     """X3-no-collapse-intermediate-pools (cc03_003 ~25:28; cc04_002 ~16:04): while the HTF draw is untouched a non-final rung never closes the last no_collapse_keep of the units;
-    the remainder rides to the HTF draw rung (appended when it lies beyond the ladder)."""
+    the remainder rides to the HTF draw rung (appended when it lies beyond the ladder, the last rung capped AT the draw when the ladder runs past it). The draw is read once, at the
+    order (the rung sits in the ladder: it is the standing 'while untouched' guard - a rung is never moved by a later touch) [our interpretation]."""
     H = htf_draw(ctx, sd, i, p, entry, st)
     if H is None:
         return None
@@ -999,6 +1173,11 @@ def no_collapse(ctx, sd, i: int, p, entry: float, keep: list, fr, st: dict):
         keep.append((hx, "array"))
         fr = [f * (1.0 - p.no_collapse_keep) for f in fr] + [p.no_collapse_keep]
     elif abs(hx - keep[-1][0]) <= p.es_pt or keep[-1][0] > hx:
+        if keep[-1][0] > hx + p.es_pt:                      # the ladder runs past the HTF draw: the last rung is capped AT the draw (the rungs beyond it give their share to it)
+            kept = [x for x in keep if x[0] < hx - p.es_pt]
+            fr = fr[:len(kept)] + [sum(fr[len(kept):])]
+            keep = kept + [(hx, "array")]
+            hit("no_collapse_cap")
         if fr[-1] < p.no_collapse_keep and len(fr) > 1:
             need = p.no_collapse_keep - fr[-1]
             so = sum(fr[:-1]) or 1.0
@@ -1029,21 +1208,51 @@ def milestone(ctx, sd, i: int, p, entry: float, risk: float, keep: list):
     return head + [(hx, "array")], fr
 
 
+def _span_highs(ctx, sd, i: int):
+    """(this ISO week's high so far, this month's high so far, the completed weeks' (week key, high) in order) in side space: the earlier sessions of ctx.hist plus today's bars through bar i."""
+    S = _S()
+    d0 = ctx.day
+    today = float(sd.h[ctx.start:i + 1].max()) if i >= ctx.start else -np.inf
+    wk, mo = today, today
+    weeks = {}
+    for fr in list(getattr(ctx, "hist", None) or []):
+        d = fr.index[0].date()
+        if d >= d0:
+            continue
+        hi = float(fr.high.max()) if sd.sign > 0 else float(-fr.low.min())
+        key = d.isocalendar()[:2]
+        weeks[key] = max(weeks.get(key, -np.inf), hi)
+        if key == d0.isocalendar()[:2]:
+            wk = max(wk, hi)
+        if (d.year, d.month) == (d0.year, d0.month):
+            mo = max(mo, hi)
+    cur = d0.isocalendar()[:2]
+    return wk, mo, [(k, v) for k, v in sorted(weeks.items()) if k != cur]
+
+
 def weekly_beyond(ctx, sd, i: int, p, entry: float, keep: list) -> tuple:
-    """L3-daily-target-weekly-beyond (cc04_003 ~15:58): (weekly_beyond, monthly_beyond) - an untaken weekly (PWH / PWL, a weekly array) / monthly (PMH / PML, a monthly array)
-    pool lies beyond T1 = the nearest pool rung."""
+    """L3-daily-target-weekly-beyond (cc04_003 ~15:58): (weekly_beyond, monthly_beyond) - an UNTAKEN weekly (PWH / PWL, a weekly swing high, a weekly array) / monthly (PMH / PML, a
+    monthly array) pool lies beyond T1 = the nearest pool rung. 'Untaken' = no session of this week / month so far (earlier days and today's bars through bar i) traded to it. The weekly
+    pivot is a swing high of the completed weekly highs of ctx.hist (higher than the week before and after; the latest completed week cannot be one yet)."""
     t1 = next((v for v, k in keep if k in POOLK), None)
     if t1 is None:
         return False, False
     hit("eval_weekly_beyond")
-    S = _S()
     raw1 = _TP()._raw(t1, "pool", p)
+    wk, mo, weeks = _span_highs(ctx, sd, i)
     out = []
-    for hl, tfs in ((getattr(ctx, "pw", None), ("W",)), (getattr(ctx, "pm_", None), ("M",))):
+    for hl, tfs, since in ((getattr(ctx, "pw", None), ("W",), wk), (getattr(ctx, "pm_", None), ("M",), mo)):
         ok = False
         if hl is not None:
             v = sd.x(hl[0] if sd.sign > 0 else hl[1])
-            ok = bool(v > raw1 + 1e-9 and sd.h[ctx.start:i + 1].max() < v)
+            ok = bool(v > raw1 + 1e-9 and since < v)
+        if not ok and tfs == ("W",):
+            for j in range(1, len(weeks) - 1):                      # a weekly swing high above T1 that no later week (nor this one) traded to
+                v = weeks[j][1]
+                if v > weeks[j - 1][1] and v > weeks[j + 1][1] and v > raw1 + 1e-9 and max([w for _, w in weeks[j + 1:]] + [wk]) < v:
+                    ok = True
+                    hit("weekly_pivot")
+                    break
         cf = _conf(ctx)
         if not ok and cf is not None:
             for r in cf.opposing_ext(_now(ctx, i), sd.x(raw1), sd.sign, tfs, (0, 1, 2, 3)):
@@ -1079,6 +1288,7 @@ def pm_gate_targets(ctx, sd, sw, i: int, p, session: str, entry: float, risk: fl
             return "x_consol_no_overnight", keep, draw
         keep, draw = [(px[0][0], "pool")], px[0][0]
         tags["single_exit"] = True
+        tags["exit_at"] = min(int(tags.get("exit_at") or 660), 660)         # 'done by 11:00' (N8): the trade itself is out at 11:00, not only the entries
         lvt.append("consol_overnight")
         hit("consol_overnight")
         return None, keep, draw
@@ -1093,16 +1303,55 @@ def pm_gate_targets(ctx, sd, sw, i: int, p, session: str, entry: float, risk: fl
                 lvt.append("wide_or_draw")
                 hit("wide_or_draw")
     if p.pm_launch_filter and session == "PM":
+        if launch_arm(ctx, sd, i, p, entry):
+            lvt.append("pm_launch_arm")
+            hit("pm_launch_arm")
         r = launch_target(ctx, sd, i, p, entry, risk, keep, keep_full)
         if r is not None:
             keep, draw = r
             lvt.append("pm_launch")
             hit("pm_launch")
     if p.session_obj_tf and locked and session == "PM" and str(getattr(ctx, "cur_lock", None) and ctx.cur_lock.get("name", "")).startswith("obj_"):
-        tags.setdefault("exit_at", 945)                     # hold_to_obj: not flattened before 15:45 unless stopped
+        tags.setdefault("exit_at", 945)                     # hold_to_obj: out at 15:45 at the latest ...
+        tags["tp3_hold"] = True                             # ... and exempt from the PM time exit pm_done (run_day: it would close a PM trade after its first partial); the session close (16:15) is later still
         lvt.append("hold_to_obj")
         hit("hold_to_obj")
     return None, keep, draw
+
+
+def _launch_array(ctx, sd, i: int, p, kind: int):
+    """The PD array of `kind` (+1 bullish / -1 bearish; 15m .. W) that holds the AM extreme the AM move launched from: the AM low for kind +1, the AM high for kind -1. Recorded ONCE
+    from the first call at or after 13:30 (ctx cache: the AM is over and the arrays known then are the launch array), computed fresh before that (a lunch-time order)."""
+    S = _S()
+    cf = _conf(ctx)
+    k0, k1 = S._idx_at(ctx, AM_START), S._idx_at(ctx, AM_END)
+    if cf is None or not k0 < k1 <= i:
+        return None
+    cache = ctx.__dict__.setdefault("_tp3_launch", {})
+    if kind in cache:
+        return cache[kind]
+    x_ = float(ctx.l[k0:k1].min()) if kind > 0 else float(ctx.h[k0:k1].max())            # the AM extreme (real)
+    now = float(_now(ctx, i).value)
+    tol = p.es_pt * 0.25
+    held = None
+    for r in cf.rows(("15m", "30m", "1h", "4h", "D", "W"), (0, 1, 3)):
+        if r["kind"] == kind and r["known"] <= now < r["dead"] and r["bottom"] - tol <= x_ <= r["top"] + tol:
+            held = r if held is None or HTF_ALL.index(r["tf"]) > HTF_ALL.index(held["tf"]) else held
+    if ctx.t[i] >= 810:
+        cache[kind] = held
+    return held
+
+
+def launch_arm(ctx, sd, i: int, p, entry: float) -> bool:
+    """LLT3-pm-reversal-launch-array-filter, 'PM longs may arm there': a PM trade entering inside the 4h / D / W array of its own direction that holds the AM extreme the AM move
+    launched from (a long in the discount array an AM rally left; the mirror for shorts) is the permitted retrace into support. It is a TAG (pm_launch_arm): no gate elsewhere blocks a
+    PM entry after an AM move, so 'may arm' needs no other code [our interpretation]."""
+    held = _launch_array(ctx, sd, i, p, sd.sign)
+    if held is None or held["tf"] not in ("4h", "D", "W"):
+        return False
+    real = float(sd.x(entry))
+    tol = p.es_pt * 0.25
+    return bool(held["bottom"] - tol <= real <= held["top"] + tol)
 
 
 def launch_target(ctx, sd, i: int, p, entry: float, risk: float, keep: list, keep_full: list):
@@ -1116,14 +1365,7 @@ def launch_target(ctx, sd, i: int, p, entry: float, risk: float, keep: list, kee
     if not k0 < k1 <= i:
         return None
     hit("eval_launch")
-    d = sd.sign
-    x_ = float(ctx.l[k0:k1].min()) if d < 0 else float(ctx.h[k0:k1].max())            # the AM extreme the AM move launched from (real)
-    now = float(_now(ctx, i).value)
-    tol = p.es_pt * 0.25
-    held = None
-    for r in cf.rows(("15m", "30m", "1h", "4h", "D", "W"), (0, 1, 3)):
-        if r["kind"] == -d and r["known"] <= now < r["dead"] and r["bottom"] - tol <= x_ <= r["top"] + tol:
-            held = r if held is None or HTF_ALL.index(r["tf"]) > HTF_ALL.index(held["tf"]) else held
+    held = _launch_array(ctx, sd, i, p, -sd.sign)
     if held is None:
         return None
     near, far = _zone_edges(sd, held)
@@ -1157,8 +1399,12 @@ def sweep_gate(ctx, sd, sw: dict, i: int, p, session: str, want: int | None = No
     hit("eval_sweep_gate")
     pool_real = float(sd.x(pool))
     TP = _TP()
+    adr = _adr(ctx)
+    reach = 3.0 * adr if adr else np.inf                      # the same reach as the milestone rung (htf_draw): 3 x ADR5 [our interpretation]
     for r in cf.opposing_ext(_now(ctx, i), pool_real, want, ("D", "W", "M"), (0, 1, 2, 3)):
         near = r["bottom"] if want > 0 else r["top"]
+        if abs(near - pool_real) > reach:
+            continue
         ex = TP.extreme_since(ctx, i, r["known"] + 1.0, want > 0)
         if ex is not None and (ex >= near if want > 0 else ex <= near):
             continue
@@ -1199,36 +1445,56 @@ def lock_obj_rank(lst: list) -> list:
 
 # --- 9. management and report ---------------------------------------------------------------------------------------------------------------------
 
-def speed_defer(pos: dict, k: int, lv: list, h, c, o, l, i: int, sd, p) -> bool:
-    """X3-full-pull-vs-mandatory-partial (092 ~1:30:11) speed_skip: the pool rung k is NOT paid when the bar touching it and the bar before are both large-range bars
-    (>= 1.5 x the median range of the 20 bars before them) and the touching bar closes beyond the pool - the fraction moves to the next rung [our interpretation: the
-    spec's 'next bar' is not known at the touch, so the previous bar stands in for it]. Only a non-final pool rung of an exit_mode2='pay_first' ladder."""
+def _speed_ok(pos: dict, k: int, p) -> dict | None:
+    """The tp3 state when rung k of this position can be a speed-skip pool (a non-final pool rung of an exit_mode2='pay_first' ladder, not skipped before), else None."""
     d = pos.get("tp3")
     if not d or not d.get("speed") or k >= len(pos["fracs"]) - 1:
-        return False
+        return None
     kinds = pos.get("level_kinds") or []
-    if k >= len(kinds) or kinds[k] not in POOLK or d.get("skipped", set()) & {k}:
+    if k >= len(kinds) or kinds[k] not in POOLK or k in d.get("skipped", set()):
+        return None
+    return d
+
+
+def speed_hold(pos: dict, k: int, i: int, sd, p) -> bool:
+    """X3-full-pull-vs-mandatory-partial (092 ~1:30:11) speed_skip, step 1 (the touch bar): the pool rung k is touched on bar i - a limit is not cancelled from the touching
+    bar's own close, so the rung is marked PENDING and the decision waits for the next closed bar (speed_state). True = do not pay now. Needs 20 bars of history."""
+    d = _speed_ok(pos, k, p)
+    if d is None or i < 21 or d.get("pend") is not None:
         return False
-    rng = sd.h[:i + 1] - sd.l[:i + 1]
-    if i < 22:
-        return False
+    d["pend"] = (k, i)
     hit("eval_speed")
-    med = float(np.median(rng[i - 21:i - 1]))
-    if not (rng[i] >= 1.5 * med and rng[i - 1] >= 1.5 * med and sd.c[i] >= lv[k]):
-        return False
-    fr = list(pos["fracs"])
-    fr[k + 1] += fr[k]
-    fr[k] = 0.0
-    pos["fracs"] = tuple(fr)
-    d.setdefault("skipped", set()).add(k)
-    hit("speed_skip")
     return True
+
+
+def speed_state(pos: dict, k: int, lv: list, i: int, sd, p) -> str | None:
+    """Step 2 (the bar after the touch, both bars closed): 'skip' when the touch bar t and the next bar are both >= 1.5 x the median range of the 20 bars before t and both close
+    beyond the pool - the rung's fraction moves to the next rung; otherwise 'pay' (the pool is paid at its price, with the next bar's time) - the spec's rule exactly.
+    None when nothing is pending for rung k (a stop on the deciding bar ends the trade first: the unpaid pool share is then stopped out, the conservative side)."""
+    d = pos.get("tp3")
+    pend = d.get("pend") if d else None
+    if pend is None or pend[0] != k or i <= pend[1]:
+        return None
+    t = pend[1]
+    d["pend"] = None
+    rng = sd.h[:i + 1] - sd.l[:i + 1]
+    med = float(np.median(rng[t - 20:t]))
+    if i == t + 1 and rng[t] >= 1.5 * med and rng[i] >= 1.5 * med and sd.c[t] >= lv[k] and sd.c[i] >= lv[k]:
+        fr = list(pos["fracs"])
+        fr[k + 1] += fr[k]
+        fr[k] = 0.0
+        pos["fracs"] = tuple(fr)
+        d.setdefault("skipped", set()).add(k)
+        hit("speed_skip")
+        return "skip"
+    hit("speed_paid")
+    return "pay"
 
 
 def on_fill(ctx, sd, pos: dict, tr, o: dict, i: int, p) -> None:
     """Fill time: the state the mid-trade hook needs."""
-    if o.get("tp3_speed"):
-        pos["tp3"] = dict(speed=True)
+    if o.get("tp3_speed") or o.get("tp3_hold"):
+        pos["tp3"] = dict(speed=bool(o.get("tp3_speed")), hold_obj=bool(o.get("tp3_hold")))
 
 
 def near_miss(pos: dict, tr, p) -> None:
