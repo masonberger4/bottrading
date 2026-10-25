@@ -2187,6 +2187,62 @@ _TP2_DECISIONS = {
 DECISIONS.update(_TP2_DECISIONS)
 
 
+# --- caption-gap pass: targets_partials #3/4 (name prefix = gap id; every variant is a valid Params set) ---------------------------------------------------------------------------------------------
+_TP3_DECISIONS = {
+    "L15-min-3r-final-draw": dict(min_rr_final=3.0, **SM_POST),
+    "new-void-fill-target": dict(void_legs=True, void_leg_mult=1.5, void_max_opp=1, **SM_POST),
+    "L13-sweep-low-measured-move": dict(mm_targets=True, mm_anchor="reanchor", **SM_POST),
+    "X1-bullish-objective-order": dict(ob_target_order=True, ob_entry="both", draw_lock="off", htf_resist_cap=False),
+    "L3-daily-target-weekly-beyond": dict(weekly_beyond_mode="tag", pool_prev_week=True, pool_prev_month=True, **SM_POST),
+    "L3-daily-target-weekly-beyond_require": dict(weekly_beyond_mode="require", pool_prev_week=True, pool_prev_month=True, **SM_POST),
+    "new-double-top-projection": dict(dt_proj=True, **SM_POST),
+    "new-60day-range-grades": dict(grades60=True, grades60_src="body", **SM_POST),
+    "new-60day-range-grades_wick": dict(grades60=True, grades60_src="wick", **SM_POST),
+    "L14-target-past-eq": dict(target_past_eq60=True, htf_targets=("1h", "4h", "D", "W"), **SM_POST),
+    "L13-cc-extension-projections": dict(proj_ext_anchor="stop_run", proj_ext2=1.62, **SM_POST),
+    "L13-cc-extension-projections_midweek": dict(proj_ext_anchor="midweek", proj_ext2=1.68, **SM_POST),
+    "new-swing-target-breaker-cap": dict(daily_breaker_cap=True, **SM_POST),
+    "LLT3-target-confluence-projection-adr-array": dict(adr_conv_target=True, adr_conv_pts=1.0, adr_conv_last=690, sd_targets=True, **SM_POST),
+    "LLT3-adr5-target-ladder": dict(adr_target=True, adr_frac=1.0, adr_t2_htf=True, adr_ext=True, adr_anchor="day_low", **SM_POST),
+    "LLT3-adr5-target-ladder_london": dict(adr_target=True, adr_frac=1.0, adr_t2_htf=True, adr_ext=True, adr_anchor="london_low", **SM_POST),
+    "LLT3-pm-measured-move-am-leg": dict(pm_am_leg=True, **SM_POST),
+    "LLT3-consolidation-day-overnight-targets": dict(consol_overnight_targets=True, consol_day_rules="tag", **SM_POST),
+    "LLT3-wide-or-bias-end": dict(wide_or_draw=True, wide_or_mult=1.5, htf_bias="draw", **SM_POST),
+    "LLT3-pm-target-am-rejection-block": dict(pm_am_rb=True, **SM_POST),
+    "LLT3-pm-reversal-launch-array-filter": dict(pm_launch_filter=True, **SM_POST),
+    "LLT3-session-targets-15m-60m": dict(session_obj_tf=True, draw_lock="session", ob_entry="post_mss", htf_resist_cap=False),
+    "LLT3-impulse-retrace-expansion": dict(mm_targets=True, mm_anchor="impulse", **SM_POST),
+    "X2-pdarray-exit-at-or-inside-edge": dict(fvg_target_level="at_edge", htf_targets=("1h", "4h", "D", "W"), **SM_POST),
+    "X2-pdarray-exit-at-or-inside-edge_deep": dict(fvg_target_level="deep", fvg_deep_frac=0.75, htf_targets=("1h", "4h", "D", "W"), **SM_POST),
+    "X2-pool-exit-at-or-before": dict(pool_exit="before", pool_before_ticks=2, pool_exit_fomc_before=True, **SM_POST),
+    "X2-pool-exit-at-or-before_at": dict(pool_exit="at", **SM_POST),
+    "X2-projection-target-1tick-before": dict(proj_kind=True, proj_before_pts=0.25, sd_targets=True, **SM_POST),
+    "X2-exit-buffer-range": dict(exit_before_pts=1.0, exit_mode="before", **SM_POST),
+    "X2-exit-buffer-before-day-extreme": dict(adr_target=True, adr_frac=1.0, adr_before_frac=0.15, **SM_POST),
+    "X3-new-vs-experienced-partials": dict(partial_mode="new", new_first=0.8, **SM_POST),
+    "X3-new-vs-experienced-partials_experienced": dict(partial_mode="experienced", **SM_POST),
+    "X3-new-vs-experienced-partials_terminus": dict(partial_mode="terminus", **SM_POST),
+    "X3-full-pull-vs-mandatory-partial": dict(exit_mode2="pay_first", speed_skip=True, **SM_POST),
+    "X3-full-pull-vs-mandatory-partial_full_pull": dict(exit_mode2="full_pull", **SM_POST),
+    "X3-full-pull-vs-mandatory-partial_hold_runner": dict(exit_mode2="hold_runner", **SM_POST),
+    "X3-pool-below-untraded-htf-partial": dict(pool_milestone=0.5, htf_bias="draw", **SM_POST),
+    "X3-no-collapse-intermediate-pools": dict(no_collapse_htf=True, no_collapse_keep=0.2, **SM_POST),
+    "D13-speed-bump-ladder-004": dict(ladder_preset="004", **SM_POST),
+    "X3-partial-size-by-energy": dict(energy_split=True, energy_room_pts=5.0, **SM_POST),
+    "X3-five-handle-first-partial-before-draw": dict(fixed_partials=(5.25, 10.0), fixed_partial_fracs=(0.25, 0.25), exit_fill_through=0.0, **SM_POST),
+    "X3-gradient-ladder-htf-target": dict(partial_mode="quarters", ladder_max_levels=6, htf_targets=("1h", "4h", "D", "W"), **SM_POST),
+    "X3-037-three-unit-ladder": dict(ladder_preset="037", **SM_POST),
+    "X3-037-three-unit-ladder_ce": dict(ladder_preset="037", ladder037_ce=True, **SM_POST),
+}
+DECISIONS.update(_TP3_DECISIONS)
+
+
+def exit_buffer_grid(base: Params | None = None) -> list:
+    """X2-exit-buffer-range (070 ~1:05:10): the exit-buffer grid - exit_before_pts in (0.25, 0.5, 1.0, 1.5) crossed with exit_mode in ("split", "before") (so the buffer also hits the pools: 070's target was a pool). Eight Params; every other field of `base` unchanged."""
+    base = base or Params()
+    return [replace(base, exit_before_pts=b, exit_mode=m) for m in ("split", "before") for b in (0.25, 0.5, 1.0, 1.5)]
+
+
 def risk_grid(base: Params | None = None) -> list:
     """E8-2pct-new-trader (cc02_001 ~00:03:41, ~00:16:41; 022 ~1:38:24): the risk-per-trade grid - risk_pct in (1.0, 1.2, 1.5, 2.0) % with max_total_risk_pct = risk_pct + 0.1 %; every other field of `base` unchanged."""
     base = base or Params()

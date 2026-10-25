@@ -842,6 +842,49 @@ def voids(h, l) -> list[Zone]:
     return out
 
 
+def one_sided_legs(o, h, l, c, mult: float = 1.5, max_opp: int = 1, win: int = 20, back: int = 30) -> list[Zone]:
+    """Caption-gap new-void-fill-target (cc01_006 ~10:28; cc02_007 ~17:38; cc04_010 ~6:47): a bearish void = a one-sided down leg - one or more LARGE
+    down candles (range >= `mult` x the mean range of the `win` bars before it) with at most `max_opp` up-close candles inside the leg. The zone runs from the LOW
+    of the last up-close candle before the drop (the bearish OB, the level a full fill returns to) down to the leg's lowest low: top = that low, bottom = the leg end,
+    `mid` = the CE. Known at the first bar AFTER the leg (it is complete only then): Zone.i = leg end + 1, Zone.src = the up-close candle. [our interpretation]: "large"
+    and "few" are the numbers above; the up-close candle is searched `back` bars before the leg. The bullish mirror is the same call on mirrored prices."""
+    n = len(h)
+    rng = h - l
+    out = []
+    k = 3
+    while k < n:
+        big = lambda j: c[j] < o[j] and rng[j] >= mult * float(np.mean(rng[max(0, j - win):j]))
+        if not big(k):
+            k += 1
+            continue
+        end, opp, j = k, 0, k + 1
+        while j < n:
+            if big(j):
+                end = j
+            elif c[j] > o[j] and opp < max_opp:
+                opp += 1
+            else:
+                break
+            j += 1
+        inner = sum(1 for m in range(k, end + 1) if c[m] > o[m])
+        src = next((m for m in range(k - 1, max(-1, k - 1 - back), -1) if c[m] > o[m]), None)
+        if inner <= max_opp and src is not None and end + 1 < n:
+            top, bot = float(l[src]), float(l[k:end + 1].min())
+            if top > bot:
+                out.append(Zone("bear", top, bot, end + 1, src))
+        k = end + 1
+    return out
+
+
+def double_top_proj(h, l, pair) -> tuple:
+    """Caption-gap new-double-top-projection (cc04_014 ~8:40): two highs `pair` = (a, b) (bar indices, a < b) -> (pool, projection). pool = the higher peak,
+    R = that peak minus the lowest low between the peaks, projection = pool + R. The double bottom is the call on mirrored prices (lower trough minus R)."""
+    a, b = int(pair[0]), int(pair[1])
+    pool = float(max(h[a], h[b]))
+    low = float(l[a:b + 1].min())
+    return pool, pool + (pool - low)
+
+
 MIT_DEFS = ("a15", "stoprun")
 STOPRUN_X_MAX = 6
 

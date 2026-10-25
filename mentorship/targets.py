@@ -439,10 +439,12 @@ def _raw(v: float, k: str, p) -> float:
     """Inverse of strategy._exit_px: the level a rung's exit price belongs to."""
     if p.exit_mode == "split" and k in POOL_KINDS:
         return v - p.pool_beyond_pts * p.es_pt
-    if k == "exact":
+    if k in ("exact", "fixed"):
         return v
     if p.proj_exit_ticks and k.startswith("proj"):          # caption-gap L12-projection-exit-1tick: the projection rungs exit proj_exit_ticks before the level
         return v + p.proj_exit_ticks * p.tick
+    if p.proj_kind and (k in SD_KINDS or k.startswith("proj")):    # caption-gap X2-projection-target-1tick-before: proj_before_pts before the level
+        return v + p.proj_before_pts * p.es_pt
     return v + p.exit_before_pts * p.es_pt
 
 
@@ -732,10 +734,10 @@ def extra_sources(ctx, sd, i: int, p, sw: dict, entry: float, risk: float, leg_h
                     if not p.measuring_need_pool or any(q <= v + p.measuring_pool_pts * p.es_pt for q in pools):     # the -1 SD lies beyond an old liquidity pool (062 ~44:24)
                         out.append((v, "array"))
                         lvt.append("measuring_target")
-    if p.mm_targets and (rr is not None or p.mm_anchor == "leg"):
+    if p.mm_targets and p.mm_anchor in ("leg", "ref") and (rr is not None or p.mm_anchor == "leg"):      # ("reanchor" / "impulse": caption-gap tp3.mm_levels)
         base = float(rr[1]) if p.mm_anchor == "ref" else float(leg_hi)
         if base > ext:
-            out.append((base + (base - ext), "array"))
+            out.append((base + (base - ext), "proj" if p.proj_kind else "array"))             # caption-gap X2-projection-target-1tick-before: a measured move is a projection
             lvt.append("mm_target")
     if p.proj_breaker and rr is not None and float(rr[1]) > ext and sw.get("broke") is not None:
         fun, S.FUNNEL = S.FUNNEL, None                          # review: a helper call must not bump the x_breaker_* counters
@@ -815,7 +817,8 @@ def extra_sources(ctx, sd, i: int, p, sw: dict, entry: float, risk: float, leg_h
     if p.adr_target:
         adr = S.adr5(getattr(ctx, "hist", [])[-5:])
         if adr:
-            out.append((float(sd.l[ctx.start:i + 1].min()) + p.adr_frac * adr, "array"))
+            from . import tp3 as _T3
+            out.append((_T3.adr_low(ctx, sd, i, p) + p.adr_frac * adr, "adr" if p.adr_before_frac > 0 else "array"))    # caption-gap L16 adr_anchor (day / London low); X2-exit-buffer-before-day-extreme: kind 'adr' exits adr_before_frac x ADR5 early
             lvt.append("adr_target")
     return [(float(v), k) for v, k in out if v > above]
 
