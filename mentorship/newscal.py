@@ -433,9 +433,13 @@ def side_filter(ctx, p, session: str, sign: int, i: int, t: int):
 # an armed order
 # ---------------------------------------------------------------------------------------------------
 
-def macro_wins(t: int) -> list[str]:
-    """T7 multi-tag: every macro window minute t lies in, "HHMM" of its start."""
-    return [f"{a // 60:02d}{a % 60:02d}" for a, b in MACROS_T7 if a <= t < b]
+MACRO_LAST_HOUR_END = (945, 950)     # X3-027-pm-runner-macro (027 ~00:40:28): the 15:45-15:50 last-hour macro, a T7 window with pm_macro_runner
+
+
+def macro_wins(t: int, p=None) -> list[str]:
+    """T7 multi-tag: every macro window minute t lies in, "HHMM" of its start. Caption-gap X3-027-pm-runner-macro: with Params.pm_macro_runner the 15:45-15:50 window is one too."""
+    wins = MACROS_T7 + ((MACRO_LAST_HOUR_END,) if (p is not None and getattr(p, "pm_macro_runner", False)) else ())
+    return [f"{a // 60:02d}{a % 60:02d}" for a, b in wins if a <= t < b]
 
 
 def _in(wins, m: int) -> bool:
@@ -477,7 +481,7 @@ def post_order(ctx, sd, i: int, p, session: str, o_: dict, hist):
         if not _in(wins, tm):
             _f("x_macro_gate")
             return None
-    if p.macro_done_skip and macro_wins(t) and run_done(ctx, i, p):
+    if p.macro_done_skip and macro_wins(t, p) and run_done(ctx, i, p):
         _f("x_macro_done")
         return None
     if p.moc_htf_done and session == "PM" and p.last_hour_sweet[0] <= t < p.last_hour_sweet[1] and run_done(ctx, i, p):
@@ -512,7 +516,7 @@ def post_order(ctx, sd, i: int, p, session: str, o_: dict, hist):
                 tags.append("pm_ob")
     if session != "PM" and p.fomc_only_am in ("tag", "scalp") and CAL.fomc_info(ctx.day)["only"]:
         tags.append("fomc_only_am")
-    mw = macro_wins(t)
+    mw = macro_wins(t, p)
     if mw:
         o_["macro_wins"] = "|".join(mw)               # T7 multi-tag: every macro window the order was armed in
     if tags:

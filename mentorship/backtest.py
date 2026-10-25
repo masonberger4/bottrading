@@ -15,6 +15,7 @@ from . import htf
 from . import sm4 as _SM4
 from . import es3 as _ES3
 from . import tp4 as _TP4
+from . import me2 as _ME2
 from .entries import new_risk_state
 from .strategy import ROUND_STEP, SMT_PICKS, Params, resolve_session_close, run_day
 
@@ -357,7 +358,10 @@ def week_state(rows: list, d) -> dict:
     wk = d.isocalendar()[:2]
     mine = [r for r in rows if r["date"].isocalendar()[:2] == wk and r["date"] < d]
     fh = sum(1 for r in mine if r.get("final_hit"))
-    return dict(n=len(mine), net=float(sum(r["net"] for r in mine)), final_hits=fh, all_final=bool(mine) and fh == len(mine))
+    out = dict(n=len(mine), net=float(sum(r["net"] for r in mine)), final_hits=fh, all_final=bool(mine) and fh == len(mine))
+    if any("htf_stall" in str(r.get("exit_reason", "")) for r in mine):
+        out["reversal_watch"] = _ME2.week_watch(rows, d)         # caption-gap X8-profitable-stall-exit (cc07_007 ~00:22:33): the directions with no new setup the session after an htf_stall exit
+    return out
 
 
 def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: dict | None = None,

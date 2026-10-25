@@ -2922,6 +2922,60 @@ class Params:
     event_eve_lock: bool = False         # X5-event-tight-lock-020 (020 ~00:09:40): the day before FOMC / CPI / jobs, bulk off: the stop goes just over the newest fresh same-direction gap under price, no trailing
     trail_confirm: bool = False          # X5-trail-after-protected-gap-confirmed (003 ~00:41:35; 062 ~00:39:12): the stop stays initial until a new gap beyond the entry gap P forms or a new extreme past the post-gap swing prints with P partly unfilled; then it goes under P. A trade through P first voids it
 
+    # --- caption-gap pass: management_exits #2/3 (digests/rulebook_gaps/management_partials_trailing_exits.md 20 .. 108; me2.py; every new switch off unless noted; the gap id is the comment's first word) ---------------
+    pool_lock_after: float = 0.8         # X5-tight-stop-under-swept-pool-near-target (003 ~01:09:14; 021 ~00:44:11): the closed share (about 80-90 %) after which the last pool run before the final rung locks the stop
+    pool_lock_pts: float = 0.0           # ... the stop sits this many ES pts under the swept pool (spec value 1.5; 0 = off - kept off so the default engine is unchanged, owner question) and the idea gets no re-entry after a stop
+    pool_lock_day_done: bool = False     # ... a final-rung fill ends the day (X12)
+    trail_after_pool: bool = False       # X5-no-trail-into-new-inefficiency (022 ~01:12:22; 067 ~01:19:24): after the add cutoff (price past the leg's 50 % line) no FVG / swing trail until the targeted pool has run
+    raise_on_vi: bool = False            # X5-raise-stop-conditional-structure (009 ~00:07:10): a bar that retests the nearest VI under the entry and closes above its top lifts the stop to the VI low - 1 tick
+    raise_on_sth_break: bool = False     # ... (018 ~00:01:38): the short-term high above the entry breaks: the stop to the breaker zone's low - 1 tick (the entry array's bottom with no breaker [our interpretation])
+    raise_need_5m_fvg: bool = False      # ... the break must leave a 5m gap
+    trail_swing_at_array: bool = False   # X5-trail-swing-low-at-intermediate-level (060 ~00:54:30): a non-final array rung fills (incl. NDOG / ORG gap levels): the stop under the latest 1m swing low, the last unit held
+    ob_retests: int = 0                  # X5-ob-open-after-retests (085 ~00:17:52): this many retests of the entry OB's open (each followed by a higher bar) lift the stop to the open - 1 tick and freeze it (0 = off; test 3)
+    trail_wick_gate: str = ""            # X5-roll-after-wick-ce-cleared (085 ~00:26:11, ~00:31:34): "" / "trade" / "close" - no trail (BE excepted) until a bar's high (close) is above the CE of the nearest overhead upper wick (a wick >= 25 % of the bar's range [our interpretation])
+    ob_stop_to_mt_after_run: bool = False  # X5-stop-to-ob-mt-after-run (cc04_003 ~00:02:00): after an OB entry has run away (best - avg >= 2 x the OB body, or a pivot high over the validating candle) the stop goes to the OB MT (mt_mode) - the pad
+    htf_bank: float = 0.0                # X3-htf-target-bank-partial (050 ~00:09:50; 099 ~00:22:50): the share banked when price trades into the HTF (daily / weekly) draw array, stop to BE + pad, no adds, no counter entries inside that array (0 = off; test 0.5)
+    rde_partials: bool = False           # X3-running-down-equity-trigger (063 ~00:26:23; 064 ~01:03:42): once progress >= rde_arm of the way to the final rung, a tranche of rde_frac at each short-term high that a later bar exceeds
+    rde_arm: float = 0.75
+    rde_frac: float = 0.2
+    peel_singles: bool = False           # X3-020-runner-peel-singles (020 ~00:10:25 ..): after >= 75 % is closed and above the target NWOG's CE: one lot per bar at an REH poke / a higher high / halfway to the gap top; the last unit gets a pivot-low stop
+    pm_macro_runner: bool = False        # X3-027-pm-runner-macro (027 ~00:40:28): a PM trade's first partial lifts the stop to +1 pt, the last unit is held to 15:50 (the 15:45-15:50 macro, newscal.macro_wins)
+    hh_low_hold: bool = False            # X3-runner-swing-low-must-hold (027 ~00:43:52): after the first partial, the swing low between a pivot high and the new high that takes it out must hold; a trade under it closes hh_low_frac of the rest
+    hh_low_frac: float = 1.0
+    marginal_ext_warn: bool = False      # X3-marginal-lower-lows-warning (046 ~01:00:39): bars that make a new session extreme by < marginal_pts and close back inside it, marginal_n times before the final rung = no adds
+    marginal_pts: float = 1.0
+    marginal_n: int = 2                  # ... [our interpretation]
+    marginal_exit: bool = False          # ... and the rest closed
+    stall_exits: bool = False            # X3-runner-stall-exits (003 ~01:17:52): >= 75 % closed and stall_bars bars without a new high: a trade into the last down-close body = 1 unit off; a poke over a relative equal high that closes back under it = the rest
+    stall_bars: int = 10                 # ... [our interpretation of 'lethargic']
+    wick_ce_close_test: bool = False     # X3-nfp-wick-ce-ladder-close-test (105 ~00:09:03, ~00:23:32): a wick-CE first rung is a 10 % rung, BE + pad after it; a 5m close above W then a 5m close at or under it takes 30 % to fund the trade
+    adr_closed_min: float = 0.0          # L16-adr5-60-80-closed (cc08_007 ~00:17:25): at the ADR5 projection from the day's low at least this share must be closed (any time of day; 0 = off; test 0.7)
+    ote_leave_bars: int = 0              # M13-ote-leave-discount-fast (cc01_004 ~00:50:18): an OTE entry with no close over the band's 62 % line after this many bars loses half (0 = off; test 3)
+    three_array_mode: str = ""           # X7-three-array-exit-trigger (026 ~00:28:00; 045 ~01:57:01; 078 ~01:03:02; 105 ~01:24:00): "" / "trade" (a low under A3's far edge = all) / "close" (a close under the A3 level = pd3_close_frac) / "into" (a low into A3's body = all)
+    pd3_close_frac: float = 0.5
+    pd3_near_pts: float = 0.0            # ... A3 within this many ES pts of A2: the trigger moves to A2 (078; 0 = off)
+    held_hi_action: str = ""             # X8-hold-above-broken-session-highs (009 ~00:17:38): "" / "tighten" (stop under the bar's low) / "partial" (half the rest) when a 1m close falls back under the 09:30 high / the swing high it broke
+    gap_q_hold: bool = False             # X8-nwog-ce-pullback-hold (020 ~00:09:23): after the NWOG CE rung, a trade under the gap's lower quarter closes the rest
+    ref_speed_check: bool = False        # X8-fast-through-next-reference (006 ~00:53:30; 022 ~01:40:24): speed check at each reference (rung / VI): a slow break pares speed_pare before T1, closes the rest after T1
+    speed_k: float = 1.5                 # ... 'ok' when the breaking bar's range >= speed_k x the median of the last 20 ranges, or a gap is left over the reference
+    ref_speed_bars: int = 3              # ... a close back under the reference within this many bars = slow (named so: speed_bars is the M1.3 sweep speed check)
+    speed_pare: float = 0.5
+    opp_tear_check: bool = False         # X8-opposing-array-torn-through (027 ~00:31:40): an opposing gap touched must be torn through to its CE within the touch bar or the next, else no adds and a warn count
+    edge_bump_add: bool = False          # X8-broken-fvg-edge-bump-once (071 ~00:30:16): the first retrace to the broken gap's edge may arm an add
+    edge_bump_guard: bool = False        # ... the second bump = no more adds and the ladder levels frozen
+    late_fvg_flip: bool = False          # X8-late-day-fvg-lost-hod-in (027 ~00:57:44): from 15:00 the small bearish gap after the session high: reclaimed = support, then lost = the runner is out; no entries in the direction while price is under it
+    sister_breaker_hold: bool = False    # X8-sister-index-breaker-hold (085 ~00:19:11): a sister-index close under its breaker of the same leg adds 1 to the position's warn count (feeds three_array_mode 'trade')
+    stall_at_htf: bool = False           # X8-profitable-stall-exit (cc07_007 ~00:22:33): Mon / Tue week range >= 1.5 x ADR5, a profitable trade inside a daily-or-higher array with no new extreme for stall_at_htf_bars bars closes; no same-direction trade next session = reversal_watch
+    stall_at_htf_bars: int = 30          # ... [our interpretation]
+    chop_close: bool = False             # X9-lethargic-or-choppy-trade (022 ~01:52:48; cc03_003 ~00:13:49): the intraday Chop detector turning on while a position is open closes it
+    after_chop_exit: str = "end_session"  # ... "end_session" (022: the session is done) / "reentry_allowed" (cc03_003: a re-entry at the half risk of X13b)
+    upclose_pair_guard: bool = False     # X9-071-move-away-from-up-close-pair (071 ~00:33:10): after a bar trades through the last same-colour candle pair's open, neither the break bar nor the next two making a new extreme = no adds
+    fulcrum_speed_bars: int = 0          # X9-speed-after-fulcrum-break (090 ~01:31:35): sd_anchor 'fulcrum' - -0.5 SD must print within this many bars of the fulcrum pool break (no close back under it), else the first rung's share closes and the stop goes under the break bar (0 = off; test 5)
+    breaker_far_partial: float = 0.0     # A13-breaker-far-edge-partial (078 ~00:55:36): the first trade through the breaker's far edge (BH of a bearish breaker) takes this share (0.5 / 0.25), no adds, the stop stays
+    small_fvg_linger: int = 0            # new-small-fvg-last-line (105 ~00:37:35): after T1 more than this many 5m bars inside the latest 5m gap (or a 5m close under it) = no adds and a stop cap at the HTF entry array's high (0 = off; test 2)
+    urgency_runner: bool = False         # new-no-down-close-urgency (021 ~00:43:53): T1 with no down-close candle since the fill: most of the position off (runner_frac, 0.2 if 0, stays), the stop urgency_stop_pts under the close, the farther target kept
+    urgency_stop_pts: float = 1.0
+
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
         _sb_check(self)
@@ -3206,6 +3260,8 @@ class Params:
         _tp4_check.check_params(self)
         from . import me1 as _me1_check                  # caption-gap pass (management_exits #1/3)
         _me1_check.check_params(self)
+        from . import me2 as _me2_check                  # caption-gap pass (management_exits #2/3)
+        _me2_check.check_params(self)
         if self.e4_color and self.retrace_candle == "off":
             self.retrace_candle = "intrabar"          # E4 candle colour = the built retrace_candle "intrabar" (a short fills on an up-close bar: the fill bar opens beyond the limit and trades into it)
         if self.vi_ob_entry and "vi_ob" not in self.entry_arrays:
@@ -3292,7 +3348,7 @@ class Params:
             self.smt_bank_against_frac = 1.0
         for name, ok in (("be_on", ("expansion", "t1", "after_mss", "stall", "pool", "off")),
                          ("extras_be_on", ("t1", "follow")),
-                         ("ladder_trail", ("fvg", "hit", "prior", "off", "measuring", "breakaway")),
+                         ("ladder_trail", ("fvg", "hit", "prior", "off", "measuring", "breakaway", "candle_mt", "eq_pause", "rej_block", "071", "structure")),
                          ("trade_type", ("session", "day")), ("day_stop", ("open", "wick_ce")),
                          ("fvg_abort_mode", ("rule", "legacy")), ("session_fail_mode", ("trades", "arrays")),
                          ("offside_level", ("open", "wick_ce")), ("time_stop_ref", ("pts", "leg_high", "array_far")),
@@ -3466,7 +3522,7 @@ class Params:
     @property
     def dw_needs_week(self) -> bool:
         """The switches that read the week's trade state (backtest.week_state)."""
-        return bool(self.max_trades_week or self.friday_week_done == "trades")
+        return bool(self.max_trades_week or self.friday_week_done == "trades" or self.stall_at_htf)
 
     # --- package entries_stops_sizing helpers --------------------------------------------------
     @property
@@ -4863,6 +4919,7 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
     tight_ = lost is not None and _ES3.tight_loss(tr, p, pos)           # caption-gap E6-new-trader-wide-stops: no immediate re-entry after a tight-stop loss (trader_mode "new")
     key = pos.get("done_key", tr.session)
     _ME1.after_close(pos, tr, done, key)              # caption-gap management_exits #1/3: the hold_reached session slot, the delivery-speed tag
+    _ME2.after_close(pos, tr, done, key, state, p)    # caption-gap management_exits #2/3: the pool lock's re-entry block / day done, the chop-close session rule
     reopened = False
     if (lost is not None and p.reentry_half and not tight_ and not state["reentered"].get(tr.session)
             and not (p.fomc_day_stop and "fomc" in events(tr.date))):            # N3.5: none on an FOMC day
@@ -6001,6 +6058,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                         _ME1.rung_taken(ctx, sd, pos, tr, k, lv_[k], i, p)           # caption-gap management_exits #1/3: the run-through watch, the reached level, the delivery-speed tag
                         fr = pos["fracs"]
                         lv_ = _ME1.lv(pos)
+                    if pos.get("me2"):
+                        _ME2.rung_taken(ctx, sd, pos, tr, k, lv_[k], i, p)           # caption-gap management_exits #2/3: the pool lock, the swing trail at an array, the PM runner, the NWOG quarter, the urgency runner
+                        fr = pos["fracs"]
                     if pos["left"] and k < len(pos.get("level_kinds") or ()) and pos["level_kinds"][k] == "speed":
                         _TP1.hit("speed_rung")           # caption-gap L10-A17-old-high-target-ladder: a speed-bump rung is a small partial only - no done flag, breakeven or trail
                         continue
@@ -6010,7 +6070,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                         if p.be_on == "t1":
                             _MG.be_move(pos, p)                        # X4: + be_pad_pts / cost pad
                     if p.ladder_trail == "prior" and k >= 1 and not pos.get("day_trade") and _ME1.trail_ok(pos):
-                        pos["stop"] = max(pos["stop"], lv_[k - 1] - p.trail_pad)
+                        pos["stop"] = max(pos["stop"], _ME2.capv(pos, lv_[k - 1] - p.trail_pad))
                     pos["away"] = lv_[k]
                 if (pos["t1_done"] and not pos.get("be_done") and p.be_on == "expansion"
                         and pos["last_partial_i"] < i and c > lv_[0]):
@@ -6029,7 +6089,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             if (pos["left"] and p.mgmt in ("ladder", "unit") and p.ladder_trail == "hit" and pos.get("away") is not None
                     and not pos.get("day_trade") and _ME1.trail_ok(pos)
                     and c >= pos["away"] + p.away_pts * p.es_pt):
-                pos["stop"] = max(pos["stop"], pos["away"] - p.trail_pad)   # price left the array
+                pos["stop"] = max(pos["stop"], _ME2.capv(pos, pos["away"] - p.trail_pad))   # price left the array
                 pos["away"] = None
             if pos["left"] and p.ep07_body_exit and l < pos["body_low"]:
                 px = min(o, pos["body_low"])           # traded below the swing low's lowest body
@@ -6093,6 +6153,10 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 _TP4.manage(ctx, sd, pos, tr, i, ts, p)                          # caption-gap targets_partials #4/4: the runner stop, the strength read of OB1, the TGIF 066 roll / cover
             if pos["left"] and pos.get("me1"):
                 _ME1.manage(ctx, sd, pos, tr, i, ts, p)                          # caption-gap management_exits #1/3: breakeven modes, stop locks, BPR / VI / IFVG / IOF exits, holds and tags
+            if pos["left"] and pos.get("me2"):
+                _ME2.manage(ctx, sd, pos, tr, i, ts, p, pctx, psides, ppos)       # caption-gap management_exits #2/3: the exits, partials and stop moves of the 34 trailing / partial specs
+                if pos["left"] and p.chop_close:
+                    _ME2.chop_close(pos, tr, sd, ts, c, chop, p, pos["fill_i"])   # caption-gap X9-lethargic-or-choppy-trade: the intraday chop turned on while the position was open
             if pos["left"]:
                 pos["best"] = max(pos["best"], h)
                 _MG.exits(ctx, sd, pos, tr, i, ts, p, state)       # management_exits: X6-X12, X9 time stops, D18, Ep07.5
@@ -6140,7 +6204,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 lost_side = _after_close(pos, trades, p, done, state, i=i, ctx=ctx) or lost_side
                 pos = None
             else:                                      # new FVG after the fill: trail / add
-                if p.htf_resist_live and ctx.conf is not None and p.htf_resist_cap and _TP.resist_cfg(p)[0]:
+                if p.htf_resist_live and ctx.conf is not None and p.htf_resist_cap and _TP.resist_cfg(p)[0] and not pos.get("levels_frozen"):
                     _resist_live(ctx, sd, pos, i, p)
                 new = [g for g in sd.gaps if g.i == i and g.i - 2 > pos["fill_i"]]
                 if p.ob_grade_mult != (1.0, 1.0) and (pos.get("es2") or {}).get("ob_mt") is not None:
@@ -6181,7 +6245,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                                 float(min(min(sd.o[k_], sd.c[k_]) for k_ in range(g.i - 2, g.i + 1))))   # Ep01.20 body
                         if ref_ - p.trail_pad > pos["stop"]:
                             pos["trail_ref"] = (float(g.bottom), float(g.top), int(g.i))      # caption-gap X13-reentry-after-trail-stop-in-profit: the structure the stop was trailed under (recorded only when the stop rose)
-                        pos["stop"] = max(pos["stop"], ref_ - p.trail_pad)
+                        pos["stop"] = max(pos["stop"], _ME2.capv(pos, ref_ - p.trail_pad))      # (caption-gap new-small-fvg-last-line: a stop_cap refuses the level)
                     apx = _EN.add_px(g, p)                         # E12 add_points
                     if ov_ is not None and can_add and _SM.add_ok(sd, pos, ov_[0], i, p, form=ov_[2]):
                         _arm_add(pos, tr, ov_[0], i, p, ctx.equity, floor=ov_[1])
@@ -6372,6 +6436,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     _TP4.on_fill(ctx, sd, pos, tr, o, i, p, fill)         # caption-gap targets_partials #4/4: the runner stop, OB1, the TGIF 066 levels, the trail from the fill
                 if o.get("me1") or _ME1.any_on(p):
                     _ME1.on_fill(ctx, sd, pos, tr, o, i, p, fill)         # caption-gap management_exits #1/3: the breakeven / lock / hold state, the best-case limit, the BPR / IFVG exits
+                if o.get("me2") or _ME2.any_on(p):
+                    _ME2.on_fill(ctx, sd, pos, tr, o, i, p, fill)         # caption-gap management_exits #2/3: the trail / partial / exit state of the 34 specs
                 if o.get("es2"):
                     _ES2.on_fill(ctx, sd, pos, tr, o, i, p, fill)      # caption-gap entries_stops_sizing #2/3: the OB grade, the FVG-then-OB add, the zone-ladder add base
                 _SM7.fill_note(state, o)                              # caption-gap setups_models #7/7: the re-entry / reversal context is no longer pending
@@ -8873,6 +8939,11 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         if why_thu:
             _f(why_thu)
             return None
+    if p.htf_bank or p.stall_at_htf or p.late_fvg_flip:
+        why_me2 = _ME2.order_block(ctx, sd, i, p, session, entry)      # caption-gap management_exits #2/3: no counter entry inside a banked HTF array, the weekly reversal watch, no entry under the late-day gap
+        if why_me2:
+            _f(why_me2)
+            return None
     above = max(leg_hi, entry)
     tp1 = {} if _TP1.any_on(p) else None             # caption-gap targets_partials #1/4: what the later stages of this order need
     tp2 = {} if _TP2.any_on(p) else None             # caption-gap targets_partials #2/4: ditto (the state of the _targets call is in ctx._tp2_st)
@@ -9463,4 +9534,5 @@ from . import tp1 as _TP1  # noqa: E402  (caption-gap pass, targets_partials #1/
 from . import tp2 as _TP2  # noqa: E402  (caption-gap pass, targets_partials #2/4: engine glue)
 from . import tp3 as _TP3  # noqa: E402  (caption-gap pass, targets_partials #3/4: engine glue)
 from . import me1 as _ME1  # noqa: E402  (caption-gap pass, management_exits #1/3: engine glue)
+from . import me2 as _ME2  # noqa: E402  (caption-gap pass, management_exits #2/3: engine glue)
 from . import tp4 as _TP4  # noqa: E402  (caption-gap pass, targets_partials #4/4: engine glue)

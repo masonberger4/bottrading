@@ -105,10 +105,11 @@ def _exit(pos, tr, sd, ts, px, reason, q=None) -> None:
 
 def trail_ok(pos) -> bool:
     """False while a lock (runner_stop / event_eve_lock) or a confirmation rule (be_cap_htf, trail_confirm, refusal_breakaway) keeps the ladder_trail FVG trails off."""
-    if pos.get("no_trail"):
+    if pos.get("no_trail") or pos.get("wgate") is not None or pos.get("freeze"):      # (management_exits #2/3: the overhead-wick gate of trail_wick_gate, the OB-open / structure freeze)
         return False
     d = pos.get("me1")
-    return not (d and d.get("trail_block"))
+    d2 = pos.get("me2")
+    return not ((d and d.get("trail_block")) or (d2 and d2.get("block_pool")))     # (... and trail_after_pool: no trail before the targeted pool has run)
 
 
 def opp_gaps(ctx, sd, upto: int) -> list:

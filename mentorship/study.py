@@ -2339,6 +2339,61 @@ _ME1_DECISIONS = {
 DECISIONS.update(_ME1_DECISIONS)
 
 
+# --- caption-gap pass: management_exits #2/3 (name prefix = gap id; every variant is a valid Params set) ----------------------------------------------------------------------------------------------
+_ME2_DECISIONS = {
+    "X5-tight-stop-under-swept-pool-near-target": dict(pool_lock_pts=1.5, pool_lock_after=0.8, **SM_POST),
+    "X5-tight-stop-under-swept-pool-near-target_day_done": dict(pool_lock_pts=1.5, pool_lock_after=0.8, pool_lock_day_done=True, **SM_POST),
+    "X5-no-trail-into-new-inefficiency": dict(trail_after_pool=True, ladder_trail="fvg", **SM_POST),
+    "X5-raise-stop-conditional-structure": dict(raise_on_vi=True, raise_on_sth_break=True, **SM_POST),
+    "X5-raise-stop-conditional-structure_5m_fvg": dict(raise_on_vi=True, raise_on_sth_break=True, raise_need_5m_fvg=True, **SM_POST),
+    "X5-trail-swing-low-at-intermediate-level": dict(trail_swing_at_array=True, **SM_POST),
+    "X5-071-trail-anchors": dict(ladder_trail="071", **SM_POST),
+    "X5-071-trail-anchors_candle_mt": dict(ladder_trail="candle_mt", **SM_POST),
+    "X5-071-trail-anchors_eq_pause": dict(ladder_trail="eq_pause", **SM_POST),
+    "X5-071-trail-anchors_rej_block": dict(ladder_trail="rej_block", **SM_POST),
+    "X5-ob-open-after-retests": dict(ob_retests=3, **SM_POST),
+    "X5-structure-trail-and-cap": dict(ladder_trail="structure", **SM_POST),
+    "X5-roll-after-wick-ce-cleared": dict(trail_wick_gate="trade", **SM_POST),
+    "X5-roll-after-wick-ce-cleared_close": dict(trail_wick_gate="close", **SM_POST),
+    "X5-stop-to-ob-mt-after-run": dict(ob_stop_to_mt_after_run=True, **SM_POST),
+    "X5-stop-to-ob-mt-after-run_range": dict(ob_stop_to_mt_after_run=True, mt_mode="range", **SM_POST),
+    "X3-htf-target-bank-partial": dict(htf_bank=0.5, htf_targets=("1h", "4h", "D", "W"), **SM_POST),
+    "X3-running-down-equity-trigger": dict(rde_partials=True, rde_arm=0.75, rde_frac=0.2, **SM_POST),
+    "X3-020-runner-peel-singles": dict(peel_singles=True, gap_q_hold=True, **SM_POST),
+    "X3-027-pm-runner-macro": dict(pm_macro_runner=True, pm=(780, 950), **SM_POST),
+    "X3-runner-swing-low-must-hold": dict(hh_low_hold=True, hh_low_frac=1.0, **SM_POST),
+    "X3-runner-swing-low-must-hold_half": dict(hh_low_hold=True, hh_low_frac=0.5, **SM_POST),
+    "X3-marginal-lower-lows-warning": dict(marginal_ext_warn=True, marginal_pts=1.0, marginal_n=2, **SM_POST),
+    "X3-marginal-lower-lows-warning_exit": dict(marginal_ext_warn=True, marginal_exit=True, **SM_POST),
+    "X3-runner-stall-exits": dict(stall_exits=True, stall_bars=10, **SM_POST),
+    "X3-nfp-wick-ce-ladder-close-test": dict(wick_ce_close_test=True, wick_partials=True, **SM_POST),
+    "L16-adr5-60-80-closed": dict(adr_closed_min=0.7, **SM_POST),
+    "M13-ote-leave-discount-fast": dict(ote_leave_bars=3, entry_arrays=("ote",), **SM_POST),
+    "X7-three-array-exit-trigger": dict(three_array_mode="trade", **SM_POST),
+    "X7-three-array-exit-trigger_close": dict(three_array_mode="close", pd3_close_frac=0.5, **SM_POST),
+    "X7-three-array-exit-trigger_into": dict(three_array_mode="into", **SM_POST),
+    "X7-three-array-exit-trigger_near": dict(three_array_mode="trade", pd3_near_pts=1.0, sister_breaker_hold=True, **SM_POST),
+    "X8-hold-above-broken-session-highs": dict(held_hi_action="partial", **SM_POST),
+    "X8-hold-above-broken-session-highs_tighten": dict(held_hi_action="tighten", **SM_POST),
+    "X8-nwog-ce-pullback-hold": dict(gap_q_hold=True, **SM_POST),
+    "X8-fast-through-next-reference": dict(ref_speed_check=True, speed_k=1.5, ref_speed_bars=3, speed_pare=0.5, **SM_POST),
+    "X8-opposing-array-torn-through": dict(opp_tear_check=True, **SM_POST),
+    "X8-broken-fvg-edge-bump-once": dict(edge_bump_add=True, edge_bump_guard=True, **SM_POST),
+    "X8-late-day-fvg-lost-hod-in": dict(late_fvg_flip=True, pm=(780, 950), **SM_POST),
+    "X8-sister-index-breaker-hold": dict(sister_breaker_hold=True, three_array_mode="trade", **SM_POST),
+    "X8-profitable-stall-exit": dict(stall_at_htf=True, stall_at_htf_bars=30, htf_targets=("1h", "4h", "D", "W"), **SM_POST),
+    "X9-lethargic-or-choppy-trade": dict(chop_close=True, after_chop_exit="end_session", sloppy_tests=("chop",), **SM_POST),
+    "X9-lethargic-or-choppy-trade_reentry": dict(chop_close=True, after_chop_exit="reentry_allowed", sloppy_tests=("chop",), **SM_POST),
+    "X9-071-move-away-from-up-close-pair": dict(upclose_pair_guard=True, **SM_POST),
+    "X9-speed-after-fulcrum-break": dict(fulcrum_speed_bars=5, sd_anchor="fulcrum", sd_targets=True, **SM_POST),
+    "A13-breaker-far-edge-partial": dict(breaker_far_partial=0.5, **SM_POST),
+    "A13-breaker-far-edge-partial_25": dict(breaker_far_partial=0.25, **SM_POST),
+    "new-small-fvg-last-line": dict(small_fvg_linger=2, **SM_POST),
+    "new-no-down-close-urgency": dict(urgency_runner=True, urgency_stop_pts=1.0, **SM_POST),
+}
+DECISIONS.update(_ME2_DECISIONS)
+
+
 def exit_buffer_grid(base: Params | None = None) -> list:
     """X2-exit-buffer-range (070 ~1:05:10): the exit-buffer grid - exit_before_pts in (0.25, 0.5, 1.0, 1.5) crossed with exit_mode in ("split", "before") (so the buffer also hits the pools: 070's target was a pool). Eight Params; every other field of `base` unchanged."""
     base = base or Params()
