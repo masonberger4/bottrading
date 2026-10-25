@@ -56,17 +56,17 @@ def check_params(p) -> None:
     bad = [m for m in p.speed_bump_tfs if m not in TF_NAME]
     if bad:
         raise ValueError(f"speed_bump_tfs {bad}: expected minutes from {sorted(TF_NAME)}")
-    if (p.resist_overlaps < 1 or p.hr_max_obstacles < 1 or p.vi_keep_days < 1 or p.reh_merge_pts < 0 or p.nfp_week_inside_pts < 0
+    if (p.resist_overlaps < 1 or p.hr_max_obstacles < 1 or p.vi_keep_days < 1 or p.void_persist_days < 0 or p.reh_merge_pts < 0 or p.nfp_week_inside_pts < 0
             or not 0 < p.nfp_week_partial < 1 or not 0 < p.htf_runner_frac < 1 or not 0 < p.speed_frac < 1 or not 0 < p.stubby_frac < 1
             or p.eve_target_pts <= 0 or p.eve_risk_mult <= 0 or not (p.nfp_flat_by == 0 or 570 < p.nfp_flat_by <= 960)
             or not p.sd_fulcrum_ext or any(m <= 1.0 for m in p.sd_fulcrum_ext)):
-        raise ValueError("targets_partials #1/4: resist_overlaps, hr_max_obstacles, vi_keep_days >= 1; reh_merge_pts, nfp_week_inside_pts >= 0; nfp_week_partial, htf_runner_frac, "
+        raise ValueError("targets_partials #1/4: resist_overlaps, hr_max_obstacles, vi_keep_days >= 1; void_persist_days >= 0; reh_merge_pts, nfp_week_inside_pts >= 0; nfp_week_partial, htf_runner_frac, "
                          "speed_frac, stubby_frac in (0, 1); eve_target_pts, eve_risk_mult > 0; nfp_flat_by 0 or a minute in (570, 960]; sd_fulcrum_ext multiples > 1")
     inert = []
     if p.htf_range_runner and not p.matrix_tf_lower:
         inert.append("htf_range_runner needs matrix_tf_lower (the opposing array one timeframe lower is its level)")
-    if (p.vi_void_level or p.vi_ob_levels or p.vi_quarters or p.vi_keep_traded or p.void_ce_rung) and not p.vi_arrays:
-        inert.append("vi_void_level / vi_ob_levels / vi_quarters / vi_keep_traded / void_ce_rung read the HTF VI rows: they need vi_arrays=True")
+    if (p.vi_void_level or p.vi_ob_levels or p.vi_quarters or p.vi_keep_traded) and not p.vi_arrays:
+        inert.append("vi_void_level / vi_ob_levels / vi_quarters / vi_keep_traded read the HTF VI rows: they need vi_arrays=True")
     if p.sd_anchor == "fulcrum_week" and not p.sd_targets:
         inert.append("sd_anchor 'fulcrum_week' needs sd_targets=True")
     if inert:
@@ -197,7 +197,11 @@ def nwog_revert(ctx, sd, i: int, p, session: str, entry: float, lv: list):
     row = _row(ctx, session, i)
     if not row or (row.get("nwog_regime") or "") != "cons":
         return None
-    gaps = [(sd.x(a), sd.x(b)) for a, b, _ in sm2.gap_list(ctx, i)]
+    if getattr(ctx, "gaps", None) is not None:                        # the ETH-bar NWOGs only (kind "nwog": chronological, the last = the current week's; "nwog_rth" is its RTH twin, no duplicates)
+        raw = [(hi, lo) for kind, hi, lo, _ in ctx.gaps if kind == "nwog"]
+    else:
+        raw = [(a, b) for a, b, _ in sm2.gap_list(ctx, i)]
+    gaps = [(sd.x(a), sd.x(b)) for a, b in raw]
     gaps = [(min(a, b), max(a, b)) for a, b in gaps]
     if not gaps:
         return None
@@ -250,6 +254,19 @@ def void_rungs(ctx, sd, i: int, p, above: float) -> list:
         if z.i <= i and z.bottom > above and h[z.i + 1:i + 1].max(initial=-np.inf) < z.bottom:
             out.append((float(z.mid), "array"))
     out += [(m, "array") for m in _vi_void_mids(ctx, sd, i, above)]
+    if p.void_persist_days > 0 and getattr(ctx, "hist", None):       # voids of earlier sessions persist until traded (the day frame covers only the previous session and today)
+        TP = _TP()
+        for fr in list(ctx.hist)[-1 - p.void_persist_days:-1]:
+            hh, ll = (fr.high.values, fr.low.values) if sd.sign > 0 else (-fr.low.values, -fr.high.values)
+            for z in L.voids(hh.astype(float), ll.astype(float)):
+                if z.kind != "bear" or z.top - z.bottom < sd.min_gap or z.bottom <= above:
+                    continue
+                t0 = float(fr.index[z.i + 1].value) if z.i + 1 < len(fr) else float(fr.index[-1].value) + 1e9      # the first bar AFTER the one that completed the void
+                ext = TP.extreme_since(ctx, i, t0, sd.sign > 0)
+                if ext is not None and float(sd.x(ext)) >= z.bottom:
+                    continue                                          # traded into since it formed: no longer open
+                out.append((float(z.mid), "array"))
+                hit("void_persist")
     return out
 
 
@@ -308,7 +325,7 @@ def vi_ladder(ctx, sd, i: int, p, above: float, lv: list, lvt: list) -> tuple:
 
 
 def vi_return(ctx, sd, i: int, p, entry: float) -> bool:
-    """A10-vi-target-ladder (077 ~00:04:08, test only): the entry sits at an edge of a daily / weekly VI that traded within the last 5 sessions."""
+    """A10-vi-target-ladder (077 ~00:04:08, test only): the far edge of a daily / weekly VI traded within the last 5 sessions (week) and the entry sits at the opposite edge."""
     conf = getattr(ctx, "conf", None)
     if conf is None:
         return False
@@ -316,7 +333,9 @@ def vi_return(ctx, sd, i: int, p, entry: float) -> bool:
     span = 5 * 86400e9 * 7 / 5
     for r in conf.rows(("D", "W"), (3,)):
         if r["known"] <= now and np.isfinite(r["dead"]) and r["dead"] <= now and now - r["dead"] <= span:
-            if any(abs(sd.x(v) - entry) <= 2 * p.es_pt for v in (r["top"], r["bottom"])):
+            # the far edge traded (dead) - for a bearish VI (kind -1, approached from below) the top, for a bullish one the bottom - and the entry sits at the OPPOSITE edge
+            opp = r["bottom"] if r["kind"] < 0 else r["top"]
+            if abs(sd.x(opp) - entry) <= 2 * p.es_pt:
                 return True
     return False
 
@@ -383,6 +402,18 @@ def matrix_price(ctx, sd, i: int, p, entry: float, above: float) -> list:
         for z in TP.rb_zones(sd, p):
             if z.i <= i and z.bottom > lo and after(z) < z.bottom:
                 out.append((float(z.bottom), "rb"))
+    if p.fvg_targets:                                                 # the rest of the premium list (review): untraded opposing FVGs / order blocks / old highs between price and the leg high,
+        for z in sd.opposing():                                       # read with the target switches that already list them
+            if z.i <= i and z.bottom > lo and after(z) < z.bottom:
+                out += [(float(z.bottom), "array"), (float(z.mid), "array")]
+    if p.ob_targets_1m or p.target_ltf_obs:
+        out += [(float(v), k) for v, k in _S()._EN.ob_target_levels(sd, i, lo, p)]
+    if p.old_high_ladder:
+        for k in (("pdh1", "pdh2", "pdh3") if sd.sign > 0 else ("pdl1", "pdl2", "pdl3")):
+            if k in ctx.pd:
+                v = float(sd.x(ctx.pd[k]))
+                if v > lo and sd.h[ctx.start:i + 1].max(initial=-np.inf) < v:
+                    out.append((v, "pool"))
     return [(v, k) for v, k in out if lo < v <= above]
 
 
@@ -471,6 +502,18 @@ def raw_post(ctx, sd, i: int, p, session: str, entry: float, risk: float, above:
         if moved != out:
             hit("nfp_week_inside")
         out = moved
+    if p.bpr_gate_htf:                                                  # A11-bpr-clear-for-htf-targets (012 ~00:08:35): matched in RAW space (hook A) - the exit prices
+        hit("eval_bpr_gate")                                            # of hook B are shifted by exit_before_pts / pool_beyond_pts and never equal the raw HTF values
+        g = bpr_gate(ctx, sd, i, p, above)
+        if g is not None and not g[2]:
+            htf = htf_values(ctx, sd, i, p, above, "bpr")
+            beyond = [(v, k) for v, k in out if v > g[1] and near_any(v, htf, tol)]
+            if beyond:
+                out = [x for x in out if x not in beyond]
+                lvt.append("bpr_chop")
+                hit("bpr_gate_htf")
+                st["bpr_far"] = g[1]
+                st["bpr_near"] = g[0]
     add = []
     hit("eval_raw_post")
     if p.nwog_revert_targets:
@@ -589,7 +632,7 @@ def merged_sweep(levels: dict, p, sd) -> dict:
     drop = set()
     for k in names:
         for j, v in levels.items():
-            if j != k and 0 < levels[k] - v <= gap + 1e-9:       # a lower (older) pool within the gap: the higher rel-eq one belongs to it
+            if j != k and not j.startswith("rel_eq") and 0 < levels[k] - v <= gap + 1e-9:       # a lower, older NAMED pool (not another rel-eq) within the gap: the higher rel-eq one belongs to it
                 drop.add(k)
     if drop:
         hit("reh_merge_sweep")
@@ -655,13 +698,14 @@ def speed_names(ctx, sd, p) -> tuple:
     this order - only while the session bias agrees with its side."""
     if not p.speed_bump_tfs or int(getattr(ctx, "cur_bias", 0) or 0) != sd.sign:
         return ()
+    hit("speed_bump_tfs")                                            # the skip is in force for this order (bias agrees)
     return tuple(TF_NAME[m] for m in p.speed_bump_tfs)
 
 
-def bpr_gate(ctx, sd, i: int, p, entry: float):
-    """A11-bpr-clear-for-htf-targets (012 ~00:08:35): the nearest opposing BPR above the entry; (near edge, far edge, cleared). Cleared = a bar since the
+def bpr_gate(ctx, sd, i: int, p, above: float):
+    """A11-bpr-clear-for-htf-targets (012 ~00:08:35): the nearest opposing BPR above the leg high (`above`, the spec's 'bottom > above'); (near edge, far edge, cleared). Cleared = a bar since the
     BPR formed CLOSED beyond its far edge and left an FVG with it (levels.fvgs, c1 = that bar - 1) [our interpretation of 'trade aggressively through']."""
-    zs = [z for z in sd.bprs(p.bpr_max_gap_bars) if z.i <= i and z.bottom > entry]
+    zs = [z for z in sd.bprs(p.bpr_max_gap_bars) if z.i <= i and z.bottom > above]
     if not zs:
         return None
     z = min(zs, key=lambda z: z.bottom)
@@ -679,7 +723,7 @@ def cap_gates(ctx, sd, i: int, p, session: str, entry: float, risk: float, above
     caps = []
     eb = p.exit_before_pts * p.es_pt
     pairs = list(zip(lv, kinds))
-    first_rung = next((v for v, k in pairs if k not in SPEED_KINDS and v - entry >= p.min_rr * risk), None)
+    first_rung = next((v for v, k in pairs if (k == "array" or k in POOLK) and v - entry >= p.min_rr * risk), None)      # B19: 'the first rung of kind array / pool'
     if p.dxy_rally_cap:                                              # BH-B19-DXY-falling-risk-on (032 ~00:32:11; 102 ~00:31:27)
         hit("eval_dxy")
         dx = int((getattr(ctx, "intermarket", None) or {}).get("dxy", 0) or 0)
@@ -710,25 +754,14 @@ def cap_gates(ctx, sd, i: int, p, session: str, entry: float, risk: float, above
     Lb = st.get("lrlr_Lb")
     if Lb is not None:                                               # L4-lrlr-bounds (cc01_007 ~12:03): at or above L_b it is high resistance
         c_ = Lb - eb
+        caps.append(c_)                                              # too close to leave min_rr room: the cap still stands (the ladder empties -> no order)
         if c_ - entry >= p.min_rr * risk:
-            caps.append(c_)
             if not any(abs(v - c_) <= p.es_pt for v in lv):
                 pairs.append((c_, "array"))
-            lvt.append("lrlr_zone")
-            hit("lrlr_zone")
-    if p.bpr_gate_htf:
-        hit("eval_bpr_gate")
-        g = bpr_gate(ctx, sd, i, p, entry)
-        if g is not None and not g[2]:
-            htf = htf_values(ctx, sd, i, p, above, "bpr")
-            tol = _tol(p)
-            beyond = [(v, k) for v, k in pairs if v > g[1] and near_any(v, htf, tol)]
-            if beyond:
-                pairs = [x for x in pairs if x not in beyond]
-                lvt.append("bpr_chop")
-                hit("bpr_gate_htf")
-                st["bpr_far"] = g[1]
-                st["bpr_near"] = g[0]
+        else:
+            lvt.append("x_lrlr_room")
+        lvt.append("lrlr_zone")
+        hit("lrlr_zone")
     cap = min(caps) if caps else None
     if cap is not None:
         pairs = [(v, k) for v, k in pairs if v <= cap + 1e-9]
@@ -822,6 +855,8 @@ def late(ctx, sd, i: int, p, session: str, entry: float, risk: float, tags: dict
             hit("eve_" + p.eve_mode)
             if p.eve_mode == "bnb":
                 one = eve_one(sd, p, entry, lv, kinds)
+                if one is not None and one[0] - entry < p.min_rr * risk:          # the capped +5 exit pays less than min_rr x risk with a wide stop
+                    one = None
                 if one is None:
                     return "x_eve_room", rm, None
                 lvt.append("eve_bnb")
@@ -935,6 +970,11 @@ def untouched(ctx, sign: int, i: int, r: dict) -> bool:
     it since it formed); 'reuse' / 'tiebreak': spent only when a bar CLOSED through its CE since it formed (the narrative is intact until a body
     closes through the MT / CE or the bias flips; the bias part lives in the htf table). `sign` = the trade's side (+1: the array is resistance above)."""
     ce = (r["top"] + r["bottom"]) / 2
+    from . import targets as _T
+    ts, _, _, hc = _T._hist_hl(ctx)                                # closes of the regular-session history since the array formed (a CE closed through on an earlier day spends it)
+    mh = ts >= r["known"]
+    if mh.any() and ((hc[mh] > ce).any() if sign > 0 else (hc[mh] < ce).any()):
+        return False
     ns = _TP()._ns(ctx)[:i + 1]
     m = ns >= r["known"]
     if not m.any():

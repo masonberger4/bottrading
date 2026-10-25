@@ -97,7 +97,7 @@ ES_CASES = {
     "eq_first": (W2, ES_B, dict(eq_first_rung=True), ("eval_eq_first",)),
     "polarity": (W2, ES_NB, dict(SMP, level_polarity=True), ("eval_polarity",)),
     "leg_mt": (W2, ES_NB, dict(SMP, leg_mt_target=True), ("eval_leg_mt",)),
-    "void": (W2, ES_NB, dict(SMP, void_ce_rung=True), ("eval_void_ce",)),
+    "void": (W2, ES_NB, dict(SMP, void_ce_rung=True, void_persist_days=3), ("eval_void_ce",)),
     "stubby": (W2, ES_NB, dict(SMP, stubby_wick_ce=True), ("stubby_wick_ce",)),
     "old_high": (W2, ES_NB, dict(SMP, old_high_ladder=True), ("old_high_ladder",)),
     "lrlr": (W2, ES_NB, dict(SMP, lrlr_zone=True), ("eval_lrlr",)),
@@ -110,13 +110,14 @@ ES_CASES = {
     "runner": (W2, dict(ES_B, htf_bias="react"), dict(htf_range_runner=True, matrix_tf_lower=True, draw_lock="session"), ("eval_runner",)),
     "hrlr": (WC, ES_B, dict(hrlr_news_only=True, lrlr_max=8, draw_lock="session"), ("eval_hrlr",)),
     "vi_ladder": (W2, ES_NB, dict(SMP, vi_arrays=True, vi_wick_overlap=False, daily_vi_targets=True, vi_void_level=True, vi_ob_levels=True, vi_keep_traded=True, vi_quarters=True), ("eval_vi_ladder", "eval_vi_quarters")),
-    "speed": (W2, ES_NB, dict(SMP, speed_bump_tfs=(5, 15), htf_resist_cap=True, htf_resist_tfs=("5m", "15m", "1h"), htf_bias="react", fvg_targets=True), ()),
+    "speed": (W2, ES_NB, dict(SMP, speed_bump_tfs=(5, 15), htf_resist_cap=True, htf_resist_tfs=("5m", "15m", "1h"), htf_bias="react", fvg_targets=True), ("speed_bump_tfs",)),
     "measuring": (W2, ES_NB, dict(SMP, measuring_gap=True, measuring_target=True, measuring_qualify=True, measuring_need_pool=True), ("measuring_unqualified",)),
     "reuse": (W2, ES_NB, dict(SMP, array_reuse="reuse", skip_exhausted=True, htf_targets=("1h", "4h", "D"), htf_no_time_stop=True, time_stop_min=10), ("array_reuse",)),
     "fulcrum": (W3, ES_NB, dict(SMP, sd_targets=True, sd_anchor="fulcrum_week", sd_need_array=True), ()),
     "range": (W2, ES_NB, dict(SMP, erl_range_swings=True, erl_range_update="swing"), ("erl_range_update",)),
-    "nfp_no_htf": (W3, ES_NB, dict(SMP, nfp_no_htf_targets=True, nfp_flat_by=720, htf_targets=("1h", "4h", "D"), vi_arrays=True, daily_vi_targets=True), ()),
-    "breaker": (W2, ES_NB, dict(SMP, breaker_first=True, breaker_overtake=True), ()),
+    "range_irl": (W2, ES_NB, dict(SMP, erl_range_swings=True, erl_range_update="swing", irl_entries=("fvg", "ob", "void")), ("irl_outside_range",)),
+    "nfp_no_htf": (W2, ES_NB, dict(SMP, nfp_no_htf_targets=True, nfp_flat_by=720, htf_targets=("1h", "4h", "D"), vi_arrays=True, daily_vi_targets=True), ("eval_raw_post",)),     # (the drop itself needs a trade on a jobs day with a daily rung above: test_forced_jobs_day_drops_the_htf_array_rung)
+    "breaker": (W2, ES_NB, dict(SMP, breaker_first=True, breaker_overtake=True), ("breaker_overtake",)),
     "nwog": (W2, dict(ES_B, gap_mode="ict", nwog_regime="tag"), dict(nwog_revert_targets=True), ("eval_nwog_revert",)),
 }
 _HITS = {}
@@ -209,3 +210,15 @@ def test_forced_resist_eve_nfp_week():
 def test_forced_jobs_day_flat_by_and_htf_filter():
     tr = _forced(_fp(nfp_flat_by=600, nfp_no_htf_targets=True), (), d=date(2023, 6, 2))
     assert [e[3] for e in tr[0].exits] == ["am_exit"]
+
+
+def test_forced_jobs_day_drops_the_htf_array_rung():
+    """N1-nfp-no-htf-hold on a hand-made jobs day with a daily FVG above the entry (a stub Confluence): the rung is dropped (nfp_no_htf_drop executed),
+    the same book on an ordinary day keeps the rung (and trades differently); full run vs runs truncated at every bar."""
+    from test_targets_partials import conf
+    cf = conf([(-1, 103.0, 102.0, np.inf, 0, "D")], tfs=("D",), t0=pd.Timestamp("2023-05-31 02:00", tz="America/New_York"))
+    kw = dict(htf_targets=("D",), vi_arrays=True, htf_bias="off")
+    on = _forced(_fp(nfp_no_htf_targets=True, **kw), ("nfp_no_htf_drop",), d=date(2023, 6, 2), conf=cf)
+    assert "nfp_no_htf" in on[0].lv_tags
+    ordinary = rf_run(day(C_ROWS, d=date(2023, 6, 1)), history(date(2023, 6, 1)), _fp(nfp_no_htf_targets=True, **kw), {}, conf=cf)[0]
+    assert all("nfp_no_htf" not in t.lv_tags for t in ordinary)                    # (an ordinary day: the rung stays, so the 102-103 FVG caps the run and the book makes no trade)

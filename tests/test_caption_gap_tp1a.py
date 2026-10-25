@@ -24,7 +24,7 @@ NEW_SWITCHES = (
     "measuring_need_pool", "stubby_wick_ce", "void_ce_rung", "vi_quarters", "array_reuse", "htf_no_time_stop", "lrlr_zone", "leg_mt_target", "erl_range_update", "breaker_overtake", "rb_fallback",
     "matrix_anchor", "level_polarity", "ob_location_cap", "swing_grade_tag", "sd_need_array", "sd_anchor",
 )
-KNOBS = ("resist_overlaps", "htf_runner_frac", "nfp_week_partial", "nfp_week_inside_pts", "eve_target_pts", "eve_risk_mult", "hr_max_obstacles", "vi_keep_days", "speed_frac", "stubby_frac", "sd_fulcrum_ext")
+KNOBS = ("resist_overlaps", "htf_runner_frac", "nfp_week_partial", "nfp_week_inside_pts", "eve_target_pts", "eve_risk_mult", "hr_max_obstacles", "vi_keep_days", "speed_frac", "stubby_frac", "sd_fulcrum_ext", "void_persist_days")
 GAP_IDS = (
     "BH-B14-consolidation-week-reversion", "BH-B19-DXY-falling-risk-on", "BH-L4-resistance-definitions", "X3-a21-eq-after-raid", "X3-a21-rebalance-to-eq", "L14-monthly-to-weekly-range", "T4-or-needs-bias-iof",
     "N2-nfp-week-imprecise-targets", "N1-nfp-no-htf-hold", "N4-eve-of-high-impact", "new-skip-high-resistance", "L4-hrlr-news-exception",
@@ -622,8 +622,8 @@ def test_measuring_qualify():
     assert run(sd, i) == [] and run(sd, i, measuring_qualify=False) == [(119.0, "array")]       # no pullback yet: a candidate only
     sd, i = _mg([(112.2, 112.3, 106.5, 107.2), (107.2, 113.5, 107.0, 113.2)])                    # the pullback left the far edge (104) untouched, a new extreme printed
     assert run(sd, i) == [(119.0, "array")]
-    sd, i = _mg([(112.2, 112.3, 103.9, 104.5), (104.5, 113.5, 104.4, 113.2)])                    # the pullback touched the far edge (a wick): no longer qualified (the legacy label needs a body close)
-    assert run(sd, i) == [] and run(sd, i, measuring_qualify=False) == [(119.0, "array")]
+    sd, i = _mg([(112.2, 112.3, 103.9, 104.5), (104.5, 113.5, 104.4, 113.2)])                    # the pullback poked the far edge with a WICK only (closes stay above): still qualified - only bodies filling the gap drop the label
+    assert run(sd, i) == [(119.0, "array")] and run(sd, i, measuring_qualify=False) == [(119.0, "array")]
     sd, i = _mg([(112.2, 112.3, 103.0, 103.5), (103.5, 113.5, 103.4, 113.2)])                    # bodies filled the gap: the label and the projection are dropped either way
     assert run(sd, i) == [] and run(sd, i, measuring_qualify=False) == []
     sd, i = _mg([(112.2, 112.3, 106.5, 107.2)])                                                  # retraced but no new extreme yet
@@ -681,6 +681,25 @@ def test_void_ce_rung():
     assert (4001.5, "array") in out and "void_ce" in lvt
 
 
+def test_void_persist_days():
+    """A void of an earlier session stays an open rung until traded (void_persist_days); the day frame alone never saw it."""
+    ctx = _row_ctx(day=D0, pd={}, pw=None, base=4085.0)
+    sd = _side(ctx)
+    ix = pd.date_range(pd.Timestamp(ctx.idx[0]) - pd.Timedelta(days=4), periods=4, freq="5min")
+    old = pd.DataFrame(dict(open=[4112.0, 4104.0, 4103.5, 4103.5], high=[4113.0, 4104.0, 4103.8, 4103.8], low=[4109.0, 4103.0, 4103.0, 4103.0],
+                            close=[4110.0, 4103.5, 4103.5, 4103.5]), index=ix)
+    # the bearish void 4104-4109 (high[1] < low[0]) lies above price in an earlier session: a rung of the long at its CE
+    ctx.hist = [old, old.copy()]
+    ctx.__dict__.pop("_tp_hist", None)
+    p = replace(P1, void_ce_rung=True)
+    assert tp1.void_rungs(ctx, sd, 5, p, 4090.0) == []                                                 # the default: the day frame only
+    on = tp1.void_rungs(ctx, sd, 5, replace(p, void_persist_days=3), 4090.0)
+    assert (4106.5, "array") in on
+    ctx.__dict__.pop("_tp_hist", None)
+    ctx.h[3] = 4105.0                                                                                  # today traded into it: no longer open
+    assert (4106.5, "array") not in tp1.void_rungs(ctx, sd, 5, replace(p, void_persist_days=3), 4090.0)
+
+
 # --- A9-vi-quarters (107) -----------------------------------------------------------------------------------------------------------------------------------
 
 def test_vi_quarters():
@@ -716,6 +735,18 @@ def test_array_reuse():
     ctx2 = bar_ctx(cf, flat, h, flat - 0.5, c2)
     sd2 = S.Side(1, ctx2.o, ctx2.h, ctx2.l, ctx2.c, 1, 0.0)
     assert TP.htf_levels(ctx2, sd2, 8, 3990.0, Params(**base, array_reuse="reuse"), ("15m",)) == []
+    # review fix: a CE closed through on an EARLIER day (regular-session history) spends the array under 'reuse' too
+    ctx3 = bar_ctx(cf, flat, h, flat - 0.5, c)
+    kn = pd.Timestamp(ctx3.idx[0]).as_unit("ns").value
+    hi_idx = pd.date_range(pd.Timestamp(ctx3.idx[0]) - pd.Timedelta(days=3), periods=2, freq="5min")
+    old = pd.DataFrame(dict(open=4000.0, high=4009.0, low=3999.0, close=[4008.0, 4000.0]), index=hi_idx)
+    ctx3.hist = [old, old]
+    sd3 = S.Side(1, ctx3.o, ctx3.h, ctx3.l, ctx3.c, 1, 0.0)
+    row = dict(top=4010.0, bottom=4005.0, known=kn - 10 ** 15)
+    assert tp1.untouched(ctx3, 1, 8, row) is False
+    ctx3.hist = []
+    ctx3.__dict__.pop("_tp_hist", None)
+    assert tp1.untouched(ctx3, 1, 8, row) is True
     # the lock's draw hygiene reads the same rule
     from mentorship import bias_day as BD
     now = pd.Timestamp("2026-06-23 11:00", tz=NY)
@@ -859,6 +890,19 @@ def test_matrix_anchor_price(monkeypatch):
     assert (4090.0, "array") in out and "matrix_price" in lvt
     out0 = tp1.raw_post(ctx, sd, 5, replace(p, matrix_anchor="eq"), "AM", 4080.0, 3.0, 4100.0, dict(ext=4075.0, ext_i=2), [(4110.0, "pool")], [], {})
     assert (4090.0, "array") not in out0
+
+
+def test_matrix_anchor_price_premium_list_extras(monkeypatch):
+    """review: the premium list also holds untraded opposing FVGs (fvg_targets), order blocks (ob_targets_1m) and old highs (old_high_ladder) between price and the leg high."""
+    ctx = _row_ctx(day=D0, pd={"pdh1": 4096.0}, pw=None, base=4085.0)
+    sd = _side(ctx)
+    z = L.Zone("bear", 4094.0, 4090.0, 3, 2, 4092.0)
+    monkeypatch.setattr(sd, "opposing", lambda: [z])
+    monkeypatch.setattr(tp1._S()._EN, "ob_target_levels", lambda *a, **k: [(4098.0, "array")])
+    p = replace(P1, matrix_targets=("breaker",), matrix_anchor="price")
+    assert tp1.matrix_price(ctx, sd, 5, p, 4080.0, 4100.0) == []
+    got = tp1.matrix_price(ctx, sd, 5, replace(p, fvg_targets=True, ob_targets_1m=True, old_high_ladder=True), 4080.0, 4100.0)
+    assert sorted(v for v, _ in got) == [4090.0, 4092.0, 4096.0, 4098.0]
 
 
 # --- A22-old-level-polarity (166) --------------------------------------------------------------------------------------------------------------------------
@@ -1016,6 +1060,7 @@ def test_htf_vi_void_and_ob():
     out, add = tp1.vi_ladder(ctx2, _side(ctx2), 5, replace(P1, vi_keep_traded=True, vi_keep_days=100), 4090.0, [], [])
     assert len(add) == 4
     assert tp1.vi_return(ctx2, _side(ctx2), 5, P1, 4101.0) and not tp1.vi_return(ctx2, _side(ctx2), 5, P1, 4150.0)
+    assert not tp1.vi_return(ctx2, _side(ctx2), 5, P1, 4104.0)                                 # the FAR edge (the one that traded) is not the return: only the opposite edge is tagged
     st, lvt = {}, []
     tp1.raw_post(ctx2, _side(ctx2), 5, replace(P1, vi_return_tag=True), "AM", 4101.0, 3.0, 4102.0, dict(ext=4095.0, ext_i=2), [], lvt, st)
     assert "vi_return" in lvt
@@ -1037,24 +1082,29 @@ def test_bpr_gates_daily_target():
     p = replace(P1, bpr_gate_htf=True, exit_before_pts=0.25)
     lv, kd = [4098.0, 4120.0, 4122.5, 4125.0, 4150.0], ["array", "array", "array", "array", "pool"]
 
+    raw = [(4098.0, "array"), (4120.0, "array"), (4122.5, "array"), (4125.0, "array"), (4150.0, "pool")]
+
     def gate(extra):
+        # the real path: raw rungs (hook A) -> exit prices (strategy._exit_px, shifted) -> the gate must already have matched in raw space
         o, h, l, c = _bpr_side(extra)
         ctx = bar_ctx(cf, o, h, l, c, day=D0, pd={}, pw=None)
         sd = S.Side(1, o, h, l, c, 1, 0.0)
         sd.bprs = lambda *a, **k: [zone]
         st, lvt = {}, []
-        out = tp1.cap_gates(ctx, sd, len(o) - 1, p, "AM", 4090.0, 3.0, 4094.0, list(lv), list(kd), lvt, st, {})
-        return out, st, lvt
+        out = tp1.raw_post(ctx, sd, len(o) - 1, p, "AM", 4090.0, 3.0, 4094.0, {}, list(raw), lvt, st)
+        olv = [S._exit_px(v, k, p) for v, k in out]
+        return (olv, [k for _, k in out], None), st, lvt
 
     (olv, okd, cap), st, lvt = gate([])
-    assert olv == [4098.0, 4150.0] or olv == [4098.0] or 4120.0 not in olv                  # the daily FVG levels beyond the BPR are pending ...
-    assert 4120.0 not in olv and 4125.0 not in olv and 4098.0 in olv and "bpr_chop" in lvt and st["bpr_far"] == 4104.0
+    dropped = (S._exit_px(4120.0, "array", p), S._exit_px(4125.0, "array", p))
+    assert S._exit_px(4120.0, "array", p) != 4120.0                                        # exit prices differ from the raw HTF values (the review's blocker)
+    assert all(d not in olv for d in dropped) and S._exit_px(4098.0, "array", p) in olv and "bpr_chop" in lvt and st["bpr_far"] == 4104.0
     # a displacement close beyond the far edge that left an FVG with it: the daily target is active
     (olv, okd, cap), st, lvt = gate([(4093.0, 4108.0, 4092.0, 4106.5), (4106.0, 4110.0, 4105.0, 4109.0)])
-    assert 4120.0 in olv and 4125.0 in olv and "bpr_chop" not in lvt
+    assert all(d in olv for d in dropped) and "bpr_chop" not in lvt
     # a close beyond without an FVG is not enough
     (olv, okd, cap), st, lvt = gate([(4093.0, 4108.0, 4092.0, 4106.5), (4106.0, 4108.5, 4093.5, 4107.0)])
-    assert 4120.0 not in olv and "bpr_chop" in lvt
+    assert dropped[0] not in olv and "bpr_chop" in lvt
     # the locked daily draw ends in front of the BPR
     o, h, l, c = _bpr_side([])
     ctx = bar_ctx(cf, o, h, l, c, day=D0, pd={}, pw=None)
@@ -1062,8 +1112,8 @@ def test_bpr_gates_daily_target():
     assert tp1.lock_adjust(ctx, sd, len(o) - 1, p, {"bpr_far": 4104.0, "bpr_near": 4100.0}, 4122.5, [(4098.0, "array")], 4090.0) == (4099.75, None)
     assert tp1.lock_adjust(ctx, sd, len(o) - 1, p, {"bpr_far": 4104.0, "bpr_near": 4100.0}, 4098.0, [(4098.0, "array")], 4090.0) == (None, None)
     # a non-HTF target beyond the BPR is untouched
-    (olv, okd, cap), st, lvt = (lambda r: r)(gate([]))
-    assert 4150.0 in olv or True
+    (olv, okd, cap), st, lvt = gate([])
+    assert S._exit_px(4150.0, "pool", p) in olv
 
 
 # --- L10-A17-old-high-target-ladder (11) ---------------------------------------------------------------------------------------------------------------------

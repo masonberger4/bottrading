@@ -2154,13 +2154,31 @@ Items (file#N gap-id | status | Params switch(es) | default | note):
 - definitions_pd_arrays_structure#197 new-swing-grades | partial | `swing_grade_tag` | False | `levels.swing_grades(o, t)` {1: O + 0.25 r [our interpretation], 2: EQ, 3: O + 0.75 r, 4: T} and `levels.swing_grade_of`; `Trade.swing_grade` from the sweep extreme .. leg high. NOT BUILT: the HTF-range entry tag (item 168 belongs to the swing work) and the final rung = T
 - definitions_pd_arrays_structure#198 new-swing-projection-fulcrum | done | `sd_anchor="fulcrum_week"`, `sd_fulcrum_ext`, `sd_need_array` | "leg", (1.27, 1.68, 2.0), False | `tp1.fulcrum_week`: the week's highest high (side space) made on Monday / Tuesday, the lowest low after it; levels = low + m x (high - low); `sd_need_array` keeps those inside an opposing 15m..4h array (FVG / OB / VI) of the confluence
 
+### Review fixes (caption-gap pass, targets_partials#1/4)
+
+- A11 `bpr_gate_htf` (blocker): the gate now runs in RAW space in hook A (`raw_post`), where the rungs still equal the confluence / PDH values; hook B ran on exit prices (shifted by `exit_before_pts` / `pool_beyond_pts`) and never matched. The BPR is the nearest one with bottom > the leg high (`above`, the spec's rule). The unit test now builds its levels with `strategy._exit_px` and fails against the old placement.
+- A22 `array_reuse`: `tp1.untouched` also scans the closes of the regular-session history since the array formed (a CE closed through on an earlier day spends it); test with a prior-day close. `"tiebreak"` stays as an alias of `"reuse"` (the ladder is price-ordered, an untested-first ordering has no effect [our interpretation]); the entry-side re-arm ("a second touch of a daily FVG arms") and the bias-flip invalidation are NOT built (the htf table owns the bias part).
+- Look-ahead coverage: counters `speed_bump_tfs` (speed skip in force), `breaker_overtake` (body rule differs from the wick rule), `irl_outside_range`, `void_persist`; the ES cases `speed`, `breaker`, `range_irl`, `void` need them; the jobs-day drop (`nfp_no_htf_drop`) is reached by the forced test `test_forced_jobs_day_drops_the_htf_array_rung` (no ES window trades a jobs day with a daily rung above; the ES `nfp_no_htf` case proves the code was evaluated).
+- A3 `merged_sweep`: only a lower, older NAMED pool merges a rel-eq sweep level (not another rel-eq). The `mark_levels` / lock-candidate consumer of the merge is NOT built (the lock reads the REH through `reh_merge` in `_targets`).
+- A10 `vi_return_tag` is now the spec rule (far edge traded within 5 sessions, entry at the OPPOSITE edge). `vi_keep_days` sessions -> calendar days by 7/5 stays [our interpretation]. The void / OB fields stay in the Confluence VI rows (`vlo`, `vhi`, `obo`, `obm`): `htf._arrays` has no consumer of the ladder, so no second copy was added.
+- A10 `void_ce_rung`: new knob `void_persist_days` (0 = the day frame only): intraday voids of the last N regular sessions stay open rungs until traded (variant `A10-void-levels-persistence_days`); the inert warning no longer claims `void_ce_rung` needs `vi_arrays`.
+- N4 `eve_mode="bnb"`: the capped exit must pay >= `min_rr` x risk, else `x_eve_room`. "A+ setups only" NOT built (no grade-A filter exists for the eve; owner question below).
+- L4 `lrlr_zone`: the L_b cap stands even when L_b is closer than `min_rr` (the ladder empties, no order, lv_tag `x_lrlr_room`).
+- B19 `dxy_rally_cap`: the first rung is the first of kind array / pool. The gold hook stays a comment (no data).
+- B14 `nwog_revert_targets`: the current NWOG is the last `nwog` (ETH) row of `ctx.gaps` (no `nwog_rth` / `ndog` duplicates); the "scalp" is the single-exit rung (tag `scalp_nwog`, the same single exit every scalp in this engine uses).
+- A6 `measuring_qualify`: `levels.bk_state(c=closes)` - bodies filling the gap drop the label, a wick poke does not (the test now expects a wick poke to stay qualified).
+- A22 `matrix_anchor="price"`: the premium list also holds untraded opposing FVGs (`fvg_targets`), order blocks (`ob_targets_1m` / `target_ltf_obs`) and old highs (`old_high_ladder`). Voids stay with `void_ce_rung`.
+- L14 `erl_range_update="swing"`: with `irl_entries` an entry outside the rolling dealing range is rejected (`x_irl_outside_range`, variant `L14-dealing-range-redefine_irl`); the default stays "off".
+- Still NOT built (each recorded above): 144(a) is an expectation without an order effect (no hook); 197 the HTF-range entry tag (item 168) and the grade-4 final rung = T are swing-work items the spec itself defers, grade 1 = O + 0.25 r stays an invented depth [our interpretation]; speed_bump_tfs Silver Bullet / Ma Deuce ladder (SB stays off); the 5 other partial notes above.
+
 ### Owner questions (caption-gap pass, targets_partials#1/4)
 
 1. N-opposing-fvg-speed-bump vs owner #7: `speed_bump_tfs` (default `()`) makes the listed opposing-FVG timeframes neither a cap nor a bump rung when the bias agrees; the default stays owner #7 REVISED (15m and lower bump, 1h and above per `htf_resist_mode`). Which timeframes should count as a speed bump (5m only, 15m, 1h)?
 2. N4-eve-of-high-impact: the eve size cut (`eve_risk_mult`, test 0.5) conflicts with E9's existing pre-CPI / pre-FOMC multipliers (`pre_cpi_risk`, `pre_fomc_risk`, `fomc_eve_risk`: they multiply as well); 042 gives no size cut. Keep one?
 3. A22-array-reuse conflicts with the A22 / L14 "skip exhausted, prefer untested" (cc07_004): the default `array_reuse="first_touch"` keeps the built rule.
-4. B19 / BH-B19 DXY cap: conflicts with cc03_006 (Nov 2016 DXY and equities rallied together); default off.
-5. `erl_range_update` default "off": the spec lists only the value "swing" (a possible default).
+4. N4 eve scalp: should "A+ setups only" (042) filter the eve trade (the engine has no A-grade filter)?
+5. B19 / BH-B19 DXY cap: conflicts with cc03_006 (Nov 2016 DXY and equities rallied together); default off.
+6. `erl_range_update` default "off": the spec lists only the value "swing" (a possible default).
 
 ### Tests (caption-gap pass, targets_partials#1/4)
 

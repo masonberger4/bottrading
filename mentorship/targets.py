@@ -682,7 +682,7 @@ def extra_sources(ctx, sd, i: int, p, sw: dict, entry: float, risk: float, leg_h
     if p.measuring_gap or p.measuring_target:
         g = measuring_gap(sd, sw, i, leg_hi, p)
         if g is not None and p.measuring_qualify:             # caption-gap A6-measuring-gap-confirmation (003 ~31:51; 062 ~44:24): the pullback left the far edge untouched and a new extreme printed
-            st_, _ = L.bk_state(sd.h, sd.l, g, i, "any_open")
+            st_, _ = L.bk_state(sd.h, sd.l, g, i, "any_open", c=sd.c)       # bodies filling the gap drop the label, a wick poke does not
             if st_ != "qualified":
                 g = None
                 from . import tp1 as _T1
@@ -843,6 +843,9 @@ def breaker_cap(ctx, sd, i: int, p, entry: float, risk: float, flag):
     if p.breaker_overtake:                      # caption-gap A22-breaker-precedence (cc05_014 ~28:18): only a BODY close through the breaker overtakes it (a wick into it keeps the stop)
         zs = [z for z in matrix_breakers(sd, p)
               if z.i <= i and z.bottom > entry and sd.c[z.i + 1:i + 1].max(initial=-np.inf) <= z.top]
+        if len(zs) != len([z for z in matrix_breakers(sd, p) if z.i <= i and z.bottom > entry and sd.h[z.i + 1:i + 1].max(initial=-np.inf) < z.bottom]):
+            from . import tp1 as _T1
+            _T1.hit("breaker_overtake")                  # a wick into the breaker no longer re-enables the arrays beyond it
     else:
         zs = [z for z in matrix_breakers(sd, p)
               if z.i <= i and z.bottom > entry and sd.h[z.i + 1:i + 1].max(initial=-np.inf) < z.bottom]

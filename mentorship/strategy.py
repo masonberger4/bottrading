@@ -2684,8 +2684,9 @@ class Params:
     stubby_wick_ce: bool = False         # A23-stubby-wick-first-approach (028 ~15:24): the first approach to a day extreme (pdh / pdl) whose wick is <= stubby_frac of the candle range targets the wick CE instead
     stubby_frac: float = 0.2
     void_ce_rung: bool = False           # A10-void-levels-persistence (065 ~1:58:00): the CE of an open liquidity void (intraday and daily / weekly VIs with a void) as a rung
+    void_persist_days: int = 0           # A10-void-levels-persistence (065 ~1:58:00; 077 ~2:24: "can stay open for a long time"): with void_ce_rung, the intraday voids of the last N regular sessions stay open rungs until traded (0 = the day frame only)
     vi_quarters: bool = False            # A9-vi-quarters (074 ~16:08): the 25 / 50 / 75 % levels of an opposing weekly VI as rungs
-    array_reuse: str = "first_touch"     # A22-array-reuse (061 ~2:11:51): "first_touch" (skip_exhausted / the htf hygiene as built) / "reuse" (an array is spent only by a body close through its CE) / "tiebreak" (as reuse, untested arrays first)
+    array_reuse: str = "first_touch"     # A22-array-reuse (061 ~2:11:51): "first_touch" (skip_exhausted / the htf hygiene as built) / "reuse" (an array is spent only by a body close through its CE) / "tiebreak" (an alias of reuse: the ladder is price-ordered, so an untested-first ordering has no effect [our interpretation])
     htf_no_time_stop: bool = False       # ... the X9 time stop does not apply to a trade whose entry array is W / M
     lrlr_zone: bool = False              # L4-lrlr-bounds (cc01_007 ~12:03): the low-resistance zone (MSS up .. the broken old low L_b) caps the ladder at L_b and adds the untaken short-term highs inside it as rungs
     leg_mt_target: bool = False          # A10-one-sided-leg-levels (cc03_002 ~3:38; cc04_004 ~10:17): the body MT (first open + last close) / 2 of the one-sided leg is a rung before the leg start
@@ -8320,6 +8321,10 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         r_ = _TP1.current_range(sd, i, sw["ext_i"])
         if r_ is not None and r_[0] < pd_hi:
             leg_lo = r_[0]
+        if r_ is not None and p.irl_entries and not (r_[0] <= entry <= r_[1]):      # IRL = the arrays INSIDE the referenced range: an entry outside the rolling range is not an IRL entry (153: 'enter on IRL, target ERL of the same range')
+            _f("x_irl_outside_range")
+            _TP1.hit("irl_outside_range")
+            return None
     pd_top, pd_act = None, _ES1.pd_active(p)
     if pd_act:                                        # caption-gap A21-intraday-fib-bodies / A21-post-cisd-range-retrace / B5-prior-day-ny-range-retracement
         if p.leg_fib == "body":

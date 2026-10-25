@@ -1737,7 +1737,7 @@ def ob_anchor_state(o, h, l, c, j: int, k: int, i: int, passes: int = 2, lead: i
     return "rule"
 
 
-def bk_state(h, l, z: Zone, i: int, depth: str = "ce", bprs=(), bpr_ce: bool = False) -> tuple:
+def bk_state(h, l, z: Zone, i: int, depth: str = "ce", bprs=(), bpr_ce: bool = False, c=None) -> tuple:
     """Caption-gap A6-breakaway-depth-qualification (062 ~37:12 / ~39:01, 065 ~4:39:02, cc04_009 ~13:37), a BULLISH gap z (known at
     z.i), state after the closed bar `i`. candidate -> retraced (price trades into the gap, the far edge z.bottom untouched) ->
     QUALIFIED when price then trades above the highest high printed since the gap formed (up to the bar before the retrace) with the far
@@ -1745,14 +1745,15 @@ def bk_state(h, l, z: Zone, i: int, depth: str = "ce", bprs=(), bpr_ce: bool = F
     breakaway) - or, with depth "ce" (A6: at most 50%), a trade at / below the CE. `depth` "any_open" (062, cc04_009: any portion
     left open, then a move away). `bpr_ce` (065): when a BPR sits directly beyond the gap's far edge (a zone in `bprs` that
     overlaps the far edge or ends within a tick of it) the retrace must stay on the near side of the CE even under any_open - past it
-    is a downgrade (dead). Returns (state, bar of the last transition or -1)."""
+    is a downgrade (dead). `c` (closes): the far-edge death test of a non-CE depth reads the CLOSE (a body filling the gap) instead of the wick
+    (A6-measuring-gap-confirmation: only bodies filling the gap drop the label). Returns (state, bar of the last transition or -1)."""
     if depth not in ("ce", "any_open"):
         raise ValueError(f"bk_depth {depth!r}: expected 'ce' or 'any_open'")
     ce_limit = depth == "ce" or (bpr_ce and any(b.bottom <= z.bottom + 1e-9 and b.top >= z.bottom - 1e-9 for b in bprs))
     state, ev, hh0 = "candidate", -1, None
     n = min(i, len(l) - 1)
     for k in range(z.i + 1, n + 1):
-        if (l[k] <= z.mid - 1e-9) if ce_limit else (l[k] <= z.bottom + 1e-9):
+        if (l[k] <= z.mid - 1e-9) if ce_limit else ((c[k] <= z.bottom + 1e-9) if c is not None else (l[k] <= z.bottom + 1e-9)):
             return "dead", k
         if state == "candidate" and l[k] <= z.top:
             state, ev = "retraced", k
