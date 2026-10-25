@@ -2142,6 +2142,51 @@ _TP1_DECISIONS = {
 DECISIONS.update(_TP1_DECISIONS)
 
 
+# --- caption-gap pass: targets_partials #2/4 (name prefix = gap id; every variant is a valid Params set) ---------------------------------------------------------------------------------------------
+_TP2_DECISIONS = {
+    "L4-target-below-eq-leg": dict(draw_below_eq=True, eq_leg="rally", **SM_POST),
+    "L4-target-below-eq-leg_imb": dict(draw_below_eq=True, eq_leg="rally", eq_beyond_imb=True, **SM_POST),
+    "L4-resistance-runs": dict(hrlr_time_k=1.0, linger_bars=10, linger_pts=1.0, **SM_POST),
+    "L4-resistance-runs_clear": dict(clear_path=True, lrlr_max=12, **SM_POST),
+    "L4-session-pool-before-rel": dict(session_pool_first=True, eq_pref="rank", **SM_POST),
+    "L5-nwog-target-ladder": dict(nwog_ladder=True, nwog_near_frac=0.0, nwog_ce_frac=0.8, nwog_halfway=True, **SM_POST),
+    "L5-event-horizon-objective": dict(event_horizon_target=True, **SM_POST),
+    "L5-old-nwog-in-consolidation": dict(nwog_magnet=True, consol_min_bars=6, consol_max_adr=0.3, **SM_POST),
+    "L7-org-overshoot-discount": dict(org_beyond=True, org_beyond_adr=0.5, org_draw="draw", **SM_POST),
+    "L7-org-partial-close-orderflow": dict(org_ce_if_flow=True, org_draw="draw", **SM_POST),
+    "L7-org-breaker-inside": dict(org_breaker_stop=True, org_draw="draw", **SM_POST),
+    "L9-htf-fvg-target-ladder": dict(htf_gap_gate=True, htf_gap_final="ce", fvg_quadrants=True, htf_far_edge=True, **SM_POST),
+    "L9-htf-fvg-target-ladder_far_edge": dict(htf_gap_gate=True, htf_gap_final="far_edge", fvg_quadrants=True, htf_far_edge=True, **SM_POST),
+    "L9-htf-fvg-target-ladder_weekly": dict(weekly_bisi_ts_block=True, keep_traded_wfvg=True, turtle_soup="2023", **SM_POST),
+    "L10-intraday-wick-ce": dict(wick_tfs=("1h", "4h"), wick_long_only=True, min_obj_frac=0.2, **SM_POST),
+    "L12-sd-activation": dict(sd_targets=True, sd_arm="close", sd_arm_bars=1, **SM_POST),
+    "L12-ref-rolls-to-new-high": dict(sd_targets=True, sd_ref_roll=True, **SM_POST),
+    "L12-cluster-anchors": dict(sd_targets=True, sd_multi_tiers=("itl", "ltl"), sd_cluster_min=3, sd_cluster_ticks=2, sd_ref_roll=True, **SM_POST),
+    "L12-projection-exit-1tick": dict(sd_targets=True, sd_anchor="entry_low", proj_exit_ticks=1, **SM_POST),
+    "L12-cap-at-htf-array": dict(sd_targets=True, sd_cap_htf=True, sd_first_beyond=False, **SM_POST),
+    "L12-prior-session-swing-htf-extreme": dict(sd_targets=True, sd_anchor="m15_leg", sd_htf_extreme=True, sd_htf_tol=1.0, **SM_POST),
+    "L12-sd-in-premium-consolidation": dict(sd_targets=True, sd_premium_consol=True, consol_day_rules="tag", **SM_POST),
+    "L12-minus3-sd-last-hour": dict(sd_targets=True, sd_anchor="mss_leg", sd_last_hour_k=3.0, **SM_POST),
+    "L13-org-sd-projection": dict(proj_org_reprice=True, proj_org_kmax=12, sd_htf_tol=1.0, **SM_POST),
+    "L14-session-pools-only": dict(session_pools_mode="only", **SM_POST),
+    "L14-session-pools-only_rank": dict(session_pools_mode="rank", **SM_POST),
+    "L14-session-pools-only_extended": dict(session_pools_mode="extended", **SM_POST),
+    "L15-room-measure-anchors": dict(room_ref="htf_far", **SM_POST),
+    "L15-first-sth-offering-5": dict(t1_skip_near=True, **SM_POST),
+    "X1-london-0300-fvg-draw": dict(overnight_5m_fvgs=True, draw_lock="session", ob_entry="post_mss", htf_resist_cap=False),
+    "X1-htf-ob-open-target": dict(htf_ob_open=True, htf_ob_open_final=True, htf_targets=("1h", "4h", "D", "W"), **SM_POST),
+    "B2-target-beyond-pool-inefficiency": dict(beyond_pool_final=True, beyond_pool_adr=0.25, **SM_POST),
+    "new-pool-break-accel-vs-reject": dict(break_accel_gate=True, break_accel_mult=1.5, **SM_POST),
+    "new-old-pool-redelivery": dict(swept_pool_targets=True, **SM_POST),
+    "L13-breaker-range-sd-weekly": dict(proj_breaker=True, proj_breaker_k=(1.0, 2.0), **SM_POST),
+    "new-level-confluence-scoring": dict(confl_rank=True, confl_tol_frac=0.001, **SM_POST),
+    "D23-inception-fulcrum-anchor": dict(sd_targets=True, sd_anchor="fulcrum", sd_fulcrum_def="inception", sd_arm="close", **SM_POST),
+    "L12-deep-sd-pd-convergence": dict(sd_targets=True, sd_deep_conv=True, sd_conv_ticks=2, sd_levels=(1.0, 1.5, 2.0, 2.5, 3.0), **SM_POST),
+    "new-defended-level": dict(defended_filter=True, defended_band_adr=0.1, defended_touches=4, defended_bars=200, **SM_POST),
+}
+DECISIONS.update(_TP2_DECISIONS)
+
+
 def risk_grid(base: Params | None = None) -> list:
     """E8-2pct-new-trader (cc02_001 ~00:03:41, ~00:16:41; 022 ~1:38:24): the risk-per-trade grid - risk_pct in (1.0, 1.2, 1.5, 2.0) % with max_total_risk_pct = risk_pct + 0.1 %; every other field of `base` unchanged."""
     base = base or Params()

@@ -202,7 +202,7 @@ that do not transfer as stated.
 - H5. SD projections as targets [both]: anchors and multiples vary (see Conflict 9). Examples: first SD
   beyond the BSL from several swing lows, cluster = turning point (014 ~2:54); -1/-2 levels must lie
   beyond the pool (030 ~23:31); breaker A-B +1 SD (070 ~37:31); measuring gap -1 SD (062 ~42:19);
-  -2/-2.5/-3 on the manipulation leg (092 ~1:21:26); fulcrum -0.5/-1 (090 ~1:29:01); ORG multiples
+  -2/-2.5/-3 on the inception-to-fulcrum leg (092 ~1:21:26; 090 ~1:34:04); fulcrum -0.5/-1 (090 ~1:29:01); ORG multiples
   (055 ~19:30; 056 ~17:10); CBDR/Asian/flout "four numbers" (cc08_003; cc08_004; cc09_002).
 - H6. 5-day ADR as the day's extreme / exit filter [CC] (cc08_001 ~2:13; cc09_006 ~19:23; cc09_007 ~8:32).
 - H7. Session target windows: AM objective by 10:30-11:00, PM by 15:00-16:00; target sits at a 15m-60m
@@ -297,7 +297,7 @@ that do not transfer as stated.
    day traders out by 14:00 (cc03_001) vs hold PM trend to 15:00-16:00 (cc10_014) and exit ~14:00 only on
    consolidation days. **Default: flatten 16:00 with exits at targets (current); test a 15:00 hard exit.**
 9. **SD projection anchor.** Down-leg into the low (014), sweep low to leg high (bot, Ep 06 wording),
-   swing high to broken low (047), manipulation leg (092), breaker A-B (070), high to measuring-gap edge
+   swing high to broken low (047), inception-to-fulcrum leg (092; 090), breaker A-B (070), high to measuring-gap edge
    (062), trigger swing (065A). 014 is the only multi-example quant study. **Default off as targets;
    test 014's "first level beyond the pool" from the down-leg.**
 10. **Reversal after a loss.** No reversal (001, kept by bot) vs same-minute flip when offside (083/085,

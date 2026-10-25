@@ -2393,3 +2393,29 @@ def swing_grade_of(px: float, o_px: float, t_px: float) -> int:
         return 0
     g = swing_grades(o_px, t_px)
     return min(g, key=lambda k: (abs(g[k] - px), k))
+
+
+# --- caption-gap pass, targets_partials #2/4 -------------------------------------------------------------------------------------------------------
+
+def consolidation_band(h, l, i: int, n: int, max_w: float):
+    """L5-old-nwog-in-consolidation (044 ~01:18:34; 051 ~00:17:37) [our interpretation]: a consolidation = the last `n` bars (ending at the closed bar i) overlap
+    inside one band no wider than `max_w`. Returns (low, high) of the band or None."""
+    if n < 2 or i + 1 < n:
+        return None
+    lo, hi = float(np.min(l[i + 1 - n:i + 1])), float(np.max(h[i + 1 - n:i + 1]))
+    return (lo, hi) if hi - lo <= max_w + 1e-12 else None
+
+
+def long_wick_ces(o, h, l, c, upper: bool = True, min_ratio: float = 1.0, n_med: int = 20):
+    """L10-intraday-wick-ce (062 ~00:25:01; 058 ~00:17:40) [our interpretation]: the CEs (body edge + half the wick) of the LONG wicks of completed candles - wick >= min_ratio x
+    body and >= the median wick of the last `n_med` candles up to and including it. `upper` = the upper wicks (premium arrays above), else the lower ones.
+    Returns [(index, ce, wick length)] in bar order."""
+    o, h, l, c = (np.asarray(x, float) for x in (o, h, l, c))
+    top, bot = np.maximum(o, c), np.minimum(o, c)
+    w = (h - top) if upper else (bot - l)
+    out = []
+    for k in range(len(c)):
+        seg = w[max(0, k + 1 - n_med):k + 1]
+        if w[k] > 0 and w[k] >= min_ratio * (top[k] - bot[k]) and w[k] >= float(np.median(seg)):
+            out.append((k, float((top[k] + h[k]) / 2 if upper else (bot[k] + l[k]) / 2), float(w[k])))
+    return out

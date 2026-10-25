@@ -373,8 +373,13 @@ def draw_pref(ctx, sd, i: int, p, entry: float, risk: float, keep: list, leg_hi:
         return out
     tol = p.eq_tol_pts * p.es_pt
     cands = list(pools)
+    eq = None
     if p.draw_below_eq:
         lo, hi = float(sw["ext"]), float(max(leg_hi, entry))
+        from . import tp2 as _T2
+        hi_r = _T2.eq_leg_hi(ctx, sd, sw, leg_hi, p)         # caption-gap L4-target-below-eq-leg (042 ~01:09:19): eq_leg "rally" - the leg runs from the high that began the run into the sweep
+        if hi_r is not None:
+            hi = max(hi_r, float(sw["ext"]) + 1e-9)
         hist = getattr(ctx, "hist", None)
         if hist:
             pdh, pdl = float(hist[-1].high.max()), float(hist[-1].low.min())
@@ -417,6 +422,12 @@ def draw_pref(ctx, sd, i: int, p, entry: float, risk: float, keep: list, leg_hi:
     if best is None and (p.draw_below_eq or p.lrlr_max >= 0):
         best = cands[0]
         name = "pool_eq_leg" if p.draw_below_eq else "lrlr"
+    if best is not None and p.eq_beyond_imb and p.draw_below_eq and eq is not None:
+        from . import tp2 as _T2
+        nv = _T2.beyond_imb(ctx, sd, i, p, _raw(best[0], best[1], p))       # caption-gap L4-target-below-eq-leg (049 ~00:03:42): the first 15m (else 60m) imbalance beyond the pool, when it lies beyond the EQ
+        if nv is not None and nv > eq:
+            out.append((_exit_px_s(nv, p), "array", "eq_beyond_imb"))
+            return out
     if best is not None:
         out.append((best[0], best[1], name))
     return out
@@ -430,6 +441,8 @@ def _raw(v: float, k: str, p) -> float:
         return v - p.pool_beyond_pts * p.es_pt
     if k == "exact":
         return v
+    if p.proj_exit_ticks and k.startswith("proj"):          # caption-gap L12-projection-exit-1tick: the projection rungs exit proj_exit_ticks before the level
+        return v + p.proj_exit_ticks * p.tick
     return v + p.exit_before_pts * p.es_pt
 
 
@@ -500,8 +513,9 @@ def _pools_raw(lv: list) -> list:
 
 def sd_active(p) -> bool:
     """The new SD engine replaces the old single-anchor block of strategy._targets."""
+    from . import tp2 as _T2
     return bool(p.sd_targets and (p.sd_anchor not in ("leg", "sweep_leg") or p.sd_roles or p.sd_align
-                                  or p.sd_cluster_ticks or p.sd_no_pool_fallback))
+                                  or p.sd_cluster_ticks or p.sd_no_pool_fallback or _T2.sd_on(p)))
 
 
 def sd_ranges(ctx, sd, i: int, p, sw: dict, leg_hi: float, rr) -> list:
@@ -512,12 +526,14 @@ def sd_ranges(ctx, sd, i: int, p, sw: dict, leg_hi: float, rr) -> list:
       fulcrum  the first confirmed swing high after the extreme, measured only once a close is above it (Ep 06)
       london   (= manip) the London swing low .. high, measured only once a close is above the high
       multi    all of them, plus the last `sd_swings` confirmed swing legs of the session"""
-    name = {"sweep_leg": "leg", "manip": "london"}.get(p.sd_anchor, p.sd_anchor)
+    name = {"sweep_leg": "leg", "manip": "london", "mss_leg": "broken"}.get(p.sd_anchor, p.sd_anchor)     # (caption-gap L12-minus3-sd-last-hour: "mss_leg" = the sweep extreme .. the broken MSS swing, the "broken" leg)
     if name == "fulcrum_week":                           # caption-gap new-swing-projection-fulcrum (cc07_003 ~27:33): tp1.fulcrum_levels reads it; here only the range
         from . import tp1 as _T1
         f_ = _T1.fulcrum_week(ctx, sd, i, p)
         return [("fulcrum_week", f_[0], f_[1])] if f_ is not None else []
     names = ("leg", "broken", "downleg", "fulcrum", "london") if name == "multi" else (name,)
+    if name in ("entry_low", "m15_leg"):                  # entry_low: the projection is built mid-trade (tp2.manage); m15_leg: added below
+        names = ()
     ext, ext_i = float(sw["ext"]), sw["ext_i"]
     out = []
     for nm in names:
@@ -531,6 +547,9 @@ def sd_ranges(ctx, sd, i: int, p, sw: dict, leg_hi: float, rr) -> list:
             ls = leg_start(sd, ext_i, 0)
             if ls is not None and ls[1] > ext:
                 out.append((nm, ext, ls[1]))
+        elif nm == "fulcrum" and p.sd_fulcrum_def == "inception":       # caption-gap D23-inception-fulcrum-anchor (090 ~01:34:04; 092 ~01:21:26)
+            from . import tp2 as _T2
+            out += _T2.sd_ranges_extra(ctx, sd, i, p, sw, "inception")
         elif nm == "fulcrum":
             q = next((q for q in sd.ph if q.i > ext_i and q.known <= i), None)
             if q is not None and q.price > ext and (sd.c[q.i + 1:i + 1] > q.price).any():
@@ -542,6 +561,12 @@ def sd_ranges(ctx, sd, i: int, p, sw: dict, leg_hi: float, rr) -> list:
                 a = int(np.searchsorted(ctx.t[ctx.start:], lon[2])) + ctx.start
                 if hi_ > lo_ and sd.c[a:i + 1].max(initial=-np.inf) > hi_:
                     out.append((nm, float(lo_), float(hi_)))
+    if name == "m15_leg":                                  # caption-gap L12-prior-session-swing-htf-extreme (035 ~00:38:13)
+        from . import tp2 as _T2
+        out += _T2.sd_ranges_extra(ctx, sd, i, p, sw, "m15_leg")
+    if p.sd_multi_tiers:                                   # caption-gap L12-cluster-anchors (014 ~00:03:48)
+        from . import tp2 as _T2
+        out += _T2.tier_ranges(ctx, sd, i, p, sw)
     if name == "multi" and p.sd_swings:
         legs = []
         for qh in sd.ph:
@@ -572,9 +597,16 @@ def sd_levels(ctx, sd, i: int, p, sw: dict, leg_hi: float, rr, lv: list, entry: 
         if out:
             lvt.append("sd_fulcrum_week")
         return out
+    from . import tp2 as _T2                              # caption-gap pass (targets_partials #2/4): the arming, the rolled reference, the premium / last-hour / HTF-extreme / deep-convergence picks
+    t2 = _T2.sd_on(p)
     for nm, lo, hi in sd_ranges(ctx, sd, i, p, sw, leg_hi, rr):
+        if t2 and not _T2.armed(ctx, sd, sw, i, p, nm, lo, hi):
+            continue
         rng = hi - lo
         cand = sorted((hi + k * rng, k) for k in p.sd_levels)
+        if t2:
+            got += [(v, k, nm, kd) for v, k, kd in _T2.sd_cands(ctx, sd, i, p, sw, nm, lo, hi, cand, pool, lv, entry, risk) if v > entry]
+            continue
         if p.sd_first_beyond:
             if pool is not None:
                 cand = [x for x in cand if x[0] > pool][:1]
@@ -582,7 +614,9 @@ def sd_levels(ctx, sd, i: int, p, sw: dict, leg_hi: float, rr, lv: list, entry: 
                 cand = [x for x in cand if x[0] - entry >= p.min_rr * risk][:1]
             else:
                 cand = []
-        got += [(v, k, nm) for v, k in cand if v > entry]
+        got += [(v, k, nm, "") for v, k in cand if v > entry]
+    if t2:
+        got = _T2.sd_tail(ctx, sd, i, p, sw, got, lv, max(leg_hi, entry), lvt)
     if p.sd_align and got:
         others = [v for v, k in lv if k not in SD_KINDS]
         tol = p.sd_align_tol_pts * p.es_pt
@@ -603,8 +637,10 @@ def sd_levels(ctx, sd, i: int, p, sw: dict, leg_hi: float, rr, lv: list, entry: 
             lvt.append("sd_cluster")
             return [(float(np.mean([x[0] for x in c])), "sd_cluster") for c in cl]
     out = []
-    for v, k, nm in got:
-        if p.sd_roles:
+    for v, k, nm, kd in got:
+        if kd:
+            kind = kd                       # caption-gap targets_partials #2/4: proj / proj_htf / proj_cluster / proj_runner / proj_lh
+        elif p.sd_roles:
             kind = "sd_half" if abs(k - 0.5) < 1e-9 else "sd_mm" if abs(k - 1.0) < 1e-9 else "sd_ext" if k >= 2 else "sd"
         else:
             kind = "sd"                     # review: always an SD kind so sd_close_hit sees it (exits treat it like "array")
@@ -709,9 +745,16 @@ def extra_sources(ctx, sd, i: int, p, sw: dict, entry: float, risk: float, leg_h
             S.FUNNEL = fun
         if bz is not None:
             B = float(rr[1])
-            out.append((B + (B - ext), "array"))                 # L13 (070 ~37:31): B + 1 x (B - A)
+            if p.proj_breaker_k == (1.0,):
+                out.append((B + (B - ext), "array"))             # L13 (070 ~37:31): B + 1 x (B - A)
+            else:                                                # caption-gap L13-breaker-range-sd-weekly (074 ~00:30:15): k = 2 (the weekly range extreme) needs the weekly and day bias
+                from . import tp2 as _T2
+                out += _T2.breaker_ks(ctx, sd, i, p, getattr(ctx, "_tp2_session", "AM"), B, ext)
             lvt.append("proj_breaker")
-    if p.proj_org_k and getattr(ctx, "org", None):
+    if p.proj_org_reprice and getattr(ctx, "org", None):       # caption-gap L13-org-sd-projection (055 ~00:19:31; 056 ~00:18:20): after the reprice, in the bias direction
+        from . import tp2 as _T2
+        out += _T2.org_projection(ctx, sd, i, p, getattr(ctx, "_tp2_session", "AM"), above)
+    elif p.proj_org_k and getattr(ctx, "org", None):
         pre_open = ctx.t[i] < 570
         orgs = ctx.org[:-1] if (pre_open and ctx.org_today) else ctx.org
         if orgs:
@@ -891,12 +934,18 @@ def tf_wicks(ctx, sd, i: int, p, tfs, above_lo: float) -> list:
         g = pd.Series(np.arange(i + 1), index=idx).groupby(idx.floor(f"{m}min"))
         first, last, st = g.min().values, g.max().values, g.min().index
         done = (idx[last] - st) >= pd.Timedelta(minutes=m - ctx.tf)
-        for a, z, ok in zip(first, last, done):
+        wk_ = []                                            # caption-gap L10-intraday-wick-ce: the wicks of the completed buckets (long = >= the body and >= the 20-candle median)
+        if p.wick_long_only:
+            for a, z, ok in zip(first, last, done):
+                wk_.append(float(sd.h[a:z + 1].max() - max(sd.o[a], sd.c[z])) if ok else 0.0)
+        for n_, (a, z, ok) in enumerate(zip(first, last, done)):
             if not ok:
                 continue
             o_, c_ = sd.o[a], sd.c[z]
             hh = sd.h[a:z + 1].max()
             top = max(o_, c_)
+            if p.wick_long_only and not (wk_[n_] >= abs(c_ - o_) and wk_[n_] >= float(np.median([w_ for w_ in wk_[max(0, n_ - 19):n_ + 1]]))):
+                continue
             ce = (top + hh) / 2
             if hh - top >= mn and ce > above_lo and sd.h[z + 1:i + 1].max(initial=-np.inf) < ce:
                 out.append((float(ce), float(hh - top), name))
@@ -1122,7 +1171,7 @@ def fill_plan(o: dict, base: tuple, p):
             j = kinds.index("sd_ext")
             small = fr.index(min(fr))
             fr[j], fr[small] = fr[small], fr[j]
-    want = [p.htf_bump_frac if e["k"] == "bump" else p.speed_frac if e["k"] == "speed" else p.partial_extra_frac for e in extras]
+    want = [p.htf_bump_frac if e["k"] == "bump" else p.speed_frac if e["k"] == "speed" else p.min_obj_frac if e["k"] == "min_obj" else p.partial_extra_frac for e in extras]
     scale = min(1.0, p.partial_extra_cap / sum(want)) if want else 1.0
     shares = [w * scale for w in want]
     tot = sum(shares)
@@ -1280,3 +1329,9 @@ def lock_rank(ctx, p, lst: list, px: float, up: bool) -> list:
             best = sorted(near, key=lambda x: (-_pool_weight(x[3]), x[0]))[0]
             lst = [best] + [x for x in lst if x is not best]
     return lst
+
+
+def _exit_px_s(v: float, p) -> float:
+    """The exit price of an 'array' level (caption-gap L4-target-below-eq-leg eq_beyond_imb)."""
+    from . import strategy as S
+    return S._exit_px(v, "array", p)

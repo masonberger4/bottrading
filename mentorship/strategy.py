@@ -1021,9 +1021,11 @@ class Params:
     # L12 / D23 / Ep06.4 standard deviations --------------------------------------------------------------
     sd_anchor: str = "leg"               # D23: "leg" (sweep extreme .. leg high; "sweep_leg"), "broken" (.. the broken MSS
                                          # swing), "downleg" (014: the one-sided down-leg into the low), "fulcrum", "london"
-                                         # (= "manip": [our interpretation] execution.md ~205 "on the manipulation leg" is read as the
+                                         # (= "manip": [our interpretation] execution.md ~205 (relabelled "inception-to-fulcrum leg", caption-gap D23-inception-fulcrum-anchor: see sd_fulcrum_def) was read as "on the manipulation leg" = the
                                          # London swing low..high, measured once its high was taken - NOT the sweep leg that runs
-                                         # stops; the sweep leg is "leg"), "multi" (all)
+                                         # stops; the sweep leg is "leg"), "multi" (all); caption-gap targets_partials #2/4: "entry_low" (L12-projection-exit-1tick:
+                                         # the fill bar's low .. the first pivot high after it, built mid-trade), "m15_leg" (L12-prior-session-swing-htf-extreme: the
+                                         # last 15m swing low -> high), "mss_leg" (L12-minus3-sd-last-hour: = "broken")
     sd_swings: int = 3                   # [our interpretation] "multi": also the last N confirmed swing legs
     sd_cluster_ticks: int = 0            # L12 (014 ~2:54-4:43; 030 ~26:01): levels from several anchors within N ticks are
                                          # a cluster (high-probability turn); only clusters are kept when any exist
@@ -2699,6 +2701,65 @@ class Params:
     swing_grade_tag: bool = False        # new-swing-grades (cc07_003 ~17:26): Trade.swing_grade 1-4 = the entry's place in origin..terminus (sweep extreme .. leg high: 0.25 / EQ / 0.75 / terminus)
     sd_need_array: bool = False          # new-swing-projection-fulcrum (cc07_003 ~27:33): a fulcrum_week projection is kept only where it overlaps an opposing array on a lower timeframe
     sd_fulcrum_ext: tuple = (1.27, 1.68, 2.0)   # ... multiples of the fulcrum range measured from the week's low (2.0 = the 100 % symmetrical swing)
+    # --- caption-gap pass: targets_partials #2/4 (digests/rulebook_gaps/levels_liquidity_targets.md items 15 .. 101; tp2.py; every new switch off unless noted; the gap id is the comment's first word) ---------------
+    eq_leg: str = "sweep"                # L4-target-below-eq-leg (042 ~01:09:19): the dealing-range leg of draw_below_eq: "sweep" (the sweep extreme .. the leg high, built) / "rally" (the sweep extreme .. the high that began the run into it: the start of the one-sided leg, else the session's extreme) [our interpretation]
+    eq_beyond_imb: bool = False          # L4-target-below-eq-leg (049 ~00:03:42): after the pool P is picked, the first 15m (else 60m) imbalance beyond P is the final target (exit at its near edge) when it lies beyond the EQ
+    hrlr_time_k: float = 0.0             # L4-resistance-runs (cc01_007 ~10:00): > 0 = a target is dropped when the bars price spent in the band [first intermediate swing, target] exceed hrlr_time_k x the bars of the leg (the sweep to now), unless the day is a jobs / FOMC day (test 1.0)
+    clear_path: bool = False             # L4-resistance-runs (cc08_007 ~6:58): the draw needs an opposing 4h / D array beyond it with lrlr_max satisfied up to it, else the order is skipped
+    linger_bars: int = 10                # L4-resistance-runs (025 ~17:40; 095 ~31:03) [our interpretation]: with hrlr_time_k / clear_path on, a position whose first linger_bars closes all stay within linger_pts of the entry is tagged "lingered" (the existing X9 time stop does the exit)
+    linger_pts: float = 1.0
+    session_pool_first: bool = False     # L4-session-pool-before-rel (067 ~00:50:27): the nearest untaken session-range pool (lunch, previous PM, London, AM) in front of the chosen rel-eq draw becomes the first rung AND the draw; the rel-eq pool stays as the next rung
+    nwog_ladder: bool = False            # L5-nwog-target-ladder (020 ~00:03:50; 025 ~00:43:43): an NWOG draw takes near edge (nwog_near_frac) -> CE (nwog_ce_frac, the bulk) -> far edge (the rest); conflict with L9 (the far edge a "ringer") listed in the rulebook
+    nwog_near_frac: float = 0.0          # (the engine exits at least one lot per rung)
+    nwog_ce_frac: float = 0.8
+    event_horizon_target: bool = False   # L5-event-horizon-objective (037 ~00:22:37; 051 ~16:51): the midpoint between NWOG k's and NWOG k+1's near edges is a rung; NWOG k+1's levels stay out of the ladder until that midpoint traded (one tick through)
+    nwog_magnet: bool = False            # L5-old-nwog-in-consolidation (044 ~01:18:34; 051 ~17:37): the stored NWOG running through the consolidation of an old daily swing high (bodies of the pivot bar +-1) / through the current cluster is tagged nwog_magnet / range_anchor and its near edge is the preferred draw
+    consol_min_bars: int = 6             # ... [our interpretation] a consolidation = this many overlapping bars within consol_max_adr x ADR5
+    consol_max_adr: float = 0.3
+    org_beyond: bool = False             # L7-org-overshoot-discount (043 ~00:12:22): with the ORG far edge as the draw the ladder goes on to the first pool / HTF array beyond it within org_beyond_adr x ADR5
+    org_beyond_adr: float = 0.5
+    org_ce_if_flow: bool = False         # L7-org-partial-close-orderflow (068 ~00:11:50): opposing arrays (FVG / OB) inside the ORG make its CE the final rung; the far edge stays as a runner slice (htf_runner_frac)
+    htf_gap_final: str = "ce"            # L9-htf-fvg-target-ladder (010 ~00:58:40; 029 ~00:32:25; 098 ~01:01:48; 102 ~02:12:22): with htf_gap_gate the 75 % and the far edge of an HTF FVG appear only after a bar closed beyond its CE ("ce"); "far_edge" keeps them while the bias table's flip is not against the order
+    htf_gap_gate: bool = False           # ... the switch that turns the CE-first gating on (the spec's default "ce" would otherwise change the built ladder)
+    weekly_bisi_ts_block: bool = False   # L9 (102 ~02:12:22) [our interpretation]: no turtle-soup long at a pool within ts_max_pts above an unfilled weekly BISI (the draw is the BISI)
+    keep_traded_wfvg: bool = False       # L9 (098 ~01:01:48): the edges of weekly FVGs price traded through stay "array" levels
+    wick_long_only: bool = False         # L10-intraday-wick-ce (062 ~00:25:01): wick_tfs counts only LONG wicks (wick >= body and >= the 20-bar median wick of its timeframe) [our interpretation]
+    min_obj_frac: float = 0.0            # L10-intraday-wick-ce (058 ~00:17:40): > 0 = the nearest long 1h / 4h wick CE before the draw is the minimum objective: a protected partial of this share (tag min_obj)
+    sd_arm: str = "trade"                # L12-sd-activation (029 ~00:21:45; 008 ~00:06:39): "close" = an SD projection is armed only after a bar CLOSED beyond the anchor extreme and the next sd_arm_bars closes stay beyond it ("trade" = the built behaviour)
+    sd_arm_bars: int = 1
+    sd_ref_roll: bool = False            # L12-ref-rolls-to-new-high (014 ~00:03:27): the buy-side reference rolls to every newer confirmed swing high above it before the first SD level beyond it is picked
+    sd_multi_tiers: tuple = ()           # L12-cluster-anchors (014 ~00:03:48): ("itl", "ltl") = one SD range per intermediate / long-term low of the up-leg (low .. the swing high before it); >= sd_cluster_min levels within sd_cluster_ticks (2 when 0) are one "proj_cluster" rung (the preferred final target)
+    sd_cluster_min: int = 3
+    proj_exit_ticks: int = 0             # L12-projection-exit-1tick (013 ~00:29:08): > 0 = a projection rung (kinds proj*) exits this many ticks before its level (0 = the X2 offset)
+    sd_cap_htf: bool = False             # L12-cap-at-htf-array (029 ~00:37:20): SD levels beyond the far edge of the nearest opposing 15m+ FVG are dropped
+    sd_htf_extreme: bool = False         # L12-prior-session-swing-htf-extreme (035 ~00:38:13): with sd_anchor "m15_leg" only the SD levels within sd_htf_tol of an HTF level are kept (kind proj_htf); a proj_htf rung reached after 11:00 with an SMT closes the trade
+    sd_htf_tol: float = 1.0
+    sd_premium_consol: bool = False      # L12-sd-in-premium-consolidation (043 ~00:14:29): on a consolidation day (dplan tag consol_day / no_draw) the SD level is the first beyond the pool AND above the 50 % of the day's range so far, preferring an old FVG edge / pivot high within 1 pt
+    sd_last_hour_k: float = 0.0          # L12-minus3-sd-last-hour (047 ~00:10:59): > 0 = an order at or after 15:00 targets the SD level k of the sd_anchor "mss_leg" leg (no first-beyond rule) and is out by 15:45 (test 1, 2, 3)
+    proj_org_reprice: bool = False       # L13-org-sd-projection (055 ~00:19:31; 056 ~00:18:20): ORG multiples (U = the gap size) project from the gap's far edge in the order's direction only after a bar since 09:30 traded back to the prior close
+    proj_org_kmax: int = 12              # ... k = 1 .. proj_org_kmax (or the proj_org_k tuple when set)
+    session_pools_mode: str = "off"      # L14-session-pools-only (067 ~00:27:37): "rank" = session pools first (draw preference, sweep pools), "only" = pools limited to the previous PM / London ranges, the ORG edges and PDH / PDL, "extended" adds lunch / AM ranges and the rel-eq pools inside those ranges [our interpretation]
+    room_ref: str = "exit"               # L15-room-measure-anchors (024 ~00:25:13): "htf_far" measures the room (min_draw_pts) from the entry to the far edge of the nearest opposing 15m+ array (fallback: the draw's exit)
+    t1_skip_near: bool = False           # L15-first-sth-offering-5 (012 ~00:32:07): pools nearer than min_draw_pts are dropped from the ladder (T1 = the first pool offering the room) instead of rejecting the order
+    overnight_5m_fvgs: bool = False      # X1-london-0300-fvg-draw (018 ~00:03:49): unfilled 5m FVGs formed before 09:30 (overnight / London) are arrays of the ladder (near edge, CE, far edge) and AM lock candidates
+    htf_ob_open: bool = False            # X1-htf-ob-open-target (058 ~00:08:20): an opposing daily / weekly OB gives its near edge and its candle open as rungs
+    htf_ob_open_final: bool = False      # ... the open is the final target when no FVG / VI lies between the entry and the OB
+    org_breaker_stop: bool = False       # L7-org-breaker-inside (072 ~00:32:02): a breaker inside the ORG makes the far side of its candle the final rung (the prior close stays a runner slice)
+    beyond_pool_final: bool = False      # B2-target-beyond-pool-inefficiency (071 ~00:22:18; 104 ~00:22:24): the final target is the nearest FVG / OB near edge beyond the draw pool within beyond_pool_adr x ADR5, else the rejection-block body edge, else the next rel-eq pool
+    beyond_pool_adr: float = 0.25
+    break_accel_gate: bool = False       # new-pool-break-accel-vs-reject (072 ~00:01:21): pools beyond a pool taken today stay only if the break was displaced (body >= break_accel_mult x the mean body, closes beyond, an FVG left); a break that closed back removes them
+    break_accel_mult: float = 1.5
+    swept_pool_targets: bool = False     # new-old-pool-redelivery (072 ~00:36:04): today's swept pools of the opposite type are re-delivery targets when the bias agrees or another ladder level lies within 1 pt
+    proj_breaker_k: tuple = (1.0,)       # L13-breaker-range-sd-weekly (074 ~00:30:15): the multiples of the breaker range (B - A) beyond B; k >= 2 is kind proj_wk and needs the weekly and daily bias to agree with the order
+    confl_rank: bool = False             # new-level-confluence-scoring (078 ~00:48:23; 094 ~00:06:04): the final target = the highest-scoring ladder level beyond the first rung (confluence.level_score; ties: the nearest)
+    confl_tol_frac: float = 0.001
+    sd_fulcrum_def: str = "ep06"         # D23-inception-fulcrum-anchor (090 ~01:34:04; 092 ~01:21:26): the sd_anchor "fulcrum" leg: "ep06" (built: a close beyond the first swing high after the extreme) / "inception" (inception = the sweep extreme, fulcrum = the first displacement leg's swing high, armed when a bar TRADES through it)
+    sd_deep_conv: bool = False           # L12-deep-sd-pd-convergence (092 ~01:25:18): deeper SD levels stay (kind proj, the deepest proj_runner) when within sd_conv_ticks of a 5m / 15m FVG edge or CE
+    sd_conv_ticks: int = 2
+    defended_filter: bool = False        # new-defended-level (cc01_007 ~00:24:23): pools touched >= defended_touches times within defended_band_adr x ADR5 over the last defended_bars bars are "defended" - not targets (tag defended)
+    defended_band_adr: float = 0.1
+    defended_touches: int = 4
+    defended_bars: int = 200
 
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
@@ -2974,6 +3035,8 @@ class Params:
         _es3_check.check_params(self)
         from . import tp1 as _tp1_check                  # caption-gap pass (targets_partials #1/4)
         _tp1_check.check_params(self)
+        from . import tp2 as _tp2_check                  # caption-gap pass (targets_partials #2/4)
+        _tp2_check.check_params(self)
         if self.e4_color and self.retrace_candle == "off":
             self.retrace_candle = "intrabar"          # E4 candle colour = the built retrace_candle "intrabar" (a short fills on an up-close bar: the fill bar opens beyond the limit and trades into it)
         if self.vi_ob_entry and "vi_ob" not in self.entry_arrays:
@@ -3026,7 +3089,7 @@ class Params:
                          ("resistance_mode", ("off", "low_full", "high_run", "both")),
                          ("measuring_anchor", ("far", "near", "ce", "dup")), ("mm_anchor", ("leg", "ref")),
                          ("wick_read", ("off", "exit")), ("wick_session", ("rth", "eth")),
-                         ("sd_anchor", ("leg", "sweep_leg", "broken", "downleg", "fulcrum", "london", "manip", "multi", "fulcrum_week")),
+                         ("sd_anchor", ("leg", "sweep_leg", "broken", "downleg", "fulcrum", "london", "manip", "multi", "fulcrum_week", "entry_low", "m15_leg", "mss_leg")),
                          ("mgmt", ("ladder", "t1t2", "unit"))):
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
@@ -4072,6 +4135,8 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
     lv = _LD3.balanced_filter(sd, i, above, lv, p)                    # caption-gap A11 balanced_range: nothing past a redelivered body-filled range's EQ
     if p.reh_merge_pts > 0 or p.stubby_wick_ce:
         lv = _TP1.targets_post(ctx, sd, i, p, lv)                     # caption-gap A3-reh-under-older-high / A23-stubby-wick-first-approach (targets_partials #1/4)
+    if _TP2.targets_on(p):
+        lv = _TP2.targets_post(ctx, sd, i, p, above, lv, eq, ext_i)    # caption-gap targets_partials #2/4: session-pool filter, defended pools, break gate, swept pools, event horizon, NWOG magnet, overnight FVGs, HTF OB open
     out = []
     for v, kind in sorted(x for x in set(lv) if x[0] > above):   # merge levels within ~1 ES point
         if not out or v - out[-1][0] > p.es_pt:
@@ -4172,6 +4237,8 @@ def _exit_px(v: float, kind: str, p) -> float:
         return v + p.pool_beyond_pts * p.es_pt
     if kind == "exact":
         return v
+    if p.proj_exit_ticks and kind.startswith("proj"):        # caption-gap L12-projection-exit-1tick (013 ~00:29:08): a projection exits proj_exit_ticks ticks before its level
+        return v - p.proj_exit_ticks * p.tick
     return v - p.exit_before_pts * p.es_pt
 
 
@@ -5136,6 +5203,7 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
         cands += [(ctx.prev_am[0], "pool", "prev_am_high", 1, cr_am), (ctx.prev_am[1], "pool", "prev_am_low", -1, cr_am)]
     cands += _LD3.lock_cands(ctx, p, t_lock, kl)           # caption-gap A2 old_hi / old_lo, L3 session opening ranges
     cands += _LD4.lock_cands(ctx, p, t_lock, kl)           # caption-gap levels_detectors #3/3 (week pools, previous London, rejection-block closes)
+    cands += _TP2.lock_cands(ctx, p, t_lock, kl)           # caption-gap X1-london-0300-fvg-draw (018 ~00:03:49): the overnight 5m FVGs
     mw_ = getattr(getattr(ctx, "dplan", None), "info", {}).get("mw")
     if p.pool_mon_wed and mw_ is not None:             # day_week_context N10.3: the Mon-Wed extremes on Thu / Fri
         cands += [(mw_[0], "pool", "mon_wed_high", 1, S), (mw_[1], "pool", "mon_wed_low", -1, S)]
@@ -5247,6 +5315,8 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
         dn = [x for x in pf if x[1] < px]
     elif p.pool_rank or p.draw_below_eq:           # L4: the larger pool / beyond the range's equilibrium
         up, dn = _TP.lock_rank(ctx, p, up, px, True), _TP.lock_rank(ctx, p, dn, px, False)
+    elif p.session_pools_mode == "rank":           # caption-gap L14-session-pools-only (067 ~00:27:37): the session-range pools first (stable: nearest first inside each group)
+        up, dn = _TP2.lock_session_rank(up), _TP2.lock_session_rank(dn)
     if p.hrlr_news_only:                           # caption-gap L4-hrlr-news-exception (cc01_007 ~00:08:34): a high-resistance run is a draw only on a jobs / FOMC day after the release
         up, dn = _TP1.hrlr_filter(ctx, p, up, dn, kl, t_lock)
     side = 0
@@ -5698,7 +5768,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     hit_, px_ = _TP.rung_hit(pos, k, lv_[k], h, c, t, tf, p, xt_)     # Ep06.4 sd_close_hit
                     if not hit_:
                         break
-                    last = k == len(lv_) - 1 and not pos.get("runner")   # Ep04.3 po3_runner
+                    last = (k == len(lv_) - 1 and not pos.get("runner")) or _TP2.close_here(pos, k, tr, t, tf, p)   # Ep04.3 po3_runner; caption-gap L12-prior-session-swing-htf-extreme: a proj_htf rung with an SMT after 11:00 closes the trade
                     if last:
                         tr.final_hit = True                           # Ep04.13: every rung taken
                     q = pos["left"] if last else min(pos["left"], max(p.lot, _lots(pos["n"] * fr[k], p.lot)))
@@ -5793,6 +5863,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 _SM7.manage(ctx, sd, pos, tr, i, ts, p)                          # caption-gap setups_models #7/7: the at_stop offside exit, the breakaway re-entry stop drop
             if pos["left"] and pos.get("es1"):
                 _ES1.manage(ctx, sd, pos, tr, i, ts, p)                          # caption-gap entries_stops_sizing #1/3: PB wick exit, MT warn, strict IOFED
+            if pos["left"] and pos.get("tp2"):
+                _TP2.manage(ctx, sd, pos, tr, i, p)                              # caption-gap targets_partials #2/4: the lingering tag, the entry-low projection rung
             if pos["left"]:
                 pos["best"] = max(pos["best"], h)
                 _MG.exits(ctx, sd, pos, tr, i, ts, p, state)       # management_exits: X6-X12, X9 time stops, D18, Ep07.5
@@ -6058,6 +6130,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 if o.get("es1"):
                     _ES1.on_fill(ctx, sd, pos, tr, o, i, p)           # caption-gap entries_stops_sizing #1/3: the PB-wick exit, the MT warn tag, the strict IOFED watch, the CISD adds
                 _ES3.on_fill(ctx, sd, pos, tr, o, i, p, fill)             # caption-gap entries_stops_sizing #3/3: initial risk, the OB MT / probe exits, the gate candle, the near-HTF room
+                if o.get("tp2") or p.sd_anchor == "entry_low":
+                    _TP2.on_fill(ctx, sd, pos, tr, o, i, p)               # caption-gap targets_partials #2/4: the lingering window, the entry-low anchor
                 if o.get("es2"):
                     _ES2.on_fill(ctx, sd, pos, tr, o, i, p, fill)      # caption-gap entries_stops_sizing #2/3: the OB grade, the FVG-then-OB add, the zone-ladder add base
                 _SM7.fill_note(state, o)                              # caption-gap setups_models #7/7: the re-entry / reversal context is no longer pending
@@ -6591,6 +6665,14 @@ def _attach_meta(ctx, meta, p, symbol):
 
 def _sell_side(ctx: DayCtx, sd: Side, session: str, i: int | None = None,
                extra: bool = False, p: "Params | None" = None) -> dict[str, float]:
+    out = _sell_side0(ctx, sd, session, i, extra, p)
+    if p is not None and p.session_pools_mode != "off":
+        out = _TP2.sell_side_filter(out, ctx, sd, p)       # caption-gap L14-session-pools-only (067 ~00:27:37): rank / limit the swept pools to the session ranges
+    return out
+
+
+def _sell_side0(ctx: DayCtx, sd: Side, session: str, i: int | None = None,
+                extra: bool = False, p: "Params | None" = None) -> dict[str, float]:
     keys = ("pdl1", "pdl2", "pdl3") if sd.sign > 0 else ("pdh1", "pdh2", "pdh3")
     out = {k: sd.x(ctx.pd[k]) for k in keys if k in ctx.pd}
     if session in ("PRE7", "PRE8", "PRE9", "NEWS", "LON"):
@@ -7953,6 +8035,9 @@ def _turtle(ctx, sd, sw, i, p, session, risk_mult):
         return None
     if not L.turtle_soup(sd.l, sd.c, sw["level"], sw["ext_i"], i, p.ts_max_pts * p.es_pt, p.ts_back_bars):
         return None
+    if p.weekly_bisi_ts_block and _TP2.ts_weekly_bisi(ctx, sd, sw, i, p):
+        _f("x_ts_weekly_bisi")           # caption-gap L9-htf-fvg-target-ladder (102 ~02:12:22): the pool lies just above an unfilled weekly BISI - the draw is the gap, no turtle long
+        return None
     premium_ts = False
     if p.ts_need_htf and not _htf_tag(ctx, sd, i, sw["ext"], p.eq_tol_pts * p.es_pt):
         if not (p.ts_ote_ok and _SM6.ts_ote(ctx, sd, sw, i, p)):       # caption-gap M13-premium-ote-turtle-soup: the OTE band / beyond the EQ of the last impulse leg qualifies too
@@ -8505,6 +8590,10 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             return None
     above = max(leg_hi, entry)
     tp1 = {} if _TP1.any_on(p) else None             # caption-gap targets_partials #1/4: what the later stages of this order need
+    tp2 = {} if _TP2.any_on(p) else None             # caption-gap targets_partials #2/4: ditto (the state of the _targets call is in ctx._tp2_st)
+    ctx._tp2_session = session
+    if tp2 is not None:
+        ctx.__dict__["_tp2_st"] = dict(tags=[], prefs=[])
     sp_ = ()                                          # N-opposing-fvg-speed-bump: the timeframes that are neither cap, bump nor target for this order
     tg = _TP.tgif_info(ctx, sd, i, p, entry) if p.tgif_zone else None     # M14.2 TGIF zone
     if tg is not None and tg["stand_down"]:
@@ -8569,7 +8658,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             lv = sorted(set(lv) | set(extra))
             if p.compressed_hh:
                 lv = _SM2.compressed_first(ctx, sd, sw, i, p, entry, lv)      # caption-gap BH-compressed-higher-highs: the leg low is the FIRST target
-        if p.mm_targets or p.proj_breaker or p.sd_anchor in ("broken", "multi"):
+        if p.mm_targets or p.proj_breaker or p.sd_anchor in ("broken", "multi", "mss_leg"):
             rr_ = _mss_ref(ctx, sd, sw, i, p)
         lv = sorted(set(lv) | set(_TP.extra_sources(ctx, sd, i, p, sw, entry, risk, leg_hi, above, lv, lvt, rr_)))
         if p.wick_tfs:                     # A23 wick_tfs: the nearest two long 1h / 4h wick CEs are targets
@@ -8589,6 +8678,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             lv = sorted(set(lv) | set(_EN.ob_target_levels(sd, i, above, p)))
         if tp1 is not None:            # caption-gap targets_partials #1/4: the NFP-day / NFP-week handling of the HTF rungs and the rungs the chunk adds (hook A)
             lv = _TP1.raw_post(ctx, sd, i, p, session, entry, risk, above, sw, lv, lvt, tp1)
+        if tp2 is not None:            # caption-gap targets_partials #2/4: the HTF gap CE-first gate, the kept traded weekly FVG edges, the minimum-objective wick CEs
+            lv = _TP2.raw_post(ctx, sd, i, p, session, entry, risk, above, sw, lv, lvt, tp2)
         if p.erl_exits_only:           # L14b: exit at external range liquidity only
             lv = [(v, k) for v, k in lv if k in POOL_KINDS]
         kinds = [kind for v, kind in lv]
@@ -8668,7 +8759,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             # lock_capped so the share of trades whose locked draw was replaced is reported.
             T, kT, lock_capped = capx, "array", True
             _f("x_lock_capped")
-        if T - entry < p.min_draw_pts * p.es_pt or T - entry < p.min_rr * risk:
+        if (p.min_draw_pts and _TP2.room(ctx, sd, i, p, entry, above, T) < p.min_draw_pts * p.es_pt) or T - entry < p.min_rr * risk:     # (caption-gap L15-room-measure-anchors: room_ref)
             _f("x_room_lt_min")
             return None
         if not p.draw_lock_partials:
@@ -8704,6 +8795,13 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             tags["fracs"] = (p.expansion_bulk, 1.0 - p.expansion_bulk) if nx_ else (1.0,)
         draw, final_T = T, True
     else:
+        if p.t1_skip_near and p.min_draw_pts and fixed is None and pools:       # caption-gap L15-first-sth-offering-5 (012 ~00:32:07): pools nearer than min_draw_pts are skipped, not trade-killers
+            keep, ok_ = _TP2.skip_near(keep, entry, p)
+            if not ok_:
+                _f("x_room_lt_min")
+                return None
+            pools = [v for v, k in keep if k in POOL_KINDS]
+        keep_full = list(keep)
         if not keep:
             _f("x_no_target_1R")
             return None
@@ -8727,14 +8825,27 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
                 prefs += _SM.draw_prefs(ctx, sd, sw, i, p, session, entry, risk, keep)
             if p.pool_rank or p.draw_below_eq or p.lrlr_max >= 0 or p.clean_eq_pref:   # L4 / Ep04.11
                 prefs += _TP.draw_pref(ctx, sd, i, p, entry, risk, keep, leg_hi, sw)
+            if tp2 is not None:        # caption-gap targets_partials #2/4: the NWOG magnet / range anchor, the HTF OB open, the projection clusters
+                prefs += _TP2.draw_prefs(ctx, sd, i, entry, p, session, keep)
             prefs = sorted(x for x in prefs if x[0] - entry >= p.min_rr * risk)
             if prefs:
                 draw, kd, nm = prefs[0]
                 keep = [(v, k) for v, k in keep if v < draw - p.es_pt] + [(draw, kd)]
                 lvt.append("draw_" + nm)
-        if p.min_draw_pts and draw - entry < p.min_draw_pts * p.es_pt:
+                if p.session_pool_first:   # caption-gap L4-session-pool-before-rel (067 ~00:50:27): the nearer session-range pool is the draw, the rel-eq pool the next rung
+                    sf_ = _TP2.session_first(ctx, sd, i, p, entry, risk, keep_full, draw)
+                    if sf_ is not None:
+                        keep, draw = sf_
+                        lvt.append("session_pool_first")
+        if p.min_draw_pts and _TP2.room(ctx, sd, i, p, entry, above, draw) < p.min_draw_pts * p.es_pt:
             _f("x_room_lt_min")
             return None                                   # not enough room to the draw (minimum)
+    if tp2 is not None and fixed is None and keep:      # caption-gap targets_partials #2/4: resistance runs, the ORG family, the NWOG ladder, the final-target picks, the minimum objective
+        why2_, keep, draw, final_T = _TP2.late(ctx, sd, sw, i, p, session, entry, risk, keep, keep0 if lk_t is not None else keep_full, draw, final_T, lvt, tags, tp2,
+                                               ("draw_org_far" in lvt) or (lk_t is not None and lk_t.get("name") == "org_far"), lk_t is not None, leg_hi)
+        if why2_:
+            _f(why2_)
+            return None
     if p.mm_plan in ("full", "mss_scalp") and fixed is None:      # caption-gap M1-three-entry-plans (003 ~1:28:27): one exit - at the draw / at the first relative equal highs
         se_, draw, _ = _SM3.mm_plan_exit(p, keep, eq_hi, entry, risk, draw)
         if se_:
@@ -8818,7 +8929,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     if (fixed is None and not scalp and not p.t1_fixed_all and not tags.get("fracs") and not tags.get("single_exit")
             and not (p.moc_pool_exit and session == "PM" and p.last_hour[0] <= t < p.last_hour[1])
             and not (p.friday_first_pool and ctx.day.weekday() == 4)):
-        extras_ = list(inner_ex)
+        extras_ = list(inner_ex) + list(tags.pop("tp2_extras", []))        # (caption-gap L10-intraday-wick-ce: the minimum-objective wick CE is a protected partial)
         if p.htf_bump_below_min:          # owner #7: a bump nearer than min_rr x risk is still a small protected partial
             extras_ += [(b, "bump", True) for b in bumps if p.inner_min_pts * p.es_pt <= b - entry < p.min_rr * risk - eps]
         if p.sd_half_partial or p.wick_partials:
@@ -8915,6 +9026,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         order["cut"] = _SM.lh_window(p)[1]       # M5: the owner #1 window end (15:50; strict 15:45)
     if p.po3_runner:
         order["runner"] = True                   # Ep04.3: the last fraction rides to the close
+    if tp2 is not None and tp2.get("runner") is not None and not order.get("scalp") and not order.get("runner") and order.get("htf_runner") is None:
+        order["htf_runner"] = tp2["runner"]      # caption-gap L7-org-partial-close-orderflow / L7-org-breaker-inside: the ORG far edge stays a runner slice
     if tp1 is not None:                          # caption-gap targets_partials #1/4: the speed-bump timeframes of the live cap, the held HTF-range slice
         if sp_:
             order["tp1_speed"] = sp_
@@ -9031,3 +9144,4 @@ from . import es1 as _ES1  # noqa: E402  (caption-gap pass, entries_stops_sizing
 from . import es2 as _ES2  # noqa: E402  (caption-gap pass, entries_stops_sizing #2/3: engine glue)
 from . import es3 as _ES3  # noqa: E402  (caption-gap pass, entries_stops_sizing #3/3: engine glue)
 from . import tp1 as _TP1  # noqa: E402  (caption-gap pass, targets_partials #1/4: engine glue)
+from . import tp2 as _TP2  # noqa: E402  (caption-gap pass, targets_partials #2/4: engine glue)

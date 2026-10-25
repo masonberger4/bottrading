@@ -576,7 +576,7 @@ def array_order(ctx, sd, sw, i, p, session, risk_mult, fvg_entry, bz):
         cs = S._SM4.unused_cands(ctx, sd, sw, i, p, bz, cs)        # caption-gap M5-lasthour-shallowest-unused-array (030 ~00:21:36): arrays price already traded back into are dropped
     if not cs:
         return None
-    entry, bottom, kind = S._SM6.pick_array(cs, p) if p.entry_arrays_order else max(cs)       # caption-gap A15-mitigation-block-sell-entry: entry_arrays_order
+    entry, bottom, kind = S._SM6.pick_array(cs, p) if p.entry_arrays_order else (S._TP2.pick_scored(ctx, sd, i, p, cs) if p.confl_rank else max(cs))       # caption-gap A15-mitigation-block-sell-entry: entry_arrays_order; new-level-confluence-scoring: confl_rank
     stop = bottom - p.pad
     if entry - stop < p.min_risk_pts * p.es_pt:
         stop = sw["ext"] - p.pad

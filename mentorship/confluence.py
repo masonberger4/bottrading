@@ -457,6 +457,8 @@ def _opposing_ext_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs, src
                        known=float(z["known"][k]), dead=float(z["dead"][k]))
             if "vlo" in z:                                           # caption-gap A10-vi-target-ladder: the VI's void and order block (stub tables carry none)
                 row.update(vlo=float(z["vlo"][k]), vhi=float(z["vhi"][k]), obo=float(z["obo"][k]), obm=float(z["obm"][k]))
+            if "open" in z:                                          # caption-gap X1-htf-ob-open-target: the order block candle's open (nan for the other sources)
+                row["opn"] = float(z["open"][k])
             out.append(row)
     out.sort(key=lambda r: (r["bottom"] if side > 0 else -r["top"]))
     return out
@@ -485,3 +487,24 @@ def _rows_impl(self, tfs, src=(3,)):
 
 
 Confluence.rows = _rows_impl
+
+
+# --- caption-gap pass, targets_partials #2/4 --------------------------------------------------------------------------------------------------------
+
+TF_WEIGHT = {"M": 3.0, "W": 2.0, "D": 1.0}          # new-level-confluence-scoring (078 ~00:48:23) [our interpretation]: monthly 3, weekly 2, daily 1, 4h / intraday 0.5
+DEFAULT_WEIGHT = 0.5
+
+
+def level_score(level: float, sources, tol_frac: float = 0.001, tick: float = 0.25) -> float:
+    """new-level-confluence-scoring (078 ~00:48:23; 094 ~00:06:04; cc06_005 ~00:28:58): how many independent arrays / levels converge on `level`. `sources` =
+    [(key, tf, [prices])]: each source is one array / level (its prices: the FVG edges and CE, the OB MT, the wick CE, a candle high or low, a session extreme) and
+    counts ONCE with its timeframe weight (M 3, W 2, D 1, anything lower 0.5) when any of its prices lies within max(tick, tol_frac x level) of the level."""
+    tol = max(tick, tol_frac * abs(level)) + 1e-9
+    seen, tot = set(), 0.0
+    for key, tf, prices in sources:
+        if key in seen:
+            continue
+        if any(abs(float(x) - level) <= tol for x in prices):
+            seen.add(key)
+            tot += TF_WEIGHT.get(tf, DEFAULT_WEIGHT)
+    return tot
