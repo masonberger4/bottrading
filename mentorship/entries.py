@@ -565,6 +565,12 @@ def pd_high(sd, sw, i, leg_hi: float, p) -> float:
     (external to external); falls back to the leg high."""
     if not p.erl_range_swings:
         return leg_hi
+    if p.erl_range_update == "swing":              # caption-gap L14-dealing-range-redefine (cc04_002 ~5:59): the rolling dealing range - a break of its high redefines it
+        from . import tp1 as _TP1
+        r = _TP1.current_range(sd, i, sw["ext_i"])
+        if r is not None:
+            _TP1.hit("erl_range_update")
+            return r[1]
     hs = [q.price for q in sd.ph if q.i > sw["ext_i"] and q.known <= i]
     return float(max(hs)) if hs else leg_hi
 

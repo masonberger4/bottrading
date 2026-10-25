@@ -25,6 +25,9 @@ Columns (all per trading day, known at the table's cut):
   B20.3 wpr                       weekly Williams %R
   B17.1 react_up / react_dn / fifty     both sides' reaction weights
   Ep08.2 on_range / in_bull_arr / in_bear_arr    overnight range and "stuck inside an HTF array"
+  A21   pd20_hi / pd20_lo         the N-session range itself (caption-gap X3-a21-rebalance-to-eq: its EQ is the first draw from a discount / premium)
+  B6    first_clue / tug / raid_px / raid_eq   caption-gap X3-a21-eq-after-raid (cc05_002 ~13:28-16:12; built here for targets_partials #1/4 post_raid_cap, the
+        owner package bias_htf items 135 / 136 reuse them): the post-raid flip reading, see `post_raid`
 """
 from __future__ import annotations
 
@@ -50,12 +53,14 @@ def bx_string(p) -> str:
     hb = p.htf_bias
     if hb == "ordered" or p.draw_lock_pick in ("ordered", "largest") or p.draw_ext_target or p.draw_first != "off":
         x["ord"] = 1
-    if hb in ("iof", "combo2"):
+    if hb in ("iof", "combo2") or p.or_needs_bias:         # (caption-gap T4-or-needs-bias-iof reads the iof column)
         x["iof"] = [p.iof_days, p.iof_min]
     pd20_on = (hb == "pd20" or p.day_pd == "20d" or p.pd_zone != "half" or "premium_chop" in p.neutral_gate
-               or p.cond_pd_tags)
+               or p.cond_pd_tags or p.eq_first_rung or p.ob_location_cap)
     if pd20_on:
         x["pd20"] = [p.pd_day_range, int(p.pd_body_multiday), p.pd_zone, list(p.ote_band), int(p.day_pd == "20d")]
+    if p.resist_def in ("htf", "both"):                  # caption-gap L4-resistance-definitions: the weekly state
+        x["wk"] = 1
     if hb == "wk" or p.weekly_gate != "off" or p.weekly_open != "off" or p.objective_neutral in ("week", "both")             or p.objective_met_stop in ("week", "both") or "draw_delivered" in p.neutral_gate:
         x["wk"] = 1
     if hb == "ob_mt" or p.how_rule != "off":
@@ -71,7 +76,7 @@ def bx_string(p) -> str:
     if p.weekly_open != "off":
         x["wo"] = p.weekly_open_early_days
         x["woa"] = p.weekly_open_array_days
-    if hb == "nwog" or p.nwog_regime != "off" or p.nwog_bias != "off" or p.nwog_sr_entries:     # (caption-gap L5-nwog-sr-levels: the regime column is read by nwog_sr_entries)
+    if hb == "nwog" or p.nwog_regime != "off" or p.nwog_bias != "off" or p.nwog_sr_entries or p.nwog_revert_targets:     # (caption-gap L5-nwog-sr-levels: the regime column is read by nwog_sr_entries)
         x["nwog"] = [p.nwog_leave_adr, p.nwog_returns_cons, p.nwog_converge_pts, p.nwog_bias_reclaim, p.nwog_converge_mode]
     if hb == "candle" or p.bias_candle_tag:
         x["bc"] = "midnight" if p.bias_candle_open == "midnight" else 1
@@ -89,6 +94,8 @@ def bx_string(p) -> str:
         x["rtf"] = 1
     if p.deep_run_mult != 1.0:                 # caption-gap E9-deep-discount-reduced (099 ~00:28:59): the weekly deep_run column
         x["deep"] = p.deep_run_weeks
+    if p.post_raid_cap:                        # caption-gap X3-a21-eq-after-raid (cc05_002 ~00:15:30): the post-raid columns
+        x["pr"] = 1
     return json.dumps(x, sort_keys=True, separators=(",", ":")) if x else ""
 
 
@@ -370,18 +377,23 @@ def add_columns(out: pd.DataFrame, X: dict, d: pd.DataFrame, w: pd.DataFrame, ar
     # --- A21 P/D of the N-session range
     if "pd20" in X:
         n, bodies, zone, ote, repl = X["pd20"]
-        st, ps = [], []
+        st, ps, rh, rl = [], [], [], []
         for k, x in zip(ks, px):
             if k < n:
                 st.append(0)
                 ps.append(nan)
+                rh.append(nan)
+                rl.append(nan)
                 continue
             hh = np.maximum(o, c)[k - n:k].max() if bodies else h[k - n:k].max()
             ll = np.minimum(o, c)[k - n:k].min() if bodies else l[k - n:k].min()
             s_, p_ = pd_state(float(x), float(hh), float(ll), zone, tuple(ote))
             st.append(s_)
             ps.append(p_)
+            rh.append(float(hh))
+            rl.append(float(ll))
         out["pd20"], out["pd20_pos"] = st, ps
+        out["pd20_hi"], out["pd20_lo"] = rh, rl            # caption-gap X3-a21-rebalance-to-eq: the range (its EQ = the first draw)
         if repl:
             out["pd"] = st
             out["combo"] = [int(r) if r else int(p_) for r, p_ in zip(out.react, out.pd)]
@@ -547,11 +559,101 @@ def add_columns(out: pd.DataFrame, X: dict, d: pd.DataFrame, w: pd.DataFrame, ar
         wh, wl, wc = w.high.values.astype(float), w.low.values.astype(float), w.close.values.astype(float)
         wlast = np.array([kpos.get(t.date(), -1) for t in w["last"]])
         out["deep_run"] = _ES3.deep_run_column(wh, wl, wc, wlast, ks, int(X["deep"]))
+    # --- caption-gap X3-a21-eq-after-raid / X3-b6-tug-of-war-new-ground / X3-one-sided-delivery-first-clue (cc05_002 ~13:28-16:12)
+    if "pr" in X:
+        out = post_raid(out, o, h, l, c, ks)
     # --- B9 next array on fail (react through the next weekly array) and persistence
     if "nof" in X:
         out = _next_array(out, X["nof"], d, arrs, ks, px, on, o, h, l, c)
     if "persist" in X:
         out = _persist(out, int(X["persist"]), ks, d, w, arrs)
+    return out
+
+
+# --------------------------------------------------------------------------------------------------------------
+# X3: the post-raid reading (first clue / tug of war)
+# --------------------------------------------------------------------------------------------------------------
+
+PR_N, PR_RUN, PR_WIN = 20, 5, 40
+
+
+def _pr_dir(h, l, c, ks) -> tuple:
+    """The BEARISH reading of the post-raid state for the rows at daily index `ks` (the sessions before each: index k-1 is the last completed one);
+    the bullish reading runs the same code on the mirrored bars. Returns (first_clue, tug, raid_px, raid_eq) arrays (the first two 0 / 1).
+      raid       the latest completed session j (within the last 10) that took the highest high of the PR_N (20) sessions before it and closed back
+                 below that high - the raid of the buy-side pool with a rejection [our interpretation of "raid and strong rejection"]
+      first_clue cc05_002 ~13:28: no short-term low (3-bar pivot) broke in the PR_RUN sessions up to the raid, and one breaks after it
+      tug        cc05_002 ~16:12: the last two short-term-high raids (a high through the latest confirmed STH) each closed back below it within one
+                 session (no new ground) and the intermediate-term highs step lower (levels.swing_tiers)
+      raid_px    the raided high (the later STH of the tug when there is no 20-session raid); raid_eq the EQ of the range [lowest low of the
+                 20 sessions before it .. that high]"""
+    nan = float("nan")
+    n = len(h)
+    ph, pl = L.pivots(h, l, 1)
+    ref_lo = np.full(n, nan)
+    ref_hi = np.full(n, nan)
+    a = b = 0
+    cur_l = cur_h = nan
+    for m in range(n):
+        while a < len(pl) and pl[a].known <= m - 1:
+            cur_l = pl[a].price
+            a += 1
+        while b < len(ph) and ph[b].known <= m - 1:
+            cur_h = ph[b].price
+            b += 1
+        ref_lo[m], ref_hi[m] = cur_l, cur_h
+    with np.errstate(invalid="ignore"):
+        broke = l < ref_lo
+        raided = h > ref_hi
+    ith = list(L.swing_tiers(h, l, 1)["itl"][0]) if n > 4 else []        # the intermediate-term highs (the tier dict holds (highs, lows))
+    clue = np.zeros(len(ks), int)
+    tug = np.zeros(len(ks), int)
+    rpx = np.full(len(ks), nan)
+    req = np.full(len(ks), nan)
+    for r, k in enumerate(ks):
+        last = k - 1
+        if last < PR_N + 2:
+            continue
+        j_raid = None
+        hr = nan
+        for j in range(last, max(last - 10, PR_N) - 1, -1):
+            hh = h[j - PR_N:j].max()
+            if h[j] > hh and c[j] < hh:
+                j_raid, hr = j, float(hh)
+                break
+        if j_raid is not None:
+            rpx[r] = hr
+            req[r] = (hr + float(l[j_raid - PR_N:j_raid + 1].min())) / 2
+            if (not broke[max(0, j_raid - PR_RUN + 1):j_raid + 1].any()) and broke[j_raid + 1:last + 1].any():
+                clue[r] = 1
+        ev = [m for m in range(max(1, last - PR_WIN), last + 1) if raided[m]]
+        if len(ev) >= 2:
+            def failed(m):
+                return c[m] < ref_hi[m] or (m + 1 <= last and c[m + 1] < ref_hi[m])
+            known_ith = [q.price for q in ith if q.known <= last]
+            if failed(ev[-1]) and failed(ev[-2]) and len(known_ith) >= 2 and known_ith[-1] < known_ith[-2]:
+                tug[r] = 1
+                if rpx[r] != rpx[r]:
+                    rpx[r] = float(ref_hi[ev[-1]])
+                    req[r] = (rpx[r] + float(l[max(0, last - PR_N):last + 1].min())) / 2
+    return clue, tug, rpx, req
+
+
+def post_raid(out: pd.DataFrame, o, h, l, c, ks) -> pd.DataFrame:
+    """Columns first_clue / tug (+1 buy-side flip, -1 sell-side flip, 0 none) and raid_px / raid_eq (the raided extreme and the EQ of its range)
+    for every row; a row where both readings fire is 0. Needs only completed sessions (see `_pr_dir`)."""
+    nan = float("nan")
+    h, l, c = np.asarray(h, float), np.asarray(l, float), np.asarray(c, float)
+    cb, tb, pb, eb = _pr_dir(h, l, c, ks)
+    cu, tu, pu, eu = _pr_dir(-l, -h, -c, ks)
+    cb_, cu_, tb_, tu_ = cb.astype(bool), cu.astype(bool), tb.astype(bool), tu.astype(bool)
+    fc = np.where(cb_ & ~cu_, -1, np.where(cu_ & ~cb_, 1, 0))
+    tg = np.where(tb_ & ~tu_, -1, np.where(tu_ & ~tb_, 1, 0))
+    use_bear = (fc < 0) | (tg < 0)
+    use_bull = (fc > 0) | (tg > 0)
+    out["first_clue"], out["tug"] = fc, tg
+    out["raid_px"] = np.where(use_bear, pb, np.where(use_bull, -pu, nan))
+    out["raid_eq"] = np.where(use_bear, eb, np.where(use_bull, -eu, nan))
     return out
 
 

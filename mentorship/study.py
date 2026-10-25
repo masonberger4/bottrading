@@ -2093,6 +2093,52 @@ _ES3_DECISIONS = {
 DECISIONS.update(_ES2_DECISIONS)
 DECISIONS.update(_ES3_DECISIONS)
 
+# --- caption-gap pass: targets_partials #1/4 (name prefix = gap id; every variant is a valid Params set) ---------------------------------------------------------------------------------------------
+_TP_TBL = dict(htf_bias="combo", draw_lock="off", htf_resist_cap=False, ob_entry="post_mss")        # the variants that read the htf table row (bias_htf columns)
+_TP1_DECISIONS = {
+    "BH-B14-consolidation-week-reversion": dict(nwog_revert_targets=True, nwog_regime="tag", gap_mode="ict", **_TP_TBL),
+    "BH-B19-DXY-falling-risk-on": dict(dxy_rally_cap=True, **SM_POST),
+    "BH-L4-resistance-definitions": dict(resist_def="both", resist_overlaps=3, **_TP_TBL),
+    "BH-L4-resistance-definitions_filter": dict(resist_def="struct", resist_overlaps=8, resist_filter=True, **_TP_TBL),
+    "X3-a21-eq-after-raid": dict(post_raid_cap=True, **_TP_TBL),
+    "X3-a21-rebalance-to-eq": dict(eq_first_rung=True, **_TP_TBL),
+    "L14-monthly-to-weekly-range": dict(htf_range_runner=True, matrix_tf_lower=True, htf_runner_frac=0.1, htf_bias="react", draw_lock="session", ob_entry="post_mss"),
+    "T4-or-needs-bias-iof": dict(or_needs_bias=True, or_extra=True, **_TP_TBL),
+    "N2-nfp-week-imprecise-targets": dict(nfp_week_split=True, nfp_week_partial=0.8, nfp_week_inside_pts=1.0, ladder_by_day=True, vi_arrays=True, htf_targets=("1h", "4h", "D"), **SM_POST),
+    "N1-nfp-no-htf-hold": dict(nfp_no_htf_targets=True, vi_arrays=True, htf_targets=("1h", "4h", "D"), **SM_POST),
+    "N1-nfp-no-htf-hold_flat": dict(nfp_no_htf_targets=True, nfp_flat_by=720, vi_arrays=True, htf_targets=("1h", "4h", "D"), **SM_POST),
+    "N4-eve-of-high-impact": dict(eve_mode="tag", eve_risk_mult=0.5, **SM_POST),
+    "N4-eve-of-high-impact_bnb": dict(eve_mode="bnb", eve_target_pts=5.0, eve_risk_mult=0.5, **SM_POST),
+    "new-skip-high-resistance": dict(skip_high_resistance="tag", hr_max_obstacles=3, **SM_POST),
+    "new-skip-high-resistance_skip": dict(skip_high_resistance="skip", hr_max_obstacles=3, **SM_POST),
+    "L4-hrlr-news-exception": dict(hrlr_news_only=True, lrlr_max=2, draw_lock="session", ob_entry="post_mss", htf_resist_cap=False),
+    "A3-reh-under-older-high": dict(reh_merge_pts=2.0, eq_pref="rank", **SM_POST),
+    "A3-reh-under-older-high_3pt": dict(reh_merge_pts=3.0, eq_pref="rank", **SM_POST),
+    "A6-measuring-gap-anchor": dict(measuring_gap=True, measuring_target=True, measuring_anchor="far", **SM_POST),
+    "A6-measuring-gap-anchor_dup": dict(measuring_gap=True, measuring_target=True, measuring_anchor="dup", **SM_POST),
+    "A10-vi-target-ladder": dict(vi_arrays=True, daily_vi_targets=True, vi_void_level=True, vi_ob_levels=True, vi_keep_traded=True, vi_return_tag=True, vi_wick_overlap=False, **SM_POST),
+    "A11-bpr-clear-for-htf-targets": dict(bpr_gate_htf=True, htf_targets=("1h", "4h", "D"), **SM_POST),
+    "L10-A17-old-high-target-ladder": dict(old_high_ladder=True, speed_frac=0.2, **SM_POST),
+    "N-opposing-fvg-speed-bump": dict(speed_bump_tfs=(5,), fvg_targets=True, htf_resist_cap=True, htf_resist_tfs=("5m", "15m", "1h", "4h", "D"), htf_bias="combo", draw_lock="off", ob_entry="post_mss"),
+    "A6-measuring-gap-confirmation": dict(measuring_gap=True, measuring_target=True, measuring_qualify=True, measuring_need_pool=True, **SM_POST),
+    "A23-stubby-wick-first-approach": dict(stubby_wick_ce=True, stubby_frac=0.2, **SM_POST),
+    "A10-void-levels-persistence": dict(void_ce_rung=True, void_targets=True, vi_arrays=True, vi_wick_overlap=False, **SM_POST),
+    "A9-vi-quarters": dict(vi_quarters=True, vi_arrays=True, **SM_POST),
+    "A22-array-reuse": dict(array_reuse="reuse", skip_exhausted=True, htf_no_time_stop=True, time_stop_min=10, htf_targets=("1h", "4h", "D"), **SM_POST),
+    "A22-array-reuse_tiebreak": dict(array_reuse="tiebreak", skip_exhausted=True, target_hygiene=("htf",), htf_targets=("1h", "4h", "D"), **SM_POST),
+    "L4-lrlr-bounds": dict(lrlr_zone=True, **SM_POST),
+    "A10-one-sided-leg-levels": dict(leg_mt_target=True, leg_start_target=True, **SM_POST),
+    "L14-dealing-range-redefine": dict(erl_range_swings=True, erl_range_update="swing", **SM_POST),
+    "A22-breaker-precedence": dict(breaker_first=True, breaker_overtake=True, **SM_POST),
+    "A22-rejection-block-fallback": dict(rb_fallback=True, rb_targets="ladder", **SM_POST),
+    "A22-matrix-anchor-market-price": dict(matrix_anchor="price", matrix_targets=("breaker", "mitigation", "rejection"), **SM_POST),
+    "A22-old-level-polarity": dict(level_polarity=True, **SM_POST),
+    "A21-ob-strength-by-location": dict(ob_location_cap=True, ob_entry="pre_break", htf_bias="combo", draw_lock="off", htf_resist_cap=False),
+    "new-swing-grades": dict(swing_grade_tag=True, **SM_POST),
+    "new-swing-projection-fulcrum": dict(sd_targets=True, sd_anchor="fulcrum_week", sd_need_array=True, **SM_POST),
+}
+DECISIONS.update(_TP1_DECISIONS)
+
 
 def risk_grid(base: Params | None = None) -> list:
     """E8-2pct-new-trader (cc02_001 ~00:03:41, ~00:16:41; 022 ~1:38:24): the risk-per-trade grid - risk_pct in (1.0, 1.2, 1.5, 2.0) % with max_total_risk_pct = risk_pct + 0.1 %; every other field of `base` unchanged."""

@@ -757,18 +757,22 @@ def cond_relock(ctx, p, lk: dict, i: int, spent: list):
     return nl
 
 
-def untraded_arrays(ctx, i: int, now, px: float, sgn: int, tfs, src) -> list:
+def untraded_arrays(ctx, i: int, now, px: float, sgn: int, tfs, src, reuse: bool = False) -> list:
     """L14 / L14d conf-target hygiene for the lock: `conf.opposing` rows [(near, ce, far, tf, src)] minus the arrays price has already
     traded into since they formed (through the last closed bar i) - an exhausted array is not a draw (028 ~54:55; cc07_004 ~4:00).
-    Gaps are never retired by a fill (039): src 2 rows are kept."""
+    Gaps are never retired by a fill (039): src 2 rows are kept. Caption-gap A22-array-reuse (`reuse`, Params.array_reuse != "first_touch"; 061 ~2:11:51):
+    a traded-into array stays a draw until a bar closed through its CE (tp1.untouched)."""
     from . import targets as _TP
+    from . import tp1 as _T1
     out = []
     for r in ctx.conf.opposing_ext(now, px, sgn, tfs, src):
         if r["src"] != 2:
             ext = _TP.extreme_since(ctx, i, r["known"], sgn > 0)
             near = r["bottom"] if sgn > 0 else r["top"]
             if ext is not None and ((ext >= near) if sgn > 0 else (ext <= near)):
-                continue
+                if not (reuse and _T1.untouched(ctx, sgn, i, r)):
+                    continue
+                _T1.hit("array_reuse_draw")
         top, bot = r["top"], r["bottom"]
         n, f = (bot, top) if sgn > 0 else (top, bot)
         out.append((n, (top + bot) / 2, f, r["tf"], r["src"]))

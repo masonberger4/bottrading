@@ -140,11 +140,14 @@ def bump_levels(ctx, sd, i: int, p, entry: float, risk: float, tfs, src, capx=No
     return sorted(out)
 
 
-def apply_resist(ctx, sd, i: int, p, entry: float, risk: float, lv: list, kinds: list, flag):
+def apply_resist(ctx, sd, i: int, p, entry: float, risk: float, lv: list, kinds: list, flag, skip=()):
     """Owner #7 on the target list (exit prices, side space). Returns dict(lv, kinds, capx, resist,
-    bumps) or None when the cap leaves too little room (x_htf_resist). `flag(name)` counts a skip."""
+    bumps) or None when the cap leaves too little room (x_htf_resist). `flag(name)` counts a skip.
+    Caption-gap N-opposing-fvg-speed-bump (019 ~00:11:08; Params.speed_bump_tfs): the timeframe names in `skip` are neither a cap nor a bump rung."""
     out = dict(lv=lv, kinds=kinds, capx=None, resist=None, bumps=[])
     cap_tfs, bump_tfs = resist_cfg(p)
+    if skip:
+        cap_tfs, bump_tfs = tuple(t for t in cap_tfs if t not in skip), tuple(t for t in bump_tfs if t not in skip)
     if not (cap_tfs or bump_tfs):
         return out
     if getattr(ctx, "conf", None) is None:
@@ -215,6 +218,11 @@ def htf_levels(ctx, sd, i: int, above: float, p, htf_t: tuple) -> list:
             ext = extreme_since(ctx, i, r["known"], up)
             near_real = r["bottom"] if up else r["top"]
             touched = ext is not None and (ext >= near_real if up else ext <= near_real)
+            if touched and p.array_reuse != "first_touch" and not p.fvg_remainder:
+                from . import tp1 as _T1                     # caption-gap A22-array-reuse (061 ~2:11:51): a touched array stays valid until a body closes through its CE
+                if _T1.untouched(ctx, sd.sign, i, r):
+                    touched = False
+                    _T1.hit("array_reuse")
             if touched:
                 if not p.fvg_remainder:
                     continue
@@ -505,6 +513,10 @@ def sd_ranges(ctx, sd, i: int, p, sw: dict, leg_hi: float, rr) -> list:
       london   (= manip) the London swing low .. high, measured only once a close is above the high
       multi    all of them, plus the last `sd_swings` confirmed swing legs of the session"""
     name = {"sweep_leg": "leg", "manip": "london"}.get(p.sd_anchor, p.sd_anchor)
+    if name == "fulcrum_week":                           # caption-gap new-swing-projection-fulcrum (cc07_003 ~27:33): tp1.fulcrum_levels reads it; here only the range
+        from . import tp1 as _T1
+        f_ = _T1.fulcrum_week(ctx, sd, i, p)
+        return [("fulcrum_week", f_[0], f_[1])] if f_ is not None else []
     names = ("leg", "broken", "downleg", "fulcrum", "london") if name == "multi" else (name,)
     ext, ext_i = float(sw["ext"]), sw["ext_i"]
     out = []
@@ -553,6 +565,13 @@ def sd_levels(ctx, sd, i: int, p, sw: dict, leg_hi: float, rr, lv: list, entry: 
     pools = sorted(v for v, k in lv if k in POOL_KINDS and v > max(leg_hi, entry))
     pool = pools[0] if pools else None
     got = []
+    if p.sd_anchor == "fulcrum_week":                    # caption-gap new-swing-projection-fulcrum: low + m x (high - low) for the sd_fulcrum_ext multiples (1.27 / 1.68 / 2.0)
+        from . import tp1 as _T1
+        got = [(v, 0.0, "fulcrum_week") for v in _T1.fulcrum_levels(ctx, sd, i, p, entry)]
+        out = [(float(v), "sd") for v, _, _ in got]
+        if out:
+            lvt.append("sd_fulcrum_week")
+        return out
     for nm, lo, hi in sd_ranges(ctx, sd, i, p, sw, leg_hi, rr):
         rng = hi - lo
         cand = sorted((hi + k * rng, k) for k in p.sd_levels)
@@ -662,14 +681,21 @@ def extra_sources(ctx, sd, i: int, p, sw: dict, entry: float, risk: float, leg_h
     after = lambda z: h[z.i + 1:i + 1].max(initial=-np.inf)
     if p.measuring_gap or p.measuring_target:
         g = measuring_gap(sd, sw, i, leg_hi, p)
+        if g is not None and p.measuring_qualify:             # caption-gap A6-measuring-gap-confirmation (003 ~31:51; 062 ~44:24): the pullback left the far edge untouched and a new extreme printed
+            st_, _ = L.bk_state(sd.h, sd.l, g, i, "any_open")
+            if st_ != "qualified":
+                g = None
+                from . import tp1 as _T1
+                _T1.hit("measuring_unqualified")
         if g is not None:
             lvt.append("measuring_gap")
             if p.measuring_target:
                 v = measuring_level(g, ext, p.measuring_anchor)
                 pools = _pools_raw(lv)
                 if (not p.measuring_pool_pts) or any(abs(v - q) <= p.measuring_pool_pts * p.es_pt for q in pools):
-                    out.append((v, "array"))
-                    lvt.append("measuring_target")
+                    if not p.measuring_need_pool or any(q <= v + p.measuring_pool_pts * p.es_pt for q in pools):     # the -1 SD lies beyond an old liquidity pool (062 ~44:24)
+                        out.append((v, "array"))
+                        lvt.append("measuring_target")
     if p.mm_targets and (rr is not None or p.mm_anchor == "leg"):
         base = float(rr[1]) if p.mm_anchor == "ref" else float(leg_hi)
         if base > ext:
@@ -814,8 +840,12 @@ def breaker_cap(ctx, sd, i: int, p, entry: float, risk: float, flag):
     room to it is too short (skip)."""
     if not p.breaker_first:
         return None
-    zs = [z for z in matrix_breakers(sd, p)
-          if z.i <= i and z.bottom > entry and sd.h[z.i + 1:i + 1].max(initial=-np.inf) < z.bottom]
+    if p.breaker_overtake:                      # caption-gap A22-breaker-precedence (cc05_014 ~28:18): only a BODY close through the breaker overtakes it (a wick into it keeps the stop)
+        zs = [z for z in matrix_breakers(sd, p)
+              if z.i <= i and z.bottom > entry and sd.c[z.i + 1:i + 1].max(initial=-np.inf) <= z.top]
+    else:
+        zs = [z for z in matrix_breakers(sd, p)
+              if z.i <= i and z.bottom > entry and sd.h[z.i + 1:i + 1].max(initial=-np.inf) < z.bottom]
     if not zs:
         return None
     cx = min(z.bottom for z in zs) - p.exit_before_pts * p.es_pt
@@ -902,7 +932,7 @@ def inner_extras(p, entry: float, risk: float, lv: list, kinds: list) -> list:
 
 
 def plan_active(p, keep: list, extras: list, tg) -> bool:
-    return bool(extras or tg is not None or any(k == "bump" for _, k in keep) or p.run_down or p.ladder_all_pools
+    return bool(extras or tg is not None or any(k in ("bump", "speed") for _, k in keep) or p.run_down or p.ladder_all_pools
                 or p.ladder_max_levels or p.halfway_partial or p.resistance_mode != "off" or p.capture_frac
                 or p.target_order or p.final_htf or p.pool_runner_pts or p.mgmt == "unit" or p.sd_roles
                 or any(k == "wick_ce" for _, k in keep))
@@ -926,8 +956,8 @@ def plan(ctx, sd, i: int, p, entry: float, risk: float, above: float, keep: list
     mains = [_R(v, k) for v, k in keep]
     bump_ex = []
     if len(mains) > 1:                                   # review: a speed bump is a small protected partial, not a main
-        bump_ex = [(m["v"], "bump", True) for m in mains[:-1] if m["k"] == "bump"]
-        mains = [m for j, m in enumerate(mains) if not (j < len(mains) - 1 and m["k"] == "bump")]
+        bump_ex = [(m["v"], m["k"], True) for m in mains[:-1] if m["k"] in ("bump", "speed")]      # (caption-gap L10-L11-A17: the old-high body edge "speed" is a protected small partial like a bump)
+        mains = [m for j, m in enumerate(mains) if not (j < len(mains) - 1 and m["k"] in ("bump", "speed"))]
     extras = list(extras) + bump_ex
     fixed = None
     run_local = False
@@ -1089,7 +1119,7 @@ def fill_plan(o: dict, base: tuple, p):
             j = kinds.index("sd_ext")
             small = fr.index(min(fr))
             fr[j], fr[small] = fr[small], fr[j]
-    want = [p.htf_bump_frac if e["k"] == "bump" else p.partial_extra_frac for e in extras]
+    want = [p.htf_bump_frac if e["k"] == "bump" else p.speed_frac if e["k"] == "speed" else p.partial_extra_frac for e in extras]
     scale = min(1.0, p.partial_extra_cap / sum(want)) if want else 1.0
     shares = [w * scale for w in want]
     tot = sum(shares)

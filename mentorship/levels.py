@@ -2372,3 +2372,23 @@ def stoch_divergence(h, l, c, i: int, n: int = 2, k: int = 14) -> str:
     if b.price > a.price and sb < sa:
         return "type2"
     return ""
+
+
+# --- caption-gap new-swing-grades (cc07_003 ~17:26): the four grades of a swing --------------------------------------------------------------------
+
+def swing_grades(o_px: float, t_px: float) -> dict:
+    """Caption-gap new-swing-grades (cc07_003 ~17:26: "the fourth is Terminus"): the four levels of a swing from its origin O to its terminus T
+    {1: the first retracement entry, 2: EQ, 3: O + 0.75 (T - O), 4: T (the final profit)}. [our interpretation] grade 1 = O + 0.25 (T - O): the
+    first of the quarter steps along the swing (the source does not give its depth); a bullish swing has O < T, a bearish one O > T (the
+    formulas hold either way). At grade 3 no stop run is expected - only a short pullback (a smaller order block), still tradable."""
+    r = t_px - o_px
+    return {1: o_px + 0.25 * r, 2: o_px + 0.5 * r, 3: o_px + 0.75 * r, 4: t_px}
+
+
+def swing_grade_of(px: float, o_px: float, t_px: float) -> int:
+    """The grade (1-4) of a price in the swing O..T: the nearest of `swing_grades` (ties to the lower grade); 0 when O == T."""
+    r = t_px - o_px
+    if not r:
+        return 0
+    g = swing_grades(o_px, t_px)
+    return min(g, key=lambda k: (abs(g[k] - px), k))

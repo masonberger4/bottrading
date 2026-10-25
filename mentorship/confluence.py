@@ -56,6 +56,27 @@ def _structure(h, l, c) -> np.ndarray:
 
 
 SRC = {"fvg": 0, "ob": 1, "gap": 2, "vi": 3, "breaker": 4}   # array source codes (column `src`)
+NOX = (float("nan"),) * 4                                       # (vlo, vhi, obo, obm): the void / order-block extras of the VI rows (nan elsewhere)
+
+
+def vi_extra(o, h, l, c, z) -> tuple:
+    """Caption-gap A10-vi-target-ladder (045 ~02:47:00; 061 ~01:55:50), a volume imbalance z (second candle z.i): (void low, void high, OB open, OB MT).
+    The void is the unprinted interval when the WICKS leave a gap too (bullish: [high[i-1], low[i]]; bearish: [high[i], low[i-1]]), else nan.
+    The order block: the VI's first candle c1 (bar i-1) is the last opposite-colour candle before the displacement (levels.order_block_blend over the
+    three bars before it) and the displacement candle closes beyond the block -> the block's open (the series' first open) and MT, else nan."""
+    i = z.i
+    nan = float("nan")
+    vlo = vhi = nan
+    if z.kind == "bull" and l[i] > h[i - 1]:
+        vlo, vhi = float(h[i - 1]), float(l[i])
+    elif z.kind == "bear" and h[i] < l[i - 1]:
+        vlo, vhi = float(h[i]), float(l[i - 1])
+    obo = obm = nan
+    if i >= 1 and ((z.kind == "bull" and c[i - 1] < o[i - 1]) or (z.kind == "bear" and c[i - 1] > o[i - 1])):
+        ob = L.order_block_blend(o, h, l, c, i - 3, i - 1, z.kind)
+        if ob is not None and ((z.kind == "bull" and c[i] > ob.top) or (z.kind == "bear" and c[i] < ob.bottom)):
+            obo, obm = float(o[ob.src]), float(ob.mt)
+    return (vlo, vhi, obo, obm)
 
 
 def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=False, c2_dir=False,
@@ -76,28 +97,28 @@ def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=F
     vi_dead = {}
     for z in L.fvgs(h, l, o, c, c2_dir):
         s = 1 if z.kind == "bull" else -1
-        rows.append((s, z.top, z.bottom, z.bottom if s > 0 else z.top, z.i, 0, nan))
+        rows.append((s, z.top, z.bottom, z.bottom if s > 0 else z.top, z.i, 0, nan) + NOX)
         ob = L.order_block_blend(o, h, l, c, z.i - 4, z.i - 2, z.kind)
         if ob is not None:
             disp = c[z.i - 1]
             if (s > 0 and disp > ob.top) or (s < 0 and disp < ob.bottom):
-                rows.append((s, ob.top, ob.bottom, ob.mt, z.i, 1, float(o[ob.src])))      # (caption-gap A12-ob-anchor-level: the OB's open, the htf_ob_anchor "open" level)
+                rows.append((s, ob.top, ob.bottom, ob.mt, z.i, 1, float(o[ob.src])) + NOX)      # (caption-gap A12-ob-anchor-level: the OB's open, the htf_ob_anchor "open" level)
     if void_rt:
         for z in L.void_round_trip_obs(o, h, l, c):
-            rows.append((1 if z.kind == "bull" else -1, z.top, z.bottom, z.mt, z.i, 1, nan))
+            rows.append((1 if z.kind == "bull" else -1, z.top, z.bottom, z.mt, z.i, 1, nan) + NOX)
     if vi:
         for z in L.volume_imbalances(o, h, l, c, vi_min_gap, vi_wick_overlap, vi_multi):
             s = 1 if z.kind == "bull" else -1
             if vi_body_death:
                 vi_dead[len(rows)] = L.vi_body_dead(o, c, z, end=None if max_bars is None else z.i + max_bars,
                                                     rule=vi_dead_rule)
-            rows.append((s, z.top, z.bottom, z.bottom if s > 0 else z.top, z.i, 3, nan))
+            rows.append((s, z.top, z.bottom, z.bottom if s > 0 else z.top, z.i, 3, nan) + vi_extra(o, h, l, c, z))
     if breakers:
         for z in L.breakers(o, h, l, c, 1):
             s = 1 if z.kind == "bull" else -1
-            rows.append((s, z.top, z.bottom, z.mt, z.i, 4, nan))
+            rows.append((s, z.top, z.bottom, z.mt, z.i, 4, nan) + NOX)
     for s, top, bottom, k in gaps or ():
-        rows.append((s, top, bottom, bottom if s > 0 else top, k, 2, nan))
+        rows.append((s, top, bottom, bottom if s > 0 else top, k, 2, nan) + NOX)
     if not rows:
         return None
     a = np.array(rows, dtype=float)
@@ -117,7 +138,8 @@ def _zones(o, h, l, c, end_times, gaps=None, max_bars=None, vi=False, breakers=F
         if len(hit):
             dead[j] = end_times[i[j] + 1 + hit[0]]
     known = end_times[i]
-    return dict(kind=kind, top=top, bottom=bottom, known=known, dead=dead, src=src, open=opn)
+    return dict(kind=kind, top=top, bottom=bottom, known=known, dead=dead, src=src, open=opn,
+                vlo=a[:, 7], vhi=a[:, 8], obo=a[:, 9], obm=a[:, 10])        # caption-gap A10-vi-target-ladder: the VI's liquidity void (wick gap) and the order block it belongs to
 
 
 class Confluence:
@@ -198,7 +220,8 @@ class Confluence:
                     continue
                 add = dict(kind=np.where(og.up.values[m], 1.0, -1.0), top=og.high.values[m],
                            bottom=og.low.values[m], known=known[m], dead=np.asarray(dead)[m],
-                           life=np.full(m.sum(), np.inf), src=np.full(m.sum(), 2.0), open=np.full(m.sum(), np.nan))
+                           life=np.full(m.sum(), np.inf), src=np.full(m.sum(), 2.0), open=np.full(m.sum(), np.nan),
+                           vlo=np.full(m.sum(), np.nan), vhi=np.full(m.sum(), np.nan), obo=np.full(m.sum(), np.nan), obm=np.full(m.sum(), np.nan))
                 z = self.z.get(tf)
                 self.z[tf] = add if z is None else {k: np.concatenate([z[k], add[k]]) for k in add}
 
@@ -430,8 +453,11 @@ def _opposing_ext_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs, src
         else:
             m &= (z["bottom"] < beyond) if straddle else (z["top"] < beyond)
         for k in np.flatnonzero(m):
-            out.append(dict(top=float(z["top"][k]), bottom=float(z["bottom"][k]), tf=tf, src=int(z["src"][k]),
-                            known=float(z["known"][k]), dead=float(z["dead"][k])))
+            row = dict(top=float(z["top"][k]), bottom=float(z["bottom"][k]), tf=tf, src=int(z["src"][k]),
+                       known=float(z["known"][k]), dead=float(z["dead"][k]))
+            if "vlo" in z:                                           # caption-gap A10-vi-target-ladder: the VI's void and order block (stub tables carry none)
+                row.update(vlo=float(z["vlo"][k]), vhi=float(z["vhi"][k]), obo=float(z["obo"][k]), obm=float(z["obm"][k]))
+            out.append(row)
     out.sort(key=lambda r: (r["bottom"] if side > 0 else -r["top"]))
     return out
 
@@ -442,3 +468,20 @@ Confluence.opposing_ext = _opposing_ext_impl
 def score(tfs: list[str]) -> tuple[int, int]:
     """(number of aligned timeframes, index of the highest one in TFS; -1 if none)."""
     return len(tfs), max((TFS.index(t) for t in tfs), default=-1)
+
+
+def _rows_impl(self, tfs, src=(3,)):
+    """Caption-gap A10-vi-target-ladder (vi_keep_traded, 076 ~00:03:29): every array row of the timeframes `tfs` with a source in `src` whatever its
+    state, as dicts (kind, top, bottom, tf, src, known_ns, dead_ns) in real prices - the caller decides what dead / alive means at its time."""
+    out = []
+    for tf in tfs:
+        z = self.z.get(tf)
+        if z is None:
+            continue
+        for k in np.flatnonzero(np.isin(z["src"], list(src))):
+            out.append(dict(kind=int(z["kind"][k]), top=float(z["top"][k]), bottom=float(z["bottom"][k]), tf=tf, src=int(z["src"][k]),
+                            known=float(z["known"][k]), dead=float(z["dead"][k])))
+    return out
+
+
+Confluence.rows = _rows_impl

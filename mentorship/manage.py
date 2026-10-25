@@ -354,7 +354,7 @@ def exits(ctx, sd, pos, tr, i: int, ts, p, state, extras: bool = False) -> None:
     basis = pos["basis"] / pos["n"]
     tk = p.tick
     later = i > fi and (not extras or p.invalidations_extras)      # the invalidation exits (X6-X9c) below need `later`
-    held = False
+    held = bool((pos.get("tp1") or {}).get("eve_bnb"))           # caption-gap N4-eve-of-high-impact: the eve scalp is not cut by the soft time exits (it has one target and its initial stop)
     if p.smt_hold_until and tr.session != "PM" and pos.get("smt_tag") and pos["fill_t"] < p.smt_hold_until:
         held = t + tf < p.smt_hold_until                        # X10c: no soft exits while an AM SMT trade is held
         if not held and p.smt_hold_exit and not pos.get("smt_hold_done"):
@@ -448,7 +448,8 @@ def exits(ctx, sd, pos, tr, i: int, ts, p, state, extras: bool = False) -> None:
                 if not pos["left"]:
                     return
     # --- X9 time stop
-    if (p.time_stop_min or p.time_stop_bars) and not pos["t1_done"] and not held and not extras:
+    if ((p.time_stop_min or p.time_stop_bars) and not pos["t1_done"] and not held and not extras
+            and not (p.htf_no_time_stop and S._TP1.htf_entry(tr))):         # caption-gap A22-array-reuse (cc04_001 ~14:22): a W / M array may pause - the 1m X9 time stop does not apply
         frac = time_stop_frac(p, pos.setdefault("ts", {}), nbars=i - fi + 1, elapsed=(t + tf) - pos["fill_t"],
                               best=pos["best"], basis=basis,
                               leg_hi=pos["leg"][1] if pos.get("leg") else None, zone_top=pos["fvg_top"])
