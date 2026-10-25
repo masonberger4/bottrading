@@ -96,7 +96,12 @@ def cmd_paper(a):
              "LIVE ORDERS" if a.live else "(simulated fills)", last_ts)
     while True:
         now = datetime.now(ZoneInfo(NY))
-        df = data.schwab_history(client, a.symbol, days=1, minutes=1)
+        try:
+            df = data.schwab_history(client, a.symbol, days=1, minutes=1)
+        except Exception as e:   # network blips and Schwab 5xx: skip this minute, catch up next time
+            log.warning("%s  data fetch failed, retrying next minute: %s", now, e)
+            _time.sleep(30)
+            continue
         closed = df[(df.index > last_ts) & (df.index + timedelta(minutes=1) <= now)]
         for bar in data.iter_bars(closed):
             step(strat, broker, bar)

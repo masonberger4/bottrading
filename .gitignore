@@ -3,3 +3,26 @@ __pycache__/
 schwab_token.json
 *.csv
 .venv/
+runs/
+data/mentorship/
+data/
+
+# never commit secrets, market data or run output
+.env
+.env.*
+*.env
+*token*.json
+*credentials*.json
+*.pem
+*.key
+*.parquet
+*.dbn
+*.zst
+*.zip
+*.log
+paper_log.txt
+*_trades_summary.json
+*.tmp
+
+# temporary git worktrees for parallel builds
+.worktrees/

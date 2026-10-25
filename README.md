@@ -24,3 +24,68 @@ The Schwab commands need SCHWAB_APP_KEY and SCHWAB_APP_SECRET from a developer.s
 app with the callback URL https://127.0.0.1:8182. The first run opens a browser so you can log in.
 
 Not financial advice.
+
+# Claude HF: intraday stock bot found by a self-improving search
+
+Package `claude_hf`. Trades 40 liquid large-cap stocks (no ETFs) on 1- or 5-minute bars,
+holds for minutes, and is flat every night. A retail Schwab API can't do true
+microsecond HFT, so this is the fastest version it supports.
+
+The strategy is a genome: two playbooks (signal weights for short-term reversal, momentum,
+VWAP distance, opening-range breakout, volume shocks, day return and overnight gap, plus
+hold time, slots, threshold, entry window and long/short mode) and a route for every kind
+of day (FOMC, CPI, jobs, PCE, PPI, retail sales, GDP, quad witching, ISM, JOLTS, sentiment,
+opex, month/quarter turns, futures roll week, weekdays): playbook A, playbook B, or sit out.
+Event dates live in `claude_hf/daytypes.py`; extend them each year.
+
+`evolve` splits days in time order into train / validation / test. Each generation mutates
+the champion; a change is kept only if it beats the champion on training AND validation
+days after 1.5 bps per side of spread/slippage plus the SEC fee. The loop also tunes its own
+mutation step sizes and operator choice from what worked. Every generation is logged to
+`runs/claude_hf/<N>min/seed<k>/generations.jsonl`. Test days are scored once, at the end.
+
+    .venv\Scripts\python -m claude_hf fetch --minutes 5      # ~9 months of 5-minute bars
+    .venv\Scripts\python -m claude_hf evolve --minutes 5 --seeds 5 --save claude_hf\champion.json
+    .venv\Scripts\python -m claude_hf paper                  # simulated fills, never sends orders
+
+Paper trades go to `runs/claude_hf/paper_trades.csv`. There is no live mode.
+
+## ICT Mentorship bot (`mentorship/`)
+
+The ICT Mentorship rules (starting with the 2023 Mentorship playlist) in `mentorship_rules.md`, implemented bar-by-bar with no
+lookahead (New York time). Paper/backtest only: it has no order-sending code.
+
+- `levels.py`: PD arrays: FVG (BISI/SIBI) with CE, order blocks with mean threshold, breakers,
+  volume imbalances, swing pivots, relative equal highs/lows, midnight/08:30/09:30/13:30 opens.
+- `strategy.py`: AM (09:30-11:00) and PM (13:30-15:50, last hour 15:15-15:45 tagged) market
+  maker models: sweep of previous-3-day / pre-market / AM-session liquidity or relative equal
+  levels, structure shift with an FVG, limit at the FVG (unicorn preferred), longs below the
+  midnight open (PM: 13:30 open), stop beyond the order block's mean threshold, targets at the
+  next liquidity 0.5 ES pt early, half off at T1, flat by 16:00. One AM + one PM trade, no
+  reversal after a loss, NFP/FOMC day filter. QQQ is the SMT partner (tagged, not a filter).
+- SPY has no overnight bars, so the first pre-market bar (04:00) stands in for the midnight
+  open, and previous-day highs/lows are regular-session. 1 ES point = 0.10 SPY.
+
+- Optional rules, each a `Params` switch (off by default): `require_htf` (sweep into an open
+  15m/60m FVG; always tagged), `trail` (stop under each new FVG), `adds` (pyramid smaller
+  units on new FVGs, 2% total risk cap), `weekly_bias`, `sd_targets` (standard-deviation
+  projections of the manipulation leg), `wick_levels` (50% of yesterday's wicks).
+  `levels.py` also has rejection blocks and balanced price ranges.
+- `backtest.combine` trades one instrument per session (first SPY/QQQ setup to fill).
+  `study.py` runs every rule alone and together on SPY, QQQ, the combination and the
+  random-walk control. `paper.py` runs on live Schwab bars and logs simulated fills only.
+- Free long history: `histdata.py` downloads SPX/NDX index CFD 1-minute bars from
+  HistData.com (2019 onward, no account; same feed as Dukascopy's, whose public datafeed
+  `dukascopy.py` also reads but throttles hard). They trade almost around the clock, so
+  the real midnight open is used and prices are ES/NQ-style points. `calendar.py` adds the
+  2019-2025 NFP/CPI/PPI/FOMC dates. `python -m mentorship.study --index` sizes in MES
+  ($5/pt) and MNQ ($2/pt) with a tick of slippage plus commission per side.
+- 5-minute history: extended hours from late March, regular session only back to late
+  January (09:30 open stands in for midnight there).
+
+    .venv\Scripts\python -m mentorship fetch
+    .venv\Scripts\python -m mentorship backtest --minutes 5
+    .venv\Scripts\python -m mentorship synthetic --seeds 5
+    .venv\Scripts\python -m mentorship.study
+    .venv\Scripts\python -m mentorship paper --minutes 1
+    .venv\Scripts\python -m pytest -q tests\test_mentorship.py

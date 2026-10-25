@@ -105,6 +105,8 @@ def test_synthetic_smoke():
 
 
 def test_schwab_bracket_json():
+    import pytest
+    pytest.importorskip("schwab")            # optional broker package; skip where it isn't installed
     from silver_bullet.schwab_broker import bracket_order
     from silver_bullet.strategy import Setup
     from datetime import datetime
