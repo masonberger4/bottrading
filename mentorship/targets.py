@@ -24,7 +24,7 @@ import pandas as pd
 from . import levels as L
 
 POOL_KINDS = ("pool", "pool_eq")
-SD_KINDS = ("sd", "sd_half", "sd_mm", "sd_ext", "sd_cluster")
+SD_KINDS = ("sd", "sd_half", "sd_mm", "sd_ext", "sd_cluster", "proj", "proj_htf", "proj_cluster", "proj_runner", "proj_lh", "proj_wk")     # (the proj* kinds are the caption-gap SD-range projections: they take sd_close_hit / sd_align like the SD levels)
 CF_SRC = {"fvg": 0, "ob": 1, "gap": 2, "vi": 3, "breaker": 4}
 ALL_SRC = (0, 1, 2, 3, 4)
 
@@ -381,7 +381,7 @@ def draw_pref(ctx, sd, i: int, p, entry: float, risk: float, keep: list, leg_hi:
         if hi_r is not None:
             hi = max(hi_r, float(sw["ext"]) + 1e-9)
         hist = getattr(ctx, "hist", None)
-        if hist:
+        if hist and hi_r is None:                           # (eq_leg 'rally': the leg itself is the range - no prior-day widening)
             pdh, pdl = float(hist[-1].high.max()), float(hist[-1].low.min())
             a, b = sd.x(pdh), sd.x(pdl)
             lo, hi = min(lo, a, b), max(hi, a, b)
@@ -749,7 +749,7 @@ def extra_sources(ctx, sd, i: int, p, sw: dict, entry: float, risk: float, leg_h
                 out.append((B + (B - ext), "array"))             # L13 (070 ~37:31): B + 1 x (B - A)
             else:                                                # caption-gap L13-breaker-range-sd-weekly (074 ~00:30:15): k = 2 (the weekly range extreme) needs the weekly and day bias
                 from . import tp2 as _T2
-                out += _T2.breaker_ks(ctx, sd, i, p, getattr(ctx, "_tp2_session", "AM"), B, ext)
+                out += _T2.breaker_ks(ctx, sd, i, p, getattr(ctx, "_tp2_session", "AM"), B, ext, sw.get("level"))
             lvt.append("proj_breaker")
     if p.proj_org_reprice and getattr(ctx, "org", None):       # caption-gap L13-org-sd-projection (055 ~00:19:31; 056 ~00:18:20): after the reprice, in the bias direction
         from . import tp2 as _T2
@@ -906,7 +906,7 @@ def breaker_cap(ctx, sd, i: int, p, entry: float, risk: float, flag):
 TF_MIN = {"15m": 15, "30m": 30, "1h": 60, "4h": 240}
 
 
-def tf_wicks(ctx, sd, i: int, p, tfs, above_lo: float) -> list:
+def tf_wicks(ctx, sd, i: int, p, tfs, above_lo: float, force_long: bool = False) -> list:
     """X3c / A23: the upper-wick CEs (side space; a short's lower wicks) of COMPLETED candles - daily
     candles of the last max(wick_days, 3) regular sessions ("D") and the 15m / 30m / 1h / 4h candles
     of the day frame up to bar i - as (CE, wick length, source) for candles whose CE lies above
@@ -934,8 +934,9 @@ def tf_wicks(ctx, sd, i: int, p, tfs, above_lo: float) -> list:
         g = pd.Series(np.arange(i + 1), index=idx).groupby(idx.floor(f"{m}min"))
         first, last, st = g.min().values, g.max().values, g.min().index
         done = (idx[last] - st) >= pd.Timedelta(minutes=m - ctx.tf)
+        long_only = p.wick_long_only or force_long
         wk_ = []                                            # caption-gap L10-intraday-wick-ce: the wicks of the completed buckets (long = >= the body and >= the 20-candle median)
-        if p.wick_long_only:
+        if long_only:
             for a, z, ok in zip(first, last, done):
                 wk_.append(float(sd.h[a:z + 1].max() - max(sd.o[a], sd.c[z])) if ok else 0.0)
         for n_, (a, z, ok) in enumerate(zip(first, last, done)):
@@ -944,7 +945,7 @@ def tf_wicks(ctx, sd, i: int, p, tfs, above_lo: float) -> list:
             o_, c_ = sd.o[a], sd.c[z]
             hh = sd.h[a:z + 1].max()
             top = max(o_, c_)
-            if p.wick_long_only and not (wk_[n_] >= abs(c_ - o_) and wk_[n_] >= float(np.median([w_ for w_ in wk_[max(0, n_ - 19):n_ + 1]]))):
+            if long_only and not (wk_[n_] >= abs(c_ - o_) and wk_[n_] >= float(np.median([w_ for w_ in wk_[max(0, n_ - 19):n_ + 1]]))):
                 continue
             ce = (top + hh) / 2
             if hh - top >= mn and ce > above_lo and sd.h[z + 1:i + 1].max(initial=-np.inf) < ce:

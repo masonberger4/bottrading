@@ -2226,11 +2226,30 @@ Items (file#N gap-id | status | Params switch(es) | default | note):
 - levels_liquidity_targets#99 L12-deep-sd-pd-convergence | done | `sd_deep_conv`, `sd_conv_ticks` | False, 2 | after the first beyond the pool, deeper levels within `sd_conv_ticks` of a 5m / 15m FVG edge / CE stay (kind proj), the deepest is `proj_runner` (the preferred final target)
 - levels_liquidity_targets#101 new-defended-level | done | `defended_filter`, `defended_band_adr`, `defended_touches`, `defended_bars` | False, 0.1, 4, 200 | pools with >= touches highs of the last bars within the band are dropped (tag defended)
 
+### Review fixes (caption-gap pass, targets_partials#2/4)
+
+- #89 `proj_breaker_k`: the k > 1 rungs run from the swept swing low L1 (`sw["level"]`) to B, not from the sweep extreme L2 (k = 1 keeps the 070 formula from the extreme); test with L2 below L1. Still not built: a 60m breaker (the day-frame breaker is used) and the hold-to-the-week handling.
+- #52 `sd_htf_extreme`: the closing SMT is evaluated on the bar that reaches the `proj_htf` rung (`tp2.extreme_smt`: the partner's highest high since the fill stayed at or under its highest before it) [our interpretation], not the entry's `tr.smt`; the last rung's `final_hit` is the session side done. Test: entry SMT False / extreme SMT True.
+- #20 `nwog_ladder`: the rungs below the NWOG near edge stay (sharing the new `nwog_pre_frac`), only the NWOG tail is re-fractioned; `nwog_near_frac` 0 drops the near-edge rung (no partial); the far edge is scaled out in `nwog_far_split` (3) single-lot rungs. The gate "near edge first" is gone when the near-edge share is 0 (price inside the NWOG). Directive-9 tension (one exact target): `nwog_ladder` and `beyond_pool_final` rewrite the locked draw; both default off - see the owner questions.
+- #101 `defended_filter`: touches are distinct visits (consecutive in-band bars count once; the pool's own pivot and its neighbours are one visit); tests incl. a lone swing high and a short side.
+- #15 `eq_leg` "rally": no prior-day widening of the range (the leg itself is the dealing range); test with a wider prior day.
+- #43 the minimum objective forces the long-wick test (`tf_wicks(force_long=True)`). Not built: the X12 `obj_stop` "idea counts as right" tag (also the #39 `obj_stop` source).
+- #56 `proj_org_reprice`: the nearest `proj_htf` rung is the final exit (`final_proj_htf`), the variant sets `proj_exit_ticks=1`.
+- #54 `sd_last_hour_k`: `proj_lh` needs min_rr x risk of room. The "short-reversal area in the last hour" (#53 / #54) is not built.
+- #50 entry-low projection: the rung is inserted in sorted position among the rungs ahead (fractions split from the rung it displaces).
+- SD-range projection kinds (`proj`, `proj_htf`, `proj_cluster`, `proj_runner`, `proj_lh`, `proj_wk`) are in `targets.SD_KINDS` (sd_close_hit, sd_align, fill_plan).
+- #86: the slice at the first bar is capped at the last closed bar (no look-ahead). Still custom: the displacement test (not A20 `disp_mult`) and the evaluation at order build only.
+- #53: the consolidation day is the DayPlan N8 tag only; with no premium level the pick falls back to the first level beyond the pool.
+- #16 clear_path: no confluence table = not evaluable (no rejection). Lock-path limits (like #27 / #62): under the owner default `draw_lock="session"` the draw preferences of #16 / #17 (`session_pool_first`, `t1_skip_near`, the preference parts of `nwog_magnet`, `beyond_imb`) live in the non-lock branch and do not run; the linger tag is attached only with `hrlr_time_k` or `clear_path` on (it has no switch of its own).
+- #41 not built: the cc04_012 "turtle soup to a daily FVG" ladder (T1 REH + 1 tick, near edge, far edge) and the daily-BISI sell-side delivery; owner question 1 stays.
+- #60 not built: `only` / `extended` filtering of the `mark_levels` lock candidates (the substring classification of `lock_session_rank` stays). #98: inception stays the sweep extreme [our interpretation], not the extreme since the last opposite MSS. #89 / #39 `org_flow` counts arrays anywhere in the gap [our interpretation]. #45 (drop a projection when price retraces through the OB MT / BPR) not built.
+- Commit trailer of the chunk-2 commit says "Claude Sonnet 5.5" (the session attribution); history is not rewritten, later commits use the required trailer.
+
 ### Owner questions (caption-gap pass, targets_partials#2/4)
 
 1. L9-htf-fvg-target-ladder (010, 098, 102, cc04_012 far edge hit vs 029 blow-off only vs 049 / 061 / 065B "ringer"): `htf_gap_final` is "ce" in the spec; the CE-first gating is behind the extra switch `htf_gap_gate` (default off) because it would change the built ladder. Switch the gate on by default?
 2. D23-inception-fulcrum-anchor: should the "fulcrum" anchor default (`sd_fulcrum_def`) become the inception-to-fulcrum leg (trade-through arming) instead of Ep06's close-beyond reading?
-3. L5-nwog-target-ladder vs L9 (the far edge of a weekly gap is a "ringer"): `nwog_ladder` aims runners at the far edge, `weekly_gap_ce_only` drops it. Which holds?
+3. L5-nwog-target-ladder vs L9 (the far edge of a weekly gap is a "ringer"; also owner directive 9, one exact target - `nwog_ladder` and `beyond_pool_final` rewrite the locked draw): `nwog_ladder` aims runners at the far edge, `weekly_gap_ce_only` drops it. Which holds?
 4. L12 first-level-only rule (014, 030) vs 043 (premium on consolidation days: `sd_premium_consol`), 047 (-3 SD in the last hour: `sd_last_hour_k`), 092 (deep convergence: `sd_deep_conv`): all default off.
 5. L4-session-pool-before-rel (067) vs L4 "prefer the larger pool" (042, 049, 103): `session_pool_first`, default off.
 6. L14-session-pools-only: "predominantly" - rank, only or extended?

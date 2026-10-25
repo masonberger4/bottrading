@@ -2167,7 +2167,7 @@ _TP2_DECISIONS = {
     "L12-prior-session-swing-htf-extreme": dict(sd_targets=True, sd_anchor="m15_leg", sd_htf_extreme=True, sd_htf_tol=1.0, **SM_POST),
     "L12-sd-in-premium-consolidation": dict(sd_targets=True, sd_premium_consol=True, consol_day_rules="tag", **SM_POST),
     "L12-minus3-sd-last-hour": dict(sd_targets=True, sd_anchor="mss_leg", sd_last_hour_k=3.0, **SM_POST),
-    "L13-org-sd-projection": dict(proj_org_reprice=True, proj_org_kmax=12, sd_htf_tol=1.0, **SM_POST),
+    "L13-org-sd-projection": dict(proj_org_reprice=True, proj_org_kmax=12, sd_htf_tol=1.0, proj_exit_ticks=1, **SM_POST),
     "L14-session-pools-only": dict(session_pools_mode="only", **SM_POST),
     "L14-session-pools-only_rank": dict(session_pools_mode="rank", **SM_POST),
     "L14-session-pools-only_extended": dict(session_pools_mode="extended", **SM_POST),

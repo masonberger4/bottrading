@@ -165,9 +165,9 @@ def test_forced_defended_and_confluence_tags():
 
 def test_forced_minimum_objective_and_hrlr_time():
     tr = _forced(_fp(wick_tfs=("1h",), min_obj_frac=0.2, hrlr_time_k=50.0), ("eval_hrlr_time",))
-    assert tr[0].entry < tr[0].t1
+    assert "min_obj" in tr[0].lv_tags and tr[0].entry < tr[0].t1                            # the long 1h wick CE is the protected minimum-objective rung
     tr = _forced(_fp(hrlr_time_k=0.001), ("eval_hrlr_time",))
-    assert len(tr) >= 0
+    assert tr and "min_obj" not in tr[0].lv_tags and tr[0].t2 == pytest.approx(108.25)     # (no swing high lies between the entry and the targets of this book: the time factor has nothing to drop)
 
 
 def test_defaults_do_not_change_a_run():

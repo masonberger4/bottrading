@@ -130,6 +130,19 @@ def test_target_imbalance_beyond_pool_below_eq():
     assert tp2.HITS["eq_beyond_imb"] >= 2
 
 
+def test_eq_leg_rally_ignores_a_wider_prior_day():
+    rows = [(4040 - 4 * k, 4040.5 - 4 * k, 4036 - 4 * k, 4036 - 4 * k) for k in range(10)] + [(4000.0, 4001, 3999, 4000.5)] * 4 + [(4001.0, 4003, 4000, 4002)] * 4
+    ctx = mk(rows, hist=hist_days(rng=120.0, base=3990.0))                                  # the prior day 3990-4110 is far wider than the rally 3999-4040
+    sd = side(ctx)
+    sw = dict(ext=3999.0, ext_i=10)
+    keep = [(4010.0, "pool"), (4028.0, "pool")]
+    pr = Params(**P, draw_below_eq=True, eq_leg="rally")
+    out = TP.draw_pref(ctx, sd, 17, pr, 4002.0, 2.0, keep, 4003.0, sw)
+    assert out and out[0][0] == 4028.0                                                      # EQ 4020 (the leg's): the pool above it
+    out_s = TP.draw_pref(ctx, sd, 17, replace(pr, eq_leg="sweep"), 4002.0, 2.0, keep, 4003.0, sw)
+    assert out_s and out_s[0][0] != 4028.0 or not out_s                                     # the prior-day EQ (4050) leaves no pool above: the fallback pick
+
+
 def test_eq_leg_rally_uses_the_start_of_the_run():
     rows = [(4040 - 4 * k, 4040.5 - 4 * k, 4036 - 4 * k, 4036 - 4 * k) for k in range(10)] + [(4000.0, 4001, 3999, 4000.5)] * 4
     ctx = mk(rows)
@@ -181,12 +194,15 @@ def test_clear_path_needs_an_htf_array_beyond_the_draw():
     p = Params(**P, clear_path=True, lrlr_max=4)
     keep = [(4100.0, "pool")]
     why, k, dr = tp2.resistance_runs(ctx, sd, sw, i, p, 4080.0, keep, 4100.0, False, [], {})
+    assert why is None                                                                    # the 4h array 4120-4130 lies beyond the draw
     tg = {}
     why, k, dr = tp2.resistance_runs(ctx, sd, sw, i, p, 4088.0, keep, 4100.0, False, [], tg)
     assert why is None and tg["tp2"]["linger"] == (10, 1.0)
-    ctx2, i2 = _hrlr_ctx()
+    ctx2, i2 = _hrlr_ctx(conf_rows=[(-1, 3500.0, 3490.0, np.inf, 0, "4h")])
     why, k, dr = tp2.resistance_runs(ctx2, side(ctx2), sw, i2, p, 4080.0, keep, 4100.0, False, [], {})
     assert why == "x_no_clear_path"
+    ctx3, i3 = _hrlr_ctx()                                                                # no confluence table: not evaluable, no rejection
+    assert tp2.resistance_runs(ctx3, side(ctx3), sw, i3, p, 4080.0, keep, 4100.0, False, [], {})[0] is None
     # too many obstacles between the entry and the array: lrlr_max = 0 fails with the intermediate swings under the array
     why, k, dr = tp2.resistance_runs(ctx, sd, sw, i, replace(p, lrlr_max=0), 4060.0, keep, 4100.0, False, [], {})
     assert why == "x_no_clear_path"
@@ -239,13 +255,18 @@ def test_nwog_ladder_bulk_at_ce():
     r = tp2.nwog_ladder(ctx, sd, 10, p, 4060.0, 3.0, keep, ex(4076.75))
     assert r is not None
     rungs, fr = r
-    assert [round(v, 6) for v, _ in rungs] == [round(ex(x), 6) for x in (4076.75, 4088.375, 4100.0)] and fr == pytest.approx((0.0, 0.8, 0.2))
-    # entry beyond the near edge: CE and far edge only (they are targets once the near edge traded)
-    r2 = tp2.nwog_ladder(ctx, sd, 10, p, 4080.0, 3.0, [(ex(4088.375), "array")], ex(4088.375))
-    assert r2 is not None and len(r2[0]) == 2 and r2[1] == pytest.approx((0.8, 0.2))
-    assert tp2.nwog_ladder(ctx, sd, 10, p, 4060.0, 3.0, [(4090.0, "pool")], 4090.0 + 0.5) is None       # the draw is no NWOG level
-    p2 = replace(p, nwog_near_frac=0.1)
+    # nwog_near_frac 0 = no partial at the near edge (the rung goes); the far edge is scaled out in three single-lot rungs
+    assert [round(v, 6) for v, _ in rungs] == [round(ex(x), 6) for x in (4088.375, 4100.0, 4100.0, 4100.0)] and fr == pytest.approx((0.8, 0.2 / 3, 0.2 / 3, 0.2 / 3))
+    # the rungs below the NWOG near edge stay and share nwog_pre_frac
+    r1 = tp2.nwog_ladder(ctx, sd, 10, p, 4060.0, 3.0, [(4070.0, "pool"), (ex(4076.75), "array")], ex(4076.75))
+    assert [v for v, _ in r1[0]][0] == 4070.0 and r1[1][0] == pytest.approx(0.2) and sum(r1[1]) == pytest.approx(1.0)
+    # a near-edge share > 0 keeps the near edge as the first NWOG rung
+    p2 = replace(p, nwog_near_frac=0.1, nwog_far_split=1)
     assert tp2.nwog_ladder(ctx, sd, 10, p2, 4060.0, 3.0, keep, ex(4076.75))[1] == pytest.approx((0.1, 0.8, 0.1))
+    # entry beyond the near edge: CE and far edge only (they are targets once the near edge traded)
+    r2 = tp2.nwog_ladder(ctx, sd, 10, p2, 4080.0, 3.0, [(ex(4088.375), "array")], ex(4088.375))
+    assert r2 is not None and len(r2[0]) == 2 and r2[1] == pytest.approx((8 / 9, 1 / 9))
+    assert tp2.nwog_ladder(ctx, sd, 10, p, 4060.0, 3.0, [(4090.0, "pool")], 4090.0 + 0.5) is None       # the draw is no NWOG level
 
 
 # --- L5-event-horizon-objective (24) --------------------------------------------------------------------------------------------------------------
@@ -426,6 +447,10 @@ def test_long_wick_ces_and_the_minimum_objective():
     o2 = dict(rung_plan=[dict(v=4015.0, k="min_obj", role="extra", prot=True), dict(v=4100.0, k="pool", role="main", prot=False)], final_T=False, bulk=False)
     lv_, kd_, fr_ = TP.fill_plan(o2, (1.0,), p)
     assert kd_ == ["min_obj", "pool"] and fr_[0] == pytest.approx(0.2)
+    # the minimum objective is a LONG wick whatever wick_long_only says
+    st2b = {}
+    tp2.raw_post(ctx, sd, 23, replace(p, wick_long_only=False), "AM", 4000.0, 3.0, 4001.0, dict(ext=3999.0, ext_i=1), [(4100.0, "pool")], [], st2b)
+    assert st2b["min_obj"] == [pytest.approx((4000.5 + 4030) / 2)]
     # without wick_long_only the stubby wick of the second bucket counts as well
     w0 = TP.tf_wicks(ctx, sd, 23, replace(p, wick_long_only=False), ("1h",), 4000.0)
     assert len(w0) >= 1
@@ -564,11 +589,20 @@ def test_sd_at_wick_ce_marks_intraday_high(monkeypatch):
     p = Params(**P, sd_targets=True, sd_anchor="m15_leg", sd_htf_extreme=True, sd_htf_tol=1.0, sd_levels=(0.5, 1.0, 1.5, 2.0), sd_first_beyond=False)
     out, lvt = _levels(ctx, sd, p, dict(ext=4100.0, ext_i=2), 4110.0, None, [], entry=4105.0, i=11)
     assert [(round(v, 2), k) for v, k in out] == [(4125.0, "proj_htf")]                    # 4110 + 1.5 x 10 = the daily wick CE
-    # the closing rung: a proj_htf rung reached after 11:00 with an SMT
-    pos = dict(level_kinds=["array", "proj_htf"])
-    assert tp2.close_here(pos, 1, SimpleNamespace(smt=True), 660, 5, p) and not tp2.close_here(pos, 1, SimpleNamespace(smt=None), 660, 5, p)
-    assert not tp2.close_here(pos, 1, SimpleNamespace(smt=True), 570, 5, p) and not tp2.close_here(pos, 0, SimpleNamespace(smt=True), 660, 5, p)
-    assert not tp2.close_here(pos, 1, SimpleNamespace(smt=True), 660, 5, replace(p, sd_htf_extreme=False))
+    # the closing rung: a proj_htf rung reached after 11:00 with an SMT at the extreme (the partner did not match the high; the entry's SMT is irrelevant)
+    pos = dict(level_kinds=["array", "proj_htf"], tp2=dict(fill_i=5))
+    pidx = ctx.idx
+    pctx = SimpleNamespace(start=0)
+    ppos = pd.Series(np.arange(len(pidx)), index=pidx)
+    ph_ok = np.array([4100.0] * 6 + [4090.0] * 6)               # the partner's high after the fill stays under its earlier high
+    ph_no = np.array([4100.0] * 6 + [4120.0] * 6)
+    ps = lambda h: {1: SimpleNamespace(h=h)}
+    tr0 = SimpleNamespace(smt=False)
+    args = lambda t, ph, k=1, pp=p: (pos, k, tr0, t, 5, pp, ctx, sd, 11, pctx, ps(ph), ppos)
+    assert tp2.close_here(*args(660, ph_ok)) and not tp2.close_here(*args(660, ph_no))
+    assert not tp2.close_here(*args(570, ph_ok)) and not tp2.close_here(*args(660, ph_ok, 0))
+    assert not tp2.close_here(*args(660, ph_ok, 1, replace(p, sd_htf_extreme=False)))
+    assert not tp2.close_here(pos, 1, SimpleNamespace(smt=True), 660, 5, p)                # no partner data: no SMT, whatever the entry's SMT
 
 
 def test_sd_pick_premium_on_consolidation_day():
@@ -800,6 +834,9 @@ def test_breaker_range_minus2_sd(monkeypatch):
     monkeypatch.setattr(BD, "want_at", lambda ctx_, p_, s_, i_: 0)
     ctx.wbias = 1
     assert tp2.breaker_ks(ctx, sd, 5, p, "AM", 15780.0, 15700.0) == [(15860.0, "array")]
+    # L2 (the sweep extreme 15700) below L1 (the swept swing low 15720): the k > 1 range runs from L1, the k = 1 rung keeps the 070 formula
+    monkeypatch.setattr(BD, "want_at", lambda ctx_, p_, s_, i_: 1)
+    assert tp2.breaker_ks(ctx, sd, 5, p, "AM", 15780.0, 15700.0, 15720.0) == [(15860.0, "array"), (15900.0, "proj_wk")]
 
 
 # --- new-level-confluence-scoring (94) ------------------------------------------------------------------------------------------------------------
@@ -869,18 +906,35 @@ def test_deep_sd_kept_on_fvg():
 # --- new-defended-level (101) ---------------------------------------------------------------------------------------------------------------------
 
 def test_defended_high_not_target():
-    rows = flat(30, 4090.0) + [(4090, 4099.7, 4089, 4090)] * 2 + flat(5, 4090.0) + [(4090, 4100.2, 4089, 4090)] * 3 + flat(4, 4090.0)
-    ctx = mk(rows)                                                                         # ADR5 = 20: the band is 2 x 0.1... 0.1 x 20 = 2; use 0.025 -> 0.5
+    visit = [(4090, 4099.8, 4089, 4090)] * 2                                               # one visit = consecutive in-band bars
+    rows = flat(20, 4090.0) + visit + flat(3, 4090.0) + visit + flat(3, 4090.0) + visit + flat(3, 4090.0) + [(4090, 4100.2, 4089, 4090)] + flat(4, 4090.0)
+    ctx = mk(rows)                                                                         # ADR5 = 20: the band is 0.025 x 20 = 0.5
     sd = side(ctx)
     p = Params(**P, defended_filter=True, defended_band_adr=0.025)
     lv = [(4100.0, "pool"), (4110.0, "pool"), (4105.0, "array")]
     st = {"tags": [], "prefs": []}
     out = tp2.defended(ctx, sd, len(rows) - 1, p, list(lv), st)
-    assert out == [(4110.0, "pool"), (4105.0, "array")] and st["tags"] == ["defended"]       # five highs within 0.5 pt of 4100
-    p2 = replace(p, defended_touches=6)
-    assert tp2.defended(ctx, sd, len(rows) - 1, p2, list(lv), {"tags": [], "prefs": []}) == lv
+    assert out == [(4110.0, "pool"), (4105.0, "array")] and st["tags"] == ["defended"]       # four distinct visits
+    p2 = replace(p, defended_touches=5)
+    assert tp2.defended(ctx, sd, len(rows) - 1, p2, list(lv), {"tags": [], "prefs": []}) == lv      # 4 visits < 5 (the 7 in-band bars are not 7 touches)
     out3 = tp2.targets_post(ctx, sd, len(rows) - 1, p, 4091.0, list(lv), [], None)
     assert (4100.0, "pool") not in out3 and ctx.__dict__["_tp2_st"]["tags"] == ["defended"]
+    # a lone swing high with ordinary neighbours (three in-band bars = ONE visit) is not defended
+    lone = flat(20, 4090.0) + [(4095, 4097, 4094, 4096), (4096, 4100.0, 4095, 4097), (4097, 4098.5, 4094, 4095)] + flat(5, 4090.0)
+    ctx1 = mk(lone)
+    pl = replace(p, defended_band_adr=0.2)
+    assert tp2.defended(ctx1, side(ctx1), len(lone) - 1, pl, list(lv), {"tags": [], "prefs": []}) == lv
+
+
+def test_defended_short_side():
+    visit = [(4110, 4111, 4100.2, 4110)] * 2
+    rows = flat(20, 4110.0) + visit + flat(3, 4110.0) + visit + flat(3, 4110.0) + visit + flat(3, 4110.0) + visit + flat(2, 4110.0)
+    ctx = mk(rows)
+    sd = side(ctx, -1)                                                                     # lows of 4100.2 are the mirrored highs -4100.2
+    p = Params(**P, defended_filter=True, defended_band_adr=0.025)
+    lv = [(-4100.0, "pool"), (-4090.0, "pool")]
+    out = tp2.defended(ctx, sd, len(rows) - 1, p, list(lv), {"tags": [], "prefs": []})
+    assert out == [(-4090.0, "pool")]
 
 
 def test_session_pools_rank_is_a_draw_preference():

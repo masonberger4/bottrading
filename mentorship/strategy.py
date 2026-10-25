@@ -2712,6 +2712,8 @@ class Params:
     nwog_ladder: bool = False            # L5-nwog-target-ladder (020 ~00:03:50; 025 ~00:43:43): an NWOG draw takes near edge (nwog_near_frac) -> CE (nwog_ce_frac, the bulk) -> far edge (the rest); conflict with L9 (the far edge a "ringer") listed in the rulebook
     nwog_near_frac: float = 0.0          # (the engine exits at least one lot per rung)
     nwog_ce_frac: float = 0.8
+    nwog_far_split: int = 3              # L5-nwog-target-ladder: the far edge is scaled out in this many rungs ("one contract at a time")
+    nwog_pre_frac: float = 0.2           # L5-nwog-target-ladder: the share of the size on the rungs below the NWOG near edge that stay
     event_horizon_target: bool = False   # L5-event-horizon-objective (037 ~00:22:37; 051 ~16:51): the midpoint between NWOG k's and NWOG k+1's near edges is a rung; NWOG k+1's levels stay out of the ladder until that midpoint traded (one tick through)
     nwog_magnet: bool = False            # L5-old-nwog-in-consolidation (044 ~01:18:34; 051 ~17:37): the stored NWOG running through the consolidation of an old daily swing high (bodies of the pivot bar +-1) / through the current cluster is tagged nwog_magnet / range_anchor and its near edge is the preferred draw
     consol_min_bars: int = 6             # ... [our interpretation] a consolidation = this many overlapping bars within consol_max_adr x ADR5
@@ -5768,7 +5770,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     hit_, px_ = _TP.rung_hit(pos, k, lv_[k], h, c, t, tf, p, xt_)     # Ep06.4 sd_close_hit
                     if not hit_:
                         break
-                    last = (k == len(lv_) - 1 and not pos.get("runner")) or _TP2.close_here(pos, k, tr, t, tf, p)   # Ep04.3 po3_runner; caption-gap L12-prior-session-swing-htf-extreme: a proj_htf rung with an SMT after 11:00 closes the trade
+                    last = (k == len(lv_) - 1 and not pos.get("runner")) or _TP2.close_here(pos, k, tr, t, tf, p, ctx, sd, i, pctx, psides, ppos)   # Ep04.3 po3_runner; caption-gap L12-prior-session-swing-htf-extreme: a proj_htf rung with an SMT after 11:00 closes the trade
                     if last:
                         tr.final_hit = True                           # Ep04.13: every rung taken
                     q = pos["left"] if last else min(pos["left"], max(p.lot, _lots(pos["n"] * fr[k], p.lot)))

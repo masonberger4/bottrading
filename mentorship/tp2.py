@@ -230,8 +230,14 @@ def session_filter(ctx, sd, i: int, p, lv: list) -> list:
     return out
 
 
+def _visits(inband) -> int:
+    """Distinct visits: consecutive in-band bars are one touch (the pool's own pivot bar and its neighbours are the first visit, not four)."""
+    a = np.asarray(inband, bool)
+    return int((a & ~np.concatenate(([False], a[:-1]))).sum()) if a.size else 0
+
+
 def defended(ctx, sd, i: int, p, lv: list, st: dict) -> list:
-    """new-defended-level (cc01_007 ~00:24:23): a pool whose level the last defended_bars bars touched (a high within defended_band_adr x ADR5 of it) at least
+    """new-defended-level (cc01_007 ~00:24:23): a pool whose level the last defended_bars bars touched (a high within defended_band_adr x ADR5 of it; consecutive in-band bars are one visit) at least
     defended_touches times is defended - not a target (tag defended)."""
     hit("eval_defended")
     adr = _adr(ctx)
@@ -241,7 +247,7 @@ def defended(ctx, sd, i: int, p, lv: list, st: dict) -> list:
     hs = sd.h[max(0, i + 1 - p.defended_bars):i + 1]
     out = []
     for v, k in lv:
-        if k in POOLK and int((np.abs(hs - v) <= x + 1e-9).sum()) >= p.defended_touches:
+        if k in POOLK and _visits(np.abs(hs - v) <= x + 1e-9) >= p.defended_touches:
             st["tags"].append("defended")
             hit("defended")
             continue
@@ -270,7 +276,7 @@ def break_accel(ctx, sd, i: int, p, lv: list, st: dict) -> list:
     if not deeper:
         return lv
     body = np.abs(sd.c - sd.o)
-    mb = float(body[max(0, kb - 10):kb].mean()) if kb > 0 else float(body[kb:kb + 3].mean())
+    mb = float(body[max(0, kb - 10):kb].mean()) if kb > 0 else float(body[kb:min(kb + 3, i + 1)].mean())
     w = range(kb, min(kb + 3, i + 1))
     big = any(body[j] >= p.break_accel_mult * mb and sd.c[j] > v1 for j in w)
     fvg = any(kb <= z.i <= min(kb + 2, i) for z in sd.gaps)
@@ -459,7 +465,7 @@ def raw_post(ctx, sd, i: int, p, session: str, entry: float, risk: float, above:
             hit("keep_traded_wfvg")
     if p.min_obj_frac > 0:
         hit("eval_min_obj")
-        w = sorted(x[0] for x in _TP().tf_wicks(ctx, sd, i, p, ("1h", "4h"), above))
+        w = sorted(x[0] for x in _TP().tf_wicks(ctx, sd, i, p, ("1h", "4h"), above, True))     # (the minimum objective is a LONG 1h / 4h wick whatever wick_long_only says)
         if w:
             st2["min_obj"] = w
     out = sorted(set(out))
@@ -705,8 +711,16 @@ def late(ctx, sd, sw, i: int, p, session: str, entry: float, risk: float, keep: 
         draw = v
         lvt.append("final_" + k)
         hit("final_" + k)
+    if p.proj_org_reprice and not locked:                 # L13-org-sd-projection: the nearest projection at an HTF array / the locked draw is the final exit (1 tick before it via proj_exit_ticks)
+        ph = sorted(x for x in keep_full if x[1] == "proj_htf" and x[0] - entry >= p.min_rr * risk)
+        if ph:
+            v, k = ph[0]
+            keep = [(a_, b_) for a_, b_ in keep if a_ < v - p.es_pt] + [(v, k)]
+            draw = v
+            lvt.append("final_proj_htf")
+            hit("final_proj_htf")
     if p.sd_last_hour_k > 0 and ctx.t[i] >= S_LAST_HOUR:
-        lh = [x for x in keep_full if x[1] == "proj_lh"]
+        lh = [x for x in keep_full if x[1] == "proj_lh" and x[0] - entry >= p.min_rr * risk]      # (room: at least min_rr x risk)
         if lh:
             v, k = lh[-1]
             keep = [(a_, b_) for a_, b_ in keep if a_ < v - p.es_pt] + [(v, k)]
@@ -773,32 +787,46 @@ def resistance_runs(ctx, sd, sw, i: int, p, entry: float, keep: list, draw: floa
                 if p.lrlr_max < 0 or TP.resistance_count(ctx, sd, i, p, entry, near) <= p.lrlr_max:
                     ok = True
                     break
-        if not ok:
+        if conf is None:
+            hit("clear_path_not_evaluable")                  # no confluence table: the test cannot be evaluated - no rejection
+        elif not ok:
             return "x_no_clear_path", keep, draw
-        lvt.append("clear_path")
+        else:
+            lvt.append("clear_path")
     if p.hrlr_time_k > 0 or p.clear_path:
         tags["tp2"] = dict(tags.get("tp2") or {}, linger=(int(p.linger_bars), float(p.linger_pts)), entry=float(entry))
     return None, keep, draw
 
 
 def nwog_ladder(ctx, sd, i: int, p, entry: float, risk: float, keep: list, draw: float):
-    """L5-nwog-target-ladder (020 ~00:03:50; 025 ~00:43:43): the draw is an NWOG level: the ladder is near edge (nwog_near_frac) -> CE (nwog_ce_frac, the bulk) -> far edge (the
-    rest, runners). The rungs already behind the entry are absent, so CE and far edge are targets only once the near edge traded. Returns (keep, fracs) or None."""
+    """L5-nwog-target-ladder (020 ~00:03:50; 025 ~00:43:43): the draw is an NWOG level: the NWOG tail of the ladder is near edge (nwog_near_frac; 0 = no partial there, the rung is
+    dropped) -> CE (nwog_ce_frac, the bulk) -> far edge (the rest, scaled out in nwog_far_split single-lot rungs "one contract at a time"). The rungs of `keep` below the NWOG near edge stay
+    (they share nwog_pre_frac of the size); rungs behind the entry are absent, so CE and far edge are targets only once the near edge traded. Returns (keep, fracs) or None."""
     S = _S()
     hit("eval_nwog_ladder")
     zs = nwog_zones(ctx, sd, i)
     eb = p.exit_before_pts * p.es_pt
     for lo_s, hi_s, ce_s, _ in zs:
         if any(abs(draw + eb - v) <= p.es_pt for v in (lo_s, ce_s, hi_s)):
-            rung = [(S._exit_px(v, "array", p), "array") for v in (lo_s, ce_s, hi_s)]
-            fr = [p.nwog_near_frac, p.nwog_ce_frac, max(0.0, 1.0 - p.nwog_near_frac - p.nwog_ce_frac)]
-            sel = [(r, f) for r, f in zip(rung, fr) if r[0] - entry >= p.min_rr * risk]
+            ex = lambda v: S._exit_px(v, "array", p)
+            near_x = ex(lo_s)
+            low = [(v, k) for v, k in keep if v < near_x - p.es_pt and v - entry >= p.min_rr * risk]
+            tail = [(ex(lo_s), p.nwog_near_frac), (ex(ce_s), p.nwog_ce_frac)]
+            nf = max(1, int(p.nwog_far_split))
+            far_f = max(0.0, 1.0 - p.nwog_near_frac - p.nwog_ce_frac)
+            tail += [(ex(hi_s), far_f / nf)] * nf
+            sel = [(v, f) for v, f in tail if v - entry >= p.min_rr * risk]
+            sel = [(v, f) for v, f in sel if f > 0 or v != near_x]          # a 0 near fraction: no partial at the near edge (the rung goes)
             if not sel:
                 return None
-            fr = [f for _, f in sel]
-            s_ = sum(fr)
-            fr = tuple(f / s_ for f in fr) if s_ > 0 else tuple([1.0 / len(fr)] * len(fr))
-            return [r for r, _ in sel], fr
+            pre = float(p.nwog_pre_frac) if low else 0.0
+            rungs = [(v, k) for v, k in low] + [(v, "array") for v, _ in sel]
+            fr = [pre / len(low)] * len(low) if low else []
+            fs = [f for _, f in sel]
+            s_ = sum(fs)
+            fs = [f / s_ * (1.0 - pre) for f in fs] if s_ > 0 else [(1.0 - pre) / len(fs)] * len(fs)
+            hit("nwog_ladder_kept_low") if low else None
+            return rungs, tuple(fr + fs)
     return None
 
 
@@ -914,7 +942,7 @@ def sd_pool(ctx, sd, i: int, p, sw: dict, pool):
 
 def is_consol_day(ctx) -> bool:
     P = getattr(ctx, "dplan", None)
-    return bool((P is not None and "consol_day" in getattr(P, "tags", ())) or getattr(ctx, "cur_no_draw", False))
+    return bool(P is not None and "consol_day" in getattr(P, "tags", ()))       # the DayPlan N8 tag only (cur_no_draw is a lock-state flag)
 
 
 def sd_cands(ctx, sd, i: int, p, sw: dict, nm: str, lo: float, hi: float, cand: list, pool, lv: list, entry: float, risk: float) -> list:
@@ -943,8 +971,7 @@ def sd_cands(ctx, sd, i: int, p, sw: dict, nm: str, lo: float, hi: float, cand: 
             pref = [x for x in ok if any(abs(x[0] - e) <= p.es_pt for e in edges)]
             v, k = (pref or ok)[0]
             hit("sd_premium_consol")
-            return [(v, k, "proj")]
-        return []
+            return [(v, k, "proj")]                      # (no premium level: the pick falls back to the first level beyond the pool below)
     if p.sd_first_beyond:
         if pool is not None:
             beyond = [x for x in cand if x[0] > pool]
@@ -1058,14 +1085,15 @@ def org_projection(ctx, sd, i: int, p, session: str, above: float) -> list:
     return out
 
 
-def breaker_ks(ctx, sd, i: int, p, session: str, B: float, ext: float) -> list:
+def breaker_ks(ctx, sd, i: int, p, session: str, B: float, ext: float, l1=None) -> list:
     """L13-breaker-range-sd-weekly (074 ~00:30:15): the breaker-range multiples beyond B: k = 1 as built ('array'); k > 1 is kind proj_wk and needs the weekly bias and the day's bias to agree
-    with the order."""
+    with the order. The k > 1 range runs from the swept swing low L1 (`l1`, the level the sweep took) to B - not from the sweep extreme L2 (k = 1 keeps the 070 formula, from the extreme)."""
     out = []
     ok = None
+    a_ = ext if l1 is None or not (ext <= l1 < B) else float(l1)
     hit("eval_proj_breaker_k")
     for k in p.proj_breaker_k:
-        v = B + k * (B - ext)
+        v = B + k * (B - (ext if k == 1.0 else a_))
         if k == 1.0:
             out.append((v, "array"))
             continue
@@ -1087,6 +1115,8 @@ def breaker_ks(ctx, sd, i: int, p, session: str, B: float, ext: float) -> list:
 def on_fill(ctx, sd, pos: dict, tr, o: dict, i: int, p) -> None:
     """Fill time: the state the mid-trade hook needs (linger window, the entry-low anchor)."""
     d = dict(o.get("tp2") or {})
+    if p.sd_htf_extreme:
+        d["x_fill"] = True
     if p.sd_anchor == "entry_low":
         hit("eval_entry_low")
         d["entry_low"] = min(float(sd.l[i]), float(o["ext"]))
@@ -1121,13 +1151,18 @@ def manage(ctx, sd, pos: dict, tr, i: int, p) -> None:
         S = _S()
         x = float(S._exit_px(v, "proj", p))
         lv, fr = list(pos["levels"]), list(pos["fracs"])
-        if (pos.get("final_T") and len(lv) > len(fr)) or pos["k"] >= len(lv) or x <= lv[-1] + p.es_pt or x <= float(sd.c[i]) or not fr:
+        if (pos.get("final_T") and len(lv) > len(fr)) or pos["k"] >= len(lv) or x <= float(sd.c[i]) or not fr or len(fr) != len(lv):
             return
-        f = min(float(p.htf_runner_frac), fr[-1])
-        fr[-1] -= f
-        pos["levels"] = lv + [x]
-        pos["fracs"] = tuple(fr + [f])
-        pos["level_kinds"] = list(pos.get("level_kinds") or ["array"] * len(lv)) + ["proj"]
+        kinds = list(pos.get("level_kinds") or ["array"] * len(lv))
+        j = next((j for j in range(pos["k"], len(lv)) if lv[j] > x), len(lv))       # inserted in sorted position among the rungs still ahead
+        if any(abs(x - v) <= p.es_pt for v in lv[pos["k"]:]):
+            return
+        src = min(j, len(fr) - 1)
+        f = min(float(p.htf_runner_frac), fr[src])
+        fr[src] -= f
+        pos["levels"] = lv[:j] + [x] + lv[j:]
+        pos["fracs"] = tuple(fr[:j] + [f] + fr[j:])
+        pos["level_kinds"] = kinds[:j] + ["proj"] + kinds[j:]
         tr.lv_tags = "|".join(x_ for x_ in (tr.lv_tags, "entry_low_proj") if x_)
         hit("entry_low_proj")
 
@@ -1210,9 +1245,31 @@ def ts_weekly_bisi(ctx, sd, sw: dict, i: int, p) -> bool:
     return False
 
 
-def close_here(pos: dict, k: int, tr, t: int, tf: int, p) -> bool:
-    """L12-prior-session-swing-htf-extreme (035 ~00:38:13): a proj_htf rung reached after 11:00 with a recorded SMT closes the trade (and with it the session's side)."""
+def extreme_smt(ctx, sd, pos: dict, i: int, pctx, psides, ppos) -> bool:
+    """SMT at the projection extreme: our side printed a high (it reached the rung) that the partner index did not match - its highest high since the fill stayed at or below its highest
+    high before the fill [our interpretation of "a recorded SMT at the extreme"]. False without a partner."""
+    d = pos.get("tp2") or {}
+    f = d.get("fill_i")
+    if pctx is None or f is None or psides is None:
+        return False
+    ps = psides[sd.sign]
+    j = int(ppos.index.searchsorted(ctx.idx[i], side="right") - 1)
+    jf = int(ppos.index.searchsorted(ctx.idx[f], side="right") - 1)
+    if j <= jf or jf < pctx.start:
+        return False
+    return bool(ps.h[jf + 1:j + 1].max() <= ps.h[pctx.start:jf + 1].max() + 1e-9)
+
+
+def close_here(pos: dict, k: int, tr, t: int, tf: int, p, ctx=None, sd=None, i: int = 0, pctx=None, psides=None, ppos=None) -> bool:
+    """L12-prior-session-swing-htf-extreme (035 ~00:38:13): a proj_htf rung reached after 11:00 with an SMT at that extreme (extreme_smt, evaluated on the bar that reaches the rung - not the
+    entry's SMT) closes the trade; the last rung's final_hit flag is the session's side done."""
     if not p.sd_htf_extreme:
         return False
     kinds = pos.get("level_kinds") or ()
-    return bool(k < len(kinds) and kinds[k] == "proj_htf" and t + tf >= 660 and (tr.smt is True or getattr(tr, "smt2", None) is True))
+    if not (k < len(kinds) and kinds[k] == "proj_htf" and t + tf >= 660):
+        return False
+    hit("eval_extreme_smt")
+    ok = ctx is not None and extreme_smt(ctx, sd, pos, i, pctx, psides, ppos)
+    if ok:
+        hit("extreme_smt_close")
+    return ok
