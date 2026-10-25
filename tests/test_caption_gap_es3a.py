@@ -22,7 +22,7 @@ NEW_SWITCHES = (
     "htf_near_risk_pct", "class_risk", "max_lev", "stop_fixed_pts", "fixed_units", "t1_fixed_r", "trader_mode", "deep_run_mult", "freq_ref", "probe_mult", "trail_wick_ce",
     "stop_old_low_body", "stop_gap_edge", "bpr75_ref", "stop_widen_new", "stop_htf_anchor", "ob_stop_kind", "ob_anchor", "mit_entries", "prop_stop", "stop_mode", "reentry_stop",
 )
-KNOBS = ("add_mom_r", "add_mom_frac", "add_wick_tf", "mohawk_add_ticks", "htf_near_pts", "htf_near_any", "htf_near_cap_pct", "grad_block", "grad_max", "deep_run_weeks", "freq_recent", "probe_t", "probe_cut",
+KNOBS = ("add_mom_r", "add_mom_frac", "add_wick_tf", "mohawk_add_ticks", "htf_near_pts", "htf_near_any", "htf_near_add_literal", "htf_near_cap_pct", "grad_block", "grad_max", "deep_run_weeks", "freq_recent", "probe_t", "probe_cut",
          "new_max_risk_pts", "tight_stop_pts", "wick_ce_tol_ticks", "mt_pad_ticks", "three_pd_n")
 GAP_IDS = (
     "E12-repeat-dig-smaller-add", "E12-single-add-variants", "E12-wick-ce-add-5m", "E12-631-vi-wickce-invalidation", "E12-liquidity-void-add", "X8-downclose-wickce-add", "E12-mohawk-add-ifvg",
@@ -890,3 +890,42 @@ def test_short_side_mirrors_the_long_result(kw):
     assert len(sh) == len(long_)
     for a, b in zip(long_, sh):
         assert b.entry == pytest.approx(300.0 - a.entry) and b.stop == pytest.approx(300.0 - a.stop)
+
+
+def test_check_params_trader_mode_values_cited_in_params_comments_validate():
+    import re
+    src = open(S.__file__, encoding="utf-8").read()
+    modes = set(re.findall(r'trader_mode[ =]+"([a-z]+)"', src)) - {""}
+    assert "experienced" in modes
+    for m in modes:
+        Params(trader_mode=m)
+
+
+def test_class_risk_swing_position_warn_no_consumer():
+    with pytest.warns(RuntimeWarning, match="no consumer"):
+        Params(class_risk={"swing": 0.015})
+    Params(class_risk={"scalp": 0.005, "day": 0.01})
+
+
+def test_extras_loss_gate_drops_extra_rows_after_the_limit():
+    ctx = SimpleNamespace(equity=100000.0)
+    p = Params(daily_loss_pct=0.01, cost_per_share=0.0)
+    t = lambda h, m, h2, m2, px, sh: S.Trade(date=None, symbol="ES", session="AM", setup="x", side="long", swept="", unicorn=False, smt=None, armed=pd.Timestamp(f"2026-06-23 {h}:{m}", tz=NY),
+                                             entry_time=pd.Timestamp(f"2026-06-23 {h}:{m}", tz=NY), entry=100.0, stop=99.0, t1=105.0, t2=None, shares=sh,
+                                             exits=[(pd.Timestamp(f"2026-06-23 {h2}:{m2}", tz=NY), px, sh, "stop")])
+    main = t("09", "30", "09", "40", 98.0, 600)                      # -1200 > limit 1000
+    e1 = t("09", "50", "10", "00", 101.0, 100)                       # after the loss: dropped
+    e0 = t("09", "35", "09", "38", 101.0, 100)                       # entered before the main loss closed: kept
+    out = es3.extras_loss_gate([main, e1, e0], 1, ctx, p)
+    assert out == [main, e0]
+    assert es3.extras_loss_gate([main, e1], 1, ctx, Params(daily_loss_pct=0.05, cost_per_share=0.0)) == [main, e1]
+
+
+def test_near_htf_literal_add_sized_at_the_near_budget():
+    sd = sd_of([(100.0, 100.5, 99.5, 100.0)] * 3)
+    pos = dict(side=sd, stop=98.0, n=100, basis=10000.0, left=100, es3_room=0.15, add=None, trade=None)
+    p = Params(htf_near_risk_pct=0.05, htf_near_add_literal=True, adds=(0.5,), lot=1)
+    tr = SimpleNamespace(shares=100, adds=[], entry=100.0)
+    S._arm_add(pos, tr, 100.0, 1, p, 100000.0)
+    # literal: 5 % x 100k / 2 pts = 2500 units (the room caps it); proportional would be 50
+    assert pos["add"] is None or pos["add"]["q"] > 50

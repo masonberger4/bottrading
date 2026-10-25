@@ -35,13 +35,15 @@ def _S():
 
 def check_params(p) -> None:
     """Validation (and the two aliases) of the chunk's Params (strategy.Params.__post_init__)."""
-    for name, ok in (("stop_gap_edge", ("", "own", "all")), ("bpr75_ref", ("upper", "lower")), ("trader_mode", ("", "new")), ("ob_stop_kind", ("", "body", "wick")),
+    for name, ok in (("stop_gap_edge", ("", "own", "all")), ("bpr75_ref", ("upper", "lower")), ("trader_mode", ("", "new", "experienced")), ("ob_stop_kind", ("", "body", "wick")),
                      ("ob_anchor", ("highest_open", "last_open")), ("prop_stop", ("", "mt"))):
         if getattr(p, name) not in ok:
             raise ValueError(f"{name} {getattr(p, name)!r}: expected one of {ok}")
     bad = set(p.class_risk) - set(CLASSES)
     if bad or any(not 0 < float(v) <= 1 for v in p.class_risk.values()):
         raise ValueError(f"class_risk {p.class_risk!r}: keys from {CLASSES}, risk fractions in (0, 1]")
+    if p.class_risk and set(p.class_risk) & {"swing", "position"}:
+        warnings.warn("class_risk keys 'swing' / 'position' have no consumer yet (only 'scalp' / 'day' act in the engine; es3.class_risk_pct is for the daily study engines)", RuntimeWarning, stacklevel=2)
     if (not 0 < p.add_dig_mult <= 1 or p.add_mom_r <= 0 or not 0 < p.add_mom_frac <= 1 or p.add_wick_tf < 1 or p.mohawk_add_ticks < 0 or not 0 <= p.daily_loss_pct < 1
             or not 0 <= p.max_exposure_pct < 1 or p.alloc_frac <= 0 or p.htf_near_risk_pct < 0 or p.htf_near_pts < 0 or p.htf_near_cap_pct < 0 or p.max_lev < 0 or p.stop_fixed_pts < 0
             or p.fixed_units < 0 or p.t1_fixed_r < 0 or p.grad_block < 1 or p.grad_max < 1 or p.deep_run_mult <= 0 or p.deep_run_weeks < 1 or p.freq_ref < 0 or p.freq_recent < 0
@@ -142,7 +144,7 @@ def deep_run_column(wh, wl, wc, wlast, ks, n: int) -> list:
 
 
 def exposure_filter(t, cap: float):
-    """E11-portfolio-exposure-cap (cc05_013 ~00:26:39; cc06_002 ~00:12:27): walk the trades in entry order with a running open-risk total (the peak open risk of each trade, released at its exit time) and
+    """E11-portfolio-exposure-cap (cc05_013 ~00:26:39; cc06_002 ~00:12:27): walk the trades in entry order with a running open-risk total (the ENTRY risk of each trade - adds filled later are not counted -, released at its exit time) and
     drop the one whose risk would push the total over `cap` (never exceed the cap to take a setup; no swap - the bot only skips [our interpretation]). Dropped rows are kept in `attrs["x_exposure"]`.
     Review fix (look-ahead): the decision at the new entry uses ENTRY risk only - the new trade's entry_risk_pct, and for the earlier open trades their entry_risk_pct (adds filled after the decision are
     not known then; the peak column is never read)."""
@@ -201,6 +203,29 @@ def dl_blocks_order(pending: dict, ctx, state: dict, p) -> bool:
 def daily_loss_hit(ctx, state: dict, pos, tr, sd, i: int, ts, p) -> bool:
     """The closed losses of the day + the trade's marked P&L at bar i's close reached the limit."""
     return dl_room(ctx, state, p, pos, tr, sd, i, ts) <= 1e-9
+
+
+def extras_loss_gate(trades: list, n_main: int, ctx, p) -> list:
+    """E11-funded-account-caps (review fix): the rows after index n_main (Ma Deuce, Silver Bullet, NDOG scalp) are produced after the main bar loop, so the loop's `state["day_net"]` never saw them. Walk all rows in entry
+    order; an extra row whose entry comes after the day's REALIZED net (every row closed before its entry) reached -limit is dropped (its order would have been refused) [our interpretation: post hoc on the extras only;
+    the main-engine rows are not re-decided]."""
+    lim = dl_limit(ctx, p)
+    if lim <= 0 or len(trades) <= n_main:
+        return trades
+    ext = {id(t) for t in trades[n_main:]}
+    keep = []
+    done: list = []                                     # (exit_time, net) of the rows taken so far
+    for t in sorted(trades, key=lambda t_: t_.entry_time):
+        if id(t) in ext:
+            net = sum(n for x, n in done if x is not None and x <= t.entry_time)
+            if net <= -lim + 1e-9:
+                hit("daily_loss_extra_block")
+                continue
+        g, c = t.pnl(p.cost_per_share)
+        done.append((max((e[0] for e in t.exits), default=None), g - c))
+        keep.append(t)
+    order = {id(t): k for k, t in enumerate(trades)}
+    return sorted(keep, key=lambda t: order[id(t)])
 
 
 def order_risk(ctx, sd, sw, i: int, p, entry: float, risk: float, scalp: bool, draw, tags: dict, lvt: list) -> tuple:

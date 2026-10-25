@@ -2173,6 +2173,18 @@ Items (file#N gap-id | status | Params switch(es) | default | note):
 - L14 `erl_range_update="swing"`: with `irl_entries` an entry outside the rolling dealing range is rejected (`x_irl_outside_range`, variant `L14-dealing-range-redefine_irl`); the default stays "off".
 - Still NOT built (each recorded above): 144(a) is an expectation without an order effect (no hook); 197 the HTF-range entry tag (item 168) and the grade-4 final rung = T are swing-work items the spec itself defers, grade 1 = O + 0.25 r stays an invented depth [our interpretation]; speed_bump_tfs Silver Bullet / Ma Deuce ladder (SB stays off); the 5 other partial notes above.
 
+### Review fixes round 2 (caption-gap pass, entries_stops_sizing#3/3)
+
+- stops#29 E8-E9-5pct-near-htf | fixed | `htf_near_add_literal` (new) | False | the spec's literal reading: the first unit and EACH add at `htf_near_risk_pct` (the add = that budget / its stop distance), the total capped at `htf_near_cap_pct` (study variant `E8-E9-5pct-near-htf_literal`; counter `htf_near_add_literal`). The proportional reading stays the default. Owner question: the trigger was narrowed from "the draw is an htf level within pts" to "the draw matches a Confluence 4h/D/W/M level within 2 pts" because level kinds carry no timeframe (`htf_near_any` = broader).
+- stops#23 E11-funded-account-caps | fixed | - | - | `es3.extras_loss_gate`: the Ma Deuce / Silver Bullet / NDOG rows are walked in entry order with the realized net of every row closed before their entry; an extra row entered after the net reached -limit is dropped (`daily_loss_extra_block`). Post hoc, extras only (the main loop's `day_net` is not fed by them; the main rows are not re-decided) [our interpretation].
+- stops#12 E12-single-add-variants | documented | - | - | `adds=(x,)` is the one-add reading (no `add_max_n` switch needed). NOT BUILT: the 031 DXY gate (no intraday DXY data).
+- stops#30 E8-risk-by-trade-class | partial | - | - | only `scalp` / `day` act; `check_params` now warns (RuntimeWarning) on `swing` / `position` keys (no consumer: the daily study engines do not exist yet).
+- stops#25 E11-portfolio-exposure-cap | documented | - | - | the filter is post hoc on the finished trade book: the engine's later trades (re-entries, loss-streak and day state) were generated as if a dropped trade had been taken, and open risk counts ENTRY risk only (adds ignored), so a pyramided book can exceed the cap. Docstring fixed.
+- stops#36 E9-deep-discount-reduced | documented | - | - | futures-only (needs the htf table); inert with one warning on SPY-only frames.
+- trader_mode "experienced" | fixed | - | - | `check_params` accepts it (committed with this package); test `test_check_params_trader_mode_values_cited_in_params_comments_validate`.
+- Tests: `near_any`, `near_literal`, `reentry_ob` ES look-ahead cases added to es3b; unit tests for the extras gate, the class_risk warning, the literal add.
+- Owner questions: (a) literal vs proportional 5 % adds (`htf_near_add_literal`); (b) narrowed near-HTF trigger; (c) exposure cap post hoc / entry-risk only; (d) daily-loss gate on extras is post hoc.
+
 ### Owner questions (caption-gap pass, targets_partials#1/4)
 
 1. N-opposing-fvg-speed-bump vs owner #7: `speed_bump_tfs` (default `()`) makes the listed opposing-FVG timeframes neither a cap nor a bump rung when the bias agrees; the default stays owner #7 REVISED (15m and lower bump, 1h and above per `htf_resist_mode`). Which timeframes should count as a speed bump (5m only, 15m, 1h)?

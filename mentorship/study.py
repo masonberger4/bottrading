@@ -2077,6 +2077,7 @@ _ES3_DECISIONS = {
     "E8-alloc-30pct_2pct": dict(alloc_frac=0.30, risk_pct=0.02, max_total_risk_pct=0.021, **SM_POST),
     "E8-2pct-new-trader": dict(risk_pct=0.015, max_total_risk_pct=0.016, t1_fixed_r=1.0, t1_fixed_all=True, **SM_POST),
     "E8-E9-5pct-near-htf": dict(htf_near_risk_pct=0.05, **SM_POST),
+    "E8-E9-5pct-near-htf_literal": dict(htf_near_risk_pct=0.05, htf_near_add_literal=True, **SM_POST),     # review fix: the first unit and each add at 5 %, total cap htf_near_cap_pct
     "E8-E9-5pct-near-htf_any": dict(htf_near_risk_pct=0.05, htf_near_any=True, **SM_POST),         # the broader reading: any HTF level in range, draw or not
     "E8-risk-by-trade-class": dict(class_risk={"scalp": 0.005, "day": 0.012}, t1_fixed_r=1.0, t1_fixed_all=True, **SM_POST),
     "E8-leverage-cap-3x": dict(max_lev=3.0, **SM_POST),

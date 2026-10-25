@@ -140,6 +140,9 @@ ES_CASES = {
     "ob_body": (W0, ES_NB, dict(OBPRE, ob_stop_kind="body"), ("ob_stop_body",)),
     "ob_wick": (W0, ES_NB, dict(OBPRE, ob_stop_kind="wick"), ("ob_stop_wick",)),
     "ob_anchor": (W0, ES_NB, dict(OBPRE, ob_anchor="last_open", ob_adds=True), ("ob_anchor_last_open",)),
+    "near_any": (W0, ES_NB, dict(SMP, htf_near_risk_pct=0.05, htf_near_any=True), ("htf_near",)),
+    "near_literal": (W0, ES_NB, dict(SMP, htf_near_risk_pct=0.05, htf_near_add_literal=True, add_on="retest"), ("htf_near",)),
+    "reentry_ob": (W0, ES_NB, dict(SMP, reentry_half=True, reentry_stop="ob_low"), ("reentry_ob_low",)),
 }
 _RUN_KW = {"es_" + c: (kw, need) for c, (w, b, kw, need) in ES_CASES.items()}
 _HITS = {}

@@ -2620,6 +2620,7 @@ class Params:
     htf_near_pts: float = 30.0
     htf_near_any: bool = False           # E8-E9-5pct-near-htf review fix: True = ANY 4h/D/W/M level within htf_near_pts beyond the entry triggers the 5 % risk (the broader reading); False = only when the DRAW is such a level
     htf_near_cap_pct: float = 0.20       # ... and the total-risk cap of such a trade
+    htf_near_add_literal: bool = False   # E8-E9-5pct-near-htf review fix (102 ~01:24:11): True = the spec's literal reading - the first unit AND each add are sized at htf_near_risk_pct (the add = that budget / its stop distance), the total at htf_near_cap_pct; False = adds stay proportional to the 5 % first unit [owner question]
     class_risk: dict = field(default_factory=dict)   # E8-risk-by-trade-class (cc09_006 ~00:05:42; cc06_006; cc05_018): {"scalp": 0.005, "day": 0.012, "swing": 0.015, "position": 0.01} per-unit risk by trade class (scalp = a single fixed exit at <= 1.5R); empty = off
     max_lev: float = 0.0                 # E8-leverage-cap-3x (cc06_006 ~00:15:32): > 0 = position notional (first unit + adds) <= max_lev x equity
     stop_fixed_pts: float = 0.0          # E8-new-trader-drill (042 ~00:32:11; 001 ~00:55:20): stop_mode="fixed" - the stop this many ES pts under the entry
@@ -6842,6 +6843,8 @@ def _ob_add(sd, pos, tr, i, p, eq):
     if k <= pos["fill_i"] or not sd.c[k] < sd.o[k] or k in pos["ob_add_used"]:
         return
     j = k
+    if p.daily_loss_pct > 0 and len(trades) > n_main:
+        trades = _ES3.extras_loss_gate(trades, n_main, ctx, p)      # caption-gap E11-funded-account-caps (review fix): the Ma Deuce / Silver Bullet / NDOG rows obey the day's loss limit too
     while j - 1 > pos["fill_i"] and sd.c[j - 1] < sd.o[j - 1]:
         j -= 1
     top = float(sd.o[k]) if p.ob_anchor == "last_open" else float(sd.o[j:k + 1].max())     # caption-gap A12-ob-anchor: the add's zone top
@@ -6910,6 +6913,11 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
             lk = nl
             ctx.lock[s_] = lk
             if lk["side"] == 0:
+    if p.htf_near_add_literal and p.htf_near_risk_pct > 0 and pos.get("es3_room") and size is None and not pos.get("no_adds"):
+        q = _lots(p.htf_near_risk_pct * eq / d, p.lot)         # caption-gap E8-E9-5pct-near-htf (literal): this add risks htf_near_risk_pct itself; the room above still caps the total
+        if d * q > room:
+            q = _lots(max(room, 0.0) / d, p.lot)
+        _ES2.hit("htf_near_add_literal")
                 if p.draw_lock_neutral == "skip":
                     done[s_] = True
                 continue
