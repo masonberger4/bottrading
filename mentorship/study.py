@@ -45,7 +45,8 @@ def _real(job):
     b = B.run(qqq, tf, "QQQ", replace(p, es_pt=q_pt), spy)
     out = {"SPY": a, "QQQ": b, "combined": B.combine(a, b, pick=study_pick(p.smt_pick), laggard_consol_only=p.laggard_consol_only, one_market=p.one_market,
                                                      sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done, dual_deal=p.dual_deal,
-                                                     exec_exclude=p.combine_exec_exclude, prefer=p.combine_prefer, max_exec=p.max_exec_markets)}
+                                                     exec_exclude=p.combine_exec_exclude, prefer=p.combine_prefer, max_exec=p.max_exec_markets,
+                                                     max_exposure_pct=p.max_exposure_pct)}
     for k, v in out.items():
         if len(v):
             v["variant"], v["tf"], v["book"] = name, tf, k
@@ -2063,6 +2064,7 @@ _ES3_DECISIONS = {
     "E8-alloc-30pct_2pct": dict(alloc_frac=0.30, risk_pct=0.02, max_total_risk_pct=0.021, **SM_POST),
     "E8-2pct-new-trader": dict(risk_pct=0.015, max_total_risk_pct=0.016, t1_fixed_r=1.0, t1_fixed_all=True, **SM_POST),
     "E8-E9-5pct-near-htf": dict(htf_near_risk_pct=0.05, **SM_POST),
+    "E8-E9-5pct-near-htf_any": dict(htf_near_risk_pct=0.05, htf_near_any=True, **SM_POST),         # the broader reading: any HTF level in range, draw or not
     "E8-risk-by-trade-class": dict(class_risk={"scalp": 0.005, "day": 0.012}, t1_fixed_r=1.0, t1_fixed_all=True, **SM_POST),
     "E8-leverage-cap-3x": dict(max_lev=3.0, **SM_POST),
     "E8-new-trader-drill": dict(stop_mode="fixed", stop_fixed_pts=5.0, t1_fixed_pts=5.0, t1_fixed_all=True, fixed_units=1, entry="edge_1tick", adds=(), **SM_POST),
@@ -2172,7 +2174,7 @@ def _dec_job(job):
               partner2=p2, ref_df=ref,
               bias_table=_bias_cache(tf, 570, p.vi_arrays, p.flip_triggers, B.table_kw(p)), meta=B.load_meta(SYMS[0], tf, SRC),
               lock_cuts=_lock_cache(tf, p))
-    if p.smt_pick != "first" or p.one_market or p.sb_one_market or p.sb_am_done or p.dual_deal or len(p.markets) > 1 or p.combine_prefer != "none":    # SB package: M3.9 / gap 7 need the second market too (BH-M3-scan-all-indices: markets)
+    if p.smt_pick != "first" or p.one_market or p.sb_one_market or p.sb_am_done or p.dual_deal or len(p.markets) > 1 or p.combine_prefer != "none" or p.max_exposure_pct:    # SB package: M3.9 / gap 7 need the second market too (BH-M3-scan-all-indices: markets)
         # Ep03.11 (review fix): smt_pick only acts when two instruments are combined - run the
         # partner as its own book (es_pt scaled by the price ratio, as main_index) and combine
         q = replace(p, es_pt=round(p.es_pt * float(pa.close.median() / df.close.median()), 2))
@@ -2180,7 +2182,8 @@ def _dec_job(job):
                    meta=B.load_meta(SYMS[1], tf, SRC) if SRC == "databento" else None, lock_cuts={} if p.draw_lock == "off" else None)
         t = B.combine(t, tb, pick=study_pick(p.smt_pick), laggard_consol_only=p.laggard_consol_only, one_market=p.one_market,
                       sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done, dual_deal=p.dual_deal,   # SB package (+ setups_models #5/7 D15-dual-dealing)
-                      exec_exclude=p.combine_exec_exclude, prefer=p.combine_prefer, max_exec=p.max_exec_markets)       # setups_models #7/7: OT-D15-default-instrument / OT-max-two-correlated-markets
+                      exec_exclude=p.combine_exec_exclude, prefer=p.combine_prefer, max_exec=p.max_exec_markets,
+                      max_exposure_pct=p.max_exposure_pct)       # E11-portfolio-exposure-cap; setups_models #7/7: OT-D15-default-instrument / OT-max-two-correlated-markets
     if len(t):
         t = t[pd.to_datetime(t.entry_time.astype(str).str[:10]) >= f"{year}-01-01"].copy()
         t["tf"], t["year"], t["variant"] = tf, year, name

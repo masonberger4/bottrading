@@ -1268,14 +1268,15 @@ def _sgn(tr) -> int:
     return 1 if tr.side == "long" else -1
 
 
-def after_close(ctx, pos, tr, lost, net: float, done: dict, key: str, state: dict, i, p, reopened: bool) -> bool:
+def after_close(ctx, pos, tr, lost, net: float, done: dict, key: str, state: dict, i, p, reopened: bool, no_same: bool = False) -> bool:
     """The re-entry / reversal state machine at a trade's close (strategy._after_close). Returns True when it re-opened the trade's session slot. Kinds (state["re7"][session], a dict with
     kind / side / pending / exit_i ...):
       "win"        X14 reentry_after_win (049 ~00:02:38; 050 ~00:49:44): a target exit short of the draw, the draw untouched -> one more same-direction entry at a NEW PD array formed after the exit;
       "trail_win"  X13 reentry_after_trail_win (085 ~00:27:16; 056; 022): a trailed stop hit in profit, the draw untouched -> a limit at the defended IFVG CE / the breaker retest (re_order);
       "reverse"    X13 reverse_after_failure (045; 094; 102; cc04_008): after a loss, the opposite side once, at reverse_risk_mult;
       "ts_re"      X13 reentry_ts (cc01_005 ~00:12:36): after a stop-out the same direction again, only by a turtle soup of an old 3-bar swing extreme (reentry_ts_ok);
-      "lod"        X14 allow_opposite_after_target (093): the counter short reached the predefined low-of-day level -> the slot re-opens once for the bias side."""
+      "lod"        X14 allow_opposite_after_target (093): the counter short reached the predefined low-of-day level -> the slot re-opens once for the bias side.
+    `no_same` (caption-gap E6-new-trader-wide-stops, review fix): a tight-stop loss of a new trader - the SAME-direction paths (ts_re) are skipped; the reversal (opposite side) is unaffected."""
     if ctx is None or i is None:
         return False
     sess = tr.session
@@ -1344,7 +1345,7 @@ def after_close(ctx, pos, tr, lost, net: float, done: dict, key: str, state: dic
             state.setdefault("only_side", {})[sess] = -sgn
             hit("reverse_" + var)
             return True
-    if lost is not None and p.reentry_ts and state.setdefault("ts_re_n", {}).get(sess, 0) < p.reentry_max and reason in ("stop", "stop_gap"):
+    if lost is not None and p.reentry_ts and not no_same and state.setdefault("ts_re_n", {}).get(sess, 0) < p.reentry_max and reason in ("stop", "stop_gap"):
         state["ts_re_n"][sess] = state["ts_re_n"].get(sess, 0) + 1
         re7[sess] = dict(kind="ts_re", side=tr.side, exit_i=i, fill_i=fill_i, key=key, pending=True)
         done[key] = False

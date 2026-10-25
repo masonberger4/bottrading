@@ -2614,6 +2614,7 @@ class Params:
     alloc_frac: float = 1.0              # E8-alloc-30pct (cc05_013 ~00:04:16): risk_pct / max_total_risk_pct apply to this fraction of the equity (CC: 0.30; 1.0 = the 2023 whole-account rule)
     htf_near_risk_pct: float = 0.0       # E8-E9-5pct-near-htf (102 ~01:24:11): > 0 = the per-unit risk (first unit and each add) when the trade runs toward a stored HTF level within htf_near_pts ES pts (research switch; away from them min(risk_pct, 0.015))
     htf_near_pts: float = 30.0
+    htf_near_any: bool = False           # E8-E9-5pct-near-htf review fix: True = ANY 4h/D/W/M level within htf_near_pts beyond the entry triggers the 5 % risk (the broader reading); False = only when the DRAW is such a level
     htf_near_cap_pct: float = 0.20       # ... and the total-risk cap of such a trade
     class_risk: dict = field(default_factory=dict)   # E8-risk-by-trade-class (cc09_006 ~00:05:42; cc06_006; cc05_018): {"scalp": 0.005, "day": 0.012, "swing": 0.015, "position": 0.01} per-unit risk by trade class (scalp = a single fixed exit at <= 1.5R); empty = off
     max_lev: float = 0.0                 # E8-leverage-cap-3x (cc06_006 ~00:15:32): > 0 = position notional (first unit + adds) <= max_lev x equity
@@ -4547,7 +4548,7 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
     gross, costs = tr.pnl(p.cost_per_share)
     net_ = gross - costs
     state["day_net"] = state.get("day_net", 0.0) + net_            # caption-gap E11-funded-account-caps: the day's realized P&L
-    tight_ = lost is not None and _ES3.tight_loss(tr, p)           # caption-gap E6-new-trader-wide-stops: no immediate re-entry after a tight-stop loss (trader_mode "new")
+    tight_ = lost is not None and _ES3.tight_loss(tr, p, pos)           # caption-gap E6-new-trader-wide-stops: no immediate re-entry after a tight-stop loss (trader_mode "new")
     key = pos.get("done_key", tr.session)
     reopened = False
     if (lost is not None and p.reentry_half and not tight_ and not state["reentered"].get(tr.session)
@@ -4571,8 +4572,8 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
         done[key] = False
         state["reversed"][tr.session] = True
         state.setdefault("only_side", {})[tr.session] = -1 if tr.side == "long" else 1
-    if ctx is not None and _SM7.any_after7(p) and not tight_:
-        reopened = _SM7.after_close(ctx, pos, tr, lost, net_, done, key, state, i, p, reopened) or reopened     # caption-gap setups_models #7/7: win / trail-win re-entries, reversals, the turtle-soup re-entry, the lod reopen
+    if ctx is not None and _SM7.any_after7(p):
+        reopened = _SM7.after_close(ctx, pos, tr, lost, net_, done, key, state, i, p, reopened, no_same=tight_) or reopened     # caption-gap setups_models #7/7: win / trail-win re-entries, reversals, the turtle-soup re-entry, the lod reopen
     if p.prop_fail_flip:
         _ES1.after_close(ctx, pos, tr, done, key, state, p)         # caption-gap A16-propulsion-block-full: a failed propulsion block ends the longs of the session
     if p.lc_reentry and ctx is not None and tr.session == (getattr(ctx, "lc_retry", None) or {}).get("session"):
@@ -5231,6 +5232,7 @@ def _ob_at_low(sd, sw, i, p=None, ctx=None):
     top, low = float(sd.o[j:k + 1].max()), float(sd.c[j:k + 1].min())
     if p is not None and p.ob_anchor == "last_open":
         top = float(sd.o[k])                                 # caption-gap A12-ob-anchor (cc05_015 ~00:16:48): the last candle's open - the ultra-tight anchor
+        mt_ = None                                           # review fix: the ob_run path's own MT belonged to the old top - the MT is the midpoint of the anchored body (every ob_pick)
         _ES3.hit("ob_anchor_last_open")
     d_ = dict(k=k, j=j, body_top=top, body_low=low, mt=(top + low) / 2 if mt_ is None else mt_,
               hi=float(sd.h[j:k + 1].max()), lo=float(sd.l[j:k + 1].min()))
@@ -5848,7 +5850,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                                                                                                     and pos["add"] is not None))
                     can_add = pos["add"] is None
                 if can_add and p.add_on == "retest":                            # Ep01.18
-                    _EN.retest_add(sd, pos, tr, i, p, lambda px: _arm_add(pos, tr, px, i, p, ctx.equity, floor=pos["fvg_bottom"]))
+                    _EN.retest_add(sd, pos, tr, i, p, lambda px: _arm_add(pos, tr, px, i, p, ctx.equity, floor=pos["fvg_bottom"], dig_g=_ES3.entry_zone(pos)))
                     can_add = pos["add"] is None
                 if can_add and (p.add_low_end or p.add_fvg_low_end or p.add_fvg_low):   # E12c / E12 / Ep04.10
                     _EN.low_end_add(sd, pos, tr, i, p, lambda px, size: _arm_add(pos, tr, px, i, p, ctx.equity, size=size))
@@ -6315,7 +6317,7 @@ def _no_draw(ctx, p, session: str, i: int, bias_by_cut: dict | None) -> bool:
     return not any(abs(v - lk["px"]) <= reach for v, *_ in lk["marked"])
 
 
-def _arm_add(pos, tr, px, i, p, eq, floor=None, g=None, pos_g=False, size=None, extra_room=0.0):
+def _arm_add(pos, tr, px, i, p, eq, floor=None, g=None, pos_g=False, size=None, extra_room=0.0, dig_g=None):
     """#12: an add at `px` (side space) sized by the adds fraction, shrunk so the open risk
     (against the current stop; never negative) stays within the total cap (1.3%).
     floor      the array's bottom: add_hold cancels the add on a body close below it (E12b)
@@ -6323,10 +6325,11 @@ def _arm_add(pos, tr, px, i, p, eq, floor=None, g=None, pos_g=False, size=None, 
                pos_g remembers it for add_low_end (E12c)
     size       an explicit quantity (E12c: the smallest earlier add)
     extra_room extra open risk (fraction of equity) above the total cap (owner #7 htf_add_extra_risk_pct)
+    dig_g      the zone whose repeat digs shrink the add (add_dig_mult; the entry zone for the retest add) - g is not reused (it also drives add_body_stop)
     E11 max_contracts_total caps the units; E1 add_order "market" fills at the open after a retest."""
     k = _nadds(pos, tr)
     base = pos.get("add_base") or pos.get("plan_shares") or tr.shares        # a ladder trade: the full planned size, not rung 0 (caption-gap E12-in-zone-larger-second: the zone ladder's first leg)
-    dm_ = _ES3.dig_mult(pos_sd(pos), px, g, i, p) if p.add_dig_mult < 1.0 else 1.0     # caption-gap E12-repeat-dig-smaller-add: an FVG price dug into twice
+    dm_ = _ES3.dig_mult(pos_sd(pos), px, g if g is not None else dig_g, i, p, pos) if p.add_dig_mult < 1.0 else 1.0     # caption-gap E12-repeat-dig-smaller-add: an FVG price dug into twice
     q = _lots(base * p.adds[min(k, len(p.adds) - 1)] * pos.get("es2_add_mult", 1.0) * dm_, p.lot) if size is None else size
     at_risk = max(0.0, pos["basis"] - pos["stop"] * pos["n"])
     d = px - pos["stop"]
@@ -7387,7 +7390,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     is_ifvg = p.ifvg_entries and g not in sd.gaps and not is_imp and not is_xz
     mit = any(z.i <= i and g.overlaps(z) for z in sd.mitigations()) if p.tag_blocks else False
     prop = any(z.i <= i and z.bottom <= g.top and z.top >= sw["ext"] for z in sd.propulsions()) if p.tag_blocks else False
-    prop_exit = None
+    prop_exit = prop_moved = None
     if p.prop_entry or p.prop_mt_exit:        # A16 (cc04_008 ~0:30-5:40): the propulsion block under the gap
         pb = _EN.prop_block(sd, sw, g.top, i, p)
         if pb is not None:
@@ -7396,6 +7399,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
                 es_x["prop_zone"] = _ES1.prop_zone_real(sd, sw, g.top, i, p)      # caption-gap A16-propulsion-block-full: the block that fails becomes a bearish array of the flipped side
             if p.prop_entry and sw["ext"] < ztop - p.tick < c[i]:
                 entry = ztop - p.tick         # the new support: its high - 1 tick (a limit below the market)
+                prop_moved = prop_exit        # caption-gap E6-propulsion-mt (review fix): the entry WAS moved to the block - only then the MT stop applies
     if p.prop_deep_mult != 1.0:               # caption-gap A16-propulsion-depth-grade (079 ~12:00): a deep PB is weaker
         pdp_ = _ES1.prop_depth(sd, sw, g.top, i)
         if pdp_ is not None:
@@ -7451,7 +7455,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         s_ = _EN.gap_stop(sd, g, sw, i, p, ob, p.stop_mode)
         stop = stop if s_ is None else s_
     if p.stop_mode in ("wick_ce", "m2_auto", "three_pd", "next_pd", "bpr75") or p.prop_stop:
-        stop = _ES3.stop_adjust(ctx, sd, sw, g, ob, mt, entry, stop, i, p, prop_exit)       # caption-gap entries_stops_sizing #3/3: wick CE / M2 auto / three PD arrays / next PD array / BPR 75 % stops, the propulsion MT stop
+        stop = _ES3.stop_adjust(ctx, sd, sw, g, ob, mt, entry, stop, i, p, prop_moved)       # caption-gap entries_stops_sizing #3/3: wick CE / M2 auto / three PD arrays / next PD array / BPR 75 % stops, the propulsion MT stop
     if p.ob_vi_overshoot and ob is not None:        # caption-gap A12-ob-overshoot-to-vi (050 ~33:56): the invalidation runs to the adjacent VI's far edge
         d_ = _ES1.zone_dict(sd, ob)
         vf_ = _ES1.vi_far_edge(sd, d_["lo"], d_["hi"], d_["j"], i, p)
@@ -7723,6 +7727,10 @@ def _ob_pre(ctx, sd, sw, i, p, session, risk_mult):
         tags["mt_close"] = mt_close                # A12 / Ep02.3 mt_close_stop
     if es_lvx:
         tags["lvx"] = es_lvx
+    if p.vi_ladder_exit:
+        tags["es3"] = dict(tags.get("es3") or {}, ob_mt=float(ob["mt"]))      # caption-gap E12-631-vi-wickce-invalidation (review fix): the pre-break OB's MT voids the idea too
+    if p.add_momentum:
+        tags["es3"] = dict(tags.get("es3") or {}, ob_top=float(ob["body_top"]))      # caption-gap E12-single-add-variants (review fix): "runs away" is measured from the OB body top
     if p.ob_grade_mult != (1.0, 1.0):
         _ES2.tag(tags, **_ES2.ob_grade_tags(ob))   # caption-gap A12-mt-grading (cc04_003): the fill-time grade A / B
     if p.ob_cisd != "off" and sd.c[i] > ob["body_top"]:

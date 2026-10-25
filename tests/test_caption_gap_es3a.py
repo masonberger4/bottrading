@@ -22,7 +22,7 @@ NEW_SWITCHES = (
     "htf_near_risk_pct", "class_risk", "max_lev", "stop_fixed_pts", "fixed_units", "t1_fixed_r", "trader_mode", "deep_run_mult", "freq_ref", "probe_mult", "trail_wick_ce",
     "stop_old_low_body", "stop_gap_edge", "bpr75_ref", "stop_widen_new", "stop_htf_anchor", "ob_stop_kind", "ob_anchor", "mit_entries", "prop_stop", "stop_mode", "reentry_stop",
 )
-KNOBS = ("add_mom_r", "add_mom_frac", "add_wick_tf", "mohawk_add_ticks", "htf_near_pts", "htf_near_cap_pct", "grad_block", "grad_max", "deep_run_weeks", "freq_recent", "probe_t", "probe_cut",
+KNOBS = ("add_mom_r", "add_mom_frac", "add_wick_tf", "mohawk_add_ticks", "htf_near_pts", "htf_near_any", "htf_near_cap_pct", "grad_block", "grad_max", "deep_run_weeks", "freq_recent", "probe_t", "probe_cut",
          "new_max_risk_pts", "tight_stop_pts", "wick_ce_tol_ticks", "mt_pad_ticks", "three_pd_n")
 GAP_IDS = (
     "E12-repeat-dig-smaller-add", "E12-single-add-variants", "E12-wick-ce-add-5m", "E12-631-vi-wickce-invalidation", "E12-liquidity-void-add", "X8-downclose-wickce-add", "E12-mohawk-add-ifvg",
@@ -118,8 +118,14 @@ def test_add_dig_mult():
     S._arm_add(pos, tr, 100.4, 4, p, 100000.0, g=g)
     assert pos["add"]["q"] == 3                                                        # the new-FVG add (g.i == i): nothing dug yet
     pos = _pos(sd)
-    S._arm_add(pos, tr, 100.2, 8, p, 100000.0)                                         # no FVG passed: the gap that contains the add price
+    S._arm_add(pos, tr, 100.2, 8, p, 100000.0)                                         # no FVG passed (an OB / wick-CE / void add): no gap is guessed (review fix)
+    assert pos["add"]["q"] == 3
+    pos = _pos(sd, fvg_bottom=float(g.bottom), fill_i=1, fvg_ce=float((g.top + g.bottom) / 2), zone_top=float(g.top))
+    S._arm_add(pos, tr, 100.4, 8, p, 100000.0, dig_g=es3.entry_zone(pos))              # the retest add: the entry zone dug into twice after the fill
     assert pos["add"]["q"] == 2
+    pos = _pos(sd, fvg_bottom=float(g.bottom), fill_i=7)
+    S._arm_add(pos, tr, 100.4, 8, p, 100000.0, g=g)                                    # g IS the entry FVG, filled on bar 7: only the digs after the fill count (here none)
+    assert pos["add"]["q"] == 3
 
 
 # --- E12-single-add-variants (12) --------------------------------------------------------------------------------------------------------
@@ -398,6 +404,9 @@ def test_exposure_cap_combine():
     later = _book([[d, "AM", "am_mm", "ES", None, t0, t0 + pd.Timedelta(minutes=20), 0.012, 0.012], [d, "PM", "pm", "ES", None, t0 + pd.Timedelta(minutes=30), t0 + pd.Timedelta(minutes=90), 0.012, 0.012]])
     assert len(B.combine(later, max_exposure_pct=0.02)) == 2                              # not overlapping: both stay
     assert es3.exposure_filter(two, 0.0) is two
+    # review fix (causal decision): the peak column (adds filled after the decision) is never read - entry risk decides, so a peak far above the entry risk changes nothing
+    big = _book([[d, "AM", "am_mm", "ES", None, t0, t0 + pd.Timedelta(minutes=60), 0.012, 0.050], [d, "PM", "pm", "ES", None, t0 + pd.Timedelta(minutes=30), t0 + pd.Timedelta(minutes=90), 0.012, 0.050]])
+    assert len(B.combine(big, max_exposure_pct=0.026)) == 2 and len(B.combine(big, max_exposure_pct=0.02)) == 1
 
 
 # --- E8-alloc-30pct (26) ---------------------------------------------------------------------------------------------------------------------
@@ -442,14 +451,18 @@ def test_htf_near_risk():
     sd = sd_of([(4000.0, 4001.0, 3999.0, 4000.5)] * 3)
     p = Params(es_pt=1.0, htf_near_risk_pct=0.05)
     tags, lvt = {}, []
-    m, extra = es3.order_risk(_ctx_risk([4025.0]), sd, {}, 2, p, 4000.0, 2.0, False, 4030.0, tags, lvt)       # the weekly high 25 pts away
+    m, extra = es3.order_risk(_ctx_risk([4025.0]), sd, {}, 2, p, 4000.0, 2.0, False, 4025.0, tags, lvt)       # the weekly high 25 pts away IS the draw
     assert m == pytest.approx(0.05 / 0.012) and extra == pytest.approx(0.20 - 0.013) and "htf_near_risk" in lvt and tags["es3"]["near_cap"] == pytest.approx(extra)
     m2, x2 = es3.order_risk(_ctx_risk([]), sd, {}, 2, p, 4000.0, 2.0, False, 4010.0, {}, [])                 # a session-pool draw: the default 1.2 % (capped at 1.5 %)
     assert m2 == pytest.approx(1.0) and x2 == 0.0
-    m3, _ = es3.order_risk(_ctx_risk([4025.0]), sd, {}, 2, replace(p, risk_pct=0.02, max_total_risk_pct=0.021), 4000.0, 2.0, False, 4030.0, {}, [])
+    m3, _ = es3.order_risk(_ctx_risk([4025.0]), sd, {}, 2, replace(p, risk_pct=0.02, max_total_risk_pct=0.021), 4000.0, 2.0, False, 4025.0, {}, [])
     assert m3 == pytest.approx(0.05 / 0.02)
     m4, _ = es3.order_risk(_ctx_risk([4025.0]), sd, {}, 2, replace(p, risk_pct=0.02, max_total_risk_pct=0.021, htf_near_risk_pct=0.0), 4000.0, 2.0, False, 4030.0, {}, [])
     assert m4 == 1.0
+    m6, _ = es3.order_risk(_ctx_risk([4025.0]), sd, {}, 2, p, 4000.0, 2.0, False, 4010.0, {}, [])           # an HTF level in range but the draw is a session pool: default risk
+    assert m6 == pytest.approx(1.0)
+    m7, _ = es3.order_risk(_ctx_risk([4025.0]), sd, {}, 2, replace(p, htf_near_any=True), 4000.0, 2.0, False, 4010.0, {}, [])    # the broader reading
+    assert m7 == pytest.approx(0.05 / 0.012)
     m5, _ = es3.order_risk(_ctx_risk([4060.0]), sd, {}, 2, p, 4000.0, 2.0, False, 4070.0, {}, [])             # 60 pts away: not near
     assert m5 == pytest.approx(1.0)
     pos = {}
@@ -723,6 +736,12 @@ def test_stop_bpr75():
 
 # --- E6-new-trader-wide-stops (56) ---------------------------------------------------------------------------------------------------------
 
+def test_tight_loss_reads_the_initial_risk_and_blocks_only_same_direction():
+    p = Params(es_pt=1.0, trader_mode="new")
+    tr = SimpleNamespace(entry=100.0, stop=95.0)                                         # the average entry after adds: 5 pts away, but the first unit risked 2
+    assert es3.tight_loss(tr, p, {"es3_r0": 2.0}) and not es3.tight_loss(tr, p, {"es3_r0": 4.0}) and not es3.tight_loss(tr, p)
+
+
 def test_new_mode_wide_stop():
     p = Params(es_pt=1.0, trader_mode="new", stop_widen_new=True)
     cands = [(99.2, 99.0), (94.5, 94.25), (90.0, 89.0)]                                    # structural levels under the entry 100, nearest first
@@ -855,3 +874,19 @@ def test_ob_stop_kind_engine():
 def test_class_risk_pct_helper():
     assert es3.class_risk_pct(Params(class_risk={"swing": 0.02}), "swing", 0.015) == 0.02
     assert es3.class_risk_pct(Params(), "swing", 0.015) == 0.015 and es3.class_risk_pct(Params(), "position", 0.01) == 0.01
+
+
+# --- review fix: the sign of the mirrored result (shorts run the bullish code on mirrored prices) -----------------------------------------------------
+
+@pytest.mark.parametrize("kw", [dict(stop_mode="wick_ce"), dict(stop_mode="m2_auto", fvg_pick="2022"), dict(stop_mode="three_pd"), dict(stop_mode="next_pd"), dict(stop_mode="bpr75"),
+                                dict(stop_old_low_body=True), dict(add_wick_ce=True), dict(add_void=True), dict(add_reclaimed_ob=True), dict(add_dig_mult=0.67, add_on="retest")])
+def test_short_side_mirrors_the_long_result(kw):
+    """A short on the mirrored day (price p -> 300 - p) gets the mirrored entry / stop of the long (targets come from the unmirrored history, so exits are not compared), for the stop and add switches of this chunk."""
+    from test_review_fixes import mirror
+    long_ = c_run(**kw)
+    tr, *_ = rf_run(mirror(day(C_ROWS)), history(), Params(**{**BASE, **{"ob_entry": "post_mss", "draw_lock": "off", "htf_resist_cap": False, "min_risk_pts": 0.5, "leg_pd": 0.0, "news_wait": "off",
+                                                                         "min_draw_pts": 0.0}, **kw}), {})
+    sh = [t for t in tr if t.side == "short"]
+    assert len(sh) == len(long_)
+    for a, b in zip(long_, sh):
+        assert b.entry == pytest.approx(300.0 - a.entry) and b.stop == pytest.approx(300.0 - a.stop)

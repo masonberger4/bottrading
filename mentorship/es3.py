@@ -9,7 +9,9 @@ Sections: 1 validation - 2 sizing (alloc / leverage / fixed units / daily loss /
 """
 from __future__ import annotations
 
+import warnings
 from dataclasses import replace
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -141,10 +143,12 @@ def deep_run_column(wh, wl, wc, wlast, ks, n: int) -> list:
 
 def exposure_filter(t, cap: float):
     """E11-portfolio-exposure-cap (cc05_013 ~00:26:39; cc06_002 ~00:12:27): walk the trades in entry order with a running open-risk total (the peak open risk of each trade, released at its exit time) and
-    drop the one whose risk would push the total over `cap` (never exceed the cap to take a setup; no swap - the bot only skips [our interpretation]). Dropped rows are kept in `attrs["x_exposure"]`."""
+    drop the one whose risk would push the total over `cap` (never exceed the cap to take a setup; no swap - the bot only skips [our interpretation]). Dropped rows are kept in `attrs["x_exposure"]`.
+    Review fix (look-ahead): the decision at the new entry uses ENTRY risk only - the new trade's entry_risk_pct, and for the earlier open trades their entry_risk_pct (adds filled after the decision are
+    not known then; the peak column is never read)."""
     if cap <= 0 or t is None or not len(t) or "entry_time" not in t.columns:
         return t
-    col = "peak_risk_pct" if "peak_risk_pct" in t.columns else "entry_risk_pct"
+    col = "entry_risk_pct" if "entry_risk_pct" in t.columns else "peak_risk_pct"
     open_: list = []
     drop = []
     for idx, r in t.sort_values("entry_time", kind="stable").iterrows():
@@ -217,7 +221,7 @@ def order_risk(ctx, sd, sw, i: int, p, entry: float, risk: float, scalp: bool, d
             lvt.append("class_" + cls)
             hit("class_risk")
     if p.htf_near_risk_pct > 0:
-        if htf_near(ctx, sd, i, p, entry):
+        if htf_near(ctx, sd, i, p, entry, draw):
             m *= p.htf_near_risk_pct / base
             extra = max(0.0, p.htf_near_cap_pct - p.max_total_risk_pct)
             tags["es3"] = dict(tags.get("es3") or {}, near_cap=float(extra))
@@ -228,6 +232,11 @@ def order_risk(ctx, sd, sw, i: int, p, entry: float, risk: float, scalp: bool, d
     if p.deep_run_mult != 1.0:
         row = S._EN.bias_row_known(ctx, i)
         dr = 0
+        if row is None:                                   # review fix: no htf table (SPY-only frames) - the switch is inert; say so once instead of silently
+            hit("deep_run_no_table")
+            if not _WARNED.get("deep_run"):
+                _WARNED["deep_run"] = True
+                warnings.warn("deep_run_mult != 1 but this frame has no htf table (no `deep_run` column): E9-deep-discount-reduced is inert here", RuntimeWarning, stacklevel=2)
         if row is not None:
             try:
                 dr = int(row["deep_run"])
@@ -245,15 +254,24 @@ def order_risk(ctx, sd, sw, i: int, p, entry: float, risk: float, scalp: bool, d
     return m, extra
 
 
-def htf_near(ctx, sd, i: int, p, entry: float) -> bool:
-    """E8-E9-5pct-near-htf: a stored 4h / D / W / M level (Confluence arrays' near edge / CE beyond the entry in the trade's direction) within htf_near_pts ES points of the entry [our interpretation of
-    "a stored monthly / weekly / daily / 4h level"]."""
+_WARNED: dict = {}                    # once-per-process warning flags
+
+
+def htf_near(ctx, sd, i: int, p, entry: float, draw=None) -> bool:
+    """E8-E9-5pct-near-htf (review fix): the trade's DRAW is a stored 4h / D / W / M level (a Confluence array edge / CE of those timeframes, within 2 ES points of the draw price - the draw is pulled a pad
+    short of its level) that lies within htf_near_pts ES points of the entry [our interpretation: the engine's level kinds carry no timeframe, so the draw is matched to the Confluence HTF levels].
+    `htf_near_any` = the broader reading (ANY such level beyond the entry within htf_near_pts, draw or not) [our interpretation of "when trading toward a stored level"]."""
     cf = getattr(ctx, "conf", None)
     if cf is None:
         return False
     now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
     near = cf.targets(now, sd.x(entry), sd.sign, ("4h", "D", "W", "M"), False)
-    return any(0 < sd.sign * (v - sd.x(entry)) <= p.htf_near_pts * p.es_pt for v in near) if near else False
+    if not near:
+        return False
+    for v in near:
+        if 0 < sd.sign * (v - sd.x(entry)) <= p.htf_near_pts * p.es_pt and (p.htf_near_any or draw is None or abs(sd.sign * (v - sd.x(draw))) <= 2 * p.es_pt + 1e-9):
+            return True
+    return False
 
 
 # --- 3. adds (E12 / X8) -----------------------------------------------------------------------------------------------------------------------------
@@ -269,15 +287,25 @@ def dig_count(sd, top: float, z_i: int, i: int) -> int:
     return n
 
 
-def dig_mult(sd, px: float, g, i: int, p) -> float:
-    """The size multiplier of an add at an FVG that price has dug into twice before (1.0 otherwise). `g` = the add's FVG; without it the latest gap that contains the add price."""
-    tol = p.eq_tol_pts * p.es_pt
-    if g is None:
-        zs = [z for z in sd.gaps if z.i < i and z.bottom - tol <= px <= z.top + tol]
-        g = max(zs, key=lambda z: z.i) if zs else None
+def entry_zone(pos):
+    """E12-repeat-dig-smaller-add: the ENTRY zone as a gap-like object (top, bottom, i = the fill bar) - the zone the retest add rests at; digs count after the fill."""
+    top = pos.get("zone_top")
+    if top is None:
+        top = 2 * pos["fvg_ce"] - pos["fvg_bottom"]
+    return SimpleNamespace(top=float(top), bottom=float(pos["fvg_bottom"]), i=int(pos["fill_i"]))
+
+
+def dig_mult(sd, px: float, g, i: int, p, pos=None) -> float:
+    """The size multiplier of an add at an FVG that price has dug into twice before (1.0 otherwise). `g` = the add's OWN FVG; no FVG passed (an OB / wick-CE / void / VI add) = 1.0 - no gap is guessed
+    (review fix). Digs are counted on the bars after the gap formed; when `g` is the ENTRY FVG only the bars after the fill count (the entry retrace itself is not a repeat dig).
+    Known deviation (build_log): the new-FVG add is armed on the gap's formation bar (no digs yet), so the multiplier bites the adds that name an older FVG (sm5 FVG add, `pos_g` re-adds); an add with an explicit
+    size bypasses it."""
     if g is None or g.i >= i:
         return 1.0
-    if dig_count(sd, float(g.top), int(g.i), i) >= 2:
+    z_i = int(g.i)
+    if pos is not None and pos.get("fvg_bottom") is not None and abs(float(g.bottom) - float(pos["fvg_bottom"])) <= 1e-9:
+        z_i = max(z_i, int(pos["fill_i"]))
+    if dig_count(sd, float(g.top), z_i, i) >= 2:
         hit("add_dig_mult")
         return float(p.add_dig_mult)
     return 1.0
@@ -353,7 +381,7 @@ def reclaimed_add(sd, pos, i: int, p):
         if k >= pos["fill_i"] or z.i > i:
             continue
         body_top, body_low = float(max(sd.o[k], sd.c[k])), float(min(sd.o[k], sd.c[k]))
-        if sd.c[z.i:i + 1].min() < body_low - MIN1:
+        if sd.c[z.i:i + 1].min() < body_top - MIN1:          # review fix: the bodies must stay beyond the LIMIT level (the body top in side space; 104's "body bottom" of a short mirrors to it)
             continue
         if best is None or z.i > best[2]:
             best = (body_top, body_low, int(z.i))
@@ -393,10 +421,15 @@ def add_locations3(ctx, sd, pos, tr, i: int, p, arm) -> None:
         return
     if p.vi_ladder and not pos["t1_done"]:
         rung = pos.get("vi_rung", 0)
+        if pos.get("vi_wait") is not None and pos["add"] is None:       # review fix: a rung counts when its add FILLED; an add that expired / was cancelled leaves the ladder where it was
+            n_, back_ = pos.pop("vi_wait")
+            if len(tr.adds) <= n_:
+                rung = pos["vi_rung"] = back_
+                hit("vi_rung_unfilled")
         if rung == 0:
             vs = [z for z in sd.vis("bull") if z.i == i and z.i > f + 1]
             if vs and arm(float(vs[-1].top), floor=float(vs[-1].bottom)):
-                pos["vi_rung"] = 1
+                pos["vi_rung"], pos["vi_wait"] = 1, (len(tr.adds), 0)
                 hit("vi_ladder_vi")
                 return
         elif rung == 1:
@@ -407,7 +440,7 @@ def add_locations3(ctx, sd, pos, tr, i: int, p, arm) -> None:
                 size = per_contract(p) if weak else None
                 if arm(float(ce), floor=float(low), size=size):
                     pos["wickce_used"].add(k0)
-                    pos["vi_rung"] = 2
+                    pos["vi_rung"], pos["vi_wait"] = 2, (len(tr.adds), 1)
                     hit("vi_ladder_wick_weak" if weak else "vi_ladder_wick")
                     return
     if p.add_wick_ce and not p.vi_ladder:
@@ -448,12 +481,15 @@ def _ES2_fracs(p) -> tuple:
 
 def momentum_add(pos, tr, sd, i: int, p, eq: float) -> bool:
     """E12-single-add-variants (020 ~00:01:40): after an OB-before-break entry and before T1, the first bar that CLOSES >= fill + add_mom_r x the initial risk arms ONE add of add_mom_frac x the first unit at
-    market (filled at the next open); then no more adds (later OB retests included). [our interpretation of "runs away"]. Returns True when armed."""
+    market (filled at the next open); then no more adds (later OB retests included). [our interpretation of "runs away"]: measured from the OB body top (the order's `es3.ob_top`; the fill price when the
+    tag is absent) + add_mom_r x the initial risk; only while no add has been made yet (review fix). Returns True when armed."""
     S = _S()
     if not pos.get("ob_pre") or pos["add"] is not None or pos.get("mom_done") or pos["t1_done"] or i <= pos["fill_i"]:
         return False
     r0 = pos.get("es3_r0")
-    if not r0 or sd.c[i] < pos["fill_px"] + p.add_mom_r * r0:
+    ref = (pos.get("es3") or {}).get("ob_top")
+    ref = pos["fill_px"] if ref is None else float(ref)
+    if not r0 or S._nadds(pos, tr) != 0 or sd.c[i] < ref + p.add_mom_r * r0:
         return False
     q = max(p.lot, S._lots(p.add_mom_frac * (pos.get("plan_shares") or tr.shares), p.lot))
     S._arm_add(pos, tr, float(sd.c[i]), i, p, eq, size=int(q))
@@ -756,9 +792,11 @@ def trail_wick(sd, pos, i: int, p) -> None:
 
 # --- 5. position hooks -----------------------------------------------------------------------------------------------------------------------------
 
-def tight_loss(tr, p) -> bool:
+def tight_loss(tr, p, pos=None) -> bool:
     """E6-new-trader-wide-stops: a stop-out from a tight stop (risk < tight_stop_pts) in trader_mode "new" allows no immediate same-direction re-entry (experienced only) [our interpretation of "tight"]."""
-    return bool(p.trader_mode == "new" and abs(tr.entry - tr.stop) < p.tight_stop_pts * p.es_pt - MIN1)
+    r0 = (pos or {}).get("es3_r0")                       # review fix: the INITIAL risk (tr.entry is the average price once adds exist)
+    r0 = abs(tr.entry - tr.stop) if r0 is None else float(r0)
+    return bool(p.trader_mode == "new" and r0 < p.tight_stop_pts * p.es_pt - MIN1)
 
 
 def on_fill(ctx, sd, pos, tr, o: dict, i: int, p, fill: float) -> None:
@@ -843,8 +881,8 @@ def ob_low_order(ctx, sd, i: int, p, session: str, risk_mult: float):
             continue
         o = S._SM4._order(ctx, sd, i, p, session, risk_mult, "ob_low", entry, stop, level=entry, ext=float(sd.l[k]), ext_i=int(k), broke=i, fvg_bottom=float(sd.l[k]),
                           lv=("ob_low",), sm7=dict(kind="ob_low"))
-        if o is not None:
+        if o is not None:                                  # review fix: a candidate the risk filters reject does not end the context - the next candidate is tried
             rc["armed_ob"] = True
             hit("reentry_ob_low")
-        return o
+            return o
     return None

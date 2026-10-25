@@ -62,6 +62,7 @@ SYN_CASES = {
     "stop_next": (3, dict(stop_mode="next_pd", ob_entry="post_mss", trader_mode="new", stop_widen_new=True, new_max_risk_pts=100.0)),
     "stop_bpr": (3, dict(stop_mode="bpr75", bpr75_ref="lower", ob_entry="post_mss")),
     "drill": (3, dict(stop_mode="fixed", stop_fixed_pts=5.0, t1_fixed_pts=5.0, t1_fixed_all=True, fixed_units=1, entry="edge_1tick", adds=(), ob_entry="post_mss")),
+    "exposure": (3, dict(max_exposure_pct=0.0125, ob_entry="post_mss")),
     "reentry": (3, dict(reentry_half=True, reentry_stop="ob_low", ob_entry="post_mss", t1_fixed_r=1.0, t1_fixed_all=True)),
 }
 
@@ -73,6 +74,17 @@ def test_look_ahead_synthetic(case):
     p = Params(**{**SYN, **SYN_BASE, **kw})
     full, added = _la(x, 5, "RW", p, COLS, every=3, partner=y)
     assert len(full) >= 1, full
+
+
+def test_exposure_cap_acts_through_params_in_a_single_book_and_the_study_variant():
+    """Review fix: Params.max_exposure_pct reaches B.run (not only B.combine with the keyword): a cap below every trade's entry risk empties the book and keeps the dropped rows."""
+    x, y = B.synthetic(start="2026-04-06", end="2026-05-08", tf=5, seed=3)
+    base = {**SYN, **SYN_BASE, "ob_entry": "post_mss"}
+    off = B.run(x, 5, "RW", Params(**base), partner=y)
+    assert len(off) >= 1
+    on = B.run(x, 5, "RW", Params(**base, max_exposure_pct=1e-6), partner=y)
+    assert len(on) == 0 and len(on.attrs["x_exposure"]) == len(off)
+    assert study.DECISIONS["E11-portfolio-exposure-cap"]["max_exposure_pct"] > 0
 
 
 @pytest.mark.parametrize("seed", [3, 4])

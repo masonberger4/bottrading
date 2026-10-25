@@ -430,6 +430,10 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     if len(out):                           # several setups per day: report in time order
         out = out.sort_values(["entry_time", "setup"], kind="stable").reset_index(drop=True)
         out.attrs["days"] = len(ds) - warmup
+        if p.max_exposure_pct:             # caption-gap E11-portfolio-exposure-cap (review fix): the single book honours the cap too (combine re-applies it across instruments)
+            attrs = dict(out.attrs)
+            out = _ES3.exposure_filter(out, p.max_exposure_pct)
+            out.attrs.update(attrs)
     out.attrs["locks"] = locks
     out.attrs["skips"] = skips
     if objective:                          # D15 laggard_objective: the per-day, per-instrument draw-met moments (also for days without a trade)
