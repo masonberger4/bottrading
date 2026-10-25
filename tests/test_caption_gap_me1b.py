@@ -85,7 +85,13 @@ ES_CASES = {
     "h": (W8, ES_NB, dict(SMP, fvg_bpr_backstop=True, fvg_abort=True, bpr_abort=True, refusal_breakaway=True, far_half_no_adds=True), ("fvg_bpr_backstop",)),
     "i": (W8, ES_NB, dict(SMP, sd_time_roll=True, sd_targets=True, sd_window=(600, 720), sd_anchor="entry_low"), ()),
     "j": (W8, ES_NB, dict(SMP, sd_body_hold=True, sd_targets=True), ()),
-    "k": (W8, ES_B, dict(SMP, no_lunch_retrace_hold=True, thu_cap=True, pre_0700=True, day_mode_auto=True, hold_through_0830=True, ma_deuce=True), ()),
+    "k": (W8, ES_B, dict(SMP, no_lunch_retrace_hold=True, thu_cap=True, pre_0700=True, day_mode_auto=True, hold_through_0830=True, ma_deuce=True), ("eval_day_pick", "eval_thu_block")),
+    # review fix: the mid-trade switches the cases above never showed executing on real bars (the rare situations themselves are covered by the forced books below)
+    "l": (W8, ES_NB, dict(SMP, pre_0700=True, ma_deuce=True, sb_model=True, sb_london=True, hold_through_0830=True, thu_cap=True, no_lunch_retrace_hold=True, ny_kz_futures=True),
+          ("eval_flat_0830", "eval_thu_block")),
+    "m": (W8, ES_NB, dict(SMP, event_eve_lock=True, vi_mid_exit=True, refusal_breakaway=True, rip_through=True, tick_match_hold=True, be_cap_htf=True, htf_targets=HTW, no_lunch_retrace_hold=True,
+                          thu_cap=True, day_mode_auto=True, iof_intraday_exit=True, iof_strict=True, rip_wick_mult=2.0),
+          ("eval_day_pick", "eval_event_eve", "eval_rip", "rip", "iof_exit", "eval_be_cap", "eval_runner_lock")),
 }
 
 
@@ -194,3 +200,12 @@ def test_forced_day_mode_auto(monkeypatch):
     rows = A_ROWS[:5] + [(100.3, 103.0, 100.2, 102.9), (102.9, 103.0, 99.8, 100.1), (100.1, 100.5, 99.0, 99.5)]
     tr = _forced(Params(**BASE, min_risk_pts=0.3, day_mode_auto=True, be_on="t1"), (), rows=rows, spike=True, lock=A_LOCK)
     assert "day_auto" in tr[0].lv_tags and "day_trade" in tr[0].lv_tags
+
+
+def test_forced_thursday_and_day_pick_run_on_real_code():
+    """A hand-made THURSDAY: the Thursday block (thu_cap) and the real day_pick / day_level (day_mode_auto, not monkeypatched) are evaluated in the full run and in every truncated run."""
+    from datetime import date as _d
+    from test_caption_gap_es1a import C_ROWS
+    thu = _d(2026, 6, 25)
+    assert thu.weekday() == 3
+    _forced(_fp(thu_cap=True, day_mode_auto=True, no_lunch_retrace_hold=True), ("eval_thu_block", "eval_day_pick"), rows=list(C_ROWS), d=thu)

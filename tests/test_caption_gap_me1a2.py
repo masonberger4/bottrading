@@ -230,7 +230,7 @@ def test_refusal_breakaway():
 def test_dojis_against_the_position_do_not_exit():
     dojis = [(101.0, 101.3, 100.7, 101.0), (101.0, 101.2, 100.8, 100.95), (100.95, 101.3, 100.7, 101.05)] * 4         # indecision candles around the entry: no body, both wicks
     tr = rf_run(day(list(C_ROWS[:6]) + dojis, tail=101.0), history(), Params(**{**BASE, **POST}), {})[0]
-    assert len(tr) == 1 and [e[3] for e in tr[0].exits][-1] in ("eod", "am_exit") and not any(e[3] in ("stop", "stop_gap", "be", "reverse") for e in tr[0].exits)      # no exit and no flip on a doji
+    assert len(tr) == 1 and [e[3] for e in tr[0].exits] == ["am_exit"] and not any(e[3] in ("stop", "stop_gap", "be", "reverse") for e in tr[0].exits)      # no exit and no flip on a doji
 
 
 # --- B6-intraday-iof (111) --------------------------------------------------------------------------------------------------------------------------

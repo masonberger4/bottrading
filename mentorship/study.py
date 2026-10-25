@@ -2291,6 +2291,7 @@ _ME1_DECISIONS = {
     "BH-micro-BPR-tick-match-LOD": dict(tick_match_hold=True, **SM_POST),
     "B6-untouched-premium-arrays-heavy": dict(heavy_gauge=True, heavy_scale=0.33, **SM_POST),
     "T9-strong-am-no-lunch-retrace": dict(no_lunch_retrace_hold=True, lunch_retr_max=0.3, **SM_POST),
+    "T9-strong-am-no-lunch-retrace_pm_ext": dict(no_lunch_retrace_hold=True, lunch_retr_max=0.3, pm=(780, 950), pm_done_by=900, **SM_POST),     # + the PM entry after the lunch-high break keeps the last hour (pm_done_by lifted)
     "N5-hold-through-0830": dict(hold_through_0830=True, pre_0700=True, ma_deuce=True, sb_model=True, sb_london=True, **SM_POST),
     "N5-hold-through-0830_off": dict(no_entry_0825=False, pre_0700=True, **SM_POST),
     "N10-thursday-caps-week": dict(thu_cap=True, pre_0700=True, **SM_POST),
@@ -2305,14 +2306,17 @@ _ME1_DECISIONS = {
     "A5-reclaimed-fvg-full-revisit": dict(fvg_bpr_backstop=True, fvg_abort=True, bpr_abort=True, **SM_POST),
     "A9-broken-vi-retrace-midpoint": dict(vi_mid_exit=True, vi_mid_bars=2, **SM_POST),
     "A8-rip-through-ce-signature": dict(rip_through=True, stall_partial=0.5, **SM_POST),
+    "A8-rip-through-ce-signature_wick": dict(rip_through=True, rip_wick_mult=2.0, stall_partial=0.5, **SM_POST),     # the large-wick path object (caption-gap review fix)
     "X9-entry-fvg-immediate-rejection": dict(fvg_full_fill_void=True, **SM_POST),
+    "X9-entry-fvg-immediate-rejection_forming_stop": dict(fvg_full_fill_void=True, stop_mode="fvg_candle", **SM_POST),     # the 1-tick-beyond-the-forming-candle stop = the built stop_mode "fvg_candle" (middle candle) [see also fvg_c1_low]
     "L4-resistance-is-delivery-speed": dict(resistance_def="speed", resist_speed_bars=3, **SM_POST),
     "L4-resistance-is-delivery-speed_low_full": dict(resistance_def="speed", resistance_mode="low_full", **SM_POST),
     "A8-ifvg-15m-body-failure": dict(ifvg_fail_tf=15, ifvg_entries=True, ifvg_hold=True, **SM_POST),
     "A6-breakaway-by-refusal": dict(refusal_breakaway=True, **SM_POST),
     "B6-intraday-iof": dict(iof_intraday_exit=True, **SM_POST),
+    "B6-intraday-iof_strict": dict(iof_intraday_exit=True, iof_strict=True, iof_tol_bars=3, iof_min_body_ticks=2, **SM_POST),     # the new-high / reversal conditions of the Rule (caption-gap review fix)
     "new-ignore-dojis": dict(**SM_POST),                                  # no switch: no doji logic exists (a regression variant = the post_mss engine; test_dojis_against_the_position_do_not_exit)
-    "new-position-trade-grading-fib": dict(pos_switch_frac=0.5),
+    "new-position-trade-grading-fib": dict(pos_switch_frac=0.5),     # PLACEHOLDER: spec only (deferred to M17), the helper me1.pos_trail has no engine hook; this variant changes nothing
     "A2-quick-run-through": dict(run_through_bars=3, run_through_ticks=2.0, **SM_POST),
     "L12-sd-step-to-time-window": dict(sd_time_roll=True, sd_window=(600, 720), sd_targets=True, **SM_POST),
     "L14-hold-above-reached-objective": dict(hold_reached=True, hold_tf=5, **SM_POST),
@@ -2322,6 +2326,7 @@ _ME1_DECISIONS = {
     "E1-manual-touch-exits_limit_through": dict(exit_fill="limit_through", **SM_POST),
     "X4-be-vi-then-new-ssl": dict(be_mode="vi_then_new_ssl", **SM_POST),
     "X4-be-without-partials": dict(be_mode="through_opposing_fvg", exit_mode2="full_pull", **SM_POST),
+    "X4-be-without-partials_full_pull": dict(exit_mode2="full_pull", **SM_POST),     # the opposing-FVG breakeven for the full-pull trade by itself
     "X4-be-plus-cap-htf": dict(be_cap_htf=True, htf_targets=("1h", "4h", "D", "W"), **SM_POST),
     "D14-be-after-adr-fraction": dict(be_mode="adr_frac", be_adr=0.4, **SM_POST),
     "D14-be-after-adr-fraction_05": dict(be_mode="adr_frac", be_adr=0.5, **SM_POST),

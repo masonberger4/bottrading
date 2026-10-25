@@ -2877,7 +2877,7 @@ class Params:
     heavy_scale: float = 0.33
     no_lunch_retrace_hold: bool = False  # T9-strong-am-no-lunch-retrace (cc10_012 ~00:11:54): a strong AM rally from the day's low whose 12:00-13:00 low retraces < lunch_retr_max of the AM leg keeps the AM position past the 12:00 close (stop to the lunch low, out at 15:50 or the target); else it closes at 13:00. The PM-entry extension to the last hour is NOT built
     lunch_retr_max: float = 0.3          # ... [our interpretation] 25-30 %
-    hold_through_0830: bool = False      # N5-hold-through-0830 (032 ~00:06:56; 091 ~00:22:26): the experienced version - a pre-09:30 position (incl. Ma Deuce / SB London) is held through the 08:30 release, the exit being a resting limit at the pool; jobs / CPI days stay excluded. Default (bot / new trader): go flat at 08:29 (pre_flat_0830)
+    hold_through_0830: bool = False      # N5-hold-through-0830 (032 ~00:06:56; 091 ~00:22:26): the experienced version - a pre-09:30 position (incl. Ma Deuce / SB London) is held through the 08:30 release, the exit being a resting limit at the pool; jobs / CPI days stay excluded. PRE8 orders still never fill on or after the 08:30 bar. Default OFF (flat at 08:29, pre_flat_0830) because owner directive "No 08:30 entries; pre-09:30 setups are test-only switches" (owner_directives.md line 16) wins over the experienced-version rule; listed under the owner questions
     no_entry_0825: bool = True           # ... no pre-09:30 order fills 08:25-08:30 on a day with a 08:30 release (main engine; the experienced hold_through_0830 lifts it) [spec default on: the existing intent of pre_flat_0830]
     thu_cap: bool = False                # N10-thursday-caps-week (cc08_001 ~00:21:59): a Thursday position entered before 09:30 is closed at 10:00; a Thursday 09:30-12:00 new weekly extreme into a daily array blocks entries in its direction that day (x_thu_week_ext) [our interpretation]
     bpr_limit: str = "mt_body_close_abort"   # A11-bpr-retrace-allowance (001 ~20:43; 012 ~22:34; 024 ~6:18; 026 ~1:05:53; 065 ~4:28): how deep a return into the BPR under the entry may go (needs bpr_abort or bpr_rule): "mt_body_close_abort" (the built rule, 065) / "no_reentry" (001) / "ce_touch" (012) / "mt_warn_far_exit" (026) / "far_edge" (024: a trade-through of the far edge)
@@ -2895,6 +2895,10 @@ class Params:
     ifvg_fail_tf: int = 0                # A8-ifvg-15m-body-failure (084 ~12:08): the IFVG entry fails on a body close back through the FVG on this timeframe (15 = ICT; 0 = the engine's own bars, the built lvx rule)
     refusal_breakaway: bool = False      # A6-breakaway-by-refusal (090 ~2:03:43): two armed adds that expired unfilled = the newest FVG is a breakaway gap: no ladder_trail FVG trailing, hold the runner
     iof_intraday_exit: bool = False      # B6-intraday-iof (075 ~1:21:58): the open of the newest down-close candle after the fill is the support; a body close below it exits
+    iof_strict: bool = False             # B6-intraday-iof (075 ~1:21:58) [our interpretation of the Rule]: with iof_intraday_exit - each down-close support must lead to a new short-term high within iof_tol_bars bars, and a low taken under the support candle must reverse (close back above it) within iof_tol_bars bars, else the IOF is no longer bullish: exit
+    iof_tol_bars: int = 3                # ... the 1-3 bar reversal tolerance [our interpretation]
+    iof_min_body_ticks: int = 0          # ... a down-close candle counts as a support only with a body of this many ticks (0 = any)
+    rip_wick_mult: float = 0.0           # A8-rip-through-ce-signature (031 ~51:52): > 0 = a large upper wick (>= this x the median range of the 20 bars before it) in the path is a rip / stall object like an opposing FVG [our interpretation of 'old FVG or large wick in the path']
     pos_switch_frac: float = 0.5         # new-position-trade-grading-fib (cc05_018 ~16:20): SPEC ONLY - the switch from the 40-day to the 20-day extreme trail (me1.pos_trail); no multi-day position engine exists yet
     run_through_bars: int = 0            # A2-quick-run-through (033 ~00:51:37): a rung that does not run > run_through_ticks beyond within this many bars of its touch (the touch bar counts) is 'stalled' (tag rt_stall, stall_at); a later body close back through it exits the rest (0 = off, test 1 / 2 / 3)
     run_through_ticks: float = 2.0
@@ -5902,13 +5906,15 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     pos["rungs"] = keep_r
             a = pos["add"]
             if a is not None:                         # pending pyramid add
-                if ((pos["t1_done"] and not a.get("post_partial")) or i - a["i"] > max(1, p.pending_minutes // tf) or chop_before
-                        or (a.get("hold") is not None and i - 1 > a["i"] and sd.c[i - 1] < a["hold"])   # E12b add_hold
-                        or (a.get("hold_es2") is not None and i - 1 > a["i"] and sd.c[i - 1] < a["hold_es2"])   # caption-gap E12-second-stage-ob-at-MT: a body close under the VI cancels the OB add
-                        or _EN.add_cut_passed(sd, pos, i - 1, p)      # E12e: the cut passed on a closed bar
-                        or (p.late_cutoff and t >= p.late_cutoff)):    # T11: no adds in the last 15 minutes
-                    if p.refusal_breakaway:
-                        _ME1.add_missed(pos, p)                       # caption-gap A6-breakaway-by-refusal: an armed add expired unfilled
+                a_time_ = i - a["i"] > max(1, p.pending_minutes // tf)
+                a_oth_ = bool((pos["t1_done"] and not a.get("post_partial")) or chop_before
+                              or (a.get("hold") is not None and i - 1 > a["i"] and sd.c[i - 1] < a["hold"])   # E12b add_hold
+                              or (a.get("hold_es2") is not None and i - 1 > a["i"] and sd.c[i - 1] < a["hold_es2"])   # caption-gap E12-second-stage-ob-at-MT: a body close under the VI cancels the OB add
+                              or _EN.add_cut_passed(sd, pos, i - 1, p)      # E12e: the cut passed on a closed bar
+                              or (p.late_cutoff and t >= p.late_cutoff))    # T11: no adds in the last 15 minutes
+                if a_time_ or a_oth_:
+                    if p.refusal_breakaway and a_time_ and not a_oth_:
+                        _ME1.add_missed(pos, p, a)                    # caption-gap A6-breakaway-by-refusal: an armed add that only TIMED OUT while price ran away (hold-break / chop / partial / cut cancels are no refusal)
                     pos["add"] = None
                 elif a.get("now"):                    # caption-gap E12-single-add-variants (020 ~00:01:40): the momentum add - a market buy at the open after the arming close
                     px = float(o)
@@ -6093,7 +6099,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 if pos["left"] and not (pos.get("tp1") or {}).get("eve_bnb"):        # (caption-gap N4-eve-of-high-impact: the eve scalp keeps its initial stop - no trailing)
                     _MG.be_modes(sd, pos, tr, i, p)                # D14 / Ep03.15 after_mss / stall / pool breakeven
                     _MG.trail_extra(sd, pos, i, p)                 # Ep03.10 first-FVG and Ep03.20 measuring-gap trails
-                    if p.bpr2_trail or p.wick_bias_line:
+                    if (p.bpr2_trail or p.wick_bias_line) and _ME1.trail_ok(pos):      # (caption-gap stop locks: no BPR / wick-line stop raise inside a blocked or locked phase)
                         _LD.manage(ctx, sd, pos, tr, i, p)         # caption-gap A11 bpr2_trail / A23 wick_bias_line
             if (pos["left"] and tr.session in ("PRE7", "PRE8", "LON") and _ME1.flat_0830(day, p)      # (caption-gap N5-hold-through-0830: pre_flat_0830 unless the experienced hold_through_0830)
                     and t + tf >= 510):
@@ -6102,7 +6108,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 tr.exits.append((ts, sd.x(c), pos["left"], "lunch_exit")); pos["left"] = 0   # T8: never held into the PM
             am_x_ = (min(p.am_exit, p.nfp_flat_by) if p.am_exit else p.nfp_flat_by) if (p.nfp_flat_by and "jobs" in tags) else p.am_exit     # caption-gap N1-nfp-no-htf-hold [our interpretation]: flat by nfp_flat_by on a jobs day
             if (pos["left"] and tr.session not in ("PM", "LUNCH") and am_x_ and t + tf >= am_x_
-                    and not (p.no_lunch_retrace_hold and _ME1.am_exit_hold(ctx, sd, pos, tr, i, ts, p, am_x_))):      # (caption-gap T9-strong-am-no-lunch-retrace: a held AM position skips the close)
+                    and not (p.no_lunch_retrace_hold and _ME1.am_exit_hold(ctx, sd, pos, tr, i, ts, p, am_x_, ev_flat=bool(p.nfp_flat_by and "jobs" in tags)))):      # (caption-gap T9-strong-am-no-lunch-retrace: a held AM position skips the close)
                 # Ep 03 / owner #8: CLOSE (not tighten) all remaining AM-family units at the close
                 # of the bar ending 12:00; "tighten" is a test-only switch [our interpretation]
                 if p.am_exit_mode == "close":
@@ -6114,7 +6120,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                         tr.exits.append((ts, sd.x(c), pos["left"], "am_exit")); pos["left"] = 0
                     else:
                         _MG.raise_stop(pos, new)               # X5c: a day trade keeps its stop
-            if pos["left"] and tr.session == "PM" and p.pm_done_by and pos["t1_done"] and t + tf >= p.pm_done_by and not _SM7.held(pos) and not (pos.get("tp3") or {}).get("hold_obj"):
+            if pos["left"] and tr.session == "PM" and p.pm_done_by and pos["t1_done"] and t + tf >= p.pm_done_by and not _SM7.held(pos) and not (pos.get("tp3") or {}).get("hold_obj") and not (pos.get("me1") or {}).get("lunch_ext"):      # (caption-gap T9-strong-am-no-lunch-retrace: a PM entry after the lunch-high break keeps the last-hour window)
                 tr.exits.append((ts, sd.x(c), pos["left"], "pm_done")); pos["left"] = 0
             if pos["left"] and ff and pos["fill_t"] < ff and t + tf >= ff:
                 tr.exits.append((ts, sd.x(c), pos["left"], "fomc_flat")); pos["left"] = 0   # N3.2: never hold into the release
@@ -6245,7 +6251,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             pending = None                           # caption-gap X9-entry-fvg-immediate-rejection: a print through the entry FVG's far edge voids the resting order
         if pending is not None:
             sd = pending["side"]
-            cut = {"AM": am_hi, "PM": p.pm[1], "PRE7": 510, "PRE8": 510 if (p.am_from_0830 or _ME1.flat_0830(day, p)) else 570, "PRE9": 570,
+            cut = {"AM": am_hi, "PM": p.pm[1], "PRE7": 510, "PRE8": _ME1.pre8_cut(day, p), "PRE9": 570,
                    "NEWS": 570, "LON": 300, "LUNCH": p.lunch_win[1], "PO3R": p.am_exit or 720}[pending["session"]]
             if pending.get("done_key", "").startswith("SB_"):
                 cut = p.sb_windows[0][1] if pending["session"] == "AM" else p.sb_windows[1][1]
@@ -8860,6 +8866,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         if p.news_range_pd and not news_pd:
             _f("x_news_range_premium")
             return None
+    if p.no_lunch_retrace_hold and session == "PM" and _ME1.lunch_ext(ctx, sd, i, p):
+        _ME1.mark_tags(tags, "lunch_ext")                  # caption-gap T9-strong-am-no-lunch-retrace: a PM entry in the AM direction after the lunch-high break keeps the last-hour window
     if p.thu_cap:
         why_thu = _ME1.thu_block(ctx, sd, i, p, session)      # caption-gap N10-thursday-caps-week: a Thursday NY-morning weekly extreme into a daily array
         if why_thu:
