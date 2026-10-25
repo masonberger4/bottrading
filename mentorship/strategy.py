@@ -2534,7 +2534,7 @@ class Params:
     ob_need_narrative: bool = False      # A12-ob-requires-narrative (059 ~19:00; 064 ~51:56; 065 ~1:28:02): an OB qualifies only with the bias this way, a transitional event (a pool swept, or an array traded into) before or by it, and (ob_need_htf_array) lying inside an HTF array
     ob_need_htf_array: bool = True       # ... (2) the OB lies inside a same-side HTF array [our interpretation: the array contains the OB bodies, tolerance eq_tol_pts]
     ob_wick_ltf_entry: bool = False      # A12-ob-open-anchor-ltf-wick (061 ~26:10): an HTF OB with a stubby wick (< 25% of its range) - the entry is an LTF FVG / OB inside [open, low] of it; the wick area does not invalidate
-    htf_ob_anchor: str = "extreme"       # A12-ob-anchor-level (default kept at the built "extreme" until the owner confirms "open", see build_log owner questions) (cc03_001 ~28:18; cc06_004; cc10_005; 072): the HTF OB level - "open" (A12 2023) / "extreme" (CC swing: the OB candle's high / highest high of the series)
+    htf_ob_anchor: str = "open"          # A12-ob-anchor-level (default "open" = the 2023 Mentorship level; "extreme" is the Core Content swing level and sits in study.PRE_OWNER) (cc03_001 ~28:18; cc06_004; cc10_005; 072): the HTF OB level - "open" (A12 2023) / "extreme" (CC swing: the OB candle's high / highest high of the series)
     scan_tfs: tuple = (1,)               # new-multi-tf-scan (070 ~30:37; 072 ~11:09): minutes of the extra bar sizes whose FVGs join the entry gaps ((1, 2, 3, 4, 5) = 1m..5m; 120 = 2h); 1 = the base bars only
     two_min_ce: bool = False             # new-2m-fvg-ce (062 ~40:09): a 1m FVG whose displacement is two same-direction 1m candles enters at the CE of the 2m FVG
     fvg_skip_below_pool_short: bool = False   # A5-skip-fvg-near-stop-pool (060 ~1:11:00): skip an entry FVG within fvg_pool_gap_pts of an untaken short-term extreme that lies between it and the protective extreme (side-space mirror: covers both directions)
@@ -5627,7 +5627,7 @@ def _ob_at_low(sd, sw, i, p=None, ctx=None):
         _ES3.hit("ob_anchor_last_open")
     d_ = dict(k=k, j=j, body_top=top, body_low=low, mt=(top + low) / 2 if mt_ is None else mt_,
               hi=float(sd.h[j:k + 1].max()), lo=float(sd.l[j:k + 1].min()))
-    if p is not None and mt_ is None and p.mt_mode in ("sensitive", "body_single_range_blended"):
+    if p is not None and mt_ is None and p.mt_mode in ("range", "sensitive", "body_single_range_blended"):    # review fix: "range" now reaches dict_mt too
         d_["mt"] = _ES1.dict_mt(p, sd, d_, d_["mt"])          # caption-gap D4-mt-source-tally: the sensitive / blended MT of the OB
     return d_
 
@@ -6450,6 +6450,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 if lk is not None:
                     lk["traded"] = True
                 pending = None
+            elif pending.get("mtf_gap") is not None and i - 1 > pending["i"] and _ES1.mtf_pending_dead(ctx, sd, pending, i - 1, p):
+                pending = None                       # review fix A5-multitf-hold-test (064 ~1:32:01): two or more 1-4m closes inside the 5m entry gap while the limit rests cancel it
                 if sd.l[i] <= pos["stop"]:           # same-bar stop (conservative)
                     tr.exits.append((ts, sd.x(pos["stop"]), pos["left"], "stop")); pos["left"] = 0
                     lost_side = _after_close(pos, trades, p, done, state, i=i, ctx=ctx) or lost_side
@@ -7828,7 +7830,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
             entry = top                                             # caption-gap A15-mitigation-definition-and-iofed (012 ~11:39): after a mitigation block the IOFED enters at the FVG's near edge, never the CE
             sm_tags.append("mit_iofed_edge")
             _ES1.hit("mit_iofed_edge")
-        if p.two_min_ce:
+        if p.two_min_ce and any(g is z_ for z_ in gaps):        # review fix: only a base-bar gap (g.src is its middle candle)
             ce2_ = _ES1.two_min_ce(ctx, sd, g, i, p)               # caption-gap new-2m-fvg-ce (062 ~40:09)
             if ce2_ is not None and bottom - 1e-9 <= ce2_ < c[i]:
                 entry = ce2_
@@ -8163,6 +8165,8 @@ def _lv_finish_targets(ctx, sd, i: int, above: float, p, htf_t: tuple) -> list:
     conf = getattr(ctx, "conf", None)
     if conf is not None and (p.fvg_quadrants or p.fvg_keep_filled or p.daily_fvg_exact):
         now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
+    if p.mtf_hold and ctx.tf < 5 and not any(g is z for z in sd.gaps):
+        tags["mtf_gap"] = (float(g.bottom), float(g.top), int(g.i))      # review fix A5-multitf-hold-test: the resting order is re-judged on the 1-4m closes each bar (es1.mtf_pending_dead)
         if p.fvg_quadrants and htf_t:
             for near, ce, far, tf, _ in conf.opposing(now, sd.x(above), sd.sign, htf_t, (0,)):
                 a, b = sd.x(near), sd.x(far)

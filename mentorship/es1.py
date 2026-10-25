@@ -345,6 +345,17 @@ def mtf_hold_ok(ctx, sd, g, i: int, p) -> bool:
     return True
 
 
+def mtf_pending_dead(ctx, sd, pending, j: int, p) -> bool:
+    """A5-multitf-hold-test review fix: a RESTING order whose entry is a coarse (5m) gap is cancelled once two or more 1-4m bar closes (completed by bar j) sit inside the gap."""
+    from types import SimpleNamespace
+    bot, top, gi = pending["mtf_gap"]
+    g = SimpleNamespace(bottom=bot, top=top, i=gi)
+    if mtf_closes_inside(ctx, sd, g, j, p) >= 2:
+        hit("mtf_hold_cancel_resting")
+        return True
+    return False
+
+
 def iofed_check(sd, g, entry: float, i: int, p) -> bool:
     """E2-iofed-full-definition (015 ~18:57; 047 ~10:40), the arm-time part of the strict IOFED: the retrace so far has not reached the CE (no trade at or under it since the gap formed) and the limit sits above
     the CE. The sweep + MSS context is the engine's own path; the 3-candle swing low inside the gap is the position check (manage)."""
@@ -510,7 +521,7 @@ def frame_line(ctx, sd, p, leg_line: float) -> float:
             lines[k] = a + p.leg_pd * (b - a)
     if fr == "any":
         hit("pd_frame_any")
-        return max([leg_line] + list(lines.values()))
+        return max(lines.values()) if lines else leg_line      # review fix: the leg line is not part of "any" (the previous-day / previous-NY frames only)
     if fr in lines:
         hit("pd_frame_" + fr)
         return lines[fr]

@@ -235,7 +235,7 @@ CURRENT = dict(mt_mode="range", exit_mode="before", min_draw_pts=0.0, leg_pd=0.0
 # pools hidden before 05:00), the _split news-ahead holiday skip (N3.4), the M1.2 swing-low intact
 # start and the mark_levels / causal roll_day fixes - so "reproduces 833350f exactly" holds on the
 # tested window (ES 5m 2024 Q1), not on every window.
-PRE_OWNER = dict(ob_entry="post_mss", draw_lock="off", htf_resist_cap=False, news_wait="off",
+PRE_OWNER = dict(htf_ob_anchor="extreme", ob_entry="post_mss", draw_lock="off", htf_resist_cap=False, news_wait="off",
                  breaker_mt_respect=False, breaker_mt_entry_floor=False, breaker_zone="body",
                  risk_dollars=1000.0, max_total_risk=2000.0, last_hour=(915, 945), flatten=960,
                  sb_target_mode="fixed", price_frame="back_adjusted", round_pools=False,

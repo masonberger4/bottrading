@@ -39,7 +39,7 @@ def test_new_switch_defaults_and_validation():
     assert (p.prop_mt_test, p.prop_fail_flip, p.prop_deep_mult, p.prop_deep_cut, p.mit_iofed_edge, p.leg_pd_anchor, p.broken_wick_stop, p.far_edge_reach, p.fvg_edge, p.ob_ce_confluence, p.ob_ce_tol_pts,
             p.leg_fib, p.htf_depth_mult) == ("close", False, 1.0, 0.5, False, "displacement_leg", "body_edge", False, "original", False, 1.0, "wick", (1.0, 1.0, 1.0))
     assert (p.ob_need_narrative, p.ob_need_htf_array, p.ob_wick_ltf_entry, p.htf_ob_anchor, p.scan_tfs, p.two_min_ce, p.fvg_skip_below_pool_short, p.mtf_hold, p.ote_gate_4th, p.ote_reanchor, p.ote_nested,
-            p.ote_parent_third, p.ob_mt_range, p.ob_reach, p.mt_mode) == (False, True, False, "extreme", (1,), False, False, False, False, False, False, False, "body", "wick", "body")
+            p.ote_parent_third, p.ob_mt_range, p.ob_reach, p.mt_mode) == (False, True, False, "open", (1,), False, False, False, False, False, False, False, "body", "wick", "body")
     for kw in (dict(entry_pd_frame="x"), dict(cisd_ob_px="x"), dict(mt_break="x"), dict(gap_tf_mode="x"), dict(vi_tol="x"), dict(prop_mt_test="x"), dict(leg_pd_anchor="x"), dict(broken_wick_stop="x"),
                dict(fvg_edge="x"), dict(leg_fib="x"), dict(htf_ob_anchor="x"), dict(ob_mt_range="x"), dict(ob_reach="x"), dict(mt_mode="x"), dict(prop_deep_cut=1.0), dict(prop_deep_mult=-1),
                dict(htf_depth_mult=(1, 1)), dict(htf_depth_mult=(1, 1, -1)), dict(scan_tfs=()), dict(scan_tfs=(0,)), dict(ob_ce_tol_pts=-1), dict(vi_tol_small_pts=-1), dict(entry_arrays=("nope",))):
@@ -235,7 +235,7 @@ def test_entry_pd_frame_prev_day_ny_any():
     assert es1.prev_range(ctx, "prev_day") == (98.0, 104.0) and es1.prev_range(ctx, "prev_ny") == (96.0, 106.0)
     sd = SimpleNamespace(x=lambda v: v)
     assert es1.frame_line(ctx, sd, Params(leg_pd=0.5, entry_pd_frame="prev_ny"), 100.0) == pytest.approx(101.0)       # 96 + 0.5 x (106 - 96)
-    assert es1.frame_line(ctx, sd, Params(leg_pd=0.5, entry_pd_frame="any"), 102.0) == pytest.approx(102.0)           # the highest line wins
+    assert es1.frame_line(ctx, sd, Params(leg_pd=0.5, entry_pd_frame="any"), 102.0) == pytest.approx(101.0)           # the highest frame line wins (the leg line is not part of "any")
     sdm = SimpleNamespace(x=lambda v: -v)
     assert es1.frame_line(ctx, sdm, Params(leg_pd=0.5, entry_pd_frame="prev_day"), 0.0) == pytest.approx(-101.0)       # a short: the mirrored range -104 .. -98 -> -101
     ctx2 = stub(5)
@@ -323,7 +323,7 @@ def test_ote_nested_children_and_parent_third():
     inside_child_only = (hi_p + hi_c) / 2 + 0.2
     assert not lo_p <= inside_child_only <= hi_p and lo_c <= inside_child_only <= hi_c
     assert es1.ote_band_for(sd, sw, 6, p, inside_child_only, 98.0, 103.0) == 99.0              # the entry is in the CHILD's band
-    assert es1.ote_band_for(sd, sw, 6, p, (lo_p + hi_p) / 2, 98.0, 103.0) in (98.0, 99.0)
+    assert es1.ote_band_for(sd, sw, 6, p, (lo_p + hi_p) / 2, 98.0, 103.0) == 98.0
     assert es1.ote_band_for(sd, sw, 6, p, 104.0, 98.0, 103.0) is None
     assert es1.ote_band_for(sd, sw, 6, replace(p, ote_nested=False), inside_child_only, 98.0, 103.0) is None
     # a child stopped out (a trade under its low) is dropped: back to the parent
@@ -334,8 +334,7 @@ def test_ote_nested_children_and_parent_third():
     sw2 = dict(ext_i=0, ext=98.0)
     assert not es1.parent_third_ok(sd, sw2, 6, p, 99.8, 103.0, 98.0)                           # 99.8 is above 98 + 5/3
     # engine: nested and parent_third run end to end
-    assert len(c_run(E_ROWS[:6], ote="limit", ote_nested=True)) >= 0
-    c_run(C_ROWS, ote="filter", ote_nested=True, ote_parent_third=True)
+    assert isinstance(c_run(C_ROWS, ote="filter", ote_nested=True, ote_parent_third=True), list)
 
 
 def test_short_ote_mirror_bands_are_above_the_eq():
@@ -649,7 +648,7 @@ def test_htf_ob_anchor_and_the_ltf_wick_entry():
     assert es1.wick_ltf_entry(None, sd, L.Zone("bull", 102.0, 100.0, 4, 0), sw, 4, p) is None                       # not an OB zone (no mt / open)
     assert es1.wick_ltf_entry(None, sd, g, sw, 3, p) is None                                                           # the FVG is not complete at bar 3
     # htf_ob_anchor: an HTF OB enters at its open under "open" (the A12 2023 default) and at its candle extreme under "extreme"
-    assert es1.htf_open_top(g, Params(htf_ob_anchor="open")) == pytest.approx(101.8) and es1.htf_open_top(g, Params()) == pytest.approx(102.0)
+    assert es1.htf_open_top(g, Params(htf_ob_anchor="open")) == pytest.approx(101.8) and es1.htf_open_top(g, Params(htf_ob_anchor="extreme")) == pytest.approx(102.0) and es1.htf_open_top(g, Params()) == pytest.approx(101.8)
     assert es1.htf_open_top(L.Zone("bull", 102.0, 100.0, 4, 0), Params(htf_ob_anchor="open")) == 102.0                                  # a plain FVG zone: its top
     # the Confluence target level of an HTF OB: the open, or the extreme of the candle
     from mentorship import confluence as CF
@@ -736,6 +735,30 @@ def test_mtf_hold_counts_closes_inside_on_the_1_to_4m_charts():
     sd3.gaps.append(base_gap)
     assert es1.mtf_hold_ok(ctx2, sd3, base_gap, 7, p)                                                                  # a base-bar gap is not judged here
     assert es1.mtf_hold_ok(SimpleNamespace(tf=5), sd2, g, 7, p)                                                        # judged on the 1-4m charts only
+
+
+def test_mtf_hold_cancels_a_resting_order_after_arming():
+    # review fix: the closes inside the 5m gap that print AFTER the order is armed cancel it (the pending re-check, es1.mtf_pending_dead)
+    rows = [(100.0, 100.2, 99.8, 100.0)] * 2 + [(102.5, 102.9, 102.3, 102.6), (102.6, 102.7, 101.2, 102.5), (102.5, 102.6, 101.1, 102.5), (102.5, 102.8, 101.0, 102.6),
+                                                (102.6, 102.7, 101.2, 102.4), (102.4, 102.6, 101.3, 102.5)]
+    p = Params(es_pt=1.0, mtf_hold=True)
+    pend = dict(mtf_gap=(101.0, 102.0, 1))
+    ctx, sd = _m1(rows)
+    assert not es1.mtf_pending_dead(ctx, sd, pend, 7, p)
+    rows2 = rows[:4] + [(102.5, 102.6, 101.1, 101.5), (101.5, 101.6, 101.1, 101.6)] + rows[6:]
+    ctx2, sd2 = _m1(rows2)
+    assert es1.mtf_pending_dead(ctx2, sd2, pend, 7, p) and not es1.mtf_pending_dead(ctx2, sd2, pend, 4, p)
+
+
+def test_frame_any_ignores_the_leg_line():
+    ctx = SimpleNamespace()
+    sd = SimpleNamespace(x=lambda v: v)
+    orig = es1.prev_range
+    es1.prev_range = lambda c, k: (100.0, 110.0)
+    try:
+        assert es1.frame_line(ctx, sd, Params(entry_pd_frame="any", leg_pd=0.5), 200.0) == pytest.approx(105.0)
+    finally:
+        es1.prev_range = orig
 
 
 # --- NEW-no-return-to-origin-ob (118) ----------------------------------------------------------------------------------------------

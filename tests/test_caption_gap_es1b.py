@@ -192,7 +192,7 @@ for _c, (_s, _kw, _need) in SYN_CASES.items():
     _RUN_KW["syn_" + _c] = (_kw, _need)
 
 
-DEFAULT_ON = set()                                   # (htf_ob_anchor defaults to the built "extreme" until the owner confirms "open": it is a switch value now)
+DEFAULT_ON = {"htf_ob_anchor"}                       # (htf_ob_anchor defaults to "open" now: every HTF run executes the open level; "extreme" is the PRE_OWNER / switch value)
 
 
 def _on(kw, switch):

@@ -211,7 +211,7 @@ and to the notes for context, charts and trade examples. This file states each r
   - Validation: 2023 = change in state of delivery (CISD): price first trades through the open of
     the last opposite candle before the MSS, then the OB low must hold (075 ~1:16:40; 078 ~53:53).
     CC = a later candle trades above the OB high (cc04_003 ~0:35).
-  - Quality: an FVG right after it; larger body; move away >= 2-3x the OB body (022 ~13:12; 064
+  - Quality: the FVG on the move away is part of the definition (an OB without it is a potential OB, `ob_need_fvg`); no "larger body" factor (092); move away >= 2-3x the OB body (022 ~13:12; 064
     ~50:06; cc04_003 ~26:51). When several down candles are run through, use the original/highest
     (012 ~14:06).
   - **Mean threshold (MT)** = 50% of the OB; bodies must not close through it, wicks may (002
