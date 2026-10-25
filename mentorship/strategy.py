@@ -6744,6 +6744,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         trades += run_sb(ctx, sides, p, day, symbol, blocked, btag)
     if p.ndog_scalp and post_eve is not None and len(post_eve):
         trades += _SM4.ndog_scalp(ctx, post_eve, p, day, symbol, btag)       # caption-gap new-ndog-asian-scalp: the Asian-evening NDOG scalp (its own window, after the day's frame)
+    if p.daily_loss_pct > 0 and len(trades) > n_main:
+        trades = _ES3.extras_loss_gate(trades, n_main, ctx, p)      # caption-gap E11-funded-account-caps (review fix): the Ma Deuce / Silver Bullet / NDOG rows obey the day's loss limit too
     if _out is not None:
         _out["extras"] = list(trades[n_main:])
     if pos is not None:   # data ended early
@@ -6810,6 +6812,11 @@ def _arm_add(pos, tr, px, i, p, eq, floor=None, g=None, pos_g=False, size=None, 
         _f("x_add_not_in_pd")                          # M2.6 add_in_pd: every add path, not only add_ok
         return
     room = _total_cap(p, eq) + (extra_room + pos.get("es3_room", 0.0)) * eq - at_risk
+    if p.htf_near_add_literal and p.htf_near_risk_pct > 0 and pos.get("es3_room") and size is None and not pos.get("no_adds"):
+        q = _lots(p.htf_near_risk_pct * eq / d, p.lot)         # caption-gap E8-E9-5pct-near-htf (literal): this add risks htf_near_risk_pct itself; the room above still caps the total
+        if d * q > room:
+            q = _lots(max(room, 0.0) / d, p.lot)
+        _ES2.hit("htf_near_add_literal")
     if d * q > room:
         q = _lots(max(room, 0.0) / d, p.lot)
     if pos.get("dl_room") is not None and d * q > pos["dl_room"]:
@@ -6843,8 +6850,6 @@ def _ob_add(sd, pos, tr, i, p, eq):
     if k <= pos["fill_i"] or not sd.c[k] < sd.o[k] or k in pos["ob_add_used"]:
         return
     j = k
-    if p.daily_loss_pct > 0 and len(trades) > n_main:
-        trades = _ES3.extras_loss_gate(trades, n_main, ctx, p)      # caption-gap E11-funded-account-caps (review fix): the Ma Deuce / Silver Bullet / NDOG rows obey the day's loss limit too
     while j - 1 > pos["fill_i"] and sd.c[j - 1] < sd.o[j - 1]:
         j -= 1
     top = float(sd.o[k]) if p.ob_anchor == "last_open" else float(sd.o[j:k + 1].max())     # caption-gap A12-ob-anchor: the add's zone top
@@ -6913,11 +6918,6 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
             lk = nl
             ctx.lock[s_] = lk
             if lk["side"] == 0:
-    if p.htf_near_add_literal and p.htf_near_risk_pct > 0 and pos.get("es3_room") and size is None and not pos.get("no_adds"):
-        q = _lots(p.htf_near_risk_pct * eq / d, p.lot)         # caption-gap E8-E9-5pct-near-htf (literal): this add risks htf_near_risk_pct itself; the room above still caps the total
-        if d * q > room:
-            q = _lots(max(room, 0.0) / d, p.lot)
-        _ES2.hit("htf_near_add_literal")
                 if p.draw_lock_neutral == "skip":
                     done[s_] = True
                 continue
