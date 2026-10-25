@@ -575,7 +575,7 @@ def held_valid(ctx, sd, held: dict, i: int, p) -> bool:
 # T8: the carried draw
 # ---------------------------------------------------------------------------------------------------
 
-def _carry_erased(ctx, am: dict, lk: dict) -> bool:
+def _carry_erased(ctx, am: dict, lk: dict, tick: float = 0.25) -> bool:
     """T8-pm-carry-condition (029 ~1:30:37): the AM draw (side +1 = up) is NOT carried when, after the AM extreme (the AM session's high for an up draw, low for a down draw), price has traded
     a tick through the AM leg's origin (the AM session's low / high) before the PM lock. Measuring 'erased' as a retrace to the AM leg origin is our interpretation. Bars before 13:30 only."""
     from . import sm2
@@ -587,8 +587,7 @@ def _carry_erased(ctx, am: dict, lk: dict) -> bool:
     up = am["side"] > 0
     h, l = ctx.h[a:b], ctx.l[a:b]
     k = int(np.argmax(h)) if up else int(np.argmin(l))
-    origin = float(l[:k + 1].min()) if up else float(h[:k + 1].max())          # the AM leg's origin: the extreme before the AM extreme
-    tick = 0.25
+    origin = float(l[:k + 1].min()) if up else float(h[:k + 1].max())          # the AM leg's origin: the extreme before the AM extreme [our interpretation: there is no ctx.am_leg object; sm2.am_leg gives only the whole 09:30-12:00 range]
     tail = l[k:] if up else h[k:]
     erased = bool(tail.min() <= origin - tick + 1e-9) if up else bool(tail.max() >= origin + tick - 1e-9)
     if erased:
@@ -608,7 +607,7 @@ def carry_lock(ctx, p, name: str, lk: dict) -> dict:
     px, tgt = lk["px"], am["target"]
     if (tgt > px) != (am["side"] > 0):                # the draw already lies behind the price
         return lk
-    if p.pm_carry_erase and _carry_erased(ctx, am, lk):    # caption-gap T8-pm-carry-condition (029 ~1:30:37): the AM move was erased - no carried draw
+    if p.pm_carry_erase and _carry_erased(ctx, am, lk, float(p.tick)):    # caption-gap T8-pm-carry-condition (029 ~1:30:37): the AM move was erased - no carried draw
         return lk
     lk.update(side=am["side"], target=tgt, kind=am["kind"], name=am["name"], carried=True)
     return lk

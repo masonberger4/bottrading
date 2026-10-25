@@ -6930,6 +6930,10 @@ def _f(key):
 def _level_intact(ctx, l, i, k, v, session, tk: float = 0.0) -> bool:
     """A sell-side level (side space) not traded through between its creation and bar i-1
     (A2: through = at least tk below it; tk = 0 any print below)."""
+    vr_ = (getattr(ctx, "state7", None) or {}).get("void_rearm")
+    if vr_ and vr_.get("session") == session and k == vr_.get("swept"):
+        _TP4.hit("void_rearm_offer")          # caption-gap new-sellstop-run-before-void-fill (cc04_010 ~8:07): after a stopped-out void_draw trade the SAME lows are offered again (once)
+        return True
     a = _level_created(ctx, k, session)
     return k.startswith(("rel_eq", "round", "diag")) or i <= a or not _thru(l[a:i].min(), v, tk)
 

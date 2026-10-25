@@ -2242,7 +2242,7 @@ DECISIONS.update(_TP3_DECISIONS)
 # --- caption-gap pass: targets_partials #4/4 (name prefix = gap id; every variant is a valid Params set) ---------------------------------------------------------------------------------------------
 HT4 = ("1h", "4h", "D", "W")
 _TP4_DECISIONS = {
-    "X3-041-projection-first-then-nwog": dict(ladder_preset="041", sd_targets=True, htf_targets=HT4, **SM_POST),
+    "X3-041-projection-first-then-nwog": dict(ladder_preset="041", be_on="t1", be_pad_pts=1.0, sd_targets=True, htf_targets=HT4, **SM_POST),
     "X3-resting-1lot-partials-vi-final": dict(ladder_preset="096", vi_arrays=True, **SM_POST),
     "X3-layered-pool-ladder-runner": dict(weekly_hl_rung=True, runner_frac=0.2, **SM_POST),
     "X3-layered-pool-ladder-runner_collapse": dict(weekly_hl_rung=True, collapse_adr_frac=1.0, runner_frac=0.2, **SM_POST),

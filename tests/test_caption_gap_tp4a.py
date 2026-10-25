@@ -476,12 +476,12 @@ def test_tgif_066_roll_and_last_hour_cover():
     sd = S.Side(-1, ctx.o, ctx.h, ctx.l, ctx.c, 1, 0.0)
     lv066 = [-4580.0, -4577.5, -4575.0, -4572.5, -4570.0]
     sd.pl = [L.Pivot(5, -4585.0, 7)]                                                              # the latest swing low (side): the short's latest swing high 4585
-    pos = dict(left=5, k=3, levels=list(lv066), stop=-4600.0, fills=3, fracs=(0.15, 0.15, 0.5, 0.1, 0.1), level_kinds=["exact"] * 5, fill_i=2, tp4=dict(tgif066=lv066))
+    pos = dict(left=5, k=3, levels=list(lv066), stop=-4600.0, fills=3, fracs=(0.15, 0.15, 0.5, 0.1, 0.1), level_kinds=["exact"] * 5, fill_i=2, tp4=dict(tgif066=lv066, tgif_l25_k=2))
     pos["trade"] = tr = SimpleNamespace(strength="")
     p = pk(tgif_exits="066", tgif_zone=True)
     tp4.manage(ctx, sd, pos, tr, 8, None, p)
     assert pos["stop"] == pytest.approx(-4585.0 - p.tick)                                         # raise_stop(pos, last pivot + tick) in side space
-    pos2 = dict(pos, k=2, stop=-4600.0, tp4=dict(tgif066=lv066))
+    pos2 = dict(pos, k=2, stop=-4600.0, tp4=dict(tgif066=lv066, tgif_l25_k=2))
     tp4.manage(ctx, sd, pos2, tr, 8, None, p)
     assert pos2["stop"] == -4600.0                                                                 # the L25 rung has not filled
     # from 15:00 a swing inside the 20 .. 30 % band: one resting cover just short of it for everything left
@@ -567,9 +567,9 @@ def test_lrlr_ceiling():
     ctx = mk(_lrlr_rows())
     sd = side(ctx)
     sw = dict(ext=4030.0, ext_i=7)
-    assert tp4.lrlr_ceiling_level(ctx, sd, sw, 12, pk(), 4040.0) == (4050.0, True)
-    assert tp4.lrlr_ceiling_level(ctx, sd, sw, 12, pk(), 4055.0) == (None, True)
-    assert tp4.lrlr_ceiling_level(mk(flat(12)), side(mk(flat(12))), dict(ext=3990.0, ext_i=7), 11, pk(), 4000.0) == (None, False)           # no broken old low: no ceiling
+    assert tp4.lrlr_ceiling_level(ctx, sd, sw, 12, pk(), 4040.0) == (4050.0, 4050.0)
+    assert tp4.lrlr_ceiling_level(ctx, sd, sw, 12, pk(), 4055.0) == (None, 4050.0)
+    assert tp4.lrlr_ceiling_level(mk(flat(12)), side(mk(flat(12))), dict(ext=3990.0, ext_i=7), 11, pk(), 4000.0) == (None, None)           # no broken old low: no ceiling
     p = pk(lrlr_ceiling=True)
     keep = [(4049.0, "array"), (4060.0, "pool")]
     lvt = []
@@ -580,9 +580,10 @@ def test_lrlr_ceiling():
     assert why is None and k3 == keep
     why, _ = tp4.lrlr_cap(ctx, sd, sw, 12, p, 4049.0, 2.0, keep, [])                            # no room left to the ceiling: no order
     assert why == "x_lrlr_ceiling"
-    why, _ = tp4.lrlr_cap(ctx, sd, sw, 12, p, 4055.0, 2.0, keep, [])                            # price at / past the ceiling: no new long (L4-lrlr-repeated-buys)
+    why, _ = tp4.lrlr_cap(ctx, sd, sw, 12, p, 4055.0, 3.0, keep, [])                            # price at / past the ceiling: no new long (L4-lrlr-repeated-buys)
     assert why == "x_lrlr_ceiling"
-    assert tp4.lrlr_cap(ctx, sd, sw, 12, pk(lrlr_ceiling=True, lrlr_allow_beyond=True), 4055.0, 2.0, keep, [])[0] is None
+    assert tp4.lrlr_cap(ctx, sd, sw, 12, pk(lrlr_ceiling=True, lrlr_allow_beyond=True), 4055.0, 3.0, keep, [])[0] is None
+    assert tp4.lrlr_cap(ctx, sd, sw, 12, p, 4075.0, 3.0, keep, [])[0] is None                    # review fix: far above the broken low is not 'at the ceiling'
     # the targets 4040 / 4060 of the spec: the ladder ends at 4049.5
     why, k4 = tp4.lrlr_cap(ctx, sd, sw, 12, p, 4035.0, 4.0, [(4040.0, "array"), (4060.0, "array")], [])
     assert [v for v, _ in k4] == [4040.0, 4049.5]
@@ -797,7 +798,10 @@ def test_void_draw_and_second_raid(monkeypatch):
     (why, k2, *_), kw = L4(p, ctx, sd, [(4110.0, "pool"), (4150.0, "pool")], entry=4100.0, risk=4.0)
     assert why is None and k2[-1] == (S._exit_px(4130.0, "array", p), "array") and (4150.0, "pool") not in k2 and "void_draw" in kw["lvt"]       # the void top is the final target
     (_, k3, *_), _ = L4(pk(void_draw=True), ctx, sd, [(4110.0, "pool"), (4150.0, "pool")], entry=4100.0, risk=4.0, locked=True, final_T=True, draw=4150.0)
-    assert k3[-1] == (4150.0, "pool")                                                              # a locked draw is one exact target
+    (_, k3, d3, _f3), kw3 = L4(pk(void_draw=True), ctx, sd, [(4110.0, "pool"), (4150.0, "pool")], entry=4100.0, risk=4.0, locked=True, final_T=True, draw=4150.0)
+    assert k3[-1] == (S._exit_px(4130.0, "array", p), "array") and d3 == k3[-1][0] and "void_draw_lock" in kw3["lvt"]     # review fix (owner q. 8): a nearer void replaces the LOCKED draw
+    (_, k3b, d3b, _f), _ = L4(pk(void_draw=True), ctx, sd, [(4110.0, "pool"), (4125.0, "pool")], entry=4100.0, risk=4.0, locked=True, final_T=True, draw=4125.0)
+    assert k3b[-1] == (4125.0, "pool") and d3b == 4125.0                                            # the locked draw nearer than the void stays
     # the stop-out re-arms once; the next order must sweep the same lows
     state = {}
     ctx.state7 = state
@@ -1059,3 +1063,84 @@ def test_engine_r_ladder_sets_the_break_even_trigger():
     assert len(tr) == 1 and "r_ladder" in tr[0].lv_tags
     r = tr[0].entry - tr[0].stop
     assert tr[0].t2 == pytest.approx(tr[0].entry + 3 * r, abs=0.02) or tr[0].t1 == pytest.approx(tr[0].entry + 3 * r, abs=0.02)
+
+
+# --- the review fixes -----------------------------------------------------------------------------------------------------------------------------------------
+
+def test_review_ob_skip_never_skips_the_last_rung():
+    p = pk(ob_target_tod=True, ob_targets_1m=True)
+    pos = dict(level_kinds=["pool", "ob"], fracs=(0.5, 0.5), tp4=dict(ob_tod=True), k=1)
+    assert tp4.ob_skip(pos, 1, 820, 5, p) is False and pos["fracs"] == (0.5, 0.5)                  # the last rung has no next rung: it fills, the units are not lost
+
+
+def test_review_final_gates_judge_the_placed_final(monkeypatch):
+    ctx = mk(flat(12), hist=hist_days(rng=40.0))
+    sd = side(ctx)
+    keep = [(4110.0, "pool"), (4160.0, "pool")]
+    # the tf cap cuts the final to 4100 + 20 pts: 20 pts / risk 4 = 5R passes; with risk 6 the cut final is 3.3R < 3 R? (min_rr_final 4 -> reject)
+    p = pk(tf_target_cap=True, tf_cap_pts=((int(ctx.tf), 20.0),), min_rr_final=4.0)
+    (why, *_), kw = L4(p, ctx, sd, keep, risk=6.0)
+    assert why == "x_min_rr_final"                                                                   # judged on the CUT final (4120), not the 4160 pre-cut one (6.7R)
+    (why, *_), kw = L4(pk(min_rr_final=4.0), ctx, sd, keep, risk=6.0)
+    assert why is None and kw["tags"]["tp4"]["rr_final"] == pytest.approx(10.0)
+    # a scalp / fixed-target order records rr_final too and meets the same gates
+    (why, *_), kw = L4(pk(min_rr_final=4.0), ctx, sd, keep, risk=6.0, tags={"single_exit": True}, draw=4110.0)
+    assert why == "x_min_rr_final" and kw["tags"]["tp4"]["rr_final"] == pytest.approx(1.667, abs=1e-3)
+    ctx.week = {"month_big": 0}
+    (why, *_), _ = L4(pk(rr_month_gate=True, rr_big=5.0), ctx, sd, keep, risk=6.0, tags={"single_exit": True}, draw=4110.0)
+    assert why == "x_rr_month"
+
+
+def test_review_lrlr_zone_alone_rejects_at_the_ceiling(monkeypatch):
+    from mentorship import tp1
+    ctx = mk(flat(12))
+    sd = side(ctx)
+    monkeypatch.setattr(tp1, "lrlr_zone", lambda ctx, sd, i, p: (4090.0, 4100.0))
+    keep = [(4110.0, "pool")]
+    (why, *_), _ = L4(pk(lrlr_zone=True), ctx, sd, keep, entry=4100.5, sw=dict(ext=4095.0, ext_i=2, name="x"))
+    assert why == "x_lrlr_ceiling"                                                                   # at the ceiling L_b: no new long (lrlr_zone alone)
+    (why, *_), _ = L4(pk(lrlr_zone=True), ctx, sd, keep, entry=4098.0, sw=dict(ext=4095.0, ext_i=2, name="x"))
+    assert why is None                                                                               # inside the zone: the order stands
+    (why, *_), _ = L4(pk(lrlr_zone=True), ctx, sd, keep, entry=4100.5, sw=dict(ext=4080.0, ext_i=2, name="x"))
+    assert why is None                                                                               # the sweep lay below the zone: not a repeated buy
+
+
+def test_review_balanced_drop_counts_from_the_formation():
+    rows = [(4000.0, 4002.0, 3999.0, 4001.0), (4001.0, 4012.0, 4000.0, 4011.0), (4011.0, 4013.0, 3996.0, 3997.0), (3997.0, 3999.0, 3995.0, 3998.0)] + flat(4, v=3998.0)
+    ctx = mk(rows)
+    sd = side(ctx)
+    sd.ph = [L.Pivot(5, 4005.0, 6)]                                                                   # the 4005 level formed at bar 5/6: the crosses at bars 1-2 came before it
+    out = tp4.balanced_drop(ctx, sd, 7, pk(skip_balanced=True), [(4005.0, "array")])
+    assert out == [(4005.0, "array")]
+    sd.ph = []
+    assert tp4.balanced_drop(ctx, sd, 7, pk(skip_balanced=True), [(4005.0, "array")]) == []         # no formation bar known: from the day start
+
+
+def test_review_ladder_096_needs_three_rungs():
+    ctx = mk(flat(12))
+    sd = _vi_side(ctx)
+    p = pk(ladder_preset="096")
+    keep = [(S._exit_px(4101.0, "pool", p), "pool"), (S._exit_px(4112.0, "pool", p), "pool")]
+    assert tp4.ladder_096(ctx, sd, 8, p, 4090.0, 4.0, keep, {}) is None
+
+
+def test_review_tgif_roll_by_index_and_after_the_fill():
+    ctx = _tgif_ctx()
+    sd = S.Side(-1, ctx.o, ctx.h, ctx.l, ctx.c, 1, 0.0)
+    lv066 = [-4580.0, -4577.5, -4575.0, -4572.5, -4570.0]
+    sd.pl = [L.Pivot(1, -4585.0, 3)]                                                                  # a swing formed BEFORE the fill
+    pos = dict(left=5, k=3, levels=list(lv066), stop=-4600.0, fills=3, fracs=(0.15, 0.15, 0.5, 0.1, 0.1), level_kinds=["exact"] * 5, fill_i=2, tp4=dict(tgif066=lv066, tgif_l25_k=2))
+    pos["trade"] = tr = SimpleNamespace(strength="")
+    tp4.manage(ctx, sd, pos, tr, 8, None, pk(tgif_exits="066", tgif_zone=True))
+    assert pos["stop"] == -4600.0                                                                    # no roll from a pre-fill swing
+    pos["tp4"]["tgif_l25_k"] = 4
+    sd.pl = [L.Pivot(5, -4585.0, 7)]
+    tp4.manage(ctx, sd, pos, tr, 8, None, pk(tgif_exits="066", tgif_zone=True))
+    assert pos["stop"] == -4600.0                                                                    # the L25 rung (index 4) has not filled: no roll
+
+
+def test_review_level_intact_offers_the_swept_lows_again():
+    ctx = mk(flat(12))
+    ctx.state7 = {"void_rearm": dict(session="AM", swept="pdl1", sign=1)}
+    l = np.array([4000.0, 3990.0, 4000.0, 4000.0])
+    assert S._level_intact(ctx, l, 3, "pdl1", 3995.0, "AM") is True and S._level_intact(ctx, l, 3, "pdl2", 3995.0, "AM") is False

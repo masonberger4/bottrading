@@ -120,7 +120,7 @@ def raw_on(p) -> bool:
 
 def late_on(p) -> bool:
     return bool(p.collapse_adr_frac > 0 or p.runner_frac > 0 or p.capture_zone or p.runner_at_half or p.runner_htf or p.gap_speed_bump_partial > 0 or p.partial_trigger
-                or p.eq60_rung or p.subrange_first or p.confluence_weight or p.void_ladder or p.mm_first > 0 or p.fulcrum_exit or p.lrlr_ceiling or p.consol_eq_target
+                or p.eq60_rung or p.subrange_first or p.confluence_weight or p.void_ladder or p.mm_first > 0 or p.fulcrum_exit or p.lrlr_ceiling or p.lrlr_zone or p.consol_eq_target
                 or p.consol_no_runner or p.same_range_t1 or p.tf_target_cap or p.void_draw or p.void_rearm or p.rr_month_gate or p.ladder_kind or p.m1450_targets
                 or p.min_rr_final > 0 or p.strength_hold or p.tgif_exits == "066" or p.tgif_reentry_pm or p.ob_target_tod or p.target_stage)
 
@@ -393,13 +393,16 @@ def pm_am_ladder_levels(ctx, sd, i: int, p, session: str, ext: float, leg_hi: fl
 
 def balanced_drop(ctx, sd, i: int, p, lv: list) -> list:
     """T8-pm-carry-condition (029 ~1:30:37): a candidate level (not a pool) that today's closed bars have crossed in both directions - a close above it and a close below it - is balanced
-    and no target [our interpretation: 'since it formed' = since the day's first bar]."""
-    c = sd.c[ctx.start:i + 1]
-    if not len(c):
+    and no target. 'Since it formed' = since the bar that made the level known (a pivot's `known` bar, `sd.ph` / `sd.pl`) when the level is a pivot of the base frame, else [our
+    interpretation] since the day's first bar."""
+    if not i + 1 > ctx.start:
         return lv
+    piv = [(x.price, x.known) for x in list(sd.ph) + list(sd.pl) if x.known <= i]
     out = []
     for v, k in lv:
-        if k not in POOLK and (c > v).any() and (c < v).any():
+        b0 = max([kn for pr, kn in piv if abs(pr - v) <= 1e-9] or [ctx.start])       # (the latest pivot at that price)
+        c = sd.c[max(ctx.start, b0):i + 1]
+        if k not in POOLK and len(c) and (c > v).any() and (c < v).any():
             hit("skip_balanced")
             continue
         out.append((v, k))
@@ -468,7 +471,7 @@ def ladder_096(ctx, sd, i: int, p, entry: float, risk: float, keep: list, st: di
     r1 = (float(raw_of(swing[0], swing[1], p) + p.tick), "exact")
     nxt = next((x for x in pre if x[0] > r1[0] + p.es_pt), None)
     if nxt is None:
-        return [r1, last], [0.3, 0.7]
+        return None                                  # review fix: the spec has only (0.2, 0.2, 0.6); fewer than three rungs = today's ladder
     hit("ladder_096")
     return [r1, nxt, last], [0.2, 0.2, 0.6]
 
@@ -511,30 +514,46 @@ def range_session_t1(ctx, sd, sw, i: int, p, entry: float, risk: float, keep: li
 
 def lrlr_ceiling_level(ctx, sd, sw, i: int, p, entry: float):
     """L4-lrlr-ceiling (cc01_007 ~13:38): U = the old low (a swing_tiers low - the intermediate-term lows first, else the plain swing lows - formed before the sweep) that a later close
-    broke before the sweep, the nearest one above the entry (side space). Returns (U or None, whether any broken old low above the sweep extreme exists)."""
+    broke before the sweep, the nearest one above the entry (side space) [our interpretation of the spec's 'most recent / lowest': the lowest broken low above the entry]. Returns (U or
+    None, the highest broken old low above the sweep extreme or None)."""
     ext_i = int(sw["ext_i"])
     tiers = sd.tiers()
     for name in ("itl", "stl"):
-        best, any_b = None, False
+        best, top = None, None
         for q in tiers[name][1]:
             if q.known > i or q.i >= ext_i or q.price <= float(sw["ext"]):
                 continue
             if (sd.c[q.i + 1:ext_i + 1] < q.price).any():
-                any_b = True
+                top = q.price if top is None else max(top, q.price)
                 if q.price > entry:
                     best = q.price if best is None else min(best, q.price)
         if best is not None:
-            return float(best), True
-        if any_b:
-            return None, True                           # every broken old low lies at or under the entry: price is AT / past the ceiling
-    return None, False
+            return float(best), top
+        if top is not None:
+            return None, float(top)                     # every broken old low lies at or under the entry
+    return None, None
+
+
+def lrlr_zone_gate(ctx, sd, sw, i: int, p, entry: float):
+    """L4-lrlr-repeated-buys (cc01_007 ~14:10) under `lrlr_zone` (review fix: the spec puts it there): no new long once price is AT the zone's ceiling L_b - the order's entry is at or above
+    L_b while the sweep extreme lies inside the zone (at or above the MSS level) [our interpretation of 'at the ceiling']. Returns the reject reason or None."""
+    from . import tp1
+    z = tp1.lrlr_zone(ctx, sd, i, p)
+    hit("eval_lrlr_zone_gate")
+    if z is None:
+        return None
+    if float(sw["ext"]) >= z[0] - 1e-9 and entry >= z[1] - 1e-9:
+        hit("lrlr_zone_ceiling")
+        return "x_lrlr_ceiling"
+    return None
+
 
 def lrlr_cap(ctx, sd, sw, i: int, p, entry: float, risk: float, keep: list, lvt: list):
     """L4-lrlr-ceiling: levels at or above U are high resistance ('hrlr', dropped unless lrlr_allow_beyond); the final rung is capped at U - exit_before_pts. Returns (why, keep)."""
-    U, any_b = lrlr_ceiling_level(ctx, sd, sw, i, p, entry)
+    U, top = lrlr_ceiling_level(ctx, sd, sw, i, p, entry)
     hit("eval_lrlr_ceiling")
     if U is None:
-        if any_b and not p.lrlr_allow_beyond:
+        if top is not None and entry - top <= 2.0 * risk and not p.lrlr_allow_beyond:     # review fix: only AT the ceiling (within 2 risks above the highest broken old low [our interpretation]), not any price above it
             hit("lrlr_at_ceiling")
             return "x_lrlr_ceiling", keep                # L4-lrlr-repeated-buys (cc01_007 ~14:10): no new long once price is at the ceiling - beyond it the run is high resistance
         return None, keep
@@ -592,9 +611,9 @@ def consol_eq_cut(ctx, sd, sw, i: int, p, session: str, entry: float, risk: floa
     return new, None
 
 
-def void_final(ctx, sd, i: int, p, entry: float, risk: float, keep: list):
-    """new-sellstop-run-before-void-fill (cc04_010 ~8:07): the nearest unfilled opposing void within 3 x ADR5 whose top (the full fill) pays min_rr is the final target. Returns the new
-    keep or None."""
+def void_pick(ctx, sd, i: int, p, entry: float, risk: float):
+    """new-sellstop-run-before-void-fill (cc04_010 ~8:07): the nearest unfilled opposing void within 3 x ADR5 whose top (the full fill) pays min_rr is the final target. Returns its exit
+    price or None."""
     adr = _adr(ctx)
     reach = 3.0 * adr if adr else np.inf
     S = _S()
@@ -603,9 +622,26 @@ def void_final(ctx, sd, i: int, p, entry: float, risk: float, keep: list):
     if not zs:
         return None
     z = min(zs, key=lambda z: z[2])
-    v = float(S._exit_px(z[2], "array", p))
-    hit("void_draw")
-    return [x for x in keep if x[0] < v - p.es_pt] + [(v, "array")]
+    return float(S._exit_px(z[2], "array", p))
+
+
+def final_gates(ctx, p, entry: float, risk: float, fin: float, lvt: list, d4: dict):
+    """The reward gates on the FINAL placed target (after every cut; review fix): records rr_final on every order that reaches tp4.late (L15-min-3R-prefer-5R / L15-min-rr-3), the rr5 tag,
+    the minimum final reward (x_min_rr_final) and the month gate (new-rr-month-gate cc02_001 ~12:11: x_rr_month). Returns the reject reason or None."""
+    rrf = (fin - entry) / risk if risk > 0 else 0.0
+    d4["rr_final"] = round(float(rrf), 3)
+    if p.min_rr_final > 0 and rrf >= 5.0 - 1e-9:
+        lvt.append("rr5")
+        hit("rr5")
+    if p.rr_month_gate:
+        wk = getattr(ctx, "week", None) or {}
+        need = p.rr_big if int(wk.get("month_big", 0)) < p.rr_n_big else p.rr_relaxed
+        hit("eval_rr_month")
+        if fin - entry < need * risk - 1e-9:
+            return "x_rr_month"
+    if p.min_rr_final > 0 and fin - entry < p.min_rr_final * risk - 1e-9:
+        return "x_min_rr_final"
+    return None
 
 
 def m1450_ladder(ctx, sd, sw, i: int, p, entry: float, risk: float, leg_hi: float, tg):
@@ -990,13 +1026,6 @@ def late(ctx, sd, sw, i: int, p, session: str, entry: float, risk: float, keep: 
         hit("tgif_week_broken")
         return "x_tgif_week_broken", keep, draw, final_T            # M14-tgif-management (066 ~45:47): the PM-window entries need the week's extreme to hold
     # --- gates
-    fin0 = draw if (final_T or locked) else keep[-1][0]
-    if p.rr_month_gate:
-        wk = getattr(ctx, "week", None) or {}
-        need = p.rr_big if int(wk.get("month_big", 0)) < p.rr_n_big else p.rr_relaxed
-        hit("eval_rr_month")
-        if fin0 - entry < need * risk - 1e-9:
-            return "x_rr_month", keep, draw, final_T
     if p.void_rearm:
         vr = (getattr(ctx, "state7", None) or {}).get("void_rearm")
         if vr and vr.get("session") == session:
@@ -1006,7 +1035,13 @@ def late(ctx, sd, sw, i: int, p, session: str, entry: float, risk: float, keep: 
             hit("void_rearm_order")
     scalp = bool(tags.get("single_exit")) or fixed is not None or (bool(tags.get("fracs")) and not tags.get("tp3_ladder"))
     if scalp:
-        return None, keep, draw, final_T
+        fin_s = float(keep[-1][0])
+        if p.t1_fixed_all and (p.t1_fixed_pts > 0 or p.t1_fixed_r > 0):
+            fin_s = min(fin_s, entry + (p.t1_fixed_r * risk if p.t1_fixed_r > 0 else p.t1_fixed_pts * es))      # strategy applies the fixed single target after this stage
+        elif tags.get("single_exit") or final_T or locked:
+            fin_s = float(draw)
+        d4.setdefault("final", fin_s)
+        return final_gates(ctx, p, entry, risk, fin_s, lvt, d4), keep, draw, final_T
     fr = list(tags["fracs"]) if (tags.get("tp3_ladder") and tags.get("fracs")) else None
     keep = list(keep)
     # --- the PM 14:50 ladder replaces the ladder
@@ -1018,12 +1053,16 @@ def late(ctx, sd, sw, i: int, p, session: str, entry: float, risk: float, keep: 
             keep, fr = rs, None
             draw = keep[-1][0]
             lvt.append("m1450")
+    if p.lrlr_zone:
+        why = lrlr_zone_gate(ctx, sd, sw, i, p, entry)
+        if why:
+            return why, keep, draw, final_T
     # --- structural cuts (not under a locked draw: the lock is one exact target)
-    if p.tf_target_cap and not locked:
-        k2 = tf_cap(ctx, p, entry, keep)
+    if p.tf_target_cap:
+        k2 = tf_cap(ctx, p, entry, keep if not locked else keep[:1])       # review fix: T1 beyond the cap is rejected under a locked draw too; the ladder is cut only when free
         if k2 is None:
             return "x_tf_cap", keep, draw, final_T
-        if k2 != keep:
+        if k2 != keep and not locked:
             keep, fr = k2, None
             lvt.append("tf_cap")
     if p.same_range_t1 and not locked:
@@ -1044,11 +1083,18 @@ def late(ctx, sd, sw, i: int, p, session: str, entry: float, risk: float, keep: 
             keep, fr = r
             consol_done = True
             lvt.append("consol_eq_target")
-    if p.void_draw and not locked:
-        k2 = void_final(ctx, sd, i, p, entry, risk, keep)
-        if k2 is not None:
-            keep, fr = k2, None
+    if p.void_draw:
+        v_ = void_pick(ctx, sd, i, p, entry, risk)
+        if v_ is not None and not locked:
+            keep, fr = [x for x in keep if x[0] < v_ - es] + [(v_, "array")], None
             lvt.append("void_draw")
+            hit("void_draw")
+        elif v_ is not None and v_ < draw - es:               # review fix (owner question 8): a nearer unfilled void replaces the LOCKED draw as the lock-side final target
+            keep, fr, draw = [x for x in keep if x[0] < v_ - es] + [(v_, "array")], None, float(v_)
+            lvt.append("void_draw")
+            lvt.append("void_draw_lock")
+            hit("void_draw")
+            hit("void_draw_lock")
     # --- whole-ladder shapes (at most one is on)
     if p.ladder_kind == "half_3r":
         keep, fr = half_3r(ctx, sd, i, p, entry, risk, keep, draw, final_T or locked, st)
@@ -1145,14 +1191,13 @@ def late(ctx, sd, sw, i: int, p, session: str, entry: float, risk: float, keep: 
         draw = keep[-1][0]
     fin = draw if (final_T or locked) else keep[-1][0]
     d4.setdefault("final", float(fin))
-    if p.min_rr_final > 0 or p.rr_month_gate:
-        rrf = (fin - entry) / risk if risk > 0 else 0.0
-        d4["rr_final"] = round(float(rrf), 3)
-        if p.min_rr_final > 0 and rrf >= 5.0 - 1e-9:
-            lvt.append("rr5")
-            hit("rr5")
-        if p.min_rr_final > 0 and fin - entry < p.min_rr_final * risk - 1e-9:
-            return "x_min_rr_final", keep, draw, final_T
+    why = final_gates(ctx, p, entry, risk, float(fin), lvt, d4)
+    if why:
+        return why, keep, draw, final_T
+    if d4.get("tgif066") and len(d4["tgif066"]) > 2 and keep:
+        dd = [abs(v - d4["tgif066"][2]) for v, _ in keep]
+        if min(dd) <= 3.0 * es:
+            d4["tgif_l25_k"] = int(np.argmin(dd))          # the index of the L25 rung in the placed ladder (manage matches it by index)
     if st.get("conf_pools") and any(abs(v - c) <= es for c in st["conf_pools"] for v, _ in keep):
         lvt.append("proj_confirms_pool")
     return None, keep, draw, final_T
@@ -1203,7 +1248,8 @@ def month_big(rows: list, day, p) -> int:
 
 def ob1_body(ctx, sd, o: dict, i: int, fill: float):
     """new-strength-no-return-discount-array (105 ~17:00): OB1 = the nearest bullish order block's BODY (down-close candle: close .. open) below the fill, from the closed bars between the
-    sweep extreme and the fill bar. (bottom, top) or None."""
+    sweep extreme and the fill bar. (bottom, top) or None. [our interpretation: the spec's `levels.order_block` (the post-fill pullback / entry OB) is replaced by this simple nearest down-close
+    candle]"""
     e = int(o.get("ext_i", ctx.start))
     for k in range(i - 1, max(ctx.start, e) - 1, -1):
         if sd.c[k] < sd.o[k] and sd.o[k] <= fill + 1e-9:
@@ -1220,7 +1266,7 @@ def on_fill(ctx, sd, pos: dict, tr, o: dict, i: int, p, fill: float) -> None:
         hit("eval_strength")
         if ob is not None:
             d["ob1"] = ob
-            d["hi0"] = float(max(o.get("leg_hi0", -np.inf), sd.h[int(o.get("ext_i", i)):i + 1].max()))
+            d["hi0"] = float(max(o.get("leg_hi0", -np.inf), sd.h[int(o.get("ext_i", i)):max(i, int(o.get("ext_i", i)) + 1)].max()))     # the CLOSED bars before the fill bar (review fix)
         else:
             d.pop("strength", None)
     if p.ob_target_tod:
@@ -1245,8 +1291,10 @@ def ob_skip(pos: dict, k: int, t: int, tf: int, p) -> bool:
     if any(a <= t < b for a, b in p.ob_pt_windows):
         return False
     fr = list(pos["fracs"])
-    if k + 1 < len(fr):
-        fr[k + 1] += fr[k]
+    if k + 1 >= len(fr):
+        hit("ob_tod_last_kept")             # review fix: the LAST rung has no next rung to take its share - it is never skipped (the units would sit open until the stop / session end)
+        return False
+    fr[k + 1] += fr[k]
     fr[k] = 0.0
     pos["fracs"] = tuple(fr)
     hit("ob_tod_skip")
@@ -1279,9 +1327,9 @@ def manage(ctx, sd, pos: dict, tr, i: int, ts, p) -> None:
     t066 = d.get("tgif066")
     if t066 and pos["left"]:
         hit("eval_tgif066")
-        L25 = t066[2] if len(t066) > 2 else None
-        if L25 is not None and not d.get("tgif_roll") and any(abs(lv[k] - L25) <= p.es_pt for k in range(min(pos["k"], len(lv)))):
-            q = [x for x in sd.pl if x.known <= i and x.price < sd.c[i]]
+        k25 = d.get("tgif_l25_k")                              # review fix: the L25 rung is matched by its INDEX in the placed ladder (set in late), not by its price
+        if k25 is not None and not d.get("tgif_roll") and pos["k"] > k25:
+            q = [x for x in sd.pl if x.known <= i and x.i > pos["fill_i"] and x.price < sd.c[i]]      # the latest swing formed AFTER the fill
             if q:
                 MG.raise_stop(pos, float(q[-1].price) - p.tick)     # the "tgif_roll": the stop to the latest swing (side space: the swing low of a short's swing high)
                 d["tgif_roll"] = True
@@ -1325,7 +1373,10 @@ def tgif_pm_slot(ctx, p, session: str, t: int) -> bool:
     if not p.tgif_reentry_pm or session != "PM":
         return False
     a, b = p.sb_windows[1]
-    return bool(a <= t < b and ctx.day.weekday() == 4 and any(x.startswith("tgif") for x in day_tag_set(ctx)))
+    ok = bool(a <= t < b and ctx.day.weekday() == 4 and any(x.startswith("tgif") for x in day_tag_set(ctx)))
+    if ok:
+        hit("tgif_pm_slot")
+    return ok
 
 
 def after_close(ctx, pos, tr, lost, done: dict, key: str, state: dict, p) -> None:

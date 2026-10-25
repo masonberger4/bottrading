@@ -89,12 +89,12 @@ ES_CASES = {
     "c": (W8, ES_NB, dict(SMP, void_draw=True, void_rearm=True, void_ladder=True, void_targets=True, ob_target_tod=True, ob_targets_1m=True, htf_targets=HTW), ("eval_void_draw", "eval_ob_tod")),
     "d": (W8, ES_NB, dict(SMP, runner_htf=True, runner_htf_steps=True, runner_frac=0.2, subrange_first=True, confluence_weight=True, confluence_only=True, proj_breaker_multi=True, htf_targets=HTW, sd_cluster_ticks=4),
           ("eval_runner_htf", "runner_htf", "eval_subrange", "subrange_first", "confluence_weight", "proj_breaker_multi")),
-    "e": (W2, dict(ES_NB, htf_bias="combo", use_bias=True), dict(SMP, consol_eq_target=True, consol_no_runner=True, htf_targets=HTW), ("eval_consol_eq",)),
+    "e": (W2, dict(ES_NB, htf_bias="combo", use_bias=True), dict(SMP, consol_eq_target=True, consol_no_runner=True, htf_targets=HTW), ("eval_consol_eq",)),      # (the rare paths consol_eq_target / consol_no_runner / tgif_roll / tgif_cover / void_rearm fire in no short real or synthetic window: unit tests in test_caption_gap_tp4a.py)
     "f": (W8, ES_NB, dict(SMP, m1450_targets=True, pm_ladder_am=True, extra_pools=True, skip_balanced=True, ladder_kind="half_3r", htf_targets=HTW), ("eval_m1450", "m1450_ladder", "pm_ladder_am", "ladder_half_3r", "skip_balanced")),
     "g": (W2, ES_NB, dict(SMP, mm_first=0.8, mm_targets=True, mm_oc_entry=True, mmxm_ctx=True, mm_lowrisk=True), ("eval_mm_first", "mm_first")),
     "h": (W2, ES_NB, dict(SMP, fulcrum_exit="ladder", sd_anchor="fulcrum", sd_targets=True), ("eval_fulcrum", "fulcrum_ladder")),
-    "h2": (W8, ES_B, dict(SMP, fulcrum_exit="trail", sd_anchor="fulcrum", sd_targets=True), ("eval_fulcrum",)),
-    "j": (W8, ES_NB, dict(SMP, ladder_preset="096", vi_arrays=True, sd_targets=True, sd_levels=(1.0, 1.5, 2.0, 2.5, 3.0)), ()),
+    "h2": (W8, ES_B, dict(SMP, fulcrum_exit="trail", sd_anchor="fulcrum", sd_targets=True), ("eval_fulcrum", "fulcrum_trail")),
+    "j": (W8, ES_NB, dict(SMP, ladder_preset="096", vi_arrays=True, sd_targets=True, sd_levels=(1.0, 1.5, 2.0, 2.5, 3.0)), ("ladder_096",)),
     "i": (W2, ES_NB, dict(SMP, ladder_preset="041", sd_targets=True, htf_targets=HTW), ("ladder_041",)),
     "l": (WL, dict(ES_NB, draw_lock="session"), dict(pm_carry_draw=True, pm_carry_erase=True, skip_balanced=True), ("eval_pm_carry", "pm_carry_erased", "skip_balanced")),
     "k": (("2023-11-20", "2024-02-27"), ES_NB, dict(SMP, tgif=True, tgif_zone=True, tgif_exits="066", tgif_reentry_pm=True, tgif_last_hour_cover=True), ("eval_tgif066",)),     # (the TGIF tag needs ~13 weeks of history)
