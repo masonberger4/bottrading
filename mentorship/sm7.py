@@ -1661,7 +1661,7 @@ def manage(ctx, sd, pos, tr, i: int, ts, p) -> None:
             st["dropped"] = True
             new = gb - p.tick
             if new > pos["stop"] and new < sd.c[i]:
-                S._MG.raise_stop(pos, new)
+                S._MG.raise_stop(pos, new, trail=True)
                 hit("breakaway_stop_drop")
 
 

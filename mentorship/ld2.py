@@ -679,7 +679,7 @@ def manage(ctx, sd, pos, tr, i: int, p) -> None:
             z = max(zs, key=lambda q: q.bi)
             if any(g.i <= i and g.i > z.bi and g.bottom >= z.top for g in sd.gaps):
                 from . import manage as _MG
-                _MG.raise_stop(pos, z.bottom - p.tick)
+                _MG.raise_stop(pos, z.bottom - p.tick, trail=True)
     if p.wick_bias_line and not pos.get("bias_line_lost"):
         e = pos["ext_i"]
         if 0 <= e < len(ctx.idx):

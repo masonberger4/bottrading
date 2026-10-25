@@ -55,8 +55,6 @@ def check_params(p) -> None:
         raise ValueError("management_exits #2/3: pool_lock_pts, ob_retests, marginal_pts, pd3_near_pts, ote_leave_bars, fulcrum_speed_bars, small_fvg_linger, urgency_stop_pts >= 0; "
                          "pool_lock_after in [0, 1]; htf_bank, adr_closed_min, breaker_far_partial in [0, 1); rde_arm, rde_frac, hh_low_frac, pd3_close_frac, speed_pare in (0, 1]; "
                          "marginal_n, stall_bars, ref_speed_bars, stall_at_htf_bars >= 1; speed_k > 0")
-    if p.ladder_trail in LADDER_TRAILS and p.mgmt not in ("ladder", "unit"):
-        pass                                                            # (the trail modes act on the ladder positions; with mgmt "t1_t2" they are inert like the other ladder_trail values)
 
 
 def any_on(p) -> bool:
@@ -156,14 +154,21 @@ def _bz_far(sd, tr):
     return float(min(sd.x(tr.bz_top), sd.x(tr.bz_bottom)))
 
 
-def _ob_candle(sd, pos, i: int):
-    """The down-close candle of the entry OB: an OB entry's body holds the OB MT (fvg_ce); an FVG entry's is the last down-close candle before the displacement (the gap's first candle). None if
-    none is found."""
+def _ob_candle(sd, pos, i: int, p=None, ob_only: bool = False):
+    """The down-close candle of the entry OB: an OB entry's candle is the down-close one whose MT (body mean, or the range mean under mt_mode "range") is the order's MT (fvg_ce); an FVG
+    entry's is the last down-close candle before the displacement (the gap's first candle) [our interpretation, #26 only: `ob_only` (#29 - the stop to the OB MT, an OB-entry rule) returns None
+    for a non-OB entry]. None if none is found."""
     ek = str(pos.get("kind") or "")
-    if (ek.startswith("ob") or ek.startswith("arr_ob")) and pos.get("fvg_ce") is not None:
+    is_ob = ek.startswith("ob") or ek.startswith("arr_ob")
+    if is_ob and pos.get("fvg_ce") is not None:
         for k in range(i - 1, max(i - 40, -1), -1):
+            if sd.c[k] < sd.o[k] and (abs(_mt(sd, k, p) - pos["fvg_ce"]) <= 1e-9 if p is not None else sd.c[k] - 1e-9 <= pos["fvg_ce"] <= sd.o[k] + 1e-9):
+                return k
+        for k in range(i - 1, max(i - 40, -1), -1):                          # (the body holds the MT: the fallback when mt_mode differs from the one that built the order)
             if sd.c[k] < sd.o[k] and sd.c[k] - 1e-9 <= pos["fvg_ce"] <= sd.o[k] + 1e-9:
                 return k
+    if ob_only and not is_ob:
+        return None
     g0 = next((g for g in sd.gaps if abs(float(g.bottom) - float(pos.get("fvg_bottom", np.nan))) < 1e-9 and g.i <= i), None)
     j0 = (g0.i - 2) if g0 is not None else i - 1
     for k in range(j0, max(j0 - 10, -1), -1):
@@ -188,7 +193,8 @@ def _htf_draw(ctx, sd, pos, fill: float, i: int, p):
     from . import targets as TP
     adr = T3._adr(ctx)
     reach = 3.0 * adr if adr else np.inf
-    out = None
+    out, bias_out = None, None
+    bl = _bias_draw_lvl(ctx, sd, i)
     for r in cf.opposing_ext(T3._now(ctx, i), sd.x(fill), sd.sign, ("D", "W", "M"), (0, 1, 2, 3)):
         near, far = T3._zone_edges(sd, r)
         ex = TP.extreme_since(ctx, i, r["known"] + 1.0, sd.sign > 0)
@@ -198,32 +204,90 @@ def _htf_draw(ctx, sd, pos, fill: float, i: int, p):
             continue
         if out is None or near < out[0]:
             out = (float(near), float(far))
+        if bl is not None and near - 1e-9 <= bl <= far + 1e-9 and (bias_out is None or near < bias_out[0]):
+            bias_out = (float(near), float(far))
+    if bias_out is not None:
+        hit("htf_bank_bias_draw")
+        return bias_out                                            # the array the bias framed the trade with (htf.table draw_ord_lvl) wins; else the nearest untouched array [our interpretation]
     return out
 
 
-def _pd3_arrays(sd, pos, i: int, p, fill: float) -> list:
+def _bias_draw_lvl(ctx, sd, i: int):
+    """Item 36: the bias draw level (htf.table row draw_ord_lvl, side space) when the ordered draw points the trade's way, else None. Read only through bias_row_known (the table is cut at 09:30)."""
+    try:
+        from .entries import bias_row_known
+        row = bias_row_known(ctx, i)
+        if row is None:
+            return None
+        if int(row.get("draw_ord", 0)) != sd.sign:
+            return None
+        v = float(row.get("draw_ord_lvl", np.nan))
+        return float(sd.x(v)) if np.isfinite(v) else None
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return None
+
+
+def _opp_obs(ctx, sd, upto: int, p, fill: float) -> list:
+    """Item 94: the opposing order blocks above `fill` (side space) known by bar `upto`, as dict(near, ce, far) with ce = the OB's MT: the confluence rows of source OB (15m and up) and the own-
+    timeframe bullish OBs of the OTHER Side (blended order block of the gap's candles), mirrored."""
+    from . import tp3 as T3
+    out = []
+    cf = _htf_cf(ctx)
+    if cf is not None:
+        for r in cf.opposing_ext(T3._now(ctx, upto), sd.x(fill), sd.sign, T3.HTF_ALL, (1,)):
+            a, b = T3._zone_edges(sd, r)
+            if b - a > 0:
+                out.append(dict(near=float(a), ce=float((a + b) / 2), far=float(b)))
+    other = (getattr(ctx, "sides_map", None) or {}).get(-sd.sign)
+    if other is not None:
+        for g in other.gaps:
+            if g.i > upto:
+                break
+            if g.i < 4:
+                continue
+            ob = L.order_block_blend(other.o, other.h, other.l, other.c, g.i - 4, g.i - 2, "bull")
+            if ob is not None and np.isfinite(ob.mt) and -float(ob.top) > fill and ob.top > ob.bottom:
+                out.append(dict(near=-float(ob.top), ce=-float(ob.mt), far=-float(ob.bottom)))
+    return out
+
+
+def _pd3_arrays(sd, pos, i: int, p, fill: float, ctx=None) -> list:
     """X7a / item 90: the three nearest arrays against the trade under the fill and over the stop, known by bar i, nearest first, as SimpleNamespace(level, top, bottom, kind): `level` is the
-    line a body close must stay over (a gap's / VI's bottom, an OB's / breaker's MT), `top` / `bottom` its extent (an OB: the body)."""
+    line a body close must stay over (a gap's / VI's bottom, an OB's / breaker's MT, a wick's CE), `top` / `bottom` its extent (an OB: the body; a wick: body edge .. wick extreme). The ENTRY
+    array itself (the FVG / OB the order filled in) is not one of the three [our interpretation: arrays "against" the trade are the ones below the entry array]. With `ctx` the lower wicks of
+    the last 200 bars that are >= rip_wick_mult x the median range (the mirror of me1.wick_objs: the other Side's upper wicks) count as wick-CE arrays (the 105 example)."""
     stop = pos["stop"]
+    tk = p.tick
+    ent_lv = [x for x in (pos.get("fvg_bottom"), pos.get("fvg_ce")) if x is not None]
+
+    def _entry(level: float) -> bool:
+        return any(abs(level - e) <= tk + 1e-9 for e in ent_lv) or (pos.get("fvg_top") is not None and level >= float(pos["fvg_top"]) - 1e-9)
+
     out = []
     for g in sd.gaps:
-        if g.i <= i and stop < g.bottom < fill:
+        if g.i <= i and stop < g.bottom < fill and not _entry(float(g.bottom)):
             out.append(SimpleNamespace(level=float(g.bottom), top=float(g.top), bottom=float(g.bottom), kind="fvg"))
     for z in sd.vis("bull"):
-        if z.i <= i and stop < z.bottom < fill:
+        if z.i <= i and stop < z.bottom < fill and not _entry(float(z.bottom)):
             out.append(SimpleNamespace(level=float(z.bottom), top=float(z.top), bottom=float(z.bottom), kind="vi"))
+    other = (getattr(ctx, "sides_map", None) or {}).get(-sd.sign) if ctx is not None else None
+    if other is not None:
+        for w in M1.wick_objs(ctx, other, i, p):                  # the other Side's upper wicks = our lower wicks, mirrored (bottom/top swap)
+            lvl, top_, bot_ = -float(w.mid), -float(w.bottom), -float(w.top)
+            if stop < lvl < fill and not _entry(lvl):
+                out.append(SimpleNamespace(level=lvl, top=top_, bottom=bot_, kind="wick"))
     for g in sd.gaps:
         if g.i > i:
             break
         if g.i < 4:
             continue
         ob = L.order_block_blend(sd.o, sd.h, sd.l, sd.c, g.i - 4, g.i - 2, "bull")
-        if ob is not None and sd.c[g.i - 1] > ob.top and np.isfinite(ob.mt) and stop < ob.mt < fill:
+        if ob is not None and sd.c[g.i - 1] > ob.top and np.isfinite(ob.mt) and stop < ob.mt < fill and not _entry(float(ob.mt)):
             out.append(SimpleNamespace(level=float(ob.mt), top=float(ob.top), bottom=float(ob.bottom), kind="ob"))
     for z in _S()._SM._breakers(sd, p):
         if z.i <= i:
             th = z.mt if np.isfinite(z.mt) else z.bottom
-            if stop < th < fill:
+            if stop < th < fill and not _entry(float(th)):
                 out.append(SimpleNamespace(level=float(th), top=float(z.top), bottom=float(z.bottom), kind="breaker"))
     out.sort(key=lambda a: -a.level)
     merged = []
@@ -270,10 +334,12 @@ def on_fill(ctx, sd, pos, tr, o: dict, i: int, p, fill: float) -> None:
         d["bz_bot"] = bf if bf is not None else float(pos.get("fvg_bottom", pos["stop"]))      # no breaker on the trade: the entry array's bottom [our interpretation]
     # --- 26 / 29 the entry OB
     if p.ob_retests or p.ob_stop_to_mt_after_run:
-        k = _ob_candle(sd, pos, i)
+        k = _ob_candle(sd, pos, i, p)
         if "ob_open" not in d and k is not None:
             d["ob_open"] = float(sd.o[k])
-        if p.ob_stop_to_mt_after_run and "ob_mt" not in d and k is not None:
+        k29 = _ob_candle(sd, pos, i, p, ob_only=True) if p.ob_stop_to_mt_after_run else None
+        if p.ob_stop_to_mt_after_run and "ob_mt" not in d and k29 is not None:
+            k = k29
             body = abs(float(sd.o[k]) - float(sd.c[k]))
             d["ob_body"] = body
             d["ob_mt"] = _mt(sd, k, p)
@@ -286,9 +352,13 @@ def on_fill(ctx, sd, pos, tr, o: dict, i: int, p, fill: float) -> None:
     # --- 36 the HTF draw
     if p.htf_bank and "htf_draw" not in d:
         d["htf_draw"] = _htf_draw(ctx, sd, pos, fill, i, p)
-    # --- 50 / 92 the NWOG
+    # --- 50 / 92 the NWOG; the peel (50) is armed only when this NWOG is the trade's target gap (a ladder rung lies inside it) or once a rung at its CE has filled (rung_taken)
     if (p.peel_singles or p.gap_q_hold) and "nwog" not in d:
         d["nwog"] = M1._nwog_zone(ctx, sd, i)
+    if p.peel_singles and "peel_armed" not in d:
+        z_ = d.get("nwog")
+        tol_ = max(tk, p.exit_before_pts * p.es_pt)
+        d["peel_armed"] = bool(z_ is not None and any(z_[0] - tol_ <= v <= z_[1] + tol_ for v in pos["levels"]))
     # --- 52 a PM trade keeps its last unit as a runner to 15:50
     if p.pm_macro_runner and tr.session == "PM" and not pos.get("runner") and len(pos["fracs"]) >= 2:
         lv0 = pos["levels"][:-1] if (pos.get("final_T") and len(pos["levels"]) > 1) else pos["levels"]
@@ -303,24 +373,28 @@ def on_fill(ctx, sd, pos, tr, o: dict, i: int, p, fill: float) -> None:
             d["wick_w"] = None
             d["wick_rung"] = True
     # --- 87 the OTE band's 62 % line
-    if p.ote_leave_bars and "ote62" not in d and str(pos.get("kind") or "") in ("ote", "arr_ote"):
+    if p.ote_leave_bars and "ote62" not in d and (str(pos.get("kind") or "") in ("ote", "arr_ote") or d.get("ote_fill")):      # (review fix: an OTE limit placed through ote_adjust on the FVG path is an OTE entry too: the order's tags["me2"]["ote_fill"])
         leg = pos.get("leg") or (float(pos["ext"]), float(sd.h[int(o.get("ext_i", i)):i + 1].max()))        # the entry array "ote": the leg from the sweep extreme to the high made before the fill
         ext, hi = leg
         if hi > ext:
             d["ote62"] = float(hi - p.ote_band[0] * (hi - ext))
     # --- 90 the three arrays against the trade
     if p.three_array_mode and "pd3" not in d:
-        d["pd3"] = _pd3_arrays(sd, pos, i - 1, p, fill)
+        d["pd3"] = _pd3_arrays(sd, pos, i - 1, p, fill, ctx)
     # --- 94 the opposing arrays on the way
     if p.opp_tear_check and "opp" not in d:
         from . import tp3 as T3
         fin = lv[-1] if lv else np.inf
         d["opp"] = [dict(near=g[0], ce=g[1], far=g[2]) for g in T3.gap_registry(ctx, sd, i, p, fill, {}) if g[0] < fin]
+        d["opp"] += [r for r in _opp_obs(ctx, sd, i - 1, p, fill) if r["near"] < fin]         # (review fix: the opposing order blocks - their MT - are array rows too)
+        d["opp"].sort(key=lambda r: r["near"])
         d["opp_done"] = set()
         d["opp_win"] = None
     # --- 95 the broken FVG edge
     if (p.edge_bump_add or p.edge_bump_guard) and "edge" not in d:
-        gs = [g for g in M1.opp_gaps(ctx, sd, i - 1) if g.top <= fill + tk and g.i >= int(o.get("ext_i", i)) - 5]
+        # the opposing gap the entry leg broke through: a bar of the leg (from the sweep extreme on) traded over its far edge after it formed [review fix: "broke through in the entry leg", not "formed in it"]
+        e_i = int(o.get("ext_i", i))
+        gs = [g for g in M1.opp_gaps(ctx, sd, i - 1) if g.top <= fill + tk and g.i >= e_i - 40 and float(sd.h[max(g.i + 1, e_i):i].max(initial=-np.inf)) > g.top + 1e-9]
         d["edge"] = float(max(gs, key=lambda g: g.top).top) if gs else None
         d["bumps"] = 0
         d["bump_on"] = False
@@ -332,12 +406,14 @@ def on_fill(ctx, sd, pos, tr, o: dict, i: int, p, fill: float) -> None:
                 d["pair_ref"] = float(max(sd.o[k], sd.o[k - 1]))
                 break
         d["pair_b"] = None
-    # --- 103 the fulcrum pool and the -0.5 SD level
+    # --- 103 the fulcrum pool and the -0.5 SD level: fulcrum-anchored trades only (item 66: Params.sd_anchor == "fulcrum"; with fulcrum_exit on, the trade must carry the fulcrum_ladder
+    #     tag = tp4.fulcrum_ladder built its pool + beyond / -0.5 SD / -1 SD rungs; the "trail" mode has a single -1 SD rung and no pool: nothing to watch)
     if p.fulcrum_speed_bars and "fp_pool" not in d:
-        pl = [v for v, k in zip(pos["levels"], kinds) if k in POOLS]
-        sdl = [v for v, k in zip(pos["levels"], kinds) if k in ("sd_half", "sd")]
+        scope = p.sd_anchor == "fulcrum" and (not p.fulcrum_exit or "fulcrum_ladder" in str(getattr(tr, "lv_tags", "") or ""))
+        pl = [v for v, k in zip(pos["levels"], kinds) if k in POOLS] if scope else []
+        sdl = [v for v, k in zip(pos["levels"], kinds) if k in ("sd_half", "sd")] if scope else []
         d["fp_pool"] = min(pl) if pl else None
-        d["fp_sd"] = min(sdl) if sdl else None
+        d["fp_sd"] = min([x for x in sdl if not pl or x > min(pl)], default=None)
         d["fp_b"] = None
     # --- 104 / 107
     if p.breaker_far_partial:
@@ -375,27 +451,43 @@ def rung_taken(ctx, sd, pos, tr, k: int, level: float, i: int, p) -> None:
         hit("eval_pool_lock")
     # 20: the last pool-kind rung before the final one has run: the stop tight under it
     if p.pool_lock_pts > 0 and k < n - 1 and kind in POOLS and not any(x in POOLS for x in kinds[k + 1:n - 1]) and _closed(pos) >= p.pool_lock_after - 1e-9:
-        if raise_to(pos, level - p.pool_lock_pts * p.es_pt, "pool_lock", c, p, gate=False):
-            pos["no_reentry"] = True
-            hit("pool_lock")
-            _tag(tr, "pool_lock")
+        pos["no_reentry"] = True                                       # (review fix: the spec sets these unconditionally - the raise itself may be refused by the clamp / the stop cap)
+        pos["pool_locked"] = True
+        _tag(tr, "pool_lock")
+        hit("pool_lock")
+        raise_to(pos, level - p.pool_lock_pts * p.es_pt, "pool_lock", c, p, gate=False)
+    # 36: a planned rung that prints while price is at the HTF draw array banks too (the trigger "planned target prints while at that array")
+    if p.htf_bank and d.get("htf_draw") and not d.get("htf_banked") and level >= d["htf_draw"][0] - 1e-9:
+        _bank(ctx, sd, pos, tr, d, i, ts, p, float(sd.o[i]), c, _avg(pos), level)
+        if not pos["left"]:
+            return
     # 24: a non-final array rung: the stop under the latest 1m swing low
     if p.trail_swing_at_array and kind == "array" and k < n - 1:
         hit("eval_swing_at_array")
-        _, lows = _piv(sd, max(ctx.start, pos["fill_i"] - 3), i)
-        lows = [q for q in lows if q.i > pos["fill_i"] - 3]
+        _, lows = _piv(sd, max(ctx.start, pos["fill_i"] - 1), i)
+        lows = [q for q in lows if q.i >= pos["fill_i"]]                      # (review fix: the latest pivot low SINCE the fill - a pre-fill retracement low is not one)
         if lows and raise_to(pos, lows[-1].price - p.tick, "swing_at_array", c, p):
             hit("swing_at_array")
     # 25 rej_block: after the last non-final rung, 1 tick beyond the wicks of the last 1-2 closed bars
-    if p.ladder_trail in ("rej_block", "071") and k == n - 2:
+    if p.ladder_trail in ("rej_block", "071") and p.mgmt in ("ladder", "unit") and k == n - 2:
         lo = float(min(sd.l[max(i - 1, 0)], sd.l[i]))
         if raise_to(pos, lo - p.tick, "rej_block", c, p):
             hit("trail_rej_block")
-    # 52: the first partial of a PM runner trade: +1 pt
+    # 52: the first partial of a PM runner trade: +1 pt (retried on the next bars while the close is still under avg + 1), and the next rung becomes the next untaken pool rung (the pool rungs
+    #     carry pool_beyond_pts already: sd._exit_px(pool) = level + pool_beyond_pts) [our interpretation of "set the next rung to the next untaken pool + pool_beyond_pts"]
     if d.get("pm_runner") and not d.get("pm_first"):
         d["pm_first"] = True
         if raise_to(pos, _avg(pos) + 1.0 * p.es_pt, "pm_macro", c, p, gate=False):
             hit("pm_macro_first")
+        if pos["stop"] < _avg(pos) + 1.0 * p.es_pt - 1e-9:
+            d["pm_stop_pending"] = True                                # (the close was under avg + 1: the clamp kept the level under the close; the full +1 follows on a later bar)
+        nxt = k + 1
+        if nxt < len(pos["levels"]) and nxt < len(kinds) and kinds[nxt] not in POOLS:
+            later = [pos["levels"][q] for q in range(nxt + 1, min(len(pos["levels"]), len(kinds))) if kinds[q] in POOLS]
+            if later:
+                pos["levels"][nxt] = float(min(later))
+                pos["level_kinds"][nxt] = "pool"
+                hit("pm_macro_retarget")
     # 67: the wick-CE rung filled: BE + pad, the 5m close test starts
     if d.get("wick_rung") and k == 0:
         d["wick_w"] = float(level)
@@ -403,21 +495,34 @@ def rung_taken(ctx, sd, pos, tr, k: int, level: float, i: int, p) -> None:
         if not pos.get("day_trade"):
             MG.be_move(pos, p)
         hit("wick_ce_first")
-    # 92: a rung at the NWOG CE: the lower quarter is the hold line
-    if p.gap_q_hold and d.get("nwog"):
+    # 92: a rung at the NWOG CE: the lower quarter is the hold line (and, 50, arms the runner peel: "bulk partial at the NWOG CE")
+    if (p.gap_q_hold or p.peel_singles) and d.get("nwog"):
         lo, hi = d["nwog"]
         ce = (lo + hi) / 2
         if abs(level - ce) <= max(p.tick, p.exit_before_pts * p.es_pt) + 1e-9:
-            d["gap_q"] = float(lo + 0.25 * (hi - lo))
-            d["gap_ce_i"] = i
-            hit("gap_q_set")
+            if p.peel_singles:
+                d["peel_armed"] = True
+            if p.gap_q_hold:
+                d["gap_q"] = float(lo + 0.25 * (hi - lo))
+                d["gap_ce_i"] = i
+                hit("gap_q_set")
     # 108: T1 on an urgent leg (no down-close candle since the fill): most of the position is off, the runner keeps the farther target on a tight stop
     if p.urgency_runner and k == 0 and not d.get("urg") and n >= 2:
         hit("eval_urgency")
         if all(sd.c[q] >= sd.o[q] for q in range(pos["fill_i"] + 1, i + 1)):
             d["urg"] = True
             keep = max(p.lot, _S()._lots(pos["n"] * (p.runner_frac or 0.2), p.lot))
-            if pos["left"] > keep:
+            # the spec: "the last rung keeps runner_frac (or 0.2)", the rest of the ladder unchanged - the rungs between T1 and the last one share what is left above the runner [review fix: no extra
+            # bulk exit]; with only two rungs there is no rung to shrink and urgency_bulk (off) is the explicit alternative: the T1 bulk exit of the first build
+            mid = list(range(k + 1, n - 1))
+            if mid:
+                share = max(0.0, (pos["left"] - keep) / max(pos["n"], 1))
+                fr = list(pos["fracs"])
+                tot = sum(fr[q] for q in mid) or 1.0
+                for q in mid:
+                    fr[q] = share * fr[q] / tot
+                pos["fracs"] = tuple(fr)
+            elif p.urgency_bulk and pos["left"] > keep:
                 MG._exit(tr, sd, ts, level, pos["left"] - keep, "urgency_bulk", pos)
             raise_to(pos, c - p.urgency_stop_pts * p.es_pt, "urgency", c, p, gate=False)
             _tag(tr, "urgency")
@@ -443,6 +548,20 @@ def _wick_gate(sd, pos, d, i: int, ref: float, p) -> None:
     d["wg_stop"] = pos["stop"]
     if best is not None:
         hit("wick_gate_set")
+
+
+def _bank(ctx, sd, pos, tr, d, i, ts, p, o, c, avg, px) -> None:
+    """36: the HTF draw bank - htf_bank of the units left at `px`, the stop to BE + be_pad_pts, no adds, the session's counter-setup block (order_block)."""
+    d["htf_banked"] = True
+    near, far = d["htf_draw"]
+    partial_close(pos, tr, sd, ts, px, p.htf_bank, "htf_bank", p)
+    raise_to(pos, avg + p.be_pad_pts * p.es_pt, "htf_bank", c, p, gate=False)
+    pos["no_adds"] = True
+    pos["add"] = None
+    a_, b_ = sorted((float(sd.x(near)), float(sd.x(far))))
+    _cs(ctx)["htf_touch"][sd.sign] = (a_, b_, i)
+    _tag(tr, "htf_bank")
+    hit("htf_bank")
 
 
 def manage(ctx, sd, pos, tr, i: int, ts, p, pctx=None, psides=None, ppos=None) -> None:
@@ -505,16 +624,7 @@ def manage(ctx, sd, pos, tr, i: int, ts, p, pctx=None, psides=None, ppos=None) -
     if p.htf_bank and d.get("htf_draw") and not d.get("htf_banked"):
         hit("eval_htf_bank")
     if p.htf_bank and d.get("htf_draw") and not d.get("htf_banked") and h >= d["htf_draw"][0]:
-        d["htf_banked"] = True
-        near, far = d["htf_draw"]
-        partial_close(pos, tr, sd, ts, near if o < near else o, p.htf_bank, "htf_bank", p)
-        raise_to(pos, avg + p.be_pad_pts * p.es_pt, "htf_bank", c, p, gate=False)
-        pos["no_adds"] = True
-        pos["add"] = None
-        a_, b_ = sorted((float(sd.x(near)), float(sd.x(far))))
-        _cs(ctx)["htf_touch"][sd.sign] = (a_, b_, i)
-        _tag(tr, "htf_bank")
-        hit("htf_bank")
+        _bank(ctx, sd, pos, tr, d, i, ts, p, o, c, avg, d["htf_draw"][0] if o < d["htf_draw"][0] else o)
         if not pos["left"]:
             return
     # 99 a profitable trade that stops delivering inside an HTF array in a fast intraweek move
@@ -574,6 +684,8 @@ def manage(ctx, sd, pos, tr, i: int, ts, p, pctx=None, psides=None, ppos=None) -
     if p.adr_closed_min > 0 and not d.get("adr_done") and not pos.get("day_trade"):
         adr = _S().adr5(list(getattr(ctx, "hist", None) or [])[-5:])
         if adr:
+            # [our interpretation, review fix] the day's low = the low of the Side's bars since the array start (the whole trading day, Asia / London / pre-open included); a projection already exceeded before the
+            # fill tops the closed share up on the first managed bar (the trade is in while price is beyond ADR5 from the day's low)
             lo_ = float(sd.l[:i + 1].min())
             if h >= lo_ + adr:
                 d["adr_done"] = True
@@ -592,6 +704,12 @@ def manage(ctx, sd, pos, tr, i: int, ts, p, pctx=None, psides=None, ppos=None) -
     # 50 / 92 the runner peel
     if p.peel_singles and _peel(ctx, sd, pos, tr, d, i, ts, p, o, h, l, c, avg):
         return
+    # 52 the +1 pt stop of the first partial, retried while the close sat under avg + 1
+    if d.get("pm_stop_pending"):
+        raise_to(pos, avg + 1.0 * p.es_pt, "pm_macro", c, p, gate=False)
+        if pos["stop"] >= avg + 1.0 * p.es_pt - 1e-9:
+            d["pm_stop_pending"] = False
+            hit("pm_macro_first")
     # 52 a PM runner is closed at 15:50
     if d.get("pm_runner") and t + tf >= 950:
         close_all(pos, tr, sd, ts, c, "pm_macro_exit")
@@ -627,19 +745,24 @@ def manage(ctx, sd, pos, tr, i: int, ts, p, pctx=None, psides=None, ppos=None) -
 def _three_arrays(ctx, sd, pos, tr, d, i, ts, p, o, l, c) -> bool:
     """90 X7-three-array-exit-trigger: A1 may be traded through, A2 is a warning, A3 decides by `three_array_mode` ("trade" low under A3's far edge = close all, "close" a close under the A3 level =
     pd3_close_frac once, "into" a low into A3's body top = close all). A3 sitting within pd3_near_pts of A2 (078): the trigger moves to A2. A sister-index breaker breach (item 98, pos["warn"]) counts
-    as one array already broken: with A1 and A2 broken it completes the three in "trade" mode."""
+    as one array already broken: with A1 and A2 broken it completes the three in "trade" mode. The near-A2 exception (078) is "close everything when price reaches A2": a low into A2's top
+    exits in every mode."""
     a1, a2, a3 = d["pd3"][:3]
     if l <= a2.top + 1e-9 and not d.get("pd3_warned"):
         d["pd3_warned"] = True
         _tag(tr, "pd3_warn")
     trig = a3
-    if p.pd3_near_pts > 0 and abs(a3.level - a2.level) <= p.pd3_near_pts * p.es_pt + 1e-9:
-        trig = a2
-        hit("pd3_near")
     hit("eval_pd3_mode")
     mode = p.three_array_mode
+    if p.pd3_near_pts > 0 and abs(a3.level - a2.level) <= p.pd3_near_pts * p.es_pt + 1e-9:
+        hit("pd3_near")
+        if l <= a2.top + 1e-9:
+            close_all(pos, tr, sd, ts, min(o, a2.top), "pd3_near")
+            hit("pd3_near_exit")
+            return True
+        return False
     if mode == "trade":
-        broken_sis = pos.get("warn", 0) >= 1 and l < a1.bottom - 1e-9 and l < a2.bottom - 1e-9
+        broken_sis = pos.get("sis_warn", 0) >= 1 and l < a1.bottom - 1e-9 and l < a2.bottom - 1e-9
         if l < trig.bottom - 1e-9 or broken_sis:
             close_all(pos, tr, sd, ts, min(o, trig.bottom) if l < trig.bottom - 1e-9 else c, "pd3_trade")
             hit("pd3_trade")
@@ -701,11 +824,12 @@ def _sister(ctx, sd, pos, tr, d, i, p, pctx, psides, ppos) -> None:
             if not d["sis_below"]:
                 d["sis_below"] = True
                 pos["warn"] = pos.get("warn", 0) + 1
+                pos["sis_warn"] = pos.get("sis_warn", 0) + 1          # (review fix: the three-array trigger reads this counter only - #94's opposing-array warn is no sister breach)
                 _tag(tr, "sister_breaker")
                 hit("sister_breaker_warn")
         else:
             d["sis_below"] = False
-    except (KeyError, IndexError, AttributeError):
+    except KeyError:                                                    # (the partner has no Side of this direction: no-op)
         return
 
 
@@ -752,13 +876,13 @@ def _stall_htf(ctx, sd, pos, tr, d, i, ts, p, c, avg) -> bool:
 def _stall_exits(ctx, sd, pos, tr, d, i, ts, p, o, h, l, c) -> bool:
     """55 X3-runner-stall-exits: active once >= 75 % is closed and stall_bars bars passed without a new high. (a) a trade back into the body of the most recent down-close candle = 1 unit off
     (once); (b) a poke above a relative equal high of the last 30 bars followed by a close back below it closes the rest (side space, as the spec's test)."""
+    hit("eval_stall_exits")
+    if not (_closed(pos) >= 0.75 - 1e-9 and d["nohi"] >= p.stall_bars and h <= d["hi"] + 1e-9):
+        d["stall_on"] = False                                           # (review fix: evaluated on every bar - a new extreme resets the stall counter and switches the exits off again)
+        return False
     if not d.get("stall_on"):
-        hit("eval_stall_exits")
-        if _closed(pos) >= 0.75 - 1e-9 and d["nohi"] >= p.stall_bars:
-            d["stall_on"] = True
-            hit("stall_on")
-        else:
-            return False
+        d["stall_on"] = True
+        hit("stall_on")
     if not d.get("rebal_done"):
         for k in range(i - 1, max(i - 30, pos["fill_i"] - 1), -1):
             if sd.c[k] < sd.o[k]:
@@ -770,7 +894,7 @@ def _stall_exits(ctx, sd, pos, tr, d, i, ts, p, o, h, l, c) -> bool:
         if not pos["left"]:
             return True
     a = max(0, i - 30)
-    highs, _ = _piv(sd, a, i - 1)
+    highs, lows_ = _piv(sd, a, i - 1)
     if len(highs) >= 2:
         for lvl in L.equal_levels([q.price for q in highs], p.eq_tol_pts * p.es_pt):
             if h > lvl + 1e-9:
@@ -779,6 +903,14 @@ def _stall_exits(ctx, sd, pos, tr, d, i, ts, p, o, h, l, c) -> bool:
         close_all(pos, tr, sd, ts, c, "stall_reh")
         hit("stall_reh")
         return True
+    if p.stall_reh_against and len(lows_) >= 2:                          # the 'against the trade' reading of (b): a poke under a relative equal LOW (side space) followed by a close back above it
+        for lvl in L.equal_levels([q.price for q in lows_], p.eq_tol_pts * p.es_pt):
+            if l < lvl - 1e-9:
+                d["rel_poke"] = min(d.get("rel_poke") or np.inf, lvl)
+        if d.get("rel_poke") is not None and c > d["rel_poke"] + 1e-9:
+            close_all(pos, tr, sd, ts, c, "stall_rel")
+            hit("stall_rel")
+            return True
     return False
 
 
@@ -866,10 +998,12 @@ def _ref_speed(ctx, sd, pos, tr, d, i, ts, p, h, l, c, lv) -> bool:
     speed_pare before T1 and closes the rest after T1 (slow_ref)."""
     rs = d.get("rs")
     if rs is None:
+        failed = d.setdefault("rs_failed", [])                      # a reference that failed is not judged again (the high never passed it: it would be picked on the next bar)
         cands = [v for v in lv[pos["k"]:] if v > d["hi"] + 1e-9]
         for z in sd.vis("bear"):
             if z.i <= i - 1 and z.bottom > d["hi"] + 1e-9:
                 cands.append(float(z.bottom))
+        cands = [v for v in cands if all(abs(v - f_) > 1e-9 for f_ in failed)]
         if not cands:
             return False
         rs = d["rs"] = dict(ref=min(cands), b=None, near=None, nc=0)
@@ -889,8 +1023,7 @@ def _ref_speed(ctx, sd, pos, tr, d, i, ts, p, h, l, c, lv) -> bool:
             if rs["nc"] >= 3:
                 fail = True
         elif rs["near"] is not None:
-            if c < float(sd.c[i - 1]):
-                rs["nc"] += 1
+            rs["nc"] = rs["nc"] + 1 if c < float(sd.c[i - 1]) else 0         # (review fix: the lower-close run resets on a non-lower close in this branch too)
             if rs["nc"] >= 3:
                 fail = True
     if rs["b"] is not None and not fail:
@@ -912,6 +1045,7 @@ def _ref_speed(ctx, sd, pos, tr, d, i, ts, p, h, l, c, lv) -> bool:
             hit("ref_speed_ok")
             return False
     if fail:
+        d.setdefault("rs_failed", []).append(float(ref))
         d["rs"] = None
         hit("ref_speed_fail")
         _tag(tr, "slow_ref")
@@ -929,12 +1063,13 @@ def _opp_tear(sd, pos, tr, d, i, h, l) -> None:
     hit("eval_opp_tear")
     w = d.get("opp_win")
     if w is not None:
+        # the window is the touch bar T and the next bar T+1 (review fix): the touch bar itself confirms when its high reaches the MT / CE (below); on T+1 a high at the CE with no low under the
+        # touch bar's low confirms, anything else - including a bar that undercuts the touch low (the order inside the bar is unknown) - is the tear-through warning. There is no T+2.
         a = d["opp"][w["k"]]
-        if h >= a["ce"] - 1e-9 and l >= w["lo"] - 1e-9 or (h >= a["ce"] - 1e-9 and i == w["i"]):
-            d["opp_win"] = None
+        d["opp_win"] = None
+        if h >= a["ce"] - 1e-9 and l >= w["lo"] - 1e-9:
             hit("opp_tear_ok")
-        elif l < w["lo"] - 1e-9 or i > w["i"]:
-            d["opp_win"] = None
+        else:
             pos["no_adds"] = True
             pos["add"] = None
             pos["warn"] = pos.get("warn", 0) + 1
@@ -964,11 +1099,12 @@ def _edge_bump(ctx, sd, pos, tr, d, i, p, l) -> None:
                 d["edge_add_armed"] = True
                 hit("edge_bump_add")
                 S = _S()
-                try:
-                    if p.adds and pos["add"] is None and not pos.get("no_adds") and S._nadds(pos, tr) < len(p.adds):
-                        S._arm_add(pos, tr, d["edge"], i, p, getattr(ctx, "equity", None))
-                except Exception:
-                    pass
+                t_ = int(ctx.t[i])
+                # the add goes through the engine's add rules (setups.add_ok: cut-off, PD gate, breaker gate; the day-state gates of the loop: adds_blocked, the add cut, late_cutoff) [review fix]
+                if (p.adds and pos["add"] is None and not pos.get("no_adds") and not pos["t1_done"] and S._nadds(pos, tr) < len(p.adds)
+                        and not S._EN.adds_blocked(ctx, sd, pos, i, p) and not S._EN.add_cut_passed(sd, pos, i, p) and not (p.late_cutoff and t_ >= p.late_cutoff)
+                        and S._SM.add_ok(sd, pos, d["edge"], i, p)):
+                    S._arm_add(pos, tr, d["edge"], i, p, getattr(ctx, "equity", None))
             elif d["bumps"] >= 2 and p.edge_bump_guard:
                 pos["no_adds"] = True
                 pos["add"] = None
@@ -1004,7 +1140,7 @@ def _pair(sd, pos, tr, d, i, h) -> None:
 def _fulcrum(sd, pos, tr, d, i, ts, p, h, l, c) -> bool:
     """103 X9-speed-after-fulcrum-break: from the bar that breaks the fulcrum pool, -0.5 SD must print within fulcrum_speed_bars bars without a close back under the broken level, else the first
     rung's share is closed at the close (fulcrum_slow) and the stop goes under the break bar's low."""
-    hit("eval_fulcrum")
+    hit("eval_fulcrum_speed")                                           # (not "eval_fulcrum": that is tp4.fulcrum_ladder's counter)
     if d["fp_b"] is None:
         if h > d["fp_pool"] + 1e-9:
             d["fp_b"] = i
@@ -1100,7 +1236,7 @@ def _peel(ctx, sd, pos, tr, d, i, ts, p, o, h, l, c, avg) -> bool:
     gap, or makes a higher high than the bar before; one lot halfway from the first peel's price to the gap top. With one unit left the stop goes under the latest 1m pivot low and the peeling
     stops."""
     z = d.get("nwog")
-    if z is None or d.get("peel_end") or _closed(pos) < 0.75 - 1e-9:
+    if z is None or d.get("peel_end") or not d.get("peel_armed") or _closed(pos) < 0.75 - 1e-9:
         return False
     lo, hi = z
     ce = (lo + hi) / 2
@@ -1110,7 +1246,7 @@ def _peel(ctx, sd, pos, tr, d, i, ts, p, o, h, l, c, avg) -> bool:
     if pos["left"] <= p.lot:
         _, lows = _piv(sd, max(ctx.start, pos["fill_i"] - 3), i)
         if lows:
-            raise_to(pos, lows[-1].price - p.tick, "peel_last", c, p)
+            raise_to(pos, lows[-1].price - p.tick, "peel_last", c, p, gate=False)       # (review fix: the final unit's roll is the spec's own stop move, not a trail the wick gate may block)
         d["peel_end"] = True
         hit("peel_last")
         return False
@@ -1165,14 +1301,15 @@ def _raisers(ctx, sd, pos, tr, d, i, p, o, h, l, c, newhi, avg, tf) -> None:
                 d["sth_done"] = True
                 if raise_to(pos, d["bz_bot"] - p.tick, "sth_break", c, p):
                     hit("raise_on_sth_break")
+    lt = p.ladder_trail if p.mgmt in ("ladder", "unit") else ""        # (review fix: the ladder_trail modes act on the ladder positions only - with mgmt "t1_t2" they are inert like the other ladder_trail values)
     # 25 the trail anchors
-    if p.ladder_trail in ("candle_mt", "071") and newhi and not pos.get("day_trade"):
+    if lt in ("candle_mt", "071") and newhi and not pos.get("day_trade"):
         for k in range(i - 1, max(pos["fill_i"] - 1, 0), -1):
             if sd.c[k] < sd.o[k]:
                 if raise_to(pos, _mt(sd, k, p) - p.tick, "candle_mt", c, p):
                     hit("trail_candle_mt")
                 break
-    if p.ladder_trail in ("eq_pause", "071") and not pos.get("day_trade"):
+    if lt in ("eq_pause", "071") and not pos.get("day_trade"):
         _, lows = _piv(sd, max(ctx.start, pos["fill_i"] - 1), i - 1)
         lows = [q for q in lows if q.i >= pos["fill_i"] and pos["stop"] < q.price < c]
         if len(lows) >= 2:
@@ -1195,7 +1332,7 @@ def _raisers(ctx, sd, pos, tr, d, i, p, o, h, l, c, newhi, avg, tf) -> None:
                     pos["freeze"] = True
                     hit("ob_open_raise")
     # 27 structure trail
-    if p.ladder_trail == "structure" and not pos.get("day_trade"):
+    if lt == "structure" and not pos.get("day_trade"):
         hit("eval_structure")
         _structure(sd, pos, tr, d, i, p, h, c)
     # 29 stop to the OB MT after the run
@@ -1269,7 +1406,7 @@ def after_close(pos, tr, done: dict, key: str, state, p) -> None:
     if pos.get("no_reentry") and last in ("stop", "stop_gap", "be"):
         done[key] = True
         hit("pool_lock_no_reentry")
-    if p.pool_lock_day_done and pos.get("stop_log") and any(w == "pool_lock" for w, _ in pos["stop_log"]) and tr.final_hit:
+    if p.pool_lock_day_done and pos.get("pool_locked") and tr.final_hit:
         done["AM"] = done["PM"] = True
         hit("pool_lock_day_done")
     if d.get("chop_closed"):
@@ -1277,7 +1414,9 @@ def after_close(pos, tr, done: dict, key: str, state, p) -> None:
             done[key] = True
             hit("chop_end_session")
         elif state is not None:
-            state.setdefault("reentered", {})[tr.session] = True
+            g_, c_ = tr.pnl(p.cost_per_share)
+            if not (p.reentry_half and g_ - c_ < 0):                  # (review fix: after a chop-close LOSS the engine's own reentry_half block follows and sets this flag itself - setting it here would suppress it)
+                state.setdefault("reentered", {})[tr.session] = True
             hit("chop_reentry_allowed")
 
 

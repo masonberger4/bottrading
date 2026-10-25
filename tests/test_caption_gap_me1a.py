@@ -32,7 +32,7 @@ GAP_IDS = (
     "E1-manual-touch-exits", "X4-be-vi-then-new-ssl", "X4-be-without-partials", "X4-be-plus-cap-htf", "D14-be-after-adr-fraction", "X5-runner-stop-half-open-profit", "X5-day-trade-stop-no-trail",
     "X5-event-tight-lock-020", "X5-trail-after-protected-gap-confirmed",
 )
-P1 = dict(es_pt=1.0, lot=1, max_notional=1e12, pivot_n=1)
+P1 = dict(es_pt=1.0, lot=1, max_notional=1e12, pivot_n=1, pool_lock_pts=0.0)          # (the unit books judge one rule at a time: the default pool lock of 1.5 pts is off here; test_pool_lock turns it on)
 
 
 def pk(**kw):
@@ -57,7 +57,8 @@ def mkpos(ctx, sign, fill_i, entry, stop, levels=(), fracs=(), kinds=None, n=10,
     sd = ctx.sides_map[sign]
     x = sd.x
     fr = tuple(fracs) or ((1.0,) if len(levels) <= 1 else tuple(1.0 / len(levels) for _ in levels))
-    tr = SimpleNamespace(exits=[], adds=[], lv_tags="", mgmt_tags="", session="AM", bz_top=None, bz_bottom=None, final_hit=False, resist_speed="", entry=entry, entry_time=ctx.idx[fill_i], side="long" if sign > 0 else "short")
+    tr = SimpleNamespace(shares=n, exits=[], adds=[], lv_tags="", mgmt_tags="", session="AM", bz_top=None, bz_bottom=None, final_hit=False, resist_speed="", entry=entry, entry_time=ctx.idx[fill_i], side="long" if sign > 0 else "short")
+    tr.pnl = lambda cps=0.0: (sum((float(px) - entry) * q * sign for _, px, q, _ in tr.exits), 0.0)       # (real prices: the stub's gross P&L from its exits)
     pos = dict(trade=tr, side=sd, stop=x(stop), left=n, n=n, basis=x(entry) * n, k=0, levels=[x(v) for v in levels], fracs=fr, level_kinds=list(kinds or ["pool"] * len(levels)), t1_done=False,
                last_partial_i=fill_i, fill_i=fill_i, fill_t=int(ctx.t[fill_i]), best=x(entry), ext=x(kw.pop("ext", entry - 5)), ext_i=max(0, fill_i - 2), fvg_bottom=x(entry) - 1.0, fvg_ce=x(entry) - 0.5,
                fvg_top=x(entry), kind="fvg", leg=None, runner=False, final_T=False, lvx={}, add=None, no_adds=False, ce_hold=False, be_done=False, away=None, draw=None, day_trade=False, rungs=[])

@@ -555,7 +555,7 @@ def far_raise_update(sd, pos, i: int, p) -> None:
         return
     if sd.c[i] > st["ph"] + MIN1 and pos["stop"] < st["level"] < sd.c[i]:
         pos["far_raised"] = True
-        S._MG.raise_stop(pos, float(st["level"]))
+        S._MG.raise_stop(pos, float(st["level"]), trail=True)
         hit("far_on_breaker_raise")
 
 

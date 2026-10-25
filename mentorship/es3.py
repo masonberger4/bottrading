@@ -786,7 +786,7 @@ def trail_wick(sd, pos, i: int, p) -> None:
         return
     s = lower_wick_ce(float(sd.o[i]), float(sd.l[i]), float(sd.c[i])) - p.pad
     if s > pos["stop"] and s < sd.c[i] - p.tick:
-        _S()._MG.raise_stop(pos, s)
+        _S()._MG.raise_stop(pos, s, trail=True)
         hit("trail_wick_ce")
 
 

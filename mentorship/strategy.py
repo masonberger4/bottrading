@@ -2924,7 +2924,7 @@ class Params:
 
     # --- caption-gap pass: management_exits #2/3 (digests/rulebook_gaps/management_partials_trailing_exits.md 20 .. 108; me2.py; every new switch off unless noted; the gap id is the comment's first word) ---------------
     pool_lock_after: float = 0.8         # X5-tight-stop-under-swept-pool-near-target (003 ~01:09:14; 021 ~00:44:11): the closed share (about 80-90 %) after which the last pool run before the final rung locks the stop
-    pool_lock_pts: float = 0.0           # ... the stop sits this many ES pts under the swept pool (spec value 1.5; 0 = off - kept off so the default engine is unchanged, owner question) and the idea gets no re-entry after a stop
+    pool_lock_pts: float = 1.5           # ... the stop sits this many ES pts under the swept pool (spec default 1.5; 0 = off; review fix: the default follows the spec) and the idea gets no re-entry after a stop
     pool_lock_day_done: bool = False     # ... a final-rung fill ends the day (X12)
     trail_after_pool: bool = False       # X5-no-trail-into-new-inefficiency (022 ~01:12:22; 067 ~01:19:24): after the add cutoff (price past the leg's 50 % line) no FVG / swing trail until the targeted pool has run
     raise_on_vi: bool = False            # X5-raise-stop-conditional-structure (009 ~00:07:10): a bar that retests the nearest VI under the entry and closes above its top lifts the stop to the VI low - 1 tick
@@ -2947,7 +2947,8 @@ class Params:
     marginal_n: int = 2                  # ... [our interpretation]
     marginal_exit: bool = False          # ... and the rest closed
     stall_exits: bool = False            # X3-runner-stall-exits (003 ~01:17:52): >= 75 % closed and stall_bars bars without a new high: a trade into the last down-close body = 1 unit off; a poke over a relative equal high that closes back under it = the rest
-    stall_bars: int = 10                 # ... [our interpretation of 'lethargic']
+    stall_bars: int = 10                 # ... [our interpretation of 'lethargic']; evaluated on every bar (a new extreme switches the exits off again)
+    stall_reh_against: bool = False      # ... (b) read 'against the trade' literally: a poke under a relative equal LOW (side space) that closes back above it closes the rest ("stall_rel"); off = a poke over a relative equal high that closes back under it (the spec's test text)
     wick_ce_close_test: bool = False     # X3-nfp-wick-ce-ladder-close-test (105 ~00:09:03, ~00:23:32): a wick-CE first rung is a 10 % rung, BE + pad after it; a 5m close above W then a 5m close at or under it takes 30 % to fund the trade
     adr_closed_min: float = 0.0          # L16-adr5-60-80-closed (cc08_007 ~00:17:25): at the ADR5 projection from the day's low at least this share must be closed (any time of day; 0 = off; test 0.7)
     ote_leave_bars: int = 0              # M13-ote-leave-discount-fast (cc01_004 ~00:50:18): an OTE entry with no close over the band's 62 % line after this many bars loses half (0 = off; test 3)
@@ -2975,6 +2976,7 @@ class Params:
     small_fvg_linger: int = 0            # new-small-fvg-last-line (105 ~00:37:35): after T1 more than this many 5m bars inside the latest 5m gap (or a 5m close under it) = no adds and a stop cap at the HTF entry array's high (0 = off; test 2)
     urgency_runner: bool = False         # new-no-down-close-urgency (021 ~00:43:53): T1 with no down-close candle since the fill: most of the position off (runner_frac, 0.2 if 0, stays), the stop urgency_stop_pts under the close, the farther target kept
     urgency_stop_pts: float = 1.0
+    urgency_bulk: bool = False           # new-no-down-close-urgency review fix: with only two rungs (no rung between T1 and the last to shrink) the T1 fill also closes everything above the runner share at once (the first build's behaviour; the spec has no such exit - owner question)
 
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
@@ -7775,6 +7777,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         return None
     top, bottom = g.top, g.bottom
     es_x, es_lvx, wick_tb = {}, {}, None
+    ote_fill_ = False
     if g.mt == g.mt and (round(float(g.top), 9), round(float(g.bottom), 9), g.i) in htf_keys:     # caption-gap A12-ob-anchor-level / A12-ob-open-anchor-ltf-wick: an HTF OB zone
         wick_tb = _ES1.wick_ltf_entry(ctx, sd, g, sw, i, p) if p.ob_wick_ltf_entry else None
         if wick_tb is not None:
@@ -8000,6 +8003,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         entry, stop = r_
         if p.ote == "limit" and p.ote_reanchor:
             es_x["ote_leg"] = True                     # caption-gap M13-reanchor-parent: the pending OTE limit follows a new swing high above H
+        if p.ote == "limit" and p.ote_leave_bars:
+            ote_fill_ = True                           # caption-gap M13-ote-leave-discount-fast (review fix): the OTE limit on the FVG path is an OTE entry for me2's leave check
     uni_t = {}
     if bz is not None and uni and g in uni and (p.bz_higher_array or (p.in_zone_ladder and ladder is None)):
         stop = _ES2.breaker_tail(ctx, sd, i, p, bz, entry, stop, uni_t)     # caption-gap A13-breaker-close-beyond-higher-array / E12-in-zone-larger-second: the unicorn is a breaker entry too (review fix)
@@ -8072,6 +8077,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
             tags["es1_prop_depth"] = es_x.pop("es1_prop_depth")
         if es_x:
             tags["es1"] = es_x
+    if ote_fill_:
+        tags["me2"] = dict(tags.get("me2") or {}, ote_fill=True)
     if m2_live:
         tags["m2_live"] = True                         # caption-gap M2-leg-eq-after-low-prints: the pending order is cancelled when the leg re-anchors above its gap
     if imp_eq is not None and imp_eq != "wait":

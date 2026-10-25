@@ -49,7 +49,12 @@ def test_three_array_modes():
     assert reasons(_pd3_run("into", prox, near)[1]) == ["pd3_into"]                          # A3's body top 4098.5 is reached too; check the near switch decides on a bar that only reaches A2
     far_rows = [(4104, 4104.5, 4098.8, 4099.5)]
     assert reasons(_pd3_run("into", far_rows, near)[1]) == []                                # 4098.8 is above A3's top 4098.5 and A2's top 4099 is... not the trigger yet
-    assert reasons(_pd3_run("into", far_rows, near, pd3_near_pts=1.0)[1]) == ["pd3_into"]    # with pd3_near_pts=1 the trigger is A2 (top 4099): exits
+    assert reasons(_pd3_run("into", far_rows, near, pd3_near_pts=1.0)[1]) == ["pd3_near"]    # with pd3_near_pts=1 the trigger is A2 (top 4099): price reaching A2 closes everything
+    # the spec's own numbers: A3 at 4097.5, near=1, a low of 4098 exits - in every mode (the proximity exception is "close everything when price reaches A2")
+    spec_near = [A(4100.0, 4101.0, 4100.0, "vi"), A(4098.0, 4099.0, 4098.0), A(4097.5, 4098.5, 4097.0, "ob")]
+    for mode in ("trade", "close", "into"):
+        assert reasons(_pd3_run(mode, [(4104, 4104.5, 4098.0, 4099)], spec_near, pd3_near_pts=1.0)[1]) == ["pd3_near"]
+        assert reasons(_pd3_run(mode, [(4104, 4104.5, 4099.5, 4100)], spec_near, pd3_near_pts=1.0)[1]) == []        # A2 not reached
     # a warning when A2 is traded into
     pos, tr = _pd3_run("trade", [(4104, 4104.5, 4098.5, 4099)])
     assert "pd3_warn" in tr.mgmt_tags and not tr.exits
@@ -60,7 +65,13 @@ def test_three_array_modes():
     p = pk(three_array_mode="trade")
     pos, tr, sd = mkpos(ctx, 1, 0, 4104.0, 4090.0, levels=(4140.0,))
     fill2(ctx, sd, pos, tr, p, pd3=list(PD3))
-    pos["warn"] = 1
+    pos["warn"] = 1                                                                        # #94's opposing-array warn is no sister breach (review fix: the sister counter is pos["sis_warn"])
+    step2(ctx, sd, pos, tr, p, 1)
+    assert reasons(tr) == []
+    ctx = mkctx([(4104, 4105, 4103, 4104), (4104, 4104.5, 4097.0, 4098)])
+    pos, tr, sd = mkpos(ctx, 1, 0, 4104.0, 4090.0, levels=(4140.0,))
+    fill2(ctx, sd, pos, tr, p, pd3=list(PD3))
+    pos["sis_warn"] = 1
     step2(ctx, sd, pos, tr, p, 1)
     assert reasons(tr) == ["pd3_trade"]
 
@@ -157,11 +168,17 @@ def test_opp_tear(second, ok):
 def test_edge_bump():
     rows = [(4402, 4403, 4401, 4402.5), (4402.5, 4403, 4399.75, 4401), (4401, 4406, 4401, 4405), (4405, 4406, 4399.75, 4403), (4403, 4408, 4402.5, 4407)]
     ctx = mkctx(rows)
+    ctx.equity = 100000.0
     p = pk(edge_bump_add=True, edge_bump_guard=True)
     pos, tr, sd = mkpos(ctx, 1, 0, 4402.0, 4390.0, levels=(4440.0,))
     fill2(ctx, sd, pos, tr, p, edge=4400.0, bumps=0, bump_on=False)
     step2(ctx, sd, pos, tr, p, 1)
     assert pos["me2"]["bumps"] == 1 and pos["me2"]["edge_add_armed"] and not pos["no_adds"]       # the first bump (4399.75) is an add location
+    assert pos["add"] is not None and pos["add"]["px"] == 4400.0                                   # ... armed through the engine's add rules (setups.add_ok)
+    pos2, tr2, sd2 = mkpos(ctx, 1, 0, 4402.0, 4390.0, levels=(4440.0,), no_adds=True)            # an add the engine would refuse (no_adds): armed nothing
+    fill2(ctx, sd2, pos2, tr2, p, edge=4400.0, bumps=0, bump_on=False)
+    step2(ctx, sd2, pos2, tr2, p, 1)
+    assert pos2["add"] is None
     step2(ctx, sd, pos, tr, p, 2)
     assert not pos["no_adds"]
     step2(ctx, sd, pos, tr, p, 3)

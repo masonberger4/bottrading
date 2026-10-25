@@ -1285,7 +1285,7 @@ def manage(ctx, sd, pos: dict, tr, i: int, ts, p, pctx, psides, ppos) -> None:
         g = breakaway_gap(sd, pos["ext_i"], i, p)
         if g is not None and c > g.top:
             from . import manage as _MG
-            _MG.raise_stop(pos, g.bottom - p.trail_pad)            # X5c: never on a day trade
+            _MG.raise_stop(pos, g.bottom - p.trail_pad, trail=True)            # X5c: never on a day trade
 
 
 def capture_ratio(pos: dict, tr) -> float | None:

@@ -2366,6 +2366,7 @@ _ME2_DECISIONS = {
     "X3-marginal-lower-lows-warning": dict(marginal_ext_warn=True, marginal_pts=1.0, marginal_n=2, **SM_POST),
     "X3-marginal-lower-lows-warning_exit": dict(marginal_ext_warn=True, marginal_exit=True, **SM_POST),
     "X3-runner-stall-exits": dict(stall_exits=True, stall_bars=10, **SM_POST),
+    "X3-runner-stall-exits_against": dict(stall_exits=True, stall_bars=10, stall_reh_against=True, **SM_POST),      # review fix: (b) read 'against the trade' (a poke under relative equal lows)
     "X3-nfp-wick-ce-ladder-close-test": dict(wick_ce_close_test=True, wick_partials=True, **SM_POST),
     "L16-adr5-60-80-closed": dict(adr_closed_min=0.7, **SM_POST),
     "M13-ote-leave-discount-fast": dict(ote_leave_bars=3, entry_arrays=("ote",), **SM_POST),
@@ -2390,6 +2391,7 @@ _ME2_DECISIONS = {
     "A13-breaker-far-edge-partial_25": dict(breaker_far_partial=0.25, **SM_POST),
     "new-small-fvg-last-line": dict(small_fvg_linger=2, **SM_POST),
     "new-no-down-close-urgency": dict(urgency_runner=True, urgency_stop_pts=1.0, **SM_POST),
+    "new-no-down-close-urgency_bulk": dict(urgency_runner=True, urgency_stop_pts=1.0, urgency_bulk=True, **SM_POST),      # review fix: the T1 bulk exit of the first build as an explicit option
 }
 DECISIONS.update(_ME2_DECISIONS)
 

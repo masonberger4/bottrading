@@ -1311,7 +1311,7 @@ def manage(ctx, sd, pos: dict, tr, i: int, ts, p) -> None:
     rk = d.get("runner_k")
     from .me1 import trail_ok as _trail_ok
     if rk and pos["k"] >= rk and rk >= 1 and _trail_ok(pos):
-        MG.raise_stop(pos, float(lv[rk - 1]) - p.pad)             # X3-runner-htf-target: "move its stop to a profitable level" - just under the rung that filled
+        MG.raise_stop(pos, float(lv[rk - 1]) - p.pad, trail=True)             # X3-runner-htf-target: "move its stop to a profitable level" - just under the rung that filled
         if not d.get("runner_stop"):
             d["runner_stop"] = True
             hit("runner_stop")
@@ -1332,7 +1332,7 @@ def manage(ctx, sd, pos: dict, tr, i: int, ts, p) -> None:
         if k25 is not None and not d.get("tgif_roll") and pos["k"] > k25 and _trail_ok(pos):
             q = [x for x in sd.pl if x.known <= i and x.i > pos["fill_i"] and x.price < sd.c[i]]      # the latest swing formed AFTER the fill
             if q:
-                MG.raise_stop(pos, float(q[-1].price) - p.tick)     # the "tgif_roll": the stop to the latest swing (side space: the swing low of a short's swing high)
+                MG.raise_stop(pos, float(q[-1].price) - p.tick, trail=True)     # the "tgif_roll": the stop to the latest swing (side space: the swing low of a short's swing high)
                 d["tgif_roll"] = True
                 hit("tgif_roll")
         if p.tgif_last_hour_cover and not d.get("cover") and ctx.t[i] >= 900:

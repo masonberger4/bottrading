@@ -351,9 +351,19 @@ def test_urgency_runner():
     p = pk(urgency_runner=True)
     pos, tr, sd = mkpos(ctx, 1, 0, 4000.0, 3990.0, levels=(4010.0, 4030.0), fracs=(0.5, 0.5), kinds=["pool", "pool"])
     fill2(ctx, sd, pos, tr, p)
-    rung(ctx, sd, pos, tr, p, 0, 3)                                                       # an all up-close leg to T1: 5 off at T1, 3 more at once, a 20 % runner on a 1-pt stop
-    assert pos["left"] == 2 and reasons(tr) == ["t1", "urgency_bulk"] and pos["stop"] == pytest.approx(4010.0)
+    rung(ctx, sd, pos, tr, p, 0, 3)                                                       # an all up-close leg to T1: the stop 1 pt under the close; the ladder is otherwise unchanged (no bulk exit)
+    assert pos["left"] == 5 and reasons(tr) == ["t1"] and pos["stop"] == pytest.approx(4010.0)
     assert "urgency" in tr.mgmt_tags
+    pos, tr, sd = mkpos(ctx, 1, 0, 4000.0, 3990.0, levels=(4010.0, 4030.0), fracs=(0.5, 0.5), kinds=["pool", "pool"])
+    pb = pk(urgency_runner=True, urgency_bulk=True)                                       # the explicit alternative: the T1 bulk exit, a 20 % runner
+    fill2(ctx, sd, pos, tr, pb)
+    rung(ctx, sd, pos, tr, pb, 0, 3)
+    assert pos["left"] == 2 and reasons(tr) == ["t1", "urgency_bulk"]
+    # three rungs: the rung between T1 and the last shrinks so the LAST rung keeps runner_frac (0.2 of 10 = 2 units)
+    pos, tr, sd = mkpos(ctx, 1, 0, 4000.0, 3990.0, levels=(4010.0, 4020.0, 4030.0), fracs=(0.4, 0.4, 0.2), kinds=["pool", "pool", "pool"])
+    fill2(ctx, sd, pos, tr, p)
+    rung(ctx, sd, pos, tr, p, 0, 3)
+    assert pos["left"] == 6 and pos["fracs"][1] == pytest.approx(0.4) and reasons(tr) == ["t1"]     # 6 left - 2 runner = 4 for the middle rung = 0.4 of 10
     # one down-close bar in the leg: the ladder is unchanged
     dn = [(4000, 4001, 3999, 4000.5), (4000.5, 4004, 4000, 4003), (4003, 4004, 4000.5, 4001), (4001, 4012, 4000.8, 4011)]
     ctx = mkctx(dn)
@@ -364,7 +374,7 @@ def test_urgency_runner():
     # runner_frac sets the runner share
     ctx = mkctx(up)
     pos, tr, sd = mkpos(ctx, 1, 0, 4000.0, 3990.0, levels=(4010.0, 4030.0), fracs=(0.5, 0.5), kinds=["pool", "pool"])
-    pr = pk(urgency_runner=True, runner_frac=0.3, urgency_stop_pts=2.0)
+    pr = pk(urgency_runner=True, urgency_bulk=True, runner_frac=0.3, urgency_stop_pts=2.0)
     fill2(ctx, sd, pos, tr, pr)
     rung(ctx, sd, pos, tr, pr, 0, 3)
     assert pos["left"] == 3 and pos["stop"] == pytest.approx(4009.0)

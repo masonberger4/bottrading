@@ -37,9 +37,9 @@ def test_new_switch_defaults_and_validation():
     assert all(getattr(p, k) is False for k in NEW_SWITCHES), "behaviour switches default off"
     assert (p.pool_lock_after, p.pool_lock_pts, p.ob_retests, p.trail_wick_gate, p.htf_bank, p.rde_arm, p.rde_frac, p.hh_low_frac, p.marginal_pts, p.marginal_n, p.stall_bars, p.adr_closed_min,
             p.ote_leave_bars, p.three_array_mode, p.pd3_close_frac, p.pd3_near_pts, p.held_hi_action, p.speed_k, p.ref_speed_bars, p.speed_pare, p.stall_at_htf_bars, p.after_chop_exit,
-            p.fulcrum_speed_bars, p.breaker_far_partial, p.small_fvg_linger, p.urgency_stop_pts) == (0.8, 0.0, 0, "", 0.0, 0.75, 0.2, 1.0, 1.0, 2, 10, 0.0, 0, "", 0.5, 0.0, "", 1.5, 3, 0.5, 30,
+            p.fulcrum_speed_bars, p.breaker_far_partial, p.small_fvg_linger, p.urgency_stop_pts) == (0.8, 1.5, 0, "", 0.0, 0.75, 0.2, 1.0, 1.0, 2, 10, 0.0, 0, "", 0.5, 0.0, "", 1.5, 3, 0.5, 30,
                                                                                                       "end_session", 0, 0.0, 0, 1.0)
-    assert not me2.any_on(p) and p.ladder_trail == "fvg"
+    assert me2.any_on(p) and not me2.any_on(Params(pool_lock_pts=0.0)) and p.ladder_trail == "fvg"      # (the spec's default 1.5-pt pool lock is the one switch that is on)
     for kw in (dict(trail_wick_gate="x"), dict(three_array_mode="x"), dict(held_hi_action="x"), dict(after_chop_exit="x"), dict(ladder_trail="x"), dict(pool_lock_pts=-1), dict(pool_lock_after=1.5),
                dict(ob_retests=-1), dict(htf_bank=1.0), dict(rde_arm=0), dict(rde_frac=0), dict(hh_low_frac=0), dict(marginal_n=0), dict(stall_bars=0), dict(adr_closed_min=1.0),
                dict(pd3_close_frac=0), dict(pd3_near_pts=-1), dict(speed_k=0), dict(ref_speed_bars=0), dict(speed_pare=0), dict(stall_at_htf_bars=0), dict(fulcrum_speed_bars=-1),
@@ -86,12 +86,15 @@ SYN_CASES = {
     # name: (seed, switches, the sm2.HITS counters the full run must have bumped)
     "trails": (3, dict(ladder_trail="071", trail_wick_gate="trade", raise_on_vi=True, raise_on_sth_break=True, trail_swing_at_array=True, ob_retests=3, **OFF), ("eval_sth_break", "eval_ob_retests", "wick_gate_set")),
     "anchors": (3, dict(ladder_trail="071", **OFF), ("trail_candle_mt",)),
-    "trails_b": (5, dict(ladder_trail="structure", trail_after_pool=True, ob_stop_to_mt_after_run=True, mt_mode="range", pool_lock_pts=1.5, **OFF), ("eval_structure", "eval_ob_mt")),
+    "trails_b": (5, dict(ladder_trail="structure", trail_after_pool=True, ob_stop_to_mt_after_run=True, mt_mode="range", pool_lock_pts=1.5, entry_arrays=("ob",), **{**OFF, "ob_entry": "both"}), ("eval_structure", "eval_ob_mt")),
     "partials": (3, dict(rde_partials=True, hh_low_hold=True, marginal_ext_warn=True, stall_exits=True, adr_closed_min=0.7, htf_bank=0.5, peel_singles=True, **OFF), ("eval_rde", "eval_marginal", "eval_stall_exits")),
     "exits": (5, dict(three_array_mode="trade", pd3_near_pts=1.0, held_hi_action="partial", ref_speed_check=True, opp_tear_check=True, upclose_pair_guard=True, breaker_far_partial=0.5, **OFF),
               ("eval_held_hi", "eval_ref_speed", "eval_pair")),
     "late": (5, dict(late_fvg_flip=True, small_fvg_linger=2, urgency_runner=True, edge_bump_add=True, edge_bump_guard=True, gap_q_hold=True, pm_macro_runner=True, pm=(780, 950), **OFF),
              ("eval_late_fvg",)),
+    "exits_b": (5, dict(three_array_mode="close", chop_close=True, wick_ce_close_test=True, fulcrum_speed_bars=5, sd_anchor="fulcrum", pm_macro_runner=True, pm=(780, 950), trail_wick_gate="close",
+                        ladder_trail="candle_mt", **OFF), ("eval_pd3_mode", "pm_macro_exit", "wick_gate_set")),
+    "exits_c": (5, dict(three_array_mode="into", stall_exits=True, stall_reh_against=True, ref_speed_check=True, **OFF), ("eval_stall_exits", "eval_ref_speed")),
 }
 
 
@@ -110,6 +113,7 @@ def test_look_ahead_synthetic_sister():
     p = Params(**{**SYN, **SYN_BASE, **OFF, "sister_breaker_hold": True, "three_array_mode": "trade"})
     full, added = _la(x, 5, "RW", p, COLS, every=4, partner=y)
     assert len(full) >= 1
+    assert added.get("eval_sister"), f"the sister-breaker code never ran with the partner index (ran: {sorted(added)})"
 
 
 # --- forced-path books (hand-made days): scenario C through run_day, full run vs runs truncated at every bar of the book -----------------------------------------------------------------------
@@ -118,8 +122,10 @@ def test_forced_urgency_and_pool_lock(monkeypatch):
     from test_caption_gap_es1a import C_ROWS
     # scenario C is an all up-close leg to T1: the urgency runner keeps 20 % (the rest is bulked at T1) on a stop 1 pt under the close
     tr = _forced(_fp(urgency_runner=True), ("urgency_runner",), rows=list(C_ROWS))
-    assert [e[3] for e in tr[0].exits][:2] == ["t1", "urgency_bulk"]
+    assert [e[3] for e in tr[0].exits][:2] == ["t1", "t2"] or [e[3] for e in tr[0].exits][:1] == ["t1"]
     assert "urgency" in tr[0].mgmt_tags
+    tr = _forced(_fp(urgency_runner=True, urgency_bulk=True), ("urgency_runner",), rows=list(C_ROWS))
+    assert [e[3] for e in tr[0].exits][:2] == ["t1", "urgency_bulk"]
     # the pool lock of a two-rung ladder (the rungs relabelled 'pool'): the first rung is the last pool before the final one; 50 % closed is enough with pool_lock_after 0.4, the stop goes 1.5 pts under it
     orig = me2.on_fill
 
@@ -165,6 +171,33 @@ def test_forced_wick_ce_close_test_and_htf_bank(monkeypatch):
     assert [e[3] for e in tr[0].exits][:2] == ["t1", "htf_bank"] and tr[0].exits[1][2] == pytest.approx(tr[0].shares / 4, abs=1)      # T1 first, then half of what is left
 
 
+def test_forced_fulcrum_speed_and_chop_close(monkeypatch):
+    """Review round 1: forced runs (full vs truncated at every bar) of the two paths no random book reaches. fulcrum_speed_bars: the two rungs relabelled pool / sd on a fulcrum-anchored trade - the
+    pool break (the T1 bar) is followed by two bars short of the SD rung; chop_close: the intraday Chop turns on (monkeypatched) while the position is open."""
+    from test_caption_gap_es1a import C_ROWS
+    orig = me2.on_fill
+
+    def relabel(ctx, sd, pos, tr, o, i, p, fill):
+        pos["level_kinds"] = ["pool", "sd"]
+        return orig(ctx, sd, pos, tr, o, i, p, fill)
+    monkeypatch.setattr(me2, "on_fill", relabel)
+    rows = list(C_ROWS[:6]) + [(100.5, 103.6, 100.4, 103.4), (103.4, 103.6, 103.0, 103.2), (103.2, 103.4, 103.0, 103.1), (103.1, 103.3, 102.9, 103.0)]
+    tr = _forced(_fp(fulcrum_speed_bars=2, sd_anchor="fulcrum"), ("eval_fulcrum_speed", "fulcrum_slow"), rows=rows)
+    assert "fulcrum_slow" in [e[3] for e in tr[0].exits]
+    monkeypatch.setattr(me2, "on_fill", orig)
+    upd = S.Chop.update
+
+    def chop_on(self, i):
+        r = upd(self, i)
+        if self.ctx.t[i] == 610 and not self.on:
+            self.on, self.on_at, self.hi, self.lo = True, i, float(self.ctx.h[i]), float(self.ctx.l[i])
+            self.state[i] = True
+        return self.on
+    monkeypatch.setattr(S.Chop, "update", chop_on)
+    tr = _forced(_fp(chop_close=True, sloppy_tests=("chop",)), ("chop_close", "eval_chop_on"), rows=rows)
+    assert "chop_close" in [e[3] for e in tr[0].exits]
+
+
 # --- ES windows (5m): the full run must have EXECUTED the code paths named ------------------------------------------------------------------------------------------------------
 
 SMP = dict(study.SM_POST)
@@ -175,7 +208,7 @@ ES_CASES = {
     # name: (window, base, switches, counters)
     "a": (W8, ES_NB, dict(SMP, pool_lock_pts=1.5, pool_lock_day_done=True, raise_on_vi=True, raise_on_sth_break=True, trail_swing_at_array=True, ladder_trail="071", ob_retests=3),
           ("eval_pool_lock", "raise_on_vi", "raise_on_sth_break", "trail_candle_mt")),
-    "b": (W8, ES_NB, dict(SMP, ladder_trail="structure", trail_wick_gate="trade", trail_after_pool=True, ob_stop_to_mt_after_run=True, mt_mode="range", ob_retests=3),
+    "b": (W8, ES_NB, dict(SMP, ladder_trail="structure", trail_wick_gate="trade", trail_after_pool=True, ob_stop_to_mt_after_run=True, mt_mode="range", ob_retests=3, entry_arrays=("ob",)),
           ("structure_step1", "wick_gate_set", "eval_trail_after_pool", "eval_ob_mt", "eval_ob_retests")),
     "c": (W8, ES_NB, dict(SMP, rde_partials=True, hh_low_hold=True, marginal_ext_warn=True, marginal_exit=True, stall_exits=True, adr_closed_min=0.7, three_array_mode="trade", pd3_near_pts=1.0),
           ("rde_armed", "hh_low_exit", "eval_marginal", "eval_stall_exits", "adr_true_up", "pd3_trade")),
@@ -185,9 +218,9 @@ ES_CASES = {
           ("eval_late_fvg", "eval_small_fvg", "urgency_runner", "pm_macro_first", "eval_htf_bank")),
     "f": (W3, ES_NB, dict(SMP, peel_singles=True, gap_q_hold=True, stall_at_htf=True, htf_targets=HTW, ote_leave_bars=3, entry_arrays=("ote",), chop_close=True, sloppy_tests=("chop",),
                           wick_ce_close_test=True, wick_partials=True),
-          ("peel", "eval_stall_htf_week", "ote_slow")),
+          ("eval_stall_htf_week", "ote_slow")),                 # (the peel itself is armed by a target NWOG / a rung at its CE: test_forced_gap_q_and_peel runs it)
     "g": (W3, ES_NB, dict(SMP, ladder_trail="eq_pause", raise_on_vi=True, ob_retests=2, rde_partials=True, ref_speed_check=True, fulcrum_speed_bars=5, sd_anchor="fulcrum", sd_targets=True,
-                          sister_breaker_hold=True, three_array_mode="close", edge_bump_guard=True),
+                          sister_breaker_hold=True, three_array_mode="close", edge_bump_guard=True, fulcrum_exit="ladder"),
           ("eval_ob_retests", "eval_rde", "eval_ref_speed")),
 }
 

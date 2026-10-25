@@ -2546,17 +2546,17 @@ Source: `rulebook_gaps/management_partials_trailing_exits.md` items 20, 21, 23, 
 
 ### Owner questions (caption-gap pass) - management_exits#2/3
 
-1. X5-tight-stop-under-swept-pool-near-target: the spec writes `pool_lock_pts` = 1.5 as the default ("0 = off"). Kept 0.0 (off) so the default engine does not change (all new switches default off); the study variant uses 1.5. Make 1.5 the default?
+1. X5-tight-stop-under-swept-pool-near-target: RESOLVED in review round 1 - `pool_lock_pts` now defaults to the spec value 1.5 (0 = off); no owner directive conflicts with it. This is the one switch of the chunk that is ON by default (`me2.any_on` is true for the default Params; the unit books turn it off in `tests/test_caption_gap_me1a.py::P1`).
 2. The new `ladder_trail` values (candle_mt / eq_pause / rej_block / 071 / structure) REPLACE the default FVG trail while they are set (one value at a time); the default "fvg" is unchanged. X5-no-trail-into-new-inefficiency (`trail_after_pool`) contradicts the default "trail under each newer FVG after each partial" - listed as a conflict, kept as a switch.
-3. new-no-down-close-urgency sells DOWN to the runner share at T1 (an extra bulk exit) - the spec says the last rung "keeps runner_frac"; confirm that selling the excess at T1 is meant.
+3. new-no-down-close-urgency: review round 1 follows the spec - the last rung keeps `runner_frac` (the rungs between T1 and the last shrink), no extra exit; the first build's T1 bulk exit is the option `urgency_bulk` (off). With only two rungs there is no rung to shrink, so nothing but the stop changes unless `urgency_bulk` is on. Confirm which is meant.
 4. X9-lethargic-or-choppy-trade: `after_chop_exit` default "end_session" (022) vs "reentry_allowed" (cc03_003) - both stay; which default?
 5. X8-profitable-stall-exit: `reversal_watch` blocks that direction for the rest of the week once the next weekday had no same-direction trade; "next session" = the next weekday; Wed / Thu reversal days are not modelled further.
-6. X3-runner-stall-exits (b): the spec text says an equal high "against the trade" but its test is a long poking an REH; built as the test (side-space highs).
+6. X3-runner-stall-exits (b): the spec text says an equal high "against the trade" but its test is a long poking an REH; built as the test (side-space highs) by default, the literal reading (a poke under a relative equal low that closes back above it, "stall_rel") is the switch `stall_reh_against` (review round 1).
 
 ### Review notes (management_exits#2/3)
 
-- Partial: #52 (next-rung move not built), #90 (no wick-CE array), #94 (gaps only, no opposing OB rows). Everything else is built as specified; [our interpretation] marks are in the code comments and the lines above.
-- Existing behaviour is unchanged with every new switch at its default: `me2.any_on` is false, `capv` returns the level unchanged, `order_block` is only called with a switch on, `macro_wins(t, p)` adds the window only with `pm_macro_runner`, `week_state` adds `reversal_watch` only after an `htf_stall` exit.
+- Partial after review round 1: #90 with fewer than 3 arrays never fires (like `pd3_short`). Everything else is built as specified; [our interpretation] marks are in the code comments and the lines above.
+- Existing behaviour is unchanged with every new switch at its default except the pool lock (`pool_lock_pts` 1.5, owner question 1 resolved): `capv` returns the level unchanged, `order_block` is only called with a switch on, `macro_wins(t, p)` adds the window only with `pm_macro_runner`, `week_state` adds `reversal_watch` only after an `htf_stall` exit.
 - `me1.trail_ok` now also reads `pos["wgate"]`, `pos["freeze"]` and `me2["block_pool"]` (all absent by default).
 
 ### Tests (caption-gap pass, management_exits#2/3)
@@ -2564,3 +2564,30 @@ Source: `rulebook_gaps/management_partials_trailing_exits.md` items 20, 21, 23, 
 `tests/test_caption_gap_me2a.py` (stop moves 20 .. 29), `tests/test_caption_gap_me2b.py` (partials 36, 49, 50, 92, 52, 53, 54, 55, 67, 68, 87, 108), `tests/test_caption_gap_me2c.py` (warnings / exits 90, 91, 93, 94, 95, 96, 98, 99, 100, 102, 103, 104, 107), `tests/test_caption_gap_me2d.py` (defaults / validation, the 49 study variants, hook wiring, look-ahead: synthetic cases, ES 5m cases a-g, an ES 1m case, forced hand-made days).
 
 Results: new tests 9 + 18 + 22 + 21 = 70 passed (me2a, me2b, me2c, me2d); the 49 study variants pass test_bias_htf_lookahead (`-k` on the variant names); existing files test_targets_partials, test_owner_directives, test_review_fixes, test_strategy, test_portability, test_levels_detectors, test_silver_bullet, test_caption_gap_me1b: 299 passed, and test_management_exits, test_news_calendar, test_caption_gap_me1a / me1a2 / me1a3 / me1c: 227 passed. The full suite runs once in the package Test step.
+
+### Review round 1 (management_exits#2/3) - fixes
+
+Findings fixed (code: `mentorship/me2.py`, `manage.py`, `strategy.py`; tests: `tests/test_caption_gap_me2e.py` + the updated me2b / me2c / me2d):
+
+- #28 / #107 (central stop gate): `manage.raise_stop(pos, new, trail=False)` now refuses a level above `pos["stop_cap"]` for every caller and, with `trail=True`, also honours `me1.trail_ok` (trail locks, the overhead-wick gate, the OB-open freeze). Marked as trails: `manage.trail_extra` (first-FVG / breakaway / measuring), `targets.trail_breakaway`, `tp4` runner_htf and the tgif roll, `ld2` BPR raise, `es2` far-on-breaker raise, `es3` breakaway stop drop, `sm7` wick-CE trail. `me1._trail_confirm` is not a gated trail: its raise is the event that releases the trail_confirm block. BE-like locks (me1 be_modes / be_cap / runner_lock / event lock / best-case hold, setups, strategy add stops) stay exempt from the wick gate but obey the cap. The `strategy.py` inline "prior" / hit trails keep `me2.capv` + `trail_ok`.
+- #103: `fulcrum_speed_bars` acts only on fulcrum-anchored trades (`sd_anchor == "fulcrum"`; with `fulcrum_exit` on, only the `fulcrum_ladder` shape - the "trail" mode has no pool). The fulcrum item (66) exists (`fulcrum_exit`, `tp4.fulcrum_ladder`); the first build log was wrong. Counter renamed `eval_fulcrum_speed` (it collided with tp4's `eval_fulcrum`); a forced day runs the path.
+- #50: the peel is armed only when the NWOG is the order's target gap (a rung lies inside it) or a rung at its CE filled; `peel_last` is not wick-gated.
+- #52: the next rung becomes the next untaken pool rung after the first partial (pool rungs already carry `pool_beyond_pts`); the +1 pt stop is retried each bar while the close sat under avg + 1 (the clamp kept it under the close). The runner is still made by trimming the levels at the fill (equivalent to "at the first partial").
+- #90: the entry array is excluded from the three; the wick CE of recent large lower wicks is an array (`kind "wick"`, from `me1.wick_objs` of the other Side, mirrored); the proximity exception closes everything when price reaches A2 (`pd3_near`, every mode); the sister breach counts through `pos["sis_warn"]` (not `pos["warn"]`, which #94 also bumps). The spec numbers (A3 4097.5, `pd3_near_pts` 1, low 4098) are in `test_three_array_modes`.
+- #94: the window is the touch bar plus the next bar (no confirmation two bars later; an undercut of the touch low on T+1 is a warning); opposing order blocks (confluence OB rows 15m+ and the other Side's blended OBs, MT as CE) join the gap rows. Test: `test_opp_tear_confirmation_is_not_accepted_two_bars_later`.
+- #20: `pool_lock_pts` default 1.5; `no_reentry` and the day-done marker are set whether or not the raise moved the stop (`pos["pool_locked"]`).
+- #108: no extra bulk exit by default (`urgency_bulk` off); the rungs between T1 and the last shrink so the last keeps `runner_frac`.
+- #55: the stall is re-evaluated each bar (a new high ends it); `stall_reh_against` is the literal reading of (b).
+- #95: the edge-bump add goes through `setups.add_ok` and the engine's add gates (adds_blocked, add cut, late cutoff, no add after T1); no broad `except`; E = the far edge of the opposing gap the entry leg traded over (not "formed in" it).
+- #36: the draw prefers the array that contains the bias draw level (`draw_ord_lvl` of the htf row, via `bias_row_known`), else the nearest untouched array [our interpretation]; a planned rung printing at the array banks too.
+- #29: the OB-MT-after-the-run rule needs an OB entry (`kind` "ob*" / "arr_ob*"); the candle is found by its MT under the running `mt_mode`.
+- #87: an `ote="limit"` fill through `ote_adjust` on the FVG path arms the leave check (order tag `me2.ote_fill`).
+- #24: only pivot lows at or after the fill count.
+- #93: a failed reference is remembered (`rs_failed`) and not judged again; the lower-close counter resets consistently.
+- #100: `reentry_allowed` does not set the half-risk flag after a chop-close LOSS when `reentry_half` is on (the engine's own block sets it); after a win it is set here.
+- #68: documented - the day's low runs from the array start (the whole trading day), and a projection already exceeded before the fill tops up on the first managed bar.
+- #98: the real-engine wiring is asserted by the look-ahead test (`eval_sister` counter); the broad `except` is gone (only a missing partner Side is a no-op).
+- check_params: the dead `ladder_trail` / `mgmt` branch is removed; the new ladder_trail values act only with `mgmt` in ("ladder", "unit") like the others.
+- Tests: short (side -1) mirrors of the hh_low, marginal, peel, stall_reh, three-array, opposing-array tear, fulcrum and running-down-equity books (`tests/test_caption_gap_me2e.py`); look-ahead: two more synthetic cases (three-array "close" / "into", chop_close, wick_ce_close_test, fulcrum_speed_bars, pm_macro_runner, trail_wick_gate "close", stall_reh_against), forced days for fulcrum_speed_bars and chop_close, ES cases b / g now take OB entries / the fulcrum ladder; the ES case f no longer needs the peel counter (the peel needs a target NWOG; `test_forced_gap_q_and_peel` runs it).
+- New study variants: `X3-runner-stall-exits_against`, `new-no-down-close-urgency_bulk`.
+- Commit trailer: commit 3c136df ends with "Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>" (the harness attribution reminder); history is not rewritten. Commits from this round carry the trailer the task text requires.

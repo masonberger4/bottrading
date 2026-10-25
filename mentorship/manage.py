@@ -65,10 +65,17 @@ def be_stop(pos_or_entry, p, n=None) -> float:
     return px + p.be_pad_pts * p.es_pt + (2.0 * p.cost_per_share if p.be_cost_pad else 0.0)
 
 
-def raise_stop(pos, new: float) -> None:
+def raise_stop(pos, new: float, trail: bool = False) -> None:
     """The ONE place a trail / lock / tighten lifts a position's stop (side space, never down). A day trade (X5c
-    trade_type="day", 064 ~1:38:44) keeps its initial stop: no trail, no breakeven, nothing raises it."""
+    trade_type="day", 064 ~1:38:44) keeps its initial stop: no trail, no breakeven, nothing raises it.
+    Caption-gap management_exits #2/3 (X5-roll-after-wick-ce-cleared #28, small-fvg-linger #107): a level above `pos["stop_cap"]` is refused for every caller;
+    `trail=True` marks a TRAIL (not a BE-like lock): it also honours the trail locks, the overhead-wick gate (trail_wick_gate) and the OB-open freeze (me1.trail_ok)."""
     if pos.get("day_trade"):
+        return
+    cap = pos.get("stop_cap")
+    if cap is not None and new > cap + 1e-12:
+        return
+    if trail and not S._ME1.trail_ok(pos):
         return
     pos["stop"] = max(pos["stop"], new)
 
@@ -145,12 +152,12 @@ def trail_extra(sd, pos, i: int, p) -> None:
         if g is not None and c > g.top and sd.c[g.i + 1:i + 1].min(initial=np.inf) >= g.bottom:
             from . import ld3 as _L3                         # caption-gap A6 trail_skip_common
             if _L3.trail_ok(sd, pos, g, i, p):
-                raise_stop(pos, g.bottom - p.trail_pad)
+                raise_stop(pos, g.bottom - p.trail_pad, trail=True)
     if p.mgmt in ("ladder", "unit") and p.ladder_trail == "breakaway" and pos["k"] >= p.trail_after:
         from . import targets as _TP
         g = _TP.breakaway_gap(sd, pos["ext_i"], i, p)       # A6: the shift's gap while price has not retraced past its half (bk_depth / bk_state)
         if g is not None and c > g.top:
-            raise_stop(pos, g.bottom - p.trail_pad)
+            raise_stop(pos, g.bottom - p.trail_pad, trail=True)
     if p.mgmt in ("ladder", "unit") and p.ladder_trail == "measuring" and pos["k"] >= p.trail_after:
         from . import targets as _TP
         leg = pos.get("leg")
@@ -158,7 +165,7 @@ def trail_extra(sd, pos, i: int, p) -> None:
         hi = max(hi, float(sd.h[pos["ext_i"]:i + 1].max()))
         g = _TP.measuring_gap(sd, dict(ext=pos["ext"], ext_i=pos["ext_i"]), i, hi, p)
         if g is not None and c > g.top:
-            raise_stop(pos, g.bottom - p.trail_pad)
+            raise_stop(pos, g.bottom - p.trail_pad, trail=True)
 
 
 # --- per-position data fixed at the fill ----------------------------------------------------------------------
