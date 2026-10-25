@@ -258,13 +258,14 @@ def ob_target_levels(sd, i: int, above: float, p) -> list:
     OB whose lower half was traded (high >= near edge) but not yet its MT keeps the MT as a target;
     once the MT itself traded the OB is spent."""
     out = []
+    kd = "ob" if p.ob_target_tod else "array"      # caption-gap A12-opposing-ob-time-of-day (cc04_003 ~34:17): kind 'ob' = paid only inside the profit-taking windows (tp4.ob_skip)
     for z in opposing_obs(sd, i, p):
         hi_since = sd.h[z.i + 1:i + 1].max(initial=-np.inf)
         mt = float(z.mt if z.mt == z.mt else z.mid)
         if hi_since < z.bottom:
-            out += [(float(z.bottom), "array"), (mt, "array")]
+            out += [(float(z.bottom), kd), (mt, kd)]
         elif p.opp_ob_mt and hi_since < mt:
-            out.append((mt, "array"))
+            out.append((mt, kd))
     return [(v, k) for v, k in out if v > above]
 
 

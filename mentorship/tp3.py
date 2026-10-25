@@ -43,12 +43,17 @@ def _T2():
     return T2
 
 
+def _T4():
+    from . import tp4 as T4
+    return T4
+
+
 # --- 1. validation ----------------------------------------------------------------------------------------------------------------------------------
 
 def check_params(p) -> None:
     """Validation of the chunk's Params (strategy.Params.__post_init__) and the inert-switch notes."""
     for name, ok in (("fvg_target_level", ("before_edge", "at_edge", "deep")), ("pool_exit", ("beyond", "at", "before")), ("partial_mode", ("", "new", "experienced", "terminus", "quarters")),
-                     ("exit_mode2", ("", "pay_first", "full_pull", "hold_runner")), ("ladder_preset", ("", "004", "037")), ("weekly_beyond_mode", ("off", "tag", "require")),
+                     ("exit_mode2", ("", "pay_first", "full_pull", "hold_runner")), ("ladder_preset", ("", "004", "037", "041", "096")), ("weekly_beyond_mode", ("off", "tag", "require")),
                      ("grades60_src", ("body", "wick")), ("proj_ext_anchor", ("leg", "stop_run", "midweek")), ("adr_anchor", ("day_low", "london_low"))):
         if getattr(p, name) not in ok:
             raise ValueError(f"{name} {getattr(p, name)!r}: expected one of {ok}")
@@ -1052,6 +1057,10 @@ def late(ctx, sd, sw, i: int, p, session: str, entry: float, risk: float, keep: 
             r = ladder_004(ctx, sd, i, p, keep, keep_full, draw, st)
         elif p.ladder_preset == "037":
             r = ladder_037(ctx, sd, i, p, entry, keep, st)
+        elif p.ladder_preset == "041":
+            r = _T4().ladder_041(ctx, sd, i, p, entry, risk, keep, st)           # (targets_partials #4/4: X3-041-projection-first-then-nwog)
+        elif p.ladder_preset == "096":
+            r = _T4().ladder_096(ctx, sd, i, p, entry, risk, keep, st)           # (targets_partials #4/4: X3-resting-1lot-partials-vi-final)
         elif p.exit_mode2 == "full_pull":
             first = next((x for x in keep if x[1] in POOLK), keep[-1])
             r = ([first], [1.0])
@@ -1073,7 +1082,7 @@ def late(ctx, sd, sw, i: int, p, session: str, entry: float, risk: float, keep: 
         if r is not None:
             keep, fr = r
             draw = keep[-1][0]
-            if p.ladder_preset in ("004", "037") or p.exit_mode2 or p.partial_mode in ("new", "terminus", "quarters"):
+            if p.ladder_preset in ("004", "037", "041", "096") or p.exit_mode2 or p.partial_mode in ("new", "terminus", "quarters"):
                 lvt.append((p.ladder_preset and "ladder_" + p.ladder_preset) or (p.exit_mode2 and "exit_" + p.exit_mode2) or "partial_" + p.partial_mode)
                 hit(lvt[-1])
     if p.fixed_partials and not scalp and keep:

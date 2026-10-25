@@ -14,6 +14,7 @@ from claude_hf.daytypes import JOBS, is_trading_day
 from . import htf
 from . import sm4 as _SM4
 from . import es3 as _ES3
+from . import tp4 as _TP4
 from .entries import new_risk_state
 from .strategy import ROUND_STEP, SMT_PICKS, Params, resolve_session_close, run_day
 
@@ -413,7 +414,12 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             eq = None
             if p.risk_basis == "equity":               # #12: start-of-day equity, closed trades only
                 eq = p.account_equity + sum(r["net"] for r in rows)
-            kw = day_kwargs(pr, k, eq, (intermarket or INTERMARKET()).get(d), week_state(rows, d) if p.dw_needs_week else None)
+            wk_ = week_state(rows, d) if p.dw_needs_week else None
+            if p.rr_month_gate:                        # caption-gap new-rr-month-gate (cc02_001 ~12:11): the big winners (>= rr_big R) closed in this calendar month so far
+                wk_ = dict(wk_ or {}, month_big=_TP4.month_big(rows, d, p))
+            kw = day_kwargs(pr, k, eq, (intermarket or INTERMARKET()).get(d), wk_)
+            if p.target_stage:                         # caption-gap OT-target-progression (099 ~40:55): the week's staged fixed target (10 -> 15 -> 20); the risk / size never change
+                kw["p"] = _TP4.stage_params(rows, d, kw["p"])
             if p.trader_mode or p.freq_ref > 0:       # caption-gap E8-new-trader-graduation / E9-frequency-small-size: the track record and the last 5 sessions size the day
                 kw["p"] = _ES3.day_params(kw["p"], rows, {x.index[0].date() for x in ds[max(0, k - 5):k]})
             day_trades = run_day(partner=pa, partner2=pa2, locks=locks, skips=skips, risk_state=rs, objective=objective, **kw)

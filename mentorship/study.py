@@ -2239,6 +2239,52 @@ _TP3_DECISIONS = {
 DECISIONS.update(_TP3_DECISIONS)
 
 
+# --- caption-gap pass: targets_partials #4/4 (name prefix = gap id; every variant is a valid Params set) ---------------------------------------------------------------------------------------------
+HT4 = ("1h", "4h", "D", "W")
+_TP4_DECISIONS = {
+    "X3-041-projection-first-then-nwog": dict(ladder_preset="041", sd_targets=True, htf_targets=HT4, **SM_POST),
+    "X3-resting-1lot-partials-vi-final": dict(ladder_preset="096", vi_arrays=True, **SM_POST),
+    "X3-layered-pool-ladder-runner": dict(weekly_hl_rung=True, runner_frac=0.2, **SM_POST),
+    "X3-layered-pool-ladder-runner_collapse": dict(weekly_hl_rung=True, collapse_adr_frac=1.0, runner_frac=0.2, **SM_POST),
+    "X3-best-case-80-85-capture": dict(capture_zone=True, capture_n=3, **SM_POST),
+    "X3-half-range-runner-success": dict(runner_at_half=True, **SM_POST),
+    "X3-runner-htf-target": dict(runner_htf=True, runner_htf_pts=2.0, runner_frac=0.2, **SM_POST),
+    "X3-runner-htf-target_steps": dict(runner_htf=True, runner_htf_steps=True, runner_htf_pts=2.0, runner_frac=0.2, **SM_POST),
+    "X3-gap-speed-bump-before-pool": dict(gap_speed_bump_partial=0.25, bump_max_pts=2.0, **SM_POST),
+    "X3-r-multiple-partials": dict(partial_trigger="cc02_001", **SM_POST),
+    "X3-r-multiple-partials_cc02_003": dict(partial_trigger="cc02_003", **SM_POST),
+    "X3-partial-60m-eq": dict(eq60_rung=True, eq60_frac=0.25, **SM_POST),
+    "X3-first-profit-premium-subrange": dict(subrange_first=True, htf_targets=HT4, **SM_POST),
+    "X3-scaleout-skip-and-confluence": dict(confluence_weight=True, htf_targets=HT4, **SM_POST),
+    "X3-scaleout-skip-and-confluence_only": dict(confluence_weight=True, confluence_only=True, htf_targets=HT4, **SM_POST),
+    "X3-scale-through-void": dict(void_ladder=True, void_targets=True, **SM_POST),
+    "X3-mm-model-target": dict(mm_first=0.8, mm_targets=True, mm_oc_entry=True, mmxm_ctx=True, **SM_POST),
+    "X3-fulcrum-exit-modes": dict(fulcrum_exit="ladder", sd_anchor="fulcrum", sd_targets=True, **SM_POST),
+    "X3-fulcrum-exit-modes_trail": dict(fulcrum_exit="trail", sd_anchor="fulcrum", sd_targets=True, htf_bias="combo", use_bias=True, **SM_POST),
+    "M14-tgif-management": dict(tgif=True, tgif_zone=True, tgif_exits="066", tgif_reentry_pm=True, tgif_last_hour_cover=True, draw_lock="off", htf_resist_cap=False),
+    "L13-multi-sd-breaker-confluence": dict(proj_breaker_multi=True, proj_k_max=7.5, sd_cluster_ticks=4, htf_targets=HT4, **SM_POST),
+    "L4-lrlr-ceiling": dict(lrlr_ceiling=True, **SM_POST),
+    "L4-lrlr-ceiling_beyond": dict(lrlr_ceiling=True, lrlr_allow_beyond=True, **SM_POST),
+    "A12-opposing-ob-time-of-day": dict(ob_target_tod=True, ob_targets_1m=True, **SM_POST),
+    "X1-consol-sweep-target-eq": dict(consol_eq_target=True, consol_eq_bars=60, consol_adr_frac=0.35, htf_bias="combo", use_bias=True, **SM_POST),
+    "new-strength-no-return-discount-array": dict(strength_hold=True, **SM_POST),
+    "B17-consolidation-no-runners": dict(consol_no_runner=True, htf_targets=HT4, **SM_POST),
+    "M7-pm-mss-after-1300-targets": dict(pm_ladder_am=True, pm_sd_mult=1.5, **SM_POST),
+    "M0-target-opposite-extreme-same-range": dict(same_range_t1=True, extra_pools=True, **SM_POST),
+    "L4-lrlr-repeated-buys": dict(lrlr_zone=True, lrlr_ceiling=True, **SM_POST),
+    "L15-min-3R-prefer-5R": dict(min_rr_final=5.0, **SM_POST),
+    "new-tf-matches-objective": dict(tf_target_cap=True, **SM_POST),
+    "new-sellstop-run-before-void-fill": dict(void_draw=True, void_rearm=True, void_targets=True, **SM_POST),
+    "OT-target-progression": dict(target_stage=True, stage_targets=(10.0, 15.0, 20.0), stage_weeks=4, stage_drop=True, t1_fixed_pts=10.0, **SM_POST),
+    "new-rr-month-gate": dict(rr_month_gate=True, rr_big=5.0, rr_n_big=1, rr_relaxed=2.0, **SM_POST),
+    "E8-2pct-split-experienced": dict(ladder_kind="half_3r", risk_pct=0.02, max_total_risk_pct=0.02, adds=(), **SM_POST),
+    "L15-min-rr-3": dict(min_rr_final=3.0, **SM_POST),
+    "T7-1450-targets": dict(m1450_targets=True, m1450_mid_open=True, extra_pools=True, **SM_POST),
+    "T8-pm-carry-condition": dict(pm_carry_draw=True, pm_carry_erase=True, skip_balanced=True, draw_lock="session", ob_entry="post_mss", htf_resist_cap=False),
+}
+DECISIONS.update(_TP4_DECISIONS)
+
+
 def exit_buffer_grid(base: Params | None = None) -> list:
     """X2-exit-buffer-range (070 ~1:05:10): the exit-buffer grid - exit_before_pts in (0.25, 0.5, 1.0, 1.5) crossed with exit_mode in ("split", "before") (so the buffer also hits the pools: 070's target was a pool). Eight Params; every other field of `base` unchanged."""
     base = base or Params()

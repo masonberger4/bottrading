@@ -24,6 +24,8 @@ import pandas as pd
 from . import levels as L
 
 POOL_KINDS = ("pool", "pool_eq")
+TGIF066_LEVELS = (0.20, 0.225, 0.25, 0.275, 0.30)      # caption-gap M14-tgif-management (066 ~48:02): the zone levels of tgif_exits='066'
+TGIF066_FRACS = (0.15, 0.15, 0.5, 0.1, 0.1)
 SD_KINDS = ("sd", "sd_half", "sd_mm", "sd_ext", "sd_cluster", "proj", "proj_htf", "proj_cluster", "proj_runner", "proj_lh", "proj_wk")     # (the proj* kinds are the caption-gap SD-range projections: they take sd_close_hit / sd_align like the SD levels)
 CF_SRC = {"fvg": 0, "ob": 1, "gap": 2, "vi": 3, "breaker": 4}
 ALL_SRC = (0, 1, 2, 3, 4)
@@ -679,18 +681,20 @@ def tgif_info(ctx, sd, i: int, p, entry: float):
     a = ctx.start
     hi_l.append(float(ctx.h[a:i + 1].max()))
     lo_l.append(float(ctx.l[a:i + 1].min()))
+    held = bool(float(ctx.h[a:i + 1].max()) <= max(hi_l[:-1]) + 1e-9) if sd.sign < 0 else bool(float(ctx.l[a:i + 1].min()) >= min(lo_l[:-1]) - 1e-9)     # caption-gap M14-tgif-management: Friday has not traded beyond the Mon-Thu extreme (the week high / low holds)
     whi, wlo = max(hi_l), min(lo_l)
     rng = whi - wlo
     if rng <= 0:
         return None
     # real prices: a short retraces down from the week high, a long up from the week low
-    real = [whi - f * rng if sd.sign < 0 else wlo + f * rng for f in p.tgif_zone_levels if f <= p.tgif_cap + 1e-9]
+    zl_ = TGIF066_LEVELS if p.tgif_exits == "066" else p.tgif_zone_levels       # caption-gap M14-tgif-management (066 ~48:02): L20, L22.5, L25, L27.5, L30
+    real = [whi - f * rng if sd.sign < 0 else wlo + f * rng for f in zl_ if f <= max(p.tgif_cap, 0.30 if p.tgif_exits == "066" else 0.0) + 1e-9]
     px = sd.x(entry)
     retr = (whi - px) / rng if sd.sign < 0 else (px - wlo) / rng
     ext_now = float(ctx.l[a:i + 1].min()) if sd.sign < 0 else float(ctx.h[a:i + 1].max())
     retr_max = (whi - ext_now) / rng if sd.sign < 0 else (ext_now - wlo) / rng
     return dict(levels=sorted(sd.x(v) for v in real), retrace=float(retr),
-                stand_down=bool(max(retr, retr_max) >= p.tgif_stand_down))
+                stand_down=bool(max(retr, retr_max) >= p.tgif_stand_down), held=held)
 
 
 def matrix_breakers(sd, p):
@@ -1025,8 +1029,9 @@ def plan(ctx, sd, i: int, p, entry: float, risk: float, above: float, keep: list
         final_T = False
         lvt.append("tgif_zone")
         if p.tgif_exits:
-            mains = mains[:len(p.tgif_exit_fracs)]
-            fixed = tuple(p.tgif_exit_fracs[:len(mains)])
+            fr_ = TGIF066_FRACS if p.tgif_exits == "066" else p.tgif_exit_fracs       # (caption-gap M14-tgif-management: 15 / 15 / 50 / 10 / 10 at L20 .. L30)
+            mains = mains[:len(fr_)]
+            fixed = tuple(fr_[:len(mains)])
             lvt.append("tgif_exits")
     if p.final_htf and not final_T and getattr(ctx, "conf", None) is not None and mains:
         rows = ctx.conf.opposing_ext(now_ts(ctx, i), sd.x(above), sd.sign, ("4h", "D", "W"), (0, 1, 2, 3))

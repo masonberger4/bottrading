@@ -1040,7 +1040,7 @@ class Params:
     tgif_zone_levels: tuple = (0.20, 0.225, 0.25, 0.30)    # from the extreme (week low incl. Sunday 18:00 to the high)
     tgif_cap: float = 0.30               # no target beyond 30%
     tgif_stand_down: float = 0.40        # 40%+ is reversal talk: no trade
-    tgif_exits: bool = False             # M14.4: 25/25/50 at the first three zone levels
+    tgif_exits: bool | str = False       # M14.4: 25/25/50 at the first three zone levels; caption-gap M14-tgif-management (066): "066" = L20 / L22.5 / L25 / L27.5 / L30 with 15/15/50/10/10 (targets_partials #4/4)
     tgif_exit_fracs: tuple = (0.25, 0.25, 0.5)
     # Ep04.x / Ep07.1 / Ep03.19 / X3b -------------------------------------------------------------------------
     target_order: tuple = ()             # Ep04.12 (Ep 04): kinds in the order they are taken, e.g. ("eq", "daily", "vi"); the
@@ -2813,6 +2813,63 @@ class Params:
     fixed_partials: tuple = ()           # X3-five-handle-first-partial-before-draw (036 ~00:49:59; 060 ~01:14:58): partial rungs at entry + these ES pts (test (5.25, 10.0)), exact price, no target (min_draw_pts judges the draw alone)
     fixed_partial_fracs: tuple = (0.25, 0.25)
 
+    # --- caption-gap pass: targets_partials #4/4 (digests/rulebook_gaps/management_partials_trailing_exits.md 44 .. 125, models_setups_entries.md 46 .. 147, other.md 8, session_day_week_stops_frequency.md 22, stops_sizing_scaling_in.md 28 / 70, times_sessions_macros.md 6 / 19; tp4.py; every new switch off unless noted; the gap id is the comment's first word) ---------------
+    weekly_hl_rung: bool = False         # X3-layered-pool-ladder-runner (cc04_003 ~00:30:19, ~00:11:24): the prior week's high (low for a short) is a pool rung - "a little more profit at the nearest old weekly high"
+    collapse_adr_frac: float = 0.0       # ... when the move from the sweep extreme to the first pool already exceeds this x ADR5 the first pool takes ALL the units [our interpretation; 0 = off, test 1.0]
+    runner_frac: float = 0.0             # ... otherwise the last rung keeps this share as the runner to the farthest pool (0 = off); also the runner share of runner_htf (0.2 when 0) and consol_eq_target's runner
+    capture_zone: bool = False           # X3-best-case-80-85-capture (013 ~00:30:23): the last capture_n rungs become equal rungs at avg + f x (B - avg), f = 0.85 .. 1.0 (B = the final level); Trade.capture_b = realised / (B - avg)
+    capture_n: int = 3
+    runner_at_half: bool = False         # X3-half-range-runner-success (cc02_003 ~00:07:06): the last rung = avg + 0.5 x (final - avg) when that lies beyond the previous rung; Trade.half_range_ok is the report flag
+    runner_htf: bool = False             # X3-runner-htf-target (099 ~00:37:57; cc02_003 ~00:03:26): the final rung = the nearest 60m-or-higher pool beyond the last execution-timeframe rung, runner_htf_pts beyond it, runner_frac of the units; the runner's stop follows the previous rung
+    runner_htf_pts: float = 2.0
+    runner_htf_steps: bool = False       # ... the intermediate 15m pools are extra rungs taking half of the runner
+    gap_speed_bump_partial: float = 0.0  # X3-gap-speed-bump-before-pool (072 ~00:28:41): a small unfilled gap (<= bump_max_pts) between price and the first pool gets a 'speed' partial of this share just past its far edge (test 0.25)
+    bump_max_pts: float = 2.0
+    partial_trigger: str = ""            # X3-r-multiple-partials (cc02_001 ~00:24:10; cc02_003 ~00:03:00): "r_multiple" (r_ladder = ((R, share), ...) as 'fixed' rungs at avg + R x risk, merged with the pool rungs) or the presets "cc02_001" (1R 50 %, 3R 25 %, break-even at 2R, runner to the far pool) / "cc02_003" (3R 50 %)
+    r_ladder: tuple = ()
+    r_be: float = 0.0                    # ... the break-even trigger in R (be_at = avg + r_be x risk; 0 = none)
+    eq60_rung: bool = False              # X3-partial-60m-eq (cc08_007 ~00:17:13): a partial at the EQ of the 60m dealing range (the last confirmed 60m pivots around the price) when it lies between the entry and the final level
+    eq60_frac: float = 0.25              # ... its share, taken from rung 1's
+    subrange_first: bool = False         # X3-first-profit-premium-subrange (cc07_005 ~00:09:58): a discount entry in a quarter of the 60-day range: rung 1 = the nearest 1h / 4h opposing array above that quarter's EQ, the earlier rungs go [our interpretation of the 'daily consolidation quadrant']
+    confluence_weight: bool = False      # X3-scaleout-skip-and-confluence (cc08_007 ~00:19:41): a rung scores +1 at an opposing array edge, +1 at a 1.27 / 1.618 extension or the 100 % measured move of the entry leg; the shares follow share x (1 + score)
+    confluence_only: bool = False        # ... only rungs that score (and the final rung) stay
+    void_ladder: bool = False            # X3-scale-through-void (cc01_006 ~00:24:21): a void used as the draw becomes three rungs, near edge / CE / far edge (each exit_before_pts short), a third of its share each
+    mm_first: float = 0.0                # X3-mm-model-target (104 ~00:53:35): an MM-model trade takes this share (0.8) at the original consolidation's near boundary, the rest at the next pool
+    fulcrum_exit: str = ""               # X3-fulcrum-exit-modes (090 ~01:32:54): trades of sd_anchor='fulcrum': "ladder" (pool + beyond, -0.5 SD, -1 SD) / "trail" (one rung at -1 SD, the FVG trail from the fill; needs a bias and no holiday-adjacent day)
+    tgif_reentry_pm: bool = False        # M14-tgif-management (066 ~00:45:47): a TGIF day takes one more TGIF entry in the PM Silver-Bullet window while the week's extreme holds (tgif_exits="066": the 066 ladder, see targets.plan)
+    tgif_last_hour_cover: bool = False   # ... from 15:00 a swing inside the 20 .. 30 % band sets a resting cover just short of it for everything left
+    proj_breaker_multi: bool = False     # L13-multi-sd-breaker-confluence (070 ~01:04:18): B + k (B - A), k = 1 .. proj_k_max step 0.5, of every 1m / 5m breaker leg; clusters of >= 2 legs inside the HTF draw range are 'proj' rungs
+    proj_k_max: float = 7.5
+    lrlr_ceiling: bool = False           # L4-lrlr-ceiling (cc01_007 ~00:13:38): U = the old low a later close broke before the sweep (swing_tiers); the ladder ends at U - exit_before_pts, levels beyond it are 'hrlr' (dropped)
+    lrlr_allow_beyond: bool = False
+    ob_target_tod: bool = False          # A12-opposing-ob-time-of-day (cc04_003 ~00:34:17): an opposing-OB rung (kind 'ob') is paid only inside ob_pt_windows; outside it is a pause - the rung is skipped and its share moves on
+    ob_pt_windows: tuple = ((600, 660), (690, 720), (900, 960))      # ... [our interpretation] 10:00-11:00, 11:30-12:00, 15:00-16:00
+    consol_eq_target: bool = False       # X1-consol-sweep-target-eq (cc09_004 ~00:12:29): the sweep of a consolidation's outer edge with the daily / 4h bias that way targets the range EQ (the final rung), not the opposite extreme
+    consol_eq_bars: int = 60             # ... the consolidation = the last N bars before the sweep (the spec's `consol_bars`; renamed because consol_bars (20) exists for the delivery state)
+    consol_adr_frac: float = 0.35        # ... under this x ADR5 [our interpretation]
+    strength_hold: bool = False          # new-strength-no-return-discount-array (105 ~00:17:00): a new high with no low inside OB1's body since the fill = "strong": the remaining non-pool rungs are dropped
+    consol_no_runner: bool = False       # B17-consolidation-no-runners (048 ~01:51:24; 053 ~00:09:25): on a multi-day-range / consolidation day: ladder_fracs_slow (bulk at T1), no HTF-array rungs, no runner
+    pm_ladder_am: bool = False           # M7-pm-mss-after-1300-targets (043 ~00:13:28): PM orders add the lunch high and every untaken AM swing high as rungs, then the SD projection of the MSS leg
+    pm_sd_mult: float = 1.5
+    same_range_t1: bool = False          # M0-target-opposite-extreme-same-range (067 ~00:18:56): the raided pool is the extreme of a session range (prev_pm / london / lunch ..): T1 = the other extreme of that range
+    tf_target_cap: bool = False          # new-tf-matches-objective (cc04_002 ~00:37:27): the final rung is capped at tf_cap_pts[tf] ES pts for the run's timeframe; a T1 beyond it is rejected (needs a higher timeframe)
+    tf_cap_pts: tuple = ((1, 10.0), (5, 20.0), (15, 40.0))
+    void_draw: bool = False              # new-sellstop-run-before-void-fill (cc04_010 ~00:08:07): the nearest unfilled opposing void within 3 x ADR5 is the final target of a long after a sell-side sweep (not under a locked draw)
+    void_rearm: bool = False             # ... a stopped-out void_draw trade re-arms its session once, on a second sweep of the same lows
+    target_stage: bool = False           # OT-target-progression (099 ~00:40:55): the fixed target t1_fixed_pts steps stage_targets (10 -> 15 -> 20) after stage_weeks non-negative weeks (backtest.run); the size never changes
+    stage_targets: tuple = (10.0, 15.0, 20.0)
+    stage_weeks: int = 4                 # ... [our interpretation] N
+    stage_drop: bool = False             # ... a negative week steps back one stage
+    rr_month_gate: bool = False          # new-rr-month-gate (cc02_001 ~00:12:11): until rr_n_big winners of >= rr_big R closed this month the final-draw reward must be >= rr_big R, afterwards >= rr_relaxed
+    rr_big: float = 5.0                  # ... [our interpretation] 5
+    rr_n_big: int = 1
+    rr_relaxed: float = 2.0
+    ladder_kind: str = ""                # E8-2pct-split-experienced (cc02_003 ~00:12:32): "half_3r" = half the units at entry + 3R, half at the HTF objective (study: risk_pct 0.02, adds off)
+    m1450_targets: bool = False          # T7-1450-targets (043 ~00:15:49; 075 ~01:45:16): a PM order armed 14:50-15:10 in the discount (the mirror of 'premium') of the day's range: rungs = the swing above the PM leg's EQ, the untaken 07:00 / 08:30 / 09:30-11:00 highs, the TGIF 20 % level
+    m1450_mid_open: bool = True          # ... the macro extreme must also lie beyond the midnight open
+    pm_carry_erase: bool = False         # T8-pm-carry-condition (029 ~01:30:37): the AM draw carries into the PM only while price has not traded back (a tick through) to the AM leg's origin after the AM extreme
+    skip_balanced: bool = False          # ... a candidate level the day's closes crossed both ways is no target [our interpretation]
+
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
         _sb_check(self)
@@ -3092,6 +3149,9 @@ class Params:
         from . import tp3 as _tp3_check                  # caption-gap pass (targets_partials #3/4)
         _tp3_check.check_params(self)
         _tp3_check.derive_pool_exit(self)
+        from . import tp4 as _tp4_check                  # caption-gap pass (targets_partials #4/4)
+        _tp4_check.derive(self)
+        _tp4_check.check_params(self)
         if self.e4_color and self.retrace_candle == "off":
             self.retrace_candle = "intrabar"          # E4 candle colour = the built retrace_candle "intrabar" (a short fills on an up-close bar: the fill bar opens beyond the limit and trades into it)
         if self.vi_ob_entry and "vi_ob" not in self.entry_arrays:
@@ -3650,6 +3710,12 @@ class Trade:
     resist: str = ""            # BH-L4-resistance-definitions: "high" / "low" resistance of the run (resist_def)
     swing_grade: int = 0           # new-swing-grades: the entry's grade 1-4 in the swing sweep extreme .. leg high (swing_grade_tag)
     near_miss: bool = False        # targets_partials #3/4 X2-projection-target-1tick-before (proj_kind): the best price fell within 1 pt short of a projection rung that did not fill
+    # package targets_partials #4/4 (caption-gap pass; empty / None while the switch is off)
+    rr_final: float | None = None  # L15-min-rr-3 / new-rr-month-gate: the reward to the final target / the risk at the order (recorded with min_rr_final or rr_month_gate)
+    stage_pts: float = 0.0         # OT-target-progression: the staged fixed target (ES pts) the trade ran with
+    half_range_ok: bool | None = None   # X3-half-range-runner-success: the runner's exit reached half the range to the final level (set when any targets_partials #4/4 ladder state exists)
+    capture_b: float | None = None      # X3-best-case-80-85-capture (capture_zone): realised average exit distance / the distance to the zone's best case B
+    strength: str = ""            # new-strength-no-return-discount-array (strength_hold): "strong" (a new high without a return into OB1) / "normal"
     # package entries_stops_sizing #1/3 (caption-gap pass)
     mt_warn: bool = False         # D4-mt-source-tally mt_break "warn": price traded under the OB MT after the fill (a warning, not the failure) - set during the trade, so it is no entry column
 
@@ -4697,6 +4763,8 @@ def _draw_prefs(ctx, sd, i: int, entry: float, p, session: str, keep: list) -> l
 def _close(pos, trades, p):
     tr = pos["trade"]
     tr.capture = _TP.capture_ratio(pos, tr)           # X3h: how much of the best-case run the exits took
+    if pos.get("tp4"):
+        _TP4.close_note(pos, tr, p)                   # caption-gap targets_partials #4/4: half_range_ok, capture_b, strength
     trades.append(tr)
     gross, costs = tr.pnl(p.cost_per_share)
     return tr.side if gross - costs < 0 else None
@@ -4759,6 +4827,8 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
         done[key] = False
         state["reversed"][tr.session] = True
         state.setdefault("only_side", {})[tr.session] = -1 if tr.side == "long" else 1
+    if p.void_rearm:
+        _TP4.after_close(ctx, pos, tr, lost, done, key, state, p)      # caption-gap new-sellstop-run-before-void-fill: a stopped-out void_draw trade re-arms its session once
     if ctx is not None and _SM7.any_after7(p):
         reopened = _SM7.after_close(ctx, pos, tr, lost, net_, done, key, state, i, p, reopened, no_same=tight_) or reopened     # caption-gap setups_models #7/7: win / trail-win re-entries, reversals, the turtle-soup re-entry, the lod reopen
     if p.prop_fail_flip:
@@ -5839,6 +5909,10 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     hit_, px_ = _TP.rung_hit(pos, k, lv_[k], h, c, t, tf, p, xt_)     # Ep06.4 sd_close_hit
                     if sp_ == "pay":
                         hit_, px_ = True, lv_[k]
+                    if hit_ and sp_ is None and pos.get("tp4") and p.ob_target_tod and _TP4.ob_skip(pos, k, t, tf, p):     # caption-gap A12-opposing-ob-time-of-day (cc04_003 ~00:34:17): a touched OB rung outside the profit-taking windows is a pause
+                        fr = pos["fracs"]
+                        pos["k"] += 1
+                        continue
                     if not hit_:
                         break
                     if sp_ is None and pos.get("tp3") and _TP3.speed_hold(pos, k, i, sd, p):    # the touch bar: the pool is pending until the next bar closes
@@ -5940,6 +6014,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 _ES1.manage(ctx, sd, pos, tr, i, ts, p)                          # caption-gap entries_stops_sizing #1/3: PB wick exit, MT warn, strict IOFED
             if pos["left"] and pos.get("tp2"):
                 _TP2.manage(ctx, sd, pos, tr, i, p)                              # caption-gap targets_partials #2/4: the lingering tag, the entry-low projection rung
+            if pos["left"] and pos.get("tp4"):
+                _TP4.manage(ctx, sd, pos, tr, i, ts, p)                          # caption-gap targets_partials #4/4: the runner stop, the strength read of OB1, the TGIF 066 roll / cover
             if pos["left"]:
                 pos["best"] = max(pos["best"], h)
                 _MG.exits(ctx, sd, pos, tr, i, ts, p, state)       # management_exits: X6-X12, X9 time stops, D18, Ep07.5
@@ -6020,7 +6096,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 if new:
                     g = new[-1]
                     if not pos.get("day_trade") and _LD3.trail_ok(sd, pos, g, i, p) and (    # X5c: a day trade keeps its initial stop (A6: never behind a common gap)
-                            p.trail or (p.mgmt in ("ladder", "unit") and p.ladder_trail == "fvg" and pos["t1_done"]
+                            p.trail or pos.get("trail_now") or (p.mgmt in ("ladder", "unit") and p.ladder_trail == "fvg" and pos["t1_done"]
                                         and pos["k"] >= p.trail_after            # Ep03.20: after N rounds of partials
                                         and g.i - 2 > pos["last_partial_i"])):   # formed since the partial
                         ref_ = (g.bottom if p.trail_ref == "gap" else
@@ -6209,6 +6285,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     _TP2.on_fill(ctx, sd, pos, tr, o, i, p)               # caption-gap targets_partials #2/4: the lingering window, the entry-low anchor
                 if o.get("tp3_speed") or o.get("tp3_hold"):
                     _TP3.on_fill(ctx, sd, pos, tr, o, i, p)               # caption-gap targets_partials #3/4: the pay_first speed exception
+                if o.get("tp4"):
+                    _TP4.on_fill(ctx, sd, pos, tr, o, i, p, fill)         # caption-gap targets_partials #4/4: the runner stop, OB1, the TGIF 066 levels, the trail from the fill
                 if o.get("es2"):
                     _ES2.on_fill(ctx, sd, pos, tr, o, i, p, fill)      # caption-gap entries_stops_sizing #2/3: the OB grade, the FVG-then-OB add, the zone-ladder add base
                 _SM7.fill_note(state, o)                              # caption-gap setups_models #7/7: the re-entry / reversal context is no longer pending
@@ -6308,7 +6386,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 and not (p.last_hour_sweet[0] <= t < p.last_hour_sweet[1])):
             continue                                  # #1 test: last hour = sweet spot only
         done_key = session
-        if done[session] and p.sb_setup and _in_sb(t, p) and not state.get("day_done"):
+        if done[session] and (p.sb_setup or _TP4.tgif_pm_slot(ctx, p, session, t)) and _in_sb(t, p) and not state.get("day_done"):     # (caption-gap M14-tgif-management: one more TGIF entry in the PM window)
             done_key = "SB_" + session                # the Silver Bullet window's own trade
             done.setdefault(done_key, False)
         lh_slot = (session == "PM" and _SM.lh_on(p, "last_hour_own_slot")
@@ -8691,6 +8769,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     if tp2 is not None:
         ctx.__dict__["_tp2_st"] = dict(tags=[], prefs=[])
     tp3 = {} if _TP3.any_on(p) else None             # caption-gap targets_partials #3/4: the state of this order's rung hooks
+    tp4 = {} if _TP4.any_on(p) else None             # caption-gap targets_partials #4/4: ditto (the raw rungs, the ladder stage, the mid-trade state)
     if tp3 is not None and p.pool_milestone > 0:
         why3_ = _TP3.sweep_gate(ctx, sd, sw, i, p, session)     # caption-gap X3-pool-below-untraded-htf-partial (061 ~02:19:41): no reversal off a pool that lies short of an untouched HTF array
         if why3_:
@@ -8784,6 +8863,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             lv = _TP2.raw_post(ctx, sd, i, p, session, entry, risk, above, sw, lv, lvt, tp2)
         if tp3 is not None and _TP3.raw_on(p):   # caption-gap targets_partials #3/4: void legs, measured-move anchors, OB-entry order, double tops, 60-day grades, cc extensions, ADR rungs, PM legs, the daily-breaker cap
             lv = _TP3.raw_post(ctx, sd, i, p, session, entry, risk, above, sw, leg_hi, lv, lvt, tags, tp3)
+        if tp4 is not None and _TP4.raw_on(p):   # caption-gap targets_partials #4/4: the prior week's high, the multi-k breaker clusters, the PM lunch + AM highs, the balanced-level filter
+            lv = _TP4.raw_post(ctx, sd, i, p, session, entry, risk, above, sw, leg_hi, lv, lvt, tags, tp4)
         if p.erl_exits_only:           # L14b: exit at external range liquidity only
             lv = [(v, k) for v, k in lv if k in POOL_KINDS]
         kinds = [kind for v, kind in lv]
@@ -8978,6 +9059,11 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         why3_, keep, draw, final_T = _TP3.late(ctx, sd, sw, i, p, session, entry, risk, keep, keep0 if lk_t is not None else keep_full, draw, final_T, lvt, tags, tp3, lk_t is not None, fixed)
         if why3_:
             _f(why3_)
+            return None
+    if tp4 is not None and keep and _TP4.late_on(p):      # caption-gap targets_partials #4/4: month gate, PM 14:50 ladder, structural cuts, ladder shapes, modifiers, minimum final reward
+        why4_, keep, draw, final_T = _TP4.late(ctx, sd, sw, i, p, session, entry, risk, keep, keep0 if lk_t is not None else keep_full, draw, final_T, lvt, tags, tp4, lk_t is not None, fixed, float(leg_hi), tg)
+        if why4_:
+            _f(why4_)
             return None
     lv, kinds = [v for v, _ in keep], [k for _, k in keep]
     if p.t1_fixed_pts > 0 or p.t1_fixed_r > 0:             # Ep03.24 test (owner #2: not the goal, default off); caption-gap E8-2pct-new-trader: t1_fixed_r = a fixed R multiple (the cc_starter single exit at 1R)
@@ -9263,3 +9349,4 @@ from . import es3 as _ES3  # noqa: E402  (caption-gap pass, entries_stops_sizing
 from . import tp1 as _TP1  # noqa: E402  (caption-gap pass, targets_partials #1/4: engine glue)
 from . import tp2 as _TP2  # noqa: E402  (caption-gap pass, targets_partials #2/4: engine glue)
 from . import tp3 as _TP3  # noqa: E402  (caption-gap pass, targets_partials #3/4: engine glue)
+from . import tp4 as _TP4  # noqa: E402  (caption-gap pass, targets_partials #4/4: engine glue)

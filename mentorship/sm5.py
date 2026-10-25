@@ -1111,7 +1111,7 @@ def array_fb_order(ctx, sd, i: int, p, session: str, risk_mult: float):
 # --- the MM model (107 / 108 / 109 / 110) -------------------------------------------------------------------------------------------------------------
 
 def need_note(p) -> bool:
-    return bool(p.mm_oc_entry or p.mm_stages or p.mm_lowrisk or p.mm_accum_bars or p.reclaimed_ladder or p.td_fallback)
+    return bool(p.mm_oc_entry or p.mm_stages or p.mm_lowrisk or p.mm_accum_bars or p.reclaimed_ladder or p.td_fallback or p.mm_first > 0)      # (caption-gap X3-mm-model-target: mm_first reads the remembered sweep)
 
 
 def note_sweep(sd, sw) -> None:
