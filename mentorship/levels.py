@@ -2462,3 +2462,27 @@ def long_wick_ces(o, h, l, c, upper: bool = True, min_ratio: float = 1.0, n_med:
         if w[k] > 0 and w[k] >= min_ratio * (top[k] - bot[k]) and w[k] >= float(np.median(seg)):
             out.append((k, float((top[k] + h[k]) / 2 if upper else (bot[k] + l[k]) / 2), float(w[k])))
     return out
+
+
+# --- caption-gap pass, management_exits #1/3 (BH-micro-BPR-tick-match-LOD: 055 ~00:15:51) -----------------------------------------------------------
+
+def tick_match_k(h, l, i: int, tick: float, look: int, zones=None):
+    """A11 micro-BPR tick match (055 ~15:51, 3m chart): the index k (i - look <= k < i) whose HIGH equals bar i's LOW to the tick (|diff| < tick / 2) - "it's not one tick
+    short" - or None. `zones` (optional) = (bottom, top) pairs of the balanced price ranges known by bar i: the matched price must lie inside one of them (inside a BPR). Only bars
+    <= i are read. The mirror (a later HIGH equal to an earlier LOW) is the same call on the mirrored arrays (side space)."""
+    v = float(l[i])
+    for k in range(max(0, i - int(look)), i):
+        if abs(float(h[k]) - v) < tick / 2.0 - 1e-12:
+            if zones is None or any(b - tick / 2.0 <= v <= t + tick / 2.0 for b, t in zones):
+                return k
+    return None
+
+
+def tick_match(h, l, i: int, tick: float, look: int, zones=None) -> bool:
+    """True when `tick_match_k` finds a match (BH-micro-BPR-tick-match-LOD)."""
+    return tick_match_k(h, l, i, tick, look, zones) is not None
+
+
+def upper_wick_ce(o, h, c, k: int) -> float:
+    """The CE (50%) of candle k's UPPER wick (body high -> high) - the mirror of `wick_ce` (X4-be-plus-cap-htf, 105 ~01:00:51)."""
+    return float((max(o[k], c[k]) + h[k]) / 2)

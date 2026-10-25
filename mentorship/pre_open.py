@@ -30,6 +30,7 @@ import numpy as np
 import pandas as pd
 
 from . import levels as L
+from . import me1 as _ME1
 
 
 def _dailies(ctx, hist, p, day, n: int):
@@ -101,6 +102,8 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
     t = ctx.t
     k8 = ctx.start + int(np.searchsorted(t[ctx.start:], 480))
     k830 = ctx.start + int(np.searchsorted(t[ctx.start:], 510))
+    c0825 = _ME1.entry_cut_0825(day, p, "PRE8")             # caption-gap N5-hold-through-0830: no new Ma Deuce entry from 08:25 on a release day
+    k_end = ctx.start + int(np.searchsorted(t[ctx.start:], c0825)) if c0825 else k830
     if k8 >= len(t) or k8 <= ctx.start:
         return []
     px = ctx.c[k8 - 1]
@@ -234,7 +237,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
     kl, n_units, add, away, basis = 0, 0, None, False, 0.0
     for i in range(k8, len(t)):
         if tr is None:
-            if i >= k830:
+            if i >= k_end:
                 return []
             if p.sloppy_mode == "stand_aside" and chop is not None and chop.active_before(i):
                 _f("md_x_chop")
@@ -322,9 +325,9 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
                 tr.exits.append((ctx.idx[i], x(sc[i]), left, nm_)); return [tr]
         if len(levels) > 1:                           # M15 md_ladder: scale out, BE after the first
             fr = _TP.bump_fracs(levels, bump_set, p.ladder_fracs, p) if bump_set else p.ladder_fracs
-            while kl < len(levels) and left and sh[i] >= levels[kl] + p.exit_fill_through * p.tick:
+            while kl < len(levels) and left and sh[i] >= levels[kl] + p.exit_fill_through * p.tick + _ME1.rung_hit_off(p):
                 q = left if kl == len(levels) - 1 else min(left, max(p.lot, _lots(n_units * fr[min(kl, len(fr) - 1)], p.lot)))
-                tr.exits.append((ctx.idx[i], x(levels[kl]), q, f"t{kl + 1}")); left -= q
+                tr.exits.append((ctx.idx[i], x(_ME1.rung_px(levels[kl], p)), q, f"t{kl + 1}")); left -= q
                 kl += 1
                 last_part = i
                 if _MG.extras_be_mode(p) == "t1":                        # X4: BE at the first rung (extras_be_on "t1", the
@@ -333,8 +336,8 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
                 tr.final_hit = tr.exits[-1][3] == f"t{len(levels)}"          # X12 / Ep04.13
                 _MG.mark_day_stop(tr, p)
                 return [tr]
-        elif sh[i] >= target + p.exit_fill_through * p.tick:
-            tr.exits.append((ctx.idx[i], x(target), left, "t1"))
+        elif sh[i] >= target + p.exit_fill_through * p.tick + _ME1.rung_hit_off(p):
+            tr.exits.append((ctx.idx[i], x(_ME1.rung_px(target, p)), left, "t1"))
             tr.final_hit = True
             _MG.mark_day_stop(tr, p)
             return [tr]
@@ -358,7 +361,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
             tr.exits.append((ctx.idx[i], x(sc[i]), left, "fomc_flat")); return [tr]
         if left and _DW.day_exit(ctx, p, "PRE8", t[i] + ctx.tf):
             tr.exits.append((ctx.idx[i], x(sc[i]), left, "consol_out")); return [tr]    # N8.3: consolidation-day AM out by 11:00
-        if left and p.pre_flat_0830 and p.flat_0830_extras and news(day) == "0830" and t[i] + ctx.tf >= 510:
+        if left and p.flat_0830_extras and _ME1.flat_0830(day, p) and t[i] + ctx.tf >= 510:
             tr.exits.append((ctx.idx[i], x(sc[i]), left, "pre_0830")); return [tr]    # N4: no position into the 08:30 release
         best = max(best, sh[i])
         if pos is not None and left:              # X4 / D14 breakeven modes + X6-X9c invalidation exits (same code as the engine)

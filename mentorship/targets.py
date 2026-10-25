@@ -1202,7 +1202,8 @@ def rung_hit(pos: dict, k: int, level: float, h: float, c: float, t: int, tf: in
             w = p.sd_close_window
             if not w or (w[0] < t + tf <= w[1]):
                 return (c >= level, c)
-    return (h >= level + xt, level)
+    from . import me1 as _ME1                    # caption-gap E1-manual-touch-exits: exit_fill ("touch" = the built rule)
+    return (h >= level + xt + _ME1.rung_hit_off(p), _ME1.rung_px(level, p))
 
 
 def breakaway_gap(sd, ext_i: int, i: int, p=None):

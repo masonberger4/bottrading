@@ -37,6 +37,7 @@ import numpy as np
 import pandas as pd
 
 from . import levels as L
+from . import me1 as _ME1
 from . import daycontext as _DW
 
 MSS_MODES = ("close", "wick")
@@ -1665,10 +1666,10 @@ def _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session, mg=
         tr.exits.append((ts, sd.x(px), pos["left"], "sb_abort")); pos["left"] = 0
     elif p.sb_mgmt in ("ladder", "gap424", "layered057"):   # scale out through the draw levels
         lv_, fr = pos["levels"], pos["fracs"]
-        while pos["k"] < len(lv_) and pos["left"] and h >= lv_[pos["k"]] + p.exit_fill_through * p.tick:
+        while pos["k"] < len(lv_) and pos["left"] and h >= lv_[pos["k"]] + p.exit_fill_through * p.tick + _ME1.rung_hit_off(p):
             k = pos["k"]
             q = pos["left"] if k == len(lv_) - 1 else min(pos["left"], max(p.lot, _lots(pos["n"] * fr[min(k, len(fr) - 1)], p.lot)))
-            tr.exits.append((ts, sd.x(lv_[k]), q, f"t{k + 1}")); pos["left"] -= q
+            tr.exits.append((ts, sd.x(_ME1.rung_px(lv_[k], p)), q, f"t{k + 1}")); pos["left"] -= q
             pos["k"] += 1
             pos["last_partial_i"] = i
             if not pos["t1_done"]:
@@ -1679,17 +1680,17 @@ def _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session, mg=
             pos["stop"] = max(pos["stop"], pos["away"] - p.trail_pad)
             pos["away"] = None
     else:
-        if not pos["t1_done"] and h >= pos["t1"] + p.exit_fill_through * p.tick:
+        if not pos["t1_done"] and h >= pos["t1"] + p.exit_fill_through * p.tick + _ME1.rung_hit_off(p):
             if pos.get("super"):                       # gap 8: all but one lot at the SB target, the stop stays
                 q = max(p.lot, pos["left"] - p.lot)
             else:
                 q = pos["left"] if pos["t2"] is None else max(p.lot, _lots(pos["left"] * 0.8, p.lot))
             q = min(q, pos["left"])
-            tr.exits.append((ts, sd.x(pos["t1"]), q, "t1")); pos["left"] -= q
+            tr.exits.append((ts, sd.x(_ME1.rung_px(pos["t1"], p)), q, "t1")); pos["left"] -= q
             pos["t1_i"] = pos["last_partial_i"] = i
             _t1_done(pos, p, mg)                       # X4: see above (a supercharged runner keeps its stop)
-        if pos["left"] and pos["t2"] is not None and pos["t1_done"] and h >= pos["t2"] + p.exit_fill_through * p.tick:
-            tr.exits.append((ts, sd.x(pos["t2"]), pos["left"], "t2")); pos["left"] = 0
+        if pos["left"] and pos["t2"] is not None and pos["t1_done"] and h >= pos["t2"] + p.exit_fill_through * p.tick + _ME1.rung_hit_off(p):
+            tr.exits.append((ts, sd.x(_ME1.rung_px(pos["t2"], p)), pos["left"], "t2")); pos["left"] = 0
     pos["best"] = max(pos["best"], h)
     if mg is not None and not pos.get("super"):
         mg.extras_be_bar(sd, pos, tr, i, p)            # X4 / D14: expansion / after_mss / stall / pool / off (extras_be_on="follow")
@@ -1723,8 +1724,8 @@ def _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session, mg=
                 tr.exits.append((ts, sd.x(c), pos["left"], "am_exit")); pos["left"] = 0
             else:
                 pos["stop"] = new
-    if (pos["left"] and win.name == "london" and p.pre_flat_0830 and p.flat_0830_extras and day is not None
-            and news(day) == "0830" and t + ctx.tf >= 510):
+    if (pos["left"] and win.name == "london" and p.flat_0830_extras and day is not None
+            and _ME1.flat_0830(day, p) and t + ctx.tf >= 510):
         tr.exits.append((ts, sd.x(c), pos["left"], "pre_0830")); pos["left"] = 0   # N4: no position into 08:30
     if pos["left"] and ff and pos["fill_t"] < ff and t + ctx.tf >= ff:
         tr.exits.append((ts, sd.x(c), pos["left"], "fomc_flat")); pos["left"] = 0     # N3.2: not into the release

@@ -2285,6 +2285,55 @@ _TP4_DECISIONS = {
 DECISIONS.update(_TP4_DECISIONS)
 
 
+# --- caption-gap pass: management_exits #1/3 (name prefix = gap id; every variant is a valid Params set) --------------------------------------------------------------------------------------------------------
+_ME1_DECISIONS = {
+    "BH-B14-NWOG-traverse-large-range": dict(nwog_traverse_hold=True, **SM_POST),
+    "BH-micro-BPR-tick-match-LOD": dict(tick_match_hold=True, **SM_POST),
+    "B6-untouched-premium-arrays-heavy": dict(heavy_gauge=True, heavy_scale=0.33, **SM_POST),
+    "T9-strong-am-no-lunch-retrace": dict(no_lunch_retrace_hold=True, lunch_retr_max=0.3, **SM_POST),
+    "N5-hold-through-0830": dict(hold_through_0830=True, pre_0700=True, ma_deuce=True, sb_model=True, sb_london=True, **SM_POST),
+    "N5-hold-through-0830_off": dict(no_entry_0825=False, pre_0700=True, **SM_POST),
+    "N10-thursday-caps-week": dict(thu_cap=True, pre_0700=True, **SM_POST),
+    "A11-bpr-retrace-allowance": dict(bpr_abort=True, bpr_limit="mt_body_close_abort", **SM_POST),
+    "A11-bpr-retrace-allowance_no_reentry": dict(bpr_abort=True, bpr_limit="no_reentry", **SM_POST),
+    "A11-bpr-retrace-allowance_ce_touch": dict(bpr_abort=True, bpr_limit="ce_touch", **SM_POST),
+    "A11-bpr-retrace-allowance_mt_warn_far_exit": dict(bpr_abort=True, bpr_limit="mt_warn_far_exit", **SM_POST),
+    "A11-bpr-retrace-allowance_far_edge": dict(bpr_abort=True, bpr_limit="far_edge", **SM_POST),
+    "A13-breaker-mt-trade-test": dict(breaker_mt_test="trade", **SM_POST),
+    "A5-partial-fill-strength-read": dict(far_half_no_adds=True, **SM_POST),
+    "A5-quadrants-any-gap-ladder": dict(ce_exit="trade", ce_hold=True, **SM_POST),
+    "A5-reclaimed-fvg-full-revisit": dict(fvg_bpr_backstop=True, fvg_abort=True, bpr_abort=True, **SM_POST),
+    "A9-broken-vi-retrace-midpoint": dict(vi_mid_exit=True, vi_mid_bars=2, **SM_POST),
+    "A8-rip-through-ce-signature": dict(rip_through=True, stall_partial=0.5, **SM_POST),
+    "X9-entry-fvg-immediate-rejection": dict(fvg_full_fill_void=True, **SM_POST),
+    "L4-resistance-is-delivery-speed": dict(resistance_def="speed", resist_speed_bars=3, **SM_POST),
+    "L4-resistance-is-delivery-speed_low_full": dict(resistance_def="speed", resistance_mode="low_full", **SM_POST),
+    "A8-ifvg-15m-body-failure": dict(ifvg_fail_tf=15, ifvg_entries=True, ifvg_hold=True, **SM_POST),
+    "A6-breakaway-by-refusal": dict(refusal_breakaway=True, **SM_POST),
+    "B6-intraday-iof": dict(iof_intraday_exit=True, **SM_POST),
+    "new-ignore-dojis": dict(**SM_POST),                                  # no switch: no doji logic exists (a regression variant = the post_mss engine; test_dojis_against_the_position_do_not_exit)
+    "new-position-trade-grading-fib": dict(pos_switch_frac=0.5),
+    "A2-quick-run-through": dict(run_through_bars=3, run_through_ticks=2.0, **SM_POST),
+    "L12-sd-step-to-time-window": dict(sd_time_roll=True, sd_window=(600, 720), sd_targets=True, **SM_POST),
+    "L14-hold-above-reached-objective": dict(hold_reached=True, hold_tf=5, **SM_POST),
+    "L12-bodies-hold-sd-continuation": dict(sd_body_hold=True, sd_targets=True, **SM_POST),
+    "X2-best-case-resting-limit": dict(best_case_limit=True, best_case_mult=1.0, best_case_bulk=0.65, **SM_POST),
+    "E1-manual-touch-exits": dict(exit_fill="touch_1tick", exit_slip_ticks=1, **SM_POST),
+    "E1-manual-touch-exits_limit_through": dict(exit_fill="limit_through", **SM_POST),
+    "X4-be-vi-then-new-ssl": dict(be_mode="vi_then_new_ssl", **SM_POST),
+    "X4-be-without-partials": dict(be_mode="through_opposing_fvg", exit_mode2="full_pull", **SM_POST),
+    "X4-be-plus-cap-htf": dict(be_cap_htf=True, htf_targets=("1h", "4h", "D", "W"), **SM_POST),
+    "D14-be-after-adr-fraction": dict(be_mode="adr_frac", be_adr=0.4, **SM_POST),
+    "D14-be-after-adr-fraction_05": dict(be_mode="adr_frac", be_adr=0.5, **SM_POST),
+    "X5-runner-stop-half-open-profit": dict(runner_stop="leg_eq", runner_eq_after=0.75, **SM_POST),
+    "X5-runner-stop-half-open-profit_half_profit": dict(runner_stop="half_profit", **SM_POST),
+    "X5-day-trade-stop-no-trail": dict(day_mode_auto=True, day_mode_size=0.5, htf_bias="combo", use_bias=True, **SM_POST),
+    "X5-event-tight-lock-020": dict(event_eve_lock=True, **SM_POST),
+    "X5-trail-after-protected-gap-confirmed": dict(trail_confirm=True, **SM_POST),
+}
+DECISIONS.update(_ME1_DECISIONS)
+
+
 def exit_buffer_grid(base: Params | None = None) -> list:
     """X2-exit-buffer-range (070 ~1:05:10): the exit-buffer grid - exit_before_pts in (0.25, 0.5, 1.0, 1.5) crossed with exit_mode in ("split", "before") (so the buffer also hits the pools: 070's target was a pool). Eight Params; every other field of `base` unchanged."""
     base = base or Params()

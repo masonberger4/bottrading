@@ -137,7 +137,7 @@ def trail_extra(sd, pos, i: int, p) -> None:
                         the measuring gap (the FVG in the middle of the leg, targets.measuring_gap) once price is above it
       ladder_trail "breakaway"  X5a (003 ~42:40; 062 ~37:02): the same rounds gate, the stop under the breakaway gap
                         (targets.breakaway_gap: the shift's FVG while price has not retraced past its half)"""
-    if pos.get("day_trade") or not pos["left"]:
+    if pos.get("day_trade") or not pos["left"] or not S._ME1.trail_ok(pos):         # (caption-gap management_exits #1/3: a lock / a confirmation rule keeps the trails off)
         return
     c = sd.c[i]
     if p.trail_first_fvg:
@@ -354,7 +354,8 @@ def exits(ctx, sd, pos, tr, i: int, ts, p, state, extras: bool = False) -> None:
     basis = pos["basis"] / pos["n"]
     tk = p.tick
     later = i > fi and (not extras or p.invalidations_extras)      # the invalidation exits (X6-X9c) below need `later`
-    held = bool((pos.get("tp1") or {}).get("eve_bnb"))           # caption-gap N4-eve-of-high-impact: the eve scalp is not cut by the soft time exits (it has one target and its initial stop)
+    held = bool((pos.get("tp1") or {}).get("eve_bnb")) or bool((pos.get("me1") or {}).get("lod_hold"))           # caption-gap N4-eve-of-high-impact: the eve scalp is not cut by the soft time exits (it has one target and its initial stop); BH-micro-BPR-tick-match-LOD: the low of the day is in - hold
+    bpr_back = bool((pos.get("me1") or {}).get("bpr_back"))       # caption-gap A5-reclaimed-fvg-full-revisit: a BPR behind the entry gap - the FVG far-edge exits are replaced by the BPR midpoint rule
     if p.smt_hold_until and tr.session != "PM" and pos.get("smt_tag") and pos["fill_t"] < p.smt_hold_until:
         held = t + tf < p.smt_hold_until                        # X10c: no soft exits while an AM SMT trade is held
         if not held and p.smt_hold_exit and not pos.get("smt_hold_done"):
@@ -368,7 +369,7 @@ def exits(ctx, sd, pos, tr, i: int, ts, p, state, extras: bool = False) -> None:
             _exit(tr, sd, ts, c, pos["left"], "first_fvg_fail", pos)
             return
     # --- X6 abort (rule mode)
-    if p.fvg_abort and p.fvg_abort_mode == "rule" and later and not held:
+    if p.fvg_abort and p.fvg_abort_mode == "rule" and later and not held and not bpr_back:
         if _abort(ctx, sd, pos, tr, i, ts, p):
             return
     # --- X7a three arrays / X7b half off
@@ -436,7 +437,7 @@ def exits(ctx, sd, pos, tr, i: int, ts, p, state, extras: bool = False) -> None:
         else:
             pos["meander_n"] = 0
     # --- X9c far edge
-    if p.far_edge_min and later and not pos["t1_done"] and not pos.get("fe_done") and not held:
+    if p.far_edge_min and later and not pos["t1_done"] and not pos.get("fe_done") and not held and not bpr_back:
         if pos.get("fe_t") is None and l <= pos["fvg_bottom"] + tk:
             pos["fe_t"] = t
         if pos.get("fe_t") is not None:
