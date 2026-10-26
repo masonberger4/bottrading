@@ -6469,6 +6469,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             elif p.daily_loss_pct > 0 and pos is None and _ES3.dl_blocks_order(pending, ctx, state, p):
                 pending = None                       # caption-gap E11-funded-account-caps: the closed losses of the day + this order's risk would reach the day's loss limit
                 _f("x_daily_loss")
+            elif pending.get("mtf_gap") is not None and i - 1 > pending["i"] and _ES1.mtf_pending_dead(ctx, sd, pending, i - 1, p):
+                pending = None                       # review fix A5-multitf-hold-test (064 ~1:32:01): two or more 1-4m closes inside the 5m entry gap while the limit rests cancel it
             elif (pos is None and _NC.fill_ok(pending, t, tf) and _fill_at(sd, pending, i) is not None
                   and _retrace_ok(sd, pending, i, p)):
                 o = pending
@@ -6538,8 +6540,6 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 if lk is not None:
                     lk["traded"] = True
                 pending = None
-            elif pending.get("mtf_gap") is not None and i - 1 > pending["i"] and _ES1.mtf_pending_dead(ctx, sd, pending, i - 1, p):
-                pending = None                       # review fix A5-multitf-hold-test (064 ~1:32:01): two or more 1-4m closes inside the 5m entry gap while the limit rests cancel it
                 if sd.l[i] <= pos["stop"]:           # same-bar stop (conservative)
                     tr.exits.append((ts, sd.x(pos["stop"]), pos["left"], "stop")); pos["left"] = 0
                     lost_side = _after_close(pos, trades, p, done, state, i=i, ctx=ctx) or lost_side
