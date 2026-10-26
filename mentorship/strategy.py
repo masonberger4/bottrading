@@ -8168,6 +8168,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         es2_t = dict(es2_t, **_ES2.ob_grade_tags(_ES1.zone_dict(sd, ob)))      # caption-gap A12-mt-grading (cc04_003), review fix: the FVG-path OB (ob_blend) is graded at the fill too [our interpretation: the retest depth of the OB's MT during the retrace to the gap]
     if es2_t:
         tags["es2"] = es2_t
+    if p.mtf_hold and ctx.tf < 5 and not any(g is z for z in sd.gaps):
+        tags["mtf_gap"] = (float(g.bottom), float(g.top), int(g.i))      # review fix A5-multitf-hold-test: the resting order is re-judged on the 1-4m closes each bar (es1.mtf_pending_dead)
     if p.vi_ladder_exit and mt is not None:
         tags["es3"] = dict(tags.get("es3") or {}, ob_mt=float(mt))       # caption-gap E12-631-vi-wickce-invalidation: the OB MT whose trade (before the displacement) voids the idea
     if p.ifvg_mohawk_add and is_ifvg and not (sd.l[g.i + 1:i] <= g.top).any():
@@ -8267,8 +8269,6 @@ def _lv_finish_targets(ctx, sd, i: int, above: float, p, htf_t: tuple) -> list:
     conf = getattr(ctx, "conf", None)
     if conf is not None and (p.fvg_quadrants or p.fvg_keep_filled or p.daily_fvg_exact):
         now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
-    if p.mtf_hold and ctx.tf < 5 and not any(g is z for z in sd.gaps):
-        tags["mtf_gap"] = (float(g.bottom), float(g.top), int(g.i))      # review fix A5-multitf-hold-test: the resting order is re-judged on the 1-4m closes each bar (es1.mtf_pending_dead)
         if p.fvg_quadrants and htf_t:
             for near, ce, far, tf, _ in conf.opposing(now, sd.x(above), sd.sign, htf_t, (0,)):
                 a, b = sd.x(near), sd.x(far)
