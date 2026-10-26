@@ -75,7 +75,8 @@ def calendar_block(d, session: str, p, t: int = 0):
             return "auction_am"
         if p.skip_two_drivers and CAL.two_drivers(d, p.news_claims, p.news_conf_board):
             return "two_drivers"
-    return None
+    from . import nct2 as _N2
+    return _N2.calendar_block2(d, session, p, t)         # caption-gap pass news_calendar_times#1/1
 
 
 def day_risk(d, p, lvt: list | None = None) -> float:
@@ -120,6 +121,8 @@ def day_tags(d, p=None) -> str:
     if CAL.is_auction_day(d):
         out.append("auction")
     out += sorted(t for t in CAL.minor_events(d) if t != "conf_board" or (p is not None and p.news_conf_board))
+    from . import nct2 as _N2
+    out += [x for x in _N2.day_tags2(d, p) if x not in out]      # caption-gap pass news_calendar_times#1/1
     return "|".join(out)
 
 
@@ -155,6 +158,10 @@ def futures_day(ctx, symbol: str, minute: int) -> bool:
 def fomc_whipsaw(ctx, day, p) -> bool:
     """N3 (cc08_006 ~3:36): the previous session was an FOMC day whose 14:00-15:00 reaction took both sides of the
     13:00-14:00 range (a whipsaw). Read from the completed previous regular session (history)."""
+    if p.fomc_whipsaw_skip != "off" and CAL.fomc_info(day)["after"]:
+        from . import nct2 as _N2
+        if _N2.whip_flag(ctx, p, day):                  # caption-gap N3-fomc-whipsaw-skip-london (cc08_006 ~00:04:37): the ADR5 form of the whipsaw
+            return True
     if not (p.fomc_whipsaw_skip_london and CAL.fomc_info(day)["after"]):
         return False
     hist = getattr(ctx, "hist", None)
@@ -475,8 +482,9 @@ def post_order(ctx, sd, i: int, p, session: str, o_: dict, hist):
     from .strategy import _f, _idx_at
     t = int(ctx.t[i])
     tags = []
-    if p.macro_gate or p.macro_only != "off":
-        wins = (MACRO_0950,) if p.macro_only == "0950" else MACROS_T7
+    from . import nct2 as _N2
+    if (p.macro_gate or p.macro_only != "off") and not (p.macro_trend_off and _N2.trend_day_nr(ctx, i)):     # caption-gap T7-no-macro-trending (025 ~00:59:10): a trending day has no macro signature - the gate is waived
+        wins = (MACRO_0950,) if p.macro_only == "0950" else _N2.macro_wins_for(p)          # (caption-gap T7-macro-start-only-all: macro_gate_set picks the windows)
         tm = t if p.macro_by == "arm" else int(ctx.t[o_.get("ext_i", i)])
         if not _in(wins, tm):
             _f("x_macro_gate")
@@ -516,6 +524,11 @@ def post_order(ctx, sd, i: int, p, session: str, o_: dict, hist):
                 tags.append("pm_ob")
     if session != "PM" and p.fomc_only_am in ("tag", "scalp") and CAL.fomc_info(ctx.day)["only"]:
         tags.append("fomc_only_am")
+    t2_, why2_ = _N2.order_tags(ctx, sd, i, p, session, o_)       # caption-gap pass news_calendar_times#1/1: tags and order filters
+    if why2_ is not None:
+        _f(why2_)
+        return None
+    tags += t2_
     mw = macro_wins(t, p)
     if mw:
         o_["macro_wins"] = "|".join(mw)               # T7 multi-tag: every macro window the order was armed in

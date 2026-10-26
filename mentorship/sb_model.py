@@ -1280,6 +1280,12 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
             continue
         if a_n != win.a:
             win = _dc_replace(win, a=a_n)
+        if p.am_search_minutes and p.am_search_sb == "include" and win.name == "am":       # caption-gap new-am-search-timebox-60min (042 ~00:05:55): the "include" box ends the AM Silver Bullet window with it
+            b_n = min(win.b, 570 + p.am_search_minutes)
+            if b_n <= win.a:
+                continue
+            if b_n != win.b:
+                win = _dc_replace(win, b=b_n)
         if p.day_filter and blocked(day, win.session, p, win.a):
             continue
         if NC.sb_gate(ctx, p, day, win.session, win.a):   # N3.2 fomc_am="recipe"

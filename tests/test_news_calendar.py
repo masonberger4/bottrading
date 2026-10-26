@@ -677,7 +677,7 @@ def test_pm_carry_draw_in_the_engine():
 
 def test_trade_news_tags_and_funnel_keys():
     t = go(EVE)[0]
-    assert t.news_tags == "fomc_eve"
+    assert t.news_tags == "fomc_eve|pre_fomc_only"      # (caption-gap news_calendar_times#1/1: the lone-release FOMC eve is tagged pre_fomc_only)
     assert go(NORMAL)[0].news_tags == ""
     S.FUNNEL = __import__("collections").Counter()
     try:

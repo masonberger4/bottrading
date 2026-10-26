@@ -77,6 +77,8 @@ def raise_stop(pos, new: float, trail: bool = False) -> None:
         return
     if trail and not S._ME1.trail_ok(pos):
         return
+    if pos.get("lunch_guard"):
+        new = S._NCT.guard_stop(pos, new)         # caption-gap T8-lunch-raid-target (lunch_trail_guard): a trail just beyond the lunch pool is moved past it
     pos["stop"] = max(pos["stop"], new)
 
 

@@ -364,6 +364,8 @@ def size_mult(ctx, sd, sw, i, p, session, entry, htf_tag, sloppy: str, lvt: list
             lvt.append("size_" + r)
     from . import newscal as _NC
     m *= _NC.day_risk(day, p, lvt)               # news_calendar_times: the eve of FOMC / CPI (N3, N3.4, N4, D9)
+    from . import nct2 as _N2
+    m *= _N2.size_mult(ctx, sd, i, p, session, lvt)      # caption-gap pass news_calendar_times#1/1: multi_release "half", pre_fomc_week_light
     from . import daycontext as _DW
     m *= _DW.day_risk(ctx, p, lvt)               # day_week_context: August (N7.6) and roll-week (N7.5) risk
     from . import bias_day as _BD
@@ -441,6 +443,8 @@ def adds_blocked(ctx, sd, pos, i, p) -> bool:
     decoupled, none on low-probability setups, none after a loss that day (after_loss_adds False /
     no_max_after_loss)."""
     if (p.nfp_no_adds or p.no_adds_nfp) and "jobs" in events(ctx.day):
+        return True
+    if p.pre_fomc_week_light and S._NCT.adds_off(ctx, p, i):      # caption-gap N3-fomc-week-mon-wed (094): no pyramiding in FOMC week before the statement
         return True
     if p.decoupled_no_adds and decoupled(ctx, i, p):
         return True

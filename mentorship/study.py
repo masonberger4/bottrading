@@ -150,6 +150,9 @@ def main_index(out="runs/mentorship", variants=None, tfs=(5, 1), workers=6):
 
 if __name__ == "__main__":
     import sys
+    if "--news-pools" in sys.argv:                          # caption-gap N6-news-pool-mapping (037 ~00:11:55) / N6-both-pools-news: the study CSVs of the release-pool maps (no trades)
+        main_news_sequence()
+        raise SystemExit
     if "--index" in sys.argv:
         _, rep = main_index()
         for k, v in rep["all"].items():
@@ -2454,6 +2457,142 @@ _ME3_DECISIONS = {
     "new-hold-pre0930-through-open": dict(pre_hold_open=True, pre_0900=True, **SM_POST),
 }
 DECISIONS.update(_ME3_DECISIONS)
+
+
+# --- caption-gap pass, package news_calendar_times#1/1 (variant name prefix = gap id; digests/rulebook_gaps) -----------------------------------------------------------------------
+_NCT_DECISIONS = {
+    "BH-consolidation-near-highs-before-news": dict(pre_news_coil=True, **SM_POST),
+    "N1-nfp-30min-wait_0900": dict(nfp_day_from=540, **SM_POST),
+    "N1-nfp-30min-wait_0930": dict(nfp_day_from=570, **SM_POST),
+    "N1-nfp-30min-wait_1000": dict(nfp_day_from=600, **SM_POST),
+    "N1-nfp-both-sides-macro": dict(nfp_day_from=590, nfp_both_sides=True, nfp_macro_only=True, **SM_POST),
+    "N1-nfp-both-sides-macro_sides_only": dict(nfp_day_from=590, nfp_both_sides=True, **SM_POST),
+    "N5-soft-bias-pre-open": dict(pre_0900=True, pre_0900_no_news=True, **SM_POST),
+    "N5-soft-bias-pre-open_bnb": dict(pre_open_bnb=True, htf_targets=("1h", "4h", "D"), **SM_POST),
+    "N4-cpi-day-new-traders": dict(cpi_from=600, **SM_POST),
+    "N5-two-driver-session": dict(two_driver_mode="tag", **SM_POST),
+    "N5-two-driver-session_wait2": dict(two_driver_mode="wait2", **SM_POST),
+    "N5-two-driver-session_skip": dict(two_driver_mode="skip", **SM_POST),
+    "N5-multi-release-count": dict(multi_release="tag", **SM_POST),
+    "N5-multi-release-count_skip": dict(multi_release="skip", **SM_POST),
+    "N5-multi-release-count_half": dict(multi_release="half", **SM_POST),
+    "N6-both-pools-news": dict(news_seq_study=True, **SM_POST),
+    "N6-news-runs-trailed-stops": dict(news_trend_side=True, htf_bias="combo", **SM_POST),
+    "DS2-killzone-news-manipulation-time": dict(kz_release_tag=True, htf_bias="combo", pre_0700=True, **SM_POST),
+    "N3-fomc-two-stage": dict(fomc_stage_study=True, **SM_POST),
+    "N3-skip-am-before-pm-event": dict(fomc_am="skip", **SM_POST),
+    "N3-fomc-minutes_block": dict(fomc_minutes_mode="block", **SM_POST),
+    "N3-fomc-minutes_pm_only": dict(fomc_minutes_mode="pm_only", **SM_POST),
+    "N3-fomc-move-ends-1500": dict(fomc_end=900, fomc_pm_from=0, fomc_observe="defer", **SM_POST),
+    "N3-fomc-week-mon-wed": dict(pre_fomc_week_light=True, **SM_POST),
+    "N3-fomc-week-mon-wed_smt": dict(pre_fomc_week_light=True, pre_fomc_week_smt=True, **SM_POST),
+    "N3-post-fomc-thu-fri_skip": dict(post_fomc_am="skip", **SM_POST),
+    "N3-post-fomc-thu-fri_symmetry": dict(post_fomc_am="symmetry", **SM_POST),
+    "N3-fomc-whipsaw-skip-london": dict(fomc_whipsaw_skip="london", london_kz=True, **SM_POST),
+    "N3-fomc-whipsaw-skip-london_am": dict(fomc_whipsaw_skip="am", london_kz=True, **SM_POST),
+    "DS2-fomc-only-week-prescan": dict(fomc_only_am="skip", skip_pre_fomc=False, **SM_POST),
+    "N2-nfp-date-from-calendar": dict(nfp_week_block=True, nfp_thu=False, **SM_POST),
+    "N2-nfp-wed-after-11": dict(nfp_week_block=True, nfp_wed_cutoff=660, **SM_POST),
+    "N2-nfp-wed-after-11_1200": dict(nfp_week_block=True, nfp_wed_cutoff=720, **SM_POST),
+    "N6-news-pool-mapping": dict(news_seq_study=True, **SM_POST),
+    "X10-pre-nfp-noon-exit": dict(event_eve_noon=True, am_exit=0, **SM_POST),
+    "B4-prefer-calendar-driven-manipulation": dict(news_sweep_min=60, **SM_POST),
+    "new-am-search-timebox-60min": dict(am_search_minutes=60, **SM_POST),
+    "new-am-search-timebox-60min_90": dict(am_search_minutes=90, **SM_POST),
+    "new-am-search-timebox-60min_include_sb": dict(am_search_minutes=60, am_search_sb="include", sb_setup=True, **SM_POST),
+    "N9-macro-failure-any-macro": dict(macro_fail_windows="all", **SM_POST),
+    "N9-macro-failure-any-macro_day": dict(macro_fail_windows="all", macro_fail_scope="day", **SM_POST),
+    "T7-macro-start-only-all": dict(macro_gate=True, macro_by="start", **SM_POST),
+    "T7-macro-start-only-all_ext": dict(macro_gate=True, macro_by="start", macro_gate_set=("0950", "1050", "1150", "1330", "1450", "1515"), **SM_POST),
+    "T7-no-macro-trending": dict(macro_gate=True, macro_by="start", macro_trend_off=True, **SM_POST),
+    "T8-lunch-raid-target": dict(lunch_raid="recent", lunch_raid_wait=True, lunch_trail_guard=True, **SM_POST),
+    "T8-lunch-raid-target_am_low": dict(lunch_raid="am_low", lunch_raid_wait=True, **SM_POST),
+    "T8-lunch-raid-target_post_news": dict(lunch_raid="post_news", lunch_raid_wait=True, **SM_POST),
+    "T8-lunch-raid-target_first_of": dict(lunch_raid="first_of", lunch_raid_wait=True, lunch_trail_guard=True, **SM_POST),
+    "T8-lunch-entries-switch": dict(lunch_macro_entry=True, lunch_first_rung_only=True, **SM_POST),
+    "T8-lunch-length-am-speed": dict(lunch_by_speed=True, **SM_POST),
+    "T9-pm-start-time_800": dict(pm_array_from=800, **SM_POST),
+    "T9-pm-start-time_810": dict(pm_array_from=810, **SM_POST),
+    "T9-pm-start-time_840": dict(pm_array_from=840, pm_1400_disp=True, **SM_POST),
+    "T5-am-session-to-noon": dict(am_session="0830_1200", **SM_POST),
+    "T5-am-session-to-noon_trend_end": dict(am_session="0830_1200", am_trend_end=660, **SM_POST),
+    "N5-pre0930-entries": dict(post_news_fade=True, pre_draw_done_am=True, pre_0900=True, htf_targets=("1h", "4h", "D"), **SM_POST),
+    "new-premarket-difficult-days": dict(pre_0700_hard_days=True, hard_day_one_trade=True, **SM_POST),
+    "T4-no-early-entry-conditions": dict(pre_entry_guard=True, pre_0700=True, pre_0900=True, **SM_POST),
+    "M9-fomc-1430": dict(fomc_judas=True, fomc_judas_end=870, fomc_pm_from=885, **SM_POST),
+    "new-10min-wait-choppy": dict(chop_wait_bars=2, sloppy_tests=("chop",), sloppy_mode="off", **SM_POST),
+}
+DECISIONS.update(_NCT_DECISIONS)
+
+
+def news_sequence_rows(df, hist_days, p=None, symbol="ES"):
+    """N6-both-pools-news / N6-news-pool-mapping (study flags --news-pools / news_seq_study): one row per release day of `df` (a multi-day frame): the pools marked at the bar before each
+    08:30 / 10:00 / 14:00 release (nct2.news_sequence) and which was taken first. No trades - the sequence of the release minute and the minute of each pool. Returns a DataFrame."""
+    from . import nct2, strategy as S
+    p = p or Params(news_seq_study=True)
+    rows = []
+    for d, g in df.groupby(df.index.date):
+        hist = [x for x in hist_days if x.index[0].date() < d]
+        ctx = S.DayCtx(g, d, hist, 5)
+        ctx.hist = hist
+        ctx.sides_map = {1: S.Side(1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, 0.0), -1: S.Side(-1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, 0.0)}
+        for R in nct2.NC.releases(d, p):
+            q = nct2.news_sequence(ctx, p, R, len(ctx.t) - 1)
+            if q is not None:
+                rows.append(dict(symbol=symbol, date=d, release=R, **{k: v for k, v in q.items() if k not in ("fvg",)}, fvg=q["fvg"]))
+    return pd.DataFrame(rows)
+
+
+def news_pool_rows(df, hist_days, p=None, symbol="ES"):
+    """N6-news-pool-mapping (study flag --news-pools): for FOMC / jobs / Fed-chair days one row per release: the untaken 5m / 15m pools within 1 x ADR5 marked one minute before it
+    (nct2.pool_study) and which side's nearest pool was taken first (+1 buy side / -1 sell side / 0), whether the other followed. No trades."""
+    from . import calendar as CAL, nct2, strategy as S
+    from claude_hf.daytypes import events
+    p = p or Params(news_seq_study=True)
+    rows = []
+    for d, g in df.groupby(df.index.date):
+        if not (events(d) & {"fomc", "jobs"} or d in CAL.FED_CHAIR or d in CAL.FED_CHAIR_EXTRA):
+            continue
+        hist = [x for x in hist_days if x.index[0].date() < d]
+        ctx = S.DayCtx(g, d, hist, 5)
+        ctx.hist = hist
+        for R in nct2.NC.releases(d, p):
+            q = nct2.pool_study(ctx, p, R, len(ctx.t) - 1)
+            if q is not None:
+                rows.append(dict(symbol=symbol, date=d, release=R, **q))
+    return pd.DataFrame(rows)
+
+
+def stage_label_rows(df, hist_days, p=None, symbol="ES"):
+    """N3-fomc-two-stage (fomc_stage_study): one row per FOMC (14:00) and jobs (08:30) day with the stage-2 label A / B / none at release + 60 minutes."""
+    from . import nct2, strategy as S
+    from claude_hf.daytypes import events
+    p = p or Params(fomc_stage_study=True)
+    rows = []
+    for d, g in df.groupby(df.index.date):
+        hist = [x for x in hist_days if x.index[0].date() < d]
+        ctx = S.DayCtx(g, d, hist, 5)
+        ctx.hist = hist
+        ctx.sides_map = {1: S.Side(1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, 0.0), -1: S.Side(-1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, 0.0)}
+        for R, on in ((840, "fomc" in events(d)), (510, "jobs" in events(d))):
+            if on:
+                q = nct2.stage_label(ctx, p, R, len(ctx.t) - 1)
+                if q is not None:
+                    rows.append(dict(symbol=symbol, date=d, release=R, **q))
+    return pd.DataFrame(rows)
+
+
+def main_news_sequence(out="runs/mentorship", symbol="ES", tf=5, start="2023-01-01", end="2026-12-31"):
+    """Writes news_sequence.csv (news_seq_study / --news-pools): the pre-release pools of every release day and the order they were taken in."""
+    df = B.load(symbol, tf, source="databento")
+    df = df[(df.index >= pd.Timestamp(start, tz=B.NY)) & (df.index < pd.Timestamp(end, tz=B.NY))]
+    days = [g for _, g in df.groupby(df.index.date)]
+    rows = news_sequence_rows(df, days, Params(news_seq_study=True), symbol)
+    Path(out).mkdir(parents=True, exist_ok=True)
+    rows.to_csv(f"{out}/news_sequence.csv", index=False)
+    news_pool_rows(df, days, Params(news_seq_study=True), symbol).to_csv(f"{out}/news_pools.csv", index=False)
+    stage_label_rows(df, days, Params(fomc_stage_study=True), symbol).to_csv(f"{out}/fomc_stage.csv", index=False)
+    return rows
 
 
 
