@@ -1111,7 +1111,7 @@ def order_gate(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str, 
         r = htf_sibi_gate(ctx, sd, sw, i, p, entry, lvt, lvx)
         if r:
             return r
-    if p.lc_tag or p.lc_reentry:
+    if p.lc_tag or p.lc_reentry or p.lc_second_swipe:
         lc = lc_reversal(ctx, sd, sw, i, p, cf, htf)
         if lc:
             tags["lc_reversal"] = True

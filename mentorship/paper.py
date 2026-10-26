@@ -18,6 +18,36 @@ from .strategy import Params, run_day
 SCHWAB_1M_DAYS = 48        # Schwab keeps roughly 48 calendar days of 1-minute bars
 
 
+class StopAckWatch:
+    """new-no-working-stop-close-exit (093 ~00:14:12; Params.stop_ack_sec, management_exits #3/3). The decision logic of a position whose protective stop was not confirmed at the broker (paper / live
+    layer only - the backtest is unaffected, and this package places no order: the caller feeds the facts and acts on the answers). `tick(now, acked)` marks the position `unprotected` once
+    `stop_ack_sec` seconds passed since the entry fill without an acknowledgement; then `ladder()` is ONE 100 % rung at rung 1 (the nearby liquidity objective where the first partial would have gone,
+    the far target is not held for) and `adverse_close(close)` is True when a bar CLOSES against the entry by more than one tick (the caller exits at market). With stop_ack_sec 0 it is inert."""
+
+    def __init__(self, p: Params, side: str, entry: float, levels, fracs, filled_at):
+        self.p, self.side, self.entry = p, side, float(entry)
+        self.levels, self.fracs = list(levels), list(fracs)
+        self.filled_at = pd.Timestamp(filled_at)
+        self.unprotected = False
+
+    def tick(self, now, acked: bool) -> bool:
+        if self.p.stop_ack_sec > 0 and not acked and not self.unprotected and (pd.Timestamp(now) - self.filled_at).total_seconds() >= self.p.stop_ack_sec:
+            self.unprotected = True
+        return self.unprotected
+
+    def ladder(self):
+        """(levels, fracs) to work: unchanged while protected; one 100 % rung at rung 1 once unprotected."""
+        if self.unprotected and self.levels:
+            return [self.levels[0]], [1.0]
+        return list(self.levels), list(self.fracs)
+
+    def adverse_close(self, close: float) -> bool:
+        if not self.unprotected:
+            return False
+        s = 1.0 if self.side == "long" else -1.0
+        return bool(s * (self.entry - float(close)) > self.p.tick + 1e-12)
+
+
 def history_days(minutes: int) -> int:
     """Calendar days to fetch (review fix): at least backtest.HIST_DAYS + 1 sessions, like the
     backtest (IPDA 40/60, ipda_eq_day, org_days > 5); 1-minute bars are capped by Schwab."""

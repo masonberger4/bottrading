@@ -2409,6 +2409,53 @@ _ME2_DECISIONS = {
 }
 DECISIONS.update(_ME2_DECISIONS)
 
+# --- caption-gap pass, management_exits #3/3 (rulebook_gaps/management_partials_trailing_exits.md 109 .. 132, models_setups_entries.md 57 / 65 / 118 / 128 / 199, session_day_week_stops_frequency.md 1 .. 30,
+# stops_sizing_scaling_in.md 41 / 42, times_sessions_macros.md 8 / 16 / 25; me3.py): one variant per switch, the name prefix = the gap id ---------------------------------------------------------------
+_ME3_DECISIONS = {
+    "new-implied-range-behaviour": dict(implied_range=True, time_stop_min=10, **SM_POST),
+    "new-rolling-bpr-ceiling": dict(ladder_trail="rolling_bpr", **SM_POST),
+    "new-laggard-slow-delivery": dict(laggard_mult=2.0, time_stop_min=10, meander_bars=6, **SM_POST),
+    "new-volume-divergence-exit": dict(vol_div_exit=True, vol_div_ratio=1.0, **SM_POST),
+    "D16-am-trade-held-into-pm": dict(day_mode_no_am_exit=True, day_mode_auto=True, **SM_POST),
+    "D16-am-trade-held-into-pm_runner": dict(am_runner_hold_to=900, **SM_POST),
+    "D16-am-trade-held-into-pm_day": dict(day_mode_no_am_exit=True, trade_type="day", **SM_POST),
+    "D16-big-range-day-runner-past-noon": dict(explosive_runner=True, explosive_frac=1.25, explosive_until=900, **SM_POST),
+    "X11-last-hour-target-hit-done": dict(last_hour_target_done=True, **SM_POST),
+    "X11-two-stage-pm-delivery": dict(pm_two_stage=True, time_stop_min=20, **SM_POST),
+    "X10-cc-day-trade-exit-1400": dict(cc_day_exit=840, turtle_soup="cc_limit", **SM_POST),
+    "X10-london-time-of-day-scaleouts": dict(london_tod_partials=True, london_tod_frac=0.25, london_kz=True, **SM_POST),
+    "new-scalp-fixed-1to1-2h": dict(scalp_mode="fixed_1to1", scalp_max_min=120, sloppy_mode="scalp", **SM_POST),
+    "new-no-close-to-reenter": dict(abort_blocks_side=True, fvg_abort=True, reentry_half=True, **SM_POST),
+    "new-no-working-stop-close-exit": dict(stop_ack_sec=10, **SM_POST),
+    "new-drawdown-recovery-exit": dict(recovery_exit="new", reentry_half=True, **SM_POST),
+    "new-drawdown-recovery-exit_experienced": dict(recovery_exit="experienced", reentry_half=True, **SM_POST),
+    "T13-reclaim-0930-open-expansion": dict(open_reclaim_runner=True, **SM_POST),
+    "new-reentry-after-breakaway-fill": dict(reentry_breakaway=True, reentry_half=True, **SM_POST),
+    "M12-ote-failure-turtle-soup": dict(ote_fail_ts=True, ote="limit", reentry_half=True, **SM_POST),
+    "X13-reentry-mechanics": dict(reentry_mode="cc_ob", reentry_cc_entry="high", reentry_half=True, reentry_stop="ob_low", **SM_POST),
+    "X13-reentry-mechanics_open": dict(reentry_mode="cc_ob", reentry_cc_entry="open", reentry_half=True, reentry_stop="ob_low", **SM_POST),
+    "new-london-close-second-swipe-reentry": dict(lc_second_swipe=True, lc_tag=True, **SM_POST),
+    "X13-am-fail-no-reverse-pm-reset": dict(lost_side_scope="session", am_idea_fail=True, pm_reset_t=840, reverse_after_loss=False, **SM_POST),
+    "D18-reentry-count-max-2": dict(reentry_half=True, reentry_count_max=2, reentry_ob_stop="full", **SM_POST),
+    "N3-021-citation-misread": dict(runner_stop_no_reentry=True, runner_frac_done=0.75, reentry_after_trail_win=True, trail=True, **SM_POST),
+    "L15-chop-micro-scalps": dict(sloppy_mode="scalp", chop_scalp_pts=2.5, chop_scalp_max=2, chop_scalp_day_pts=5.0, **SM_POST),
+    "X7-three-failures-flatten-open-trade": dict(session_fail_flatten=True, session_stop_after_fails=3, pd3_pm_window=True, **SM_POST),
+    "X14-new-trader-stop-when-day-positive": dict(trader_mode="new", new_day_stops=True, **SM_POST),
+    "X14-new-trader-stop-when-day-positive_experienced": dict(pm_after_am_win="draw_open", pm_recover_loss=True, **SM_POST),
+    "X14-beginner-template-numbers": dict(beginner_template=True, beginner_target_pts=12.5, **SM_POST),
+    "X14-conflicted-htf-one-entry": dict(conflicted_mode="one", **SM_POST),
+    "X14-conflicted-htf-one-entry_skip": dict(conflicted_mode="skip", **SM_POST),
+    "X14-conflicted-htf-one-entry_one_win": dict(conflicted_mode="one_win", **SM_POST),
+    "new-late-week-close-flat": dict(late_week_flat=True, late_flat_t=900, recover_trail=True, reentry_half=True, **SM_POST),
+    "E7-reduce-size": dict(abort_mode="half", abort_frac=0.5, fvg_abort=True, **SM_POST),
+    "X8-offside-flip": dict(offside_flip=True, **SM_POST),
+    "T10-1550-pool-timing": dict(lh_pool_timing=True, lh_keep_frac=0.1, lh_late_ext_pts=3.0, last_hour_own_slot=True, pm_last_hour_model=True, **SM_POST),
+    "T8-lunch-trending-days": dict(am_exit_trend_hold=True, **SM_POST),
+    "new-hold-pre0930-through-open": dict(pre_hold_open=True, pre_0900=True, **SM_POST),
+}
+DECISIONS.update(_ME3_DECISIONS)
+
+
 
 def exit_buffer_grid(base: Params | None = None) -> list:
     """X2-exit-buffer-range (070 ~1:05:10): the exit-buffer grid - exit_before_pts in (0.25, 0.5, 1.0, 1.5) crossed with exit_mode in ("split", "before") (so the buffer also hits the pools: 070's target was a pool). Eight Params; every other field of `base` unchanged."""

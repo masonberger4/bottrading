@@ -429,7 +429,10 @@ def exits(ctx, sd, pos, tr, i: int, ts, p, state, extras: bool = False) -> None:
             pos["off_ok"] = True                                                  # smashed through: the test passed
         elif h >= lv:
             pos["off_arm"] = True                                                 # reached it, bodies respected it
+            pos.setdefault("off_arm_i", i)                                        # (caption-gap X8-offside-flip: the reaction candles start here)
         elif pos.get("off_arm") and c < basis:
+            if p.offside_flip and state is not None:
+                state["flip_req"] = dict(sign=sd.sign, n=int(pos["left"]), arm_i=int(pos.get("off_arm_i", i)), session=tr.session)       # caption-gap X8-offside-flip (085 ~00:14:05): run_day reverses at the next open
             _exit(tr, sd, ts, c, pos["left"], "offside", pos)
             return
     # --- X8g meander
@@ -456,7 +459,7 @@ def exits(ctx, sd, pos, tr, i: int, ts, p, state, extras: bool = False) -> None:
                 if not pos["left"]:
                     return
     # --- X9 time stop
-    if ((p.time_stop_min or p.time_stop_bars) and not pos["t1_done"] and not held and not extras
+    if ((p.time_stop_min or p.time_stop_bars) and not pos["t1_done"] and not held and not extras and not pos.get("ts_off")      # (caption-gap new-implied-range-behaviour / X11-two-stage-pm-delivery: pos["ts_off"])
             and not (p.htf_no_time_stop and S._TP1.htf_entry(tr))):         # caption-gap A22-array-reuse (cc04_001 ~14:22): a W / M array may pause - the 1m X9 time stop does not apply
         frac = time_stop_frac(p, pos.setdefault("ts", {}), nbars=i - fi + 1, elapsed=(t + tf) - pos["fill_t"],
                               best=pos["best"], basis=basis,
@@ -523,6 +526,23 @@ def _abort(ctx, sd, pos, tr, i: int, ts, p) -> bool:
     m = max(1, p.fvg_abort_tf // tf)                           # engine bars per 5-minute candle
     t = ctx.t[i]
     c, l = sd.c[i], sd.l[i]
+    if p.abort_mode == "half":                                  # caption-gap E7-reduce-size (046 ~01:33:39): the first body close beyond the entry gap cuts abort_frac of the units at the close and leaves the stop; the next one closes the rest
+        if (t + tf) % p.fvg_abort_tf == 0 or m == 1:
+            j0 = i - m + 1
+            if j0 > pos["fill_i"]:
+                beyond = (max(sd.o[j0], c) < pos["fvg_bottom"]) if p.fvg_abort_body else (c < pos["fvg_bottom"])
+                S._ME3.hit("eval_abort_half")
+                if beyond and not pos.get("abort_half_done"):
+                    pos["abort_half_done"] = True
+                    pos["no_adds"] = True
+                    pos["add"] = None
+                    _exit(tr, sd, ts, c, cut_qty(pos["left"], p.abort_frac, p), "abort_half", pos)
+                    S._ME3.hit("abort_half")
+                    return not pos["left"]
+                if beyond:
+                    _exit(tr, sd, ts, c, pos["left"], "abort", pos)
+                    return True
+        return False
     arm = pos.get("abort_arm")                                 # (armed candle end bar, armed low)
     if arm is not None and i > arm[0]:
         if l < arm[1] - 1e-9:
@@ -616,7 +636,7 @@ def stops_from(p, trades, ts=None) -> tuple:
       stop_day            X12 / Ep04.13 the trade itself ended the day (objective hit, final level before the cut-off)
       loss_ends_morning   X13a (001 ~46:57-48:43) an AM-family loss ends the AM family
       session_stop_after_fails  X7c (044 ~1:52:49) N failed trades in a row in a session end that session
-      fomc_no_reentry  N3 / N3.5 (021 ~43:56) a loss on an FOMC day ends the day (every session, every model)"""
+      fomc_no_reentry  N3 / N3.5 (a design choice, no source) a loss on an FOMC day ends the day (every session, every model)"""
     closed = sorted((t for t in trades if t.exits and (ts is None or t.exits[-1][0] <= ts)),
                     key=lambda t: t.exits[-1][0])
     day, sess = None, {}

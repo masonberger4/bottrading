@@ -359,6 +359,8 @@ def week_state(rows: list, d) -> dict:
     mine = [r for r in rows if r["date"].isocalendar()[:2] == wk and r["date"] < d]
     fh = sum(1 for r in mine if r.get("final_hit"))
     out = dict(n=len(mine), net=float(sum(r["net"] for r in mine)), final_hits=fh, all_final=bool(mine) and fh == len(mine))
+    if any("flat_week" in str(r.get("exit_reason", "")) for r in mine):
+        out["flat_done"] = True                                  # caption-gap new-late-week-close-flat (cc02_005 ~00:08:05): a recovery re-entry closed the week flat - no more trades this week
     if any("htf_stall" in str(r.get("exit_reason", "")) for r in mine):
         out["reversal_watch"] = _ME2.week_watch(rows, d)         # caption-gap X8-profitable-stall-exit (cc07_007 ~00:22:33): the directions with no new setup the session after an htf_stall exit
     return out

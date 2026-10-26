@@ -901,8 +901,9 @@ def ob_low_order(ctx, sd, i: int, p, session: str, risk_mult: float):
     for k in range(si + 1, i):
         if not sd.c[k] < sd.o[k] or not sd.h[k + 1:i + 1].max() > sd.h[k]:
             continue
-        entry, stop = float(sd.o[k]), float(sd.l[k]) - p.pad
-        if not entry < sd.c[i] or entry - stop < p.min_risk_pts * p.es_pt:
+        cc_ = p.reentry_mode == "cc_ob" and p.reentry_cc_entry == "high"          # caption-gap X13-reentry-mechanics: the limit at the validated candle's HIGH (the variant: its open), the stop under its whole low
+        entry, stop = (float(sd.h[k]) if cc_ else float(sd.o[k])), float(sd.l[k]) - p.pad
+        if (not entry < sd.c[i] and not cc_) or entry - stop < p.min_risk_pts * p.es_pt:
             continue
         o = S._SM4._order(ctx, sd, i, p, session, risk_mult, "ob_low", entry, stop, level=entry, ext=float(sd.l[k]), ext_i=int(k), broke=i, fvg_bottom=float(sd.l[k]),
                           lv=("ob_low",), sm7=dict(kind="ob_low"))

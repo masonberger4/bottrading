@@ -1309,6 +1309,9 @@ def after_close(ctx, pos, tr, lost, net: float, done: dict, key: str, state: dic
         hit("reverse_eval")
     if lost is not None and p.reentry_ts:
         hit("ts_re_eval")
+    if state.get("no_win_reentry"):
+        net_pos = False                                      # caption-gap N3-021-citation-misread (021 ~00:44:08): a runner stopped after the bulk was banked ends the move - no win / trail-win re-entry
+        hit("runner_stop_no_reentry")
     if (p.reentry_after_win or p.breakaway_chase) and net_pos and re.fullmatch(r"t\d+", reason) and not tr.final_hit and untouched and state.setdefault("win_n", {}).get(sess, 0) < p.reentry_win_max:
         state["win_n"][sess] = state["win_n"].get(sess, 0) + 1
         re7[sess] = dict(kind="win", side=tr.side, exit_i=i, fill_i=fill_i, draw=float(draw), key=key, pending=True, ext=float(pos["ext"]))

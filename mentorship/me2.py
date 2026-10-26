@@ -852,6 +852,8 @@ def _week_range_ok(ctx, i: int) -> bool:
 def _stall_htf(ctx, sd, pos, tr, d, i, ts, p, c, avg) -> bool:
     """99 X8-profitable-stall-exit: in a fast intraweek move (week range >= 1.5 x ADR5, Monday / Tuesday) a trade in profit inside a daily / weekly / monthly array that makes no new extreme for
     stall_at_htf_bars bars is closed at the close (the weekly reversal_watch flag is backtest.week_state)."""
+    if pos.get("stall_off"):
+        return False                                                    # (caption-gap X11-two-stage-pm-delivery: suspended until 15:00 on a two-session PM)
     if not d.get("htf_stall_on"):
         d["htf_stall_on"] = _week_range_ok(ctx, i)
     if not d["htf_stall_on"]:
@@ -876,6 +878,8 @@ def _stall_htf(ctx, sd, pos, tr, d, i, ts, p, c, avg) -> bool:
 def _stall_exits(ctx, sd, pos, tr, d, i, ts, p, o, h, l, c) -> bool:
     """55 X3-runner-stall-exits: active once >= 75 % is closed and stall_bars bars passed without a new high. (a) a trade back into the body of the most recent down-close candle = 1 unit off
     (once); (b) a poke above a relative equal high of the last 30 bars followed by a close back below it closes the rest (side space, as the spec's test)."""
+    if pos.get("stall_off"):
+        return False                                                    # (caption-gap X11-two-stage-pm-delivery)
     hit("eval_stall_exits")
     if not (_closed(pos) >= 0.75 - 1e-9 and d["nohi"] >= p.stall_bars and h <= d["hi"] + 1e-9):
         d["stall_on"] = False                                           # (review fix: evaluated on every bar - a new extreme resets the stall counter and switches the exits off again)

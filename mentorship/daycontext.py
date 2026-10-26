@@ -473,6 +473,8 @@ def _week_rules(P: DayPlan, ctx, d: date, p, hist, eth, a5, week: dict) -> None:
         P.info["week_left"] = left
         if left <= 0:
             P.block(None, "week_cap")
+    if p.late_week_flat and week.get("flat_done"):
+        P.block(None, "week_flat_done")                # caption-gap new-late-week-close-flat: the week was closed flat by a recovery re-entry
     # X15d: the weekly objective already delivered by the completed sessions -> done for the week
     if p.week_done_on_draw != "off":
         done = objective_delivered(ctx, hist, d, p, eth, None)

@@ -182,7 +182,7 @@ class Params:
     leg_pd_at: str = "fill"        # check it when the order is armed ("arm") or, as ICT waits for
                                    # the retrace, against the leg high reached before the fill ("fill")
     am_exit: int = 720             # D16: AM leftovers out at 12:00 (minutes); 0 = hold to flatten
-    pm_done_by: int = 0            # D16 test: PM out at this time once T1 filled (900 = 15:00)
+    pm_done_by: int = 0            # D16 test: PM out at this time once T1 filled (900 = 15:00) - the 15:00 DEADLINE variant, not ICT's 006 rule (that is last_hour_target_done: a target hit from 15:00 closes everything at the target)
     breaker_zone: str = "range"    # owner #14 (D6): Ep 02/05 (and Ep 07 OB, [our interpretation]) use the
                                    # breaker candle's full high-low range; "body" = Ep 01 switch;
                                    # "leg" = the A->B leg (070), "last" = the last up-close candle
@@ -1146,7 +1146,7 @@ class Params:
     loss_ends_morning: bool = False      # X13a: an AM-family loss ends the morning (AM, SB, pre-open, Ma Deuce); the PM is open
     reentry_gate: bool = False           # X13b (070 ~38:41; 085 ~27:21): reentry_half only when the idea is intact - same side, the
                                          # draw not delivered, a RESTORED sweep and an FVG formed after the stop, not on FOMC
-    reentry_fomc_ok: bool = False        # X13b (021 ~43:56): a re-entry on an FOMC day (default: none)
+    reentry_fomc_ok: bool = False        # X13b: a re-entry on an FOMC day (default: none; the 021 citation was wrong - see fomc_no_reentry)
     reentry_risk: str = "budget"         # D18: the re-entry risks half of the standard budget ("budget") or half of the losing trade's
                                          # own risk ("loss")
     reentry_lock_r: float = 0.0          # D18 (cc02_005 ~11:33): at this R the re-entry's stop moves to the level that keeps the
@@ -1207,7 +1207,7 @@ class Params:
     skip_pre_fomc: bool = False          # filters.md: the day before FOMC is skipped
     fomc_after_am_block: bool = False    # N3 (095 ~51:27): the day after FOMC sit still in the AM
     skip_post_fomc_am: bool = False      # N3.4 / D8: the same switch in the D8 spelling (either blocks)
-    fomc_no_reentry: bool = True         # N3 / N3.5 (021 ~43:56): a loss on an FOMC day ends the day for every session and model
+    fomc_no_reentry: bool = True         # N3 / N3.5: a loss on an FOMC day ends the day for every session and model - a design choice resting on N3's 14:00-14:45 observation-only rule and the FOMC PM block, NO source (caption-gap N3-021-citation-misread: 021 ~43:56 shows an AM trade that day)
     fomc_observe: str = "off"            # N3.1 (021 ~2:40-6:18): "defer" = scan 14:00 .. fomc_pm_from but hold the order until
                                          # then ("judas" = defer + the M9.2 side rule); "off" = the PM stays blocked
     fomc_pm_block_from: int = 0          # N3.1: the FOMC PM is open before this minute (default 0: blocked from the PM start,
@@ -2981,6 +2981,62 @@ class Params:
     urgency_stop_pts: float = 1.0
     urgency_bulk: bool = False           # new-no-down-close-urgency review fix: with only two rungs (no rung between T1 and the last to shrink) the T1 fill also closes everything above the runner share at once (the first build's behaviour; the spec has no such exit - owner question)
 
+    # --- caption-gap pass: management_exits #3/3 (digests/rulebook_gaps/management_partials_trailing_exits.md 109 .. 132, models_setups_entries.md 57 / 65 / 118 / 128 / 199, session_day_week_stops_frequency.md 1 .. 30, stops_sizing_scaling_in.md 41 / 42, times_sessions_macros.md 8 / 16 / 25; me3.py; every new switch off unless noted; the gap id is the comment's first word) ---------------
+    implied_range: bool = False          # new-implied-range-behaviour (045 ~03:02:00): the range sweep extreme .. final level: no X9 time stop between its 25 % and 75 % lines; a trade under the latest pivot low formed above 75 % / under the last bullish OB body halves the position (ir_top_raid)
+    laggard_mult: float = 1.0            # new-laggard-slow-delivery (090 ~01:49:28): a trade taken in the index moving in sympathy after the leader reached its draw runs time_stop_min / meander_bars x this (test 2.0); tag laggard
+    vol_div_exit: bool = False           # new-volume-divergence-exit (cc10_006 ~00:06:00; BOND futures volume, a test switch - not for SPY / ES without validation): a new session extreme on less than vol_div_ratio x the volume of the bar behind the prior extreme = half off
+    vol_div_ratio: float = 1.0
+    day_mode_no_am_exit: bool = False    # D16-am-trade-held-into-pm (064 ~01:40:54; 026 ~01:32:26): a day-mode position (trade_type "day" / day_mode_auto) is exempt from am_exit (and the pending noon guard); flat by the session flat time
+    am_runner_hold_to: int = 0           # ... after >= 85 % off at 12:00 at most 2 lots stay on the current stop and close at this minute (900 = 15:00; 085 ~00:32:13; 0 = off)
+    explosive_runner: bool = False       # D16-big-range-day-runner-past-noon (cc09_006 ~00:12:51; cc10_014 ~00:03:28): an explosive day (range >= ADR5 by 10:00 or >= explosive_frac x ADR5 by 11:00, the extreme made within the last 15 bars) keeps its runner past 12:00 to explosive_until
+    explosive_frac: float = 1.25         # [our threshold]
+    explosive_until: int = 900
+    last_hour_target_done: bool = False  # X11-last-hour-target-hit-done (006 ~00:41:27): from 15:00 a fill of any rung closes everything left at that rung (lh_target); pm_done_by stays the 15:00-deadline variant (NOT ICT's 006 rule)
+    pm_two_stage: bool = False           # X11-two-stage-pm-delivery (cc10_014 ~00:04:52): a PM trade on a two-session day keeps its time stop and stall exits suspended until 15:00 while the far (non-pool) rung is unhit and the close holds above the entry array's far edge
+    cc_day_exit: int = 0                 # X10-cc-day-trade-exit-1400 (cc03_001 ~00:17:22): a Core Content model trade (cc_* tags) is closed at the first bar close at or after this minute and no cc order is armed from then on (840 = 14:00; 0 = off)
+    london_tod_partials: bool = False    # X10-london-time-of-day-scaleouts (cc08_001 ~00:18:01; cc08_007 ~00:18:59): a London position takes london_tod_frac at 04:55, again at 06:55 and on the first new extreme in 10:00-11:00
+    london_tod_frac: float = 0.25
+    scalp_mode: str = ""                 # new-scalp-fixed-1to1-2h (cc09_003 ~00:04:51; cc09_006 ~00:03:58): "fixed_1to1" - a scalp order (sloppy_mode "scalp" / N8 scalp day) has ONE rung at the entry + its risk, no BE / trail / adds, and a time exit scalp_max_min after the fill
+    scalp_max_min: int = 120
+    abort_blocks_side: bool = False      # new-no-close-to-reenter (085 ~00:13:50): an abort-set exit (abort, ce_close, breaker_mt, pd3*, chop_close, htf_stall, time, slow_ref, lost_hi, hh_low, stall_reh) abandons the direction for the leg: no same-direction order until a new MSS forms after the close; no reentry_half
+    stop_ack_sec: int = 0                # new-no-working-stop-close-exit (093 ~00:14:12; live / paper only): no stop acknowledgement within this many seconds of the entry fill = the position is unprotected (the ladder collapses to one 100 % rung at rung 1; an adverse close exits at market; 0 = off, test 10)
+    recovery_exit: str = ""              # new-drawdown-recovery-exit (cc02_005 ~00:11:33): a re-entry after a loss: "new" = close everything once the open profit covers the unrecovered loss and stand aside; "experienced" = stop to +2R - 1 tick at +2R, one rung at +3R
+    open_reclaim_runner: bool = False    # T13-reclaim-0930-open-expansion (055 ~00:21:00): a close over the 09:30 open after the session low formed under it = the day is expanding: the ladder's last fraction is kept as a runner, the breakeven waits for the next rung
+    reentry_breakaway: bool = False      # new-reentry-after-breakaway-fill (062 ~00:38:24): a loss whose breakaway entry gap filled completely re-enters only after price reached the HTF level / prior FVG, then a new MSS + FVG (half risk)
+    ote_fail_ts: bool = False            # M12-ote-failure-turtle-soup (cc01_004 ~00:45:27): an OTE entry stopped under a prior low arms a turtle-soup buy at that low (a close back above within ts_back_bars), half risk
+    reentry_mode: str = ""               # X13-reentry-mechanics (cc02_005 ~00:04:02): "cc_ob" - the loss re-entry order is the next CC-validated down-close candle: a limit at its high (reentry_cc_entry "high") or open, the stop under its whole low, half risk
+    reentry_cc_entry: str = "high"
+    lc_second_swipe: bool = False        # new-london-close-second-swipe-reentry (cc09_005 ~00:34:08): a stopped AM trade whose sweep extreme sat in an HTF array: a second sweep of it inside the same array in 10:00-12:00 arms one more try (T3 lc_reentry machinery), half risk
+    lost_side_scope: str = "day"         # X13-am-fail-no-reverse-pm-reset (001 ~00:48:43): with reverse_after_loss off, "session" lets the lost-side block lapse at the PM reset (pm_reset_t) instead of lasting the day
+    am_idea_fail: bool = False           # ... the AM idea also fails when price runs the opposite session / pre-market pool with displacement before any fill: the AM is done, a pending AM order is cancelled
+    pm_reset_t: int = 810                # ... the PM reset minute (13:30; 001 says 14:00 = 840)
+    reentry_count_max: int = 1           # D18-reentry-count-max-2 (cc02_005 ~00:13:41): same-direction loss re-entries per session, each at reentry_risk_mult ** n (the spec's name reentry_max is the turtle-soup re-entry cap since setups_models #7/7); test 2
+    reentry_ob_stop: str = "mt"          # ... "full" = the re-entry stop below the whole OB (the built reentry_stop "ob_low" order)
+    runner_stop_no_reentry: bool = False  # N3-021-citation-misread (021 ~00:44:08): a runner stopped after >= runner_frac_done of the units were banked ends the move (no win / trail-win re-entry); the final rung ends the session and its Silver Bullet key
+    runner_frac_done: float = 0.75
+    chop_scalp_pts: float = 0.0          # L15-chop-micro-scalps (010 ~01:15:51): with sloppy_mode "scalp" the scalp's only exit is the nearest pool within this many pts, which is also its minimum room (test 2.5)
+    chop_scalp_max: int = 2
+    chop_scalp_day_pts: float = 5.0
+    session_fail_flatten: bool = False   # X7-three-failures-flatten-open-trade (044 ~01:54:41): the third failed array of the session closes the open position at the bar close (pd3_session), cancels orders, ends the family and its SB key
+    pd3_pm_window: bool = False          # ... after that the PM window is 13:45-14:30
+    new_day_stops: bool = False          # X14-new-trader-stop-when-day-positive (065 ~04:16; 102 ~01:51:30): with trader_mode "new": stop once the day is net positive; AM or PM, not both
+    pm_after_am_win: str = "off"         # ... experienced: "draw_open" = a PM entry after an AM win only while the day's HTF draw is untouched (056 ~08:19)
+    pm_recover_loss: bool = False        # ... recovering a losing AM in the PM (experienced only; forced off in trader_mode "new")
+    beginner_template: bool = False      # X14-beginner-template-numbers (095 ~00:47:08): preset - 1 contract, one setup, a single exit at beginner_target_pts, the stop at most 12 handles (max_stop_pts), trader_mode "new" with new_day_stops
+    beginner_target_pts: float = 12.5
+    conflicted_mode: str = "off"         # X14-conflicted-htf-one-entry (091 ~00:10:44): a conflicted HTF day (both sides valid / inside a daily BISI-SIBI): "skip" / "one" (one entry then done) / "one_win" (done after the first win)
+    late_week_flat: bool = False         # new-late-week-close-flat (cc02_005 ~00:08:05): a recovery re-entry that brings the week back to >= 0 on Thu / Fri or from late_flat_t is closed there and the week is done
+    late_flat_t: int = 900               # [our interpretation: 15:00]
+    recover_trail: bool = False          # ... otherwise the stop trails to the price where the week's P&L is 0
+    abort_mode: str = "full"             # E7-reduce-size (046 ~01:33:39): "half" - the confirmed X6 abort closes abort_frac of the units, the stop stays, no adds; a second confirmation closes the rest
+    abort_frac: float = 0.5
+    offside_flip: bool = False           # X8-offside-flip (085 ~00:14:05): an X8e offside close reverses at the next open with the same units (stop under the reaction bodies / the defending wick CE, nearest pool), overriding the no-reversal lock once
+    lh_pool_timing: bool = False         # T10-1550-pool-timing (027 ~00:49:36; 056 ~00:19:28): last-hour pool rung before 15:50 = all but lh_keep_frac off + BE; from 15:50 the runner (lh_keep_frac) goes lh_late_ext_pts beyond the pool; the MOC target before 15:45 ends the LH slot
+    lh_keep_frac: float = 0.1
+    lh_late_ext_pts: float = 3.0         # [027 example]
+    am_exit_trend_hold: bool = False     # T8-lunch-trending-days (cc10_013 ~00:16:58): on a trend day an open position in the trend direction skips the 12:00 am_exit and keeps its ladder / trail to the session close
+    pre_hold_open: bool = False          # new-hold-pre0930-through-open (105 ~00:39:20): a pre-09:30 position held through 09:30: funded = held (tag risk_0930_sweep on a drift into the open), unfunded and flagged = closed at 09:29
+
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
         _sb_check(self)
@@ -3267,6 +3323,9 @@ class Params:
         _me1_check.check_params(self)
         from . import me2 as _me2_check                  # caption-gap pass (management_exits #2/3)
         _me2_check.check_params(self)
+        from . import me3 as _me3_check                  # caption-gap pass (management_exits #3/3)
+        _me3_check.check_params(self)
+        _me3_check.apply_presets(self)
         if self.e4_color and self.retrace_candle == "off":
             self.retrace_candle = "intrabar"          # E4 candle colour = the built retrace_candle "intrabar" (a short fills on an up-close bar: the fill bar opens beyond the limit and trades into it)
         if self.vi_ob_entry and "vi_ob" not in self.entry_arrays:
@@ -3353,7 +3412,7 @@ class Params:
             self.smt_bank_against_frac = 1.0
         for name, ok in (("be_on", ("expansion", "t1", "after_mss", "stall", "pool", "off")),
                          ("extras_be_on", ("t1", "follow")),
-                         ("ladder_trail", ("fvg", "hit", "prior", "off", "measuring", "breakaway", "candle_mt", "eq_pause", "rej_block", "071", "structure")),
+                         ("ladder_trail", ("fvg", "hit", "prior", "off", "measuring", "breakaway", "candle_mt", "eq_pause", "rej_block", "071", "structure", "rolling_bpr")),
                          ("trade_type", ("session", "day")), ("day_stop", ("open", "wick_ce")),
                          ("fvg_abort_mode", ("rule", "legacy")), ("session_fail_mode", ("trades", "arrays")),
                          ("offside_level", ("open", "wick_ce")), ("time_stop_ref", ("pts", "leg_high", "array_far")),
@@ -3527,7 +3586,7 @@ class Params:
     @property
     def dw_needs_week(self) -> bool:
         """The switches that read the week's trade state (backtest.week_state)."""
-        return bool(self.max_trades_week or self.friday_week_done == "trades" or self.stall_at_htf)
+        return bool(self.max_trades_week or self.friday_week_done == "trades" or self.stall_at_htf or self.late_week_flat)
 
     # --- package entries_stops_sizing helpers --------------------------------------------------
     @property
@@ -3817,6 +3876,7 @@ class Trade:
     gap_count: int | None = None   # D15 smt_pick "clean" (setups_models #4/7): the number of same-side FVGs of the leg between its EQ and its extreme (1 = one clean obvious gap)
     obj_met_t: object = None       # D15 smt_pick "laggard_objective": when this instrument's OWN htf.table draw was first traded (end of that bar); None = not met / not asked
     # package setups_models #5/7 (caption-gap pass)
+    laggard: bool = False          # management_exits #3/3 new-laggard-slow-delivery (laggard_mult): the leader index had already reached its draw before this fill (set at the fill)
     entry_style: str = ""          # M12-new-trader-no-turtle-soup: "raid" (a turtle-soup / pre-break entry at the run of a pool) / "confirmed" (displacement, swing taken and FVG first)
     # package setups_models #7/7 (caption-gap pass)
     cc09: str = ""                 # OT-M17-cc09_001-checklist: "|"-joined names of the failing checklist items (iof / react / room / open / depart; m15 / wpr15 are tag-only); "" = all held
@@ -4042,6 +4102,7 @@ class DayCtx:
         self.t = (self.idx.hour * 60 + self.idx.minute).values
         self.o, self.h, self.l, self.c = (frame[k].values.astype(float) for k in ("open", "high", "low", "close"))
         self.start = len(prev)
+        self.v = frame["volume"].values.astype(float) if "volume" in frame.columns else None      # caption-gap new-volume-divergence-exit (cc10_006): the bars' volume (None without it)
         self.opens = L.opens(df.index, df.open.values)
         self.pd = {}
         last3 = hist[-3:]
@@ -4925,8 +4986,9 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
     key = pos.get("done_key", tr.session)
     _ME1.after_close(pos, tr, done, key)              # caption-gap management_exits #1/3: the hold_reached session slot, the delivery-speed tag
     _ME2.after_close(pos, tr, done, key, state, p)    # caption-gap management_exits #2/3: the pool lock's re-entry block / day done, the chop-close session rule
+    blocked3_ = _ME3.pre_close(pos, tr, state, p, i) if (p.abort_blocks_side or p.runner_stop_no_reentry) else False      # caption-gap management_exits #3/3: an abort-set exit abandons the leg's direction (no re-entry), a runner stop after the bulk was banked ends the move
     reopened = False
-    if (lost is not None and p.reentry_half and not tight_ and not state["reentered"].get(tr.session)
+    if (lost is not None and p.reentry_half and not tight_ and not blocked3_ and (not state["reentered"].get(tr.session) or _ME3.more_reentries(state, tr.session, p))      # (caption-gap D18-reentry-count-max-2: reentry_count_max attempts)
             and not (p.fomc_day_stop and "fomc" in events(tr.date))):            # N3.5: none on an FOMC day
         # X13b / D18: one more try, same direction, half risk (reentry_gate: only while the idea is intact); the flag of
         # the trade's OWN done key is re-opened (an SB_AM loss no longer re-opens the plain AM slot)
@@ -4937,7 +4999,7 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
             rc["fill_i"] = pos["fill_i"]
         if rc is not None:
             done[key] = False
-            state["reentered"][tr.session] = True
+            _ME3.count_reentry(state, tr.session, p)
             state.setdefault("re_ctx", {})[tr.session] = rc
             reopened = True
     if (lost is not None and not reopened and p.reverse_in_session
@@ -4951,13 +5013,16 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
         _TP4.after_close(ctx, pos, tr, lost, done, key, state, p)      # caption-gap new-sellstop-run-before-void-fill: a stopped-out void_draw trade re-arms its session once
     if ctx is not None and _SM7.any_after7(p):
         reopened = _SM7.after_close(ctx, pos, tr, lost, net_, done, key, state, i, p, reopened, no_same=tight_) or reopened     # caption-gap setups_models #7/7: win / trail-win re-entries, reversals, the turtle-soup re-entry, the lod reopen
+    state.pop("no_win_reentry", None)
     if p.prop_fail_flip:
         _ES1.after_close(ctx, pos, tr, done, key, state, p)         # caption-gap A16-propulsion-block-full: a failed propulsion block ends the longs of the session
-    if p.lc_reentry and ctx is not None and tr.session == (getattr(ctx, "lc_retry", None) or {}).get("session"):
+    if (p.lc_reentry or p.lc_second_swipe) and ctx is not None and tr.session == (getattr(ctx, "lc_retry", None) or {}).get("session"):
         _SM2.lc_clear(ctx)                              # the re-opened slot's trade closed: the retry gate ends
     if (p.lc_reentry and ctx is not None and lost is not None and not reopened and not state.get("lc_done") and "lc_reversal" in (tr.lv_tags or "")
             and tr.exits and tr.exits[-1][3] in ("stop", "stop_gap") and 600 <= tr.exits[-1][0].hour * 60 + tr.exits[-1][0].minute < 720):
         _SM2.lc_reopen(ctx, tr, done, key, state)       # caption-gap T3 lc_reentry: one more try after a stopped-out London-close reversal
+    if ctx is not None and _ME3.any_on(p):
+        reopened = _ME3.after_close(ctx, pos, tr, done, key, state, p, i, lost, net_, reopened) or reopened       # caption-gap management_exits #3/3: the day / session stops, the re-entry arms, the second swipe
     if net_ < 0:
         state["day_loss"] = True                      # Ep08.12 after_loss_mult / after_loss_adds
     if lost is not None:
@@ -4988,6 +5053,7 @@ def _risk_mult(state, session, p) -> float:
     m = p.reentry_risk_mult if state["reentered"].get(session) else 1.0
     if state["reentered"].get(session) and p.reentry_risk == "loss":          # D18: half of the LOSING trade's own risk (caption-gap X13b: reentry_risk_mult, 0.5 by default)
         m = p.reentry_risk_mult * state.get("re_ctx", {}).get(session, {}).get("ratio", 1.0)
+    m = _ME3.risk_count(state, session, p, m)         # caption-gap D18-reentry-count-max-2: the n-th re-entry at reentry_risk_mult ** n
     if p.loss_halving and state.get("rs") is not None:
         m *= state["rs"]["m"]
     if state.get("day_loss"):
@@ -5875,6 +5941,12 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             skips.append((day, symbol, "sloppy", "|".join(sorted(sl_all_day))))
         return []
     ctx.sl_day = sl_day
+    if p.conflicted_mode != "off":                       # caption-gap X14-conflicted-htf-one-entry (091 ~00:10:44): both sides valid / inside a daily BISI-SIBI
+        ctx.conflicted = _ME3.conflicted_day(hist, bias, p)
+        if ctx.conflicted and p.conflicted_mode == "skip":
+            if skips is not None:
+                skips.append((day, symbol, "conflicted", "htf"))
+            return []
     ctx.day_tags = "|".join(sorted(dt))
     ctx.bias_by_cut = bias_by_cut or {}                   # (bias_htf rows known before 09:30 come from these cuts)
     dw = _DW.plan(ctx, hist, p, week, eve, dt)            # day_week_context: the day's blocks / flags / tags
@@ -5916,7 +5988,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         pre_windows.append(("NEWS", 540, 570))
     if p.pre_0900 and not nfp_hour and not am0830:
         pre_windows.append(("PRE9", 540, 570))
-    state = {"day": day, "reentered": {}, "re_ctx": {}, "re7": {}, "only_side": {}, "reversed": {}, "day_pts": 0.0, "day_loss": False, "day_net": 0.0,
+    state = {"day": day, "reentered": {}, "re_ctx": {}, "re7": {}, "re3": {}, "only_side": {}, "reversed": {}, "day_pts": 0.0, "day_loss": False, "day_net": 0.0,
              "rs": (risk_state if risk_state is not None else _EN.new_risk_state()) if p.loss_halving else None,
              "ext": list(_ext or ())}              # run_day fixed point: the extras' trades of the previous pass
     ctx.ext_other = [t_ for t_ in (_ext or ()) if t_.setup.startswith("sb_")]   # Ma Deuce reads the SB's (it runs first)
@@ -5942,6 +6014,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         ts = ctx.idx[i]
         ctx.pend_now = pending
         chop_before = chop.active_before(i) and p.sloppy_mode == "stand_aside"
+        if p.am_idea_fail or p.reentry_breakaway:
+            if _ME3.bar(ctx, i, p, state, done, trades, pos, (_BD.want_at(ctx, p, "AM", i) if (want is not None and p.am_idea_fail) else 0)) == "cancel_am" and pending is not None and pending["session"] == "AM":
+                pending = None                       # caption-gap X13-am-fail-no-reverse-pm-reset: the AM idea failed (the opposite pool ran before any fill)
         if state["ext"]:
             _MG.sync_ext(trades, p, done, state, ts)       # X7c / X12 / X13a / X14b / X14d: the extras' closed trades count too
         # --- 1. manage the open position on this bar
@@ -6048,13 +6123,17 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                             continue
                         if rh_ == "break":
                             break
+                    if pos.get("me3") and _ME3.rung_pre(ctx, sd, pos, tr, k, lv_, i, p, t) == "reload":      # caption-gap T10-1550-pool-timing: from 15:50 the pool rung leaves a runner past the pool
+                        fr = pos["fracs"]
+                        lv_ = _ME1.lv(pos)
                     if sp_ is None and pos.get("tp3") and _TP3.speed_hold(pos, k, i, sd, p):    # the touch bar: the pool is pending until the next bar closes
                         break
                     last = (k == len(lv_) - 1 and not pos.get("runner")) or _TP2.close_here(pos, k, tr, t, tf, p, ctx, sd, i, pctx, psides, ppos)   # Ep04.3 po3_runner; caption-gap L12-prior-session-swing-htf-extreme: a proj_htf rung with an SMT after 11:00 closes the trade
+                    lh3_ = bool(not last and _ME3.lh_all(pos, t, p))   # caption-gap X11-last-hour-target-hit-done: from 15:00 any rung fill closes everything left (lh_target)
                     if last:
                         tr.final_hit = True                           # Ep04.13: every rung taken
-                    q = pos["left"] if last else min(pos["left"], max(p.lot, _lots(pos["n"] * fr[k], p.lot)))
-                    tr.exits.append((ts, sd.x(px_), q, f"t{k + 1}")); pos["left"] -= q
+                    q = pos["left"] if (last or lh3_) else min(pos["left"], max(p.lot, _lots(pos["n"] * fr[k], p.lot)))
+                    tr.exits.append((ts, sd.x(px_), q, "lh_target" if lh3_ else f"t{k + 1}")); pos["left"] -= q
                     if (p.wick_read == "exit" and pos["left"] and pos.get("level_kinds")
                             and k < len(pos["level_kinds"]) and pos["level_kinds"][k] in ("wick", "wick_ce")):
                         pos["wick_chk"] = (i, lv_[k] + p.exit_before_pts * p.es_pt)      # A23: read the next close
@@ -6066,6 +6145,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     if pos.get("me2"):
                         _ME2.rung_taken(ctx, sd, pos, tr, k, lv_[k], i, p)           # caption-gap management_exits #2/3: the pool lock, the swing trail at an array, the PM runner, the NWOG quarter, the urgency runner
                         fr = pos["fracs"]
+                    if pos.get("me3"):
+                        _ME3.rung_taken(ctx, sd, pos, tr, k, lv_[k], i, p)           # caption-gap management_exits #3/3: the last-hour early take, the reclaim runner's breakeven wait
                     if pos["left"] and k < len(pos.get("level_kinds") or ()) and pos["level_kinds"][k] == "speed":
                         _TP1.hit("speed_rung")           # caption-gap L10-A17-old-high-target-ladder: a speed-bump rung is a small partial only - no done flag, breakeven or trail
                         continue
@@ -6162,9 +6243,11 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 _ME2.manage(ctx, sd, pos, tr, i, ts, p, pctx, psides, ppos)       # caption-gap management_exits #2/3: the exits, partials and stop moves of the 34 trailing / partial specs
                 if pos["left"] and p.chop_close:
                     _ME2.chop_close(pos, tr, sd, ts, c, chop, p, pos["fill_i"])   # caption-gap X9-lethargic-or-choppy-trade: the intraday chop turned on while the position was open
+            if pos["left"] and pos.get("me3"):
+                _ME3.manage(ctx, sd, pos, tr, i, ts, p, state, done, trades)      # caption-gap management_exits #3/3: the exits, partials and stop moves of the 33 specs
             if pos["left"]:
                 pos["best"] = max(pos["best"], h)
-                _MG.exits(ctx, sd, pos, tr, i, ts, p, state)       # management_exits: X6-X12, X9 time stops, D18, Ep07.5
+                _MG.exits(ctx, sd, pos, tr, i, ts, _ME3.eff_p(pos, p), state)       # management_exits: X6-X12, X9 time stops, D18, Ep07.5 (caption-gap new-laggard-slow-delivery: the laggard's longer windows)
                 if pos["left"] and not (pos.get("tp1") or {}).get("eve_bnb"):        # (caption-gap N4-eve-of-high-impact: the eve scalp keeps its initial stop - no trailing)
                     _MG.be_modes(sd, pos, tr, i, p)                # D14 / Ep03.15 after_mss / stall / pool breakeven
                     _MG.trail_extra(sd, pos, i, p)                 # Ep03.10 first-FVG and Ep03.20 measuring-gap trails
@@ -6177,7 +6260,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 tr.exits.append((ts, sd.x(c), pos["left"], "lunch_exit")); pos["left"] = 0   # T8: never held into the PM
             am_x_ = (min(p.am_exit, p.nfp_flat_by) if p.am_exit else p.nfp_flat_by) if (p.nfp_flat_by and "jobs" in tags) else p.am_exit     # caption-gap N1-nfp-no-htf-hold [our interpretation]: flat by nfp_flat_by on a jobs day
             if (pos["left"] and tr.session not in ("PM", "LUNCH") and am_x_ and t + tf >= am_x_
-                    and not (p.no_lunch_retrace_hold and _ME1.am_exit_hold(ctx, sd, pos, tr, i, ts, p, am_x_, ev_flat=bool(p.nfp_flat_by and "jobs" in tags)))):      # (caption-gap T9-strong-am-no-lunch-retrace: a held AM position skips the close)
+                    and not (p.no_lunch_retrace_hold and _ME1.am_exit_hold(ctx, sd, pos, tr, i, ts, p, am_x_, ev_flat=bool(p.nfp_flat_by and "jobs" in tags)))      # (caption-gap T9-strong-am-no-lunch-retrace: a held AM position skips the close)
+                    and not (_ME3.am_on(p) and _ME3.am_skip(ctx, sd, pos, tr, i, ts, p, am_x_))):      # (caption-gap management_exits #3/3: day mode, the 85 % runner, the explosive-day runner, the trend-day hold)
                 # Ep 03 / owner #8: CLOSE (not tighten) all remaining AM-family units at the close
                 # of the bar ending 12:00; "tighten" is a test-only switch [our interpretation]
                 if p.am_exit_mode == "close":
@@ -6314,7 +6398,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         if pending is not None and _MG.blocked_now(state, pending["session"]):
             pending = None                           # management_exits: the session / day was stopped meanwhile
         if (pending is not None and pending["session"] not in ("PM", "LUNCH") and p.am_exit
-                and t + tf >= p.am_exit):
+                and t + tf >= p.am_exit and not _ME3.noon_exempt(pending, p)):
             pending = None                           # #8 guard: no AM-family fills into 12:00
         if pending is not None and p.fvg_full_fill_void and _ME1.void_pending(pending, pending["side"], i):
             pending = None                           # caption-gap X9-entry-fvg-immediate-rejection: a print through the entry FVG's far edge voids the resting order
@@ -6443,6 +6527,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     _ME1.on_fill(ctx, sd, pos, tr, o, i, p, fill)         # caption-gap management_exits #1/3: the breakeven / lock / hold state, the best-case limit, the BPR / IFVG exits
                 if o.get("me2") or _ME2.any_on(p):
                     _ME2.on_fill(ctx, sd, pos, tr, o, i, p, fill)         # caption-gap management_exits #2/3: the trail / partial / exit state of the 34 specs
+                if o.get("me3") or _ME3.any_on(p):
+                    _ME3.on_fill(ctx, sd, pos, tr, o, i, p, fill, state, done)       # caption-gap management_exits #3/3: the implied range, the laggard, the scalp rung, the recovery state
                 if o.get("es2"):
                     _ES2.on_fill(ctx, sd, pos, tr, o, i, p, fill)      # caption-gap entries_stops_sizing #2/3: the OB grade, the FVG-then-OB add, the zone-ladder add base
                 _SM7.fill_note(state, o)                              # caption-gap setups_models #7/7: the re-entry / reversal context is no longer pending
@@ -6500,6 +6586,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             o_x = _SM7.special7(ctx, sides, i, p, state, pos, pending, _risk_mult(state, "AM", p), done)     # caption-gap setups_models #7/7: the London-close scalp, the 10:50 macro, the lunch macro, the NY expansion turtle soup
             if o_x is not None:
                 pending = o_x
+        if state.get("flip_req") and pending is None and pos is None:
+            pending = _ME3.flip_order(ctx, state, i, p, 1.0) or pending       # caption-gap X8-offside-flip: the market reversal at the next open (it overrides the no-reversal lock once)
         if p.probe_mult > 0 and want is not None and pending is None and pos is None and am_lo <= t < am_hi and not _MG.blocked_now(state, "AM"):
             o_x = _ES3.probe_order(ctx, sides, i, p, state, trades, done, _BD.want_at(ctx, p, "AM", i), ctx.lock.get("AM"))     # caption-gap new-probe-position (026 ~00:16:16): a small market probe on an indecisive session
             if o_x is not None:
@@ -6621,7 +6709,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         for sd in sides:
             sname = "long" if sd.sign > 0 else "short"
             if (not p.reverse_after_loss and lost_side is not None and sname != lost_side
-                    and (not p.lost_side_session or state.get("lost_fam") == _MG.fam(session))
+                    and (not (p.lost_side_session or p.lost_side_scope == "session") or _ME3.lost_side_holds(state, session, t, p))      # (caption-gap X13-am-fail-no-reverse-pm-reset: lost_side_scope "session" lapses at pm_reset_t)
                     and not state["only_side"].get(session)):
                 continue                              # no reversals after a loss (X13a: lost_side_session = this session only;
                                                       # reverse_in_session is the one reversal the lock lets through)
@@ -6635,6 +6723,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             if r7_ is not None and r7_.get("pending") and r7_["kind"] in ("win", "trail_win", "ts_re") and sname != r7_["side"]:
                 continue                              # caption-gap X14 / X13 re-entries (setups_models #7/7): the same direction only
             ctx.re7, ctx.re_ctx_now, ctx.pend_now = r7_, rc_, pending
+            ctx.re3_now = state["re3"].get(session)          # caption-gap management_exits #3/3: the OTE-failure turtle soup / breakaway re-entry context
             ctx.pb_flip = state.get("pb_flip", {}).get(session)          # caption-gap A16-propulsion-block-full: the failed propulsion block (an entry array of the flipped side)
             if p.weekly_bias and ctx.wbias == -sd.sign:
                 continue
@@ -7190,10 +7279,12 @@ def _scan(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, risk_mul
         o_ = _SM6.extra6(ctx, sd, i, p, session, risk_mult)                  # caption-gap setups_models #6/7: consolidation EQ, void trades, failed-turtle continuation, rejection block, range fades, vacuum block
     if o_ is None and sd.sweep is None and _SM7.any_extra7(p):
         o_ = _SM7.extra7(ctx, sd, i, p, session, risk_mult)                  # caption-gap setups_models #7/7: or_ref, am_array_open, lh_ob_pullback, the 09:50 continuation, missed_5m
-    if p.reentry_stop == "ob_low" and (getattr(ctx, "re_ctx_now", None) or {}).get("pending"):
+    if (p.reentry_stop == "ob_low" or p.reentry_ob_stop == "full" or p.reentry_mode == "cc_ob") and (getattr(ctx, "re_ctx_now", None) or {}).get("pending"):
         o2_ = _ES3.ob_low_order(ctx, sd, i, p, session, risk_mult)             # caption-gap E6-attempt-based-stop (cc02_005 ~00:01:47): the re-entry is the first new OB after the stop-out
         if o2_ is not None:
             o_ = o2_
+    if o_ is None and _ME3.any_re_orders(ctx, p):
+        o_ = _ME3.re_order(ctx, sd, i, p, session, risk_mult)                  # caption-gap M12-ote-failure-turtle-soup: the turtle-soup buy at the low the stopped OTE entry ran
     if o_ is None and _SM7.any_re_orders(ctx, p):
         o_ = _SM7.re_order(ctx, sd, i, p, session, risk_mult)                # caption-gap X13 / X14 (setups_models #7/7): the trail-win IFVG CE / breaker retest, the reversal inversion / at-stop orders, the sibi return
     if o_ is not None and p.entry_discipline != "any" and p.entry_discipline_only and not _SM6.discipline_ok(o_, p):
@@ -8622,6 +8713,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     space [(level, kind)]): the setup's own targets (turtle-soup or60 / cc_1h_ob) instead of the
     liquidity list; the #7 cap still trims them, the #9 lock gates the side only."""
     l, h, c = sd.l, sd.h, sd.c
+    if p.chop_scalp_pts > 0 and p.sloppy_mode == "scalp" and getattr(ctx, "cur_sloppy", ""):
+        p = replace(p, min_draw_pts=p.chop_scalp_pts)      # caption-gap L15-chop-micro-scalps (010 ~01:15:51): the minimum room of a chop scalp is chop_scalp_pts, not min_draw_pts
     tol = p.eq_tol_pts * p.es_pt
     sw.pop("_wide_stop", None)                       # caption-gap item 44 review fix: a stale too-wide-stop flag of an earlier call must not restore the sweep after an unrelated None return
     tags = dict(tags)
@@ -8962,6 +9055,11 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         if why_thu:
             _f(why_thu)
             return None
+    if _ME3.order_on(p):
+        why_me3 = _ME3.order_block(ctx, sd, sw, i, p, session, entry, tags)      # caption-gap management_exits #3/3: the abort's blocked side, the breakaway re-entry wait, the CC cut-off, the PM window
+        if why_me3:
+            _f(why_me3)
+            return None
     if p.htf_bank or p.stall_at_htf or p.late_fvg_flip:
         why_me2 = _ME2.order_block(ctx, sd, i, p, session, entry)      # caption-gap management_exits #2/3: no counter entry inside a banked HTF array, the weekly reversal watch, no entry under the late-day gap
         if why_me2:
@@ -9284,7 +9382,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         lvt.append("scalp_" + dws)
     if (sl and p.sloppy_mode == "scalp") or _NC.scalp_now(ctx, p, session) or dws:   # #10 scalp mode (N3.3: the FOMC-only AM):
                                           # one exit at min(+5, T1), no adds
-        lv, kinds, scalp, final_T = [min(entry + p.sloppy_scalp_pts * p.es_pt, lv[0])], [kinds[0]], True, False
+        lv, kinds, scalp, final_T = [min(entry + (p.chop_scalp_pts if (p.chop_scalp_pts > 0 and sl and p.sloppy_mode == "scalp") else p.sloppy_scalp_pts) * p.es_pt, lv[0])], [kinds[0]], True, False
     smt_n = int(sw["smt"] is True) + int(sw.get("smt2") is True)
     if smt_n < p.smt_min:
         _f("x_no_smt")
@@ -9558,4 +9656,5 @@ from . import tp2 as _TP2  # noqa: E402  (caption-gap pass, targets_partials #2/
 from . import tp3 as _TP3  # noqa: E402  (caption-gap pass, targets_partials #3/4: engine glue)
 from . import me1 as _ME1  # noqa: E402  (caption-gap pass, management_exits #1/3: engine glue)
 from . import me2 as _ME2  # noqa: E402  (caption-gap pass, management_exits #2/3: engine glue)
+from . import me3 as _ME3  # noqa: E402  (caption-gap pass, management_exits #3/3: engine glue)
 from . import tp4 as _TP4  # noqa: E402  (caption-gap pass, targets_partials #4/4: engine glue)
