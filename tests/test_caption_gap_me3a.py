@@ -240,7 +240,7 @@ def test_day_mode_am_exit_and_the_runner():
 
 def test_noon_guard_exempts_a_day_mode_order():
     assert me3.noon_exempt({"day_trade": True}, pk(day_mode_no_am_exit=True)) is True
-    assert me3.noon_exempt({"day_trade": True}, pk()) is False
+    assert me3.noon_exempt({"day_trade": True}, pk(day_mode_no_am_exit=False)) is False
     assert me3.noon_exempt({}, pk(day_mode_no_am_exit=True)) is False
 
 
@@ -452,7 +452,7 @@ def test_am_exit_trend_hold(monkeypatch):
     for sw_on in (True, False):
         ctx = mkctx(rows, t0=11 * 60 + 55)
         ctx.lock = {}
-        p = pk(am_exit_trend_hold=sw_on)
+        p = pk(am_exit_trend_hold=sw_on, day_mode_no_am_exit=False)
         pos, tr, sd = mkpos(ctx, 1, 0, 4000.0, 3990.0, levels=(4100.0,))
         fill3(ctx, sd, pos, tr, p)
         if sw_on:

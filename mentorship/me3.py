@@ -26,7 +26,7 @@ POOLS = ("pool", "pool_eq")
 ABORT_REASONS = ("abort", "ce_close", "breaker_mt", "chop_close", "htf_stall", "time", "slow_ref", "lost_hi", "hh_low", "stall_reh")        # 130 (+ every "pd3*")
 LH_ENTRY_KINDS = ("moc_run", "lh_ob")
 BOOLS = ("implied_range", "vol_div_exit", "pm_two_stage", "london_tod_partials", "pre_hold_open", "session_fail_flatten", "late_week_flat", "open_reclaim_runner", "lh_pool_timing",
-         "explosive_runner", "am_exit_trend_hold", "day_mode_no_am_exit", "recover_trail", "abort_blocks_side", "reentry_breakaway", "ote_fail_ts", "offside_flip", "new_day_stops",
+         "explosive_runner", "am_exit_trend_hold", "recover_trail", "abort_blocks_side", "reentry_breakaway", "ote_fail_ts", "offside_flip",
          "runner_stop_no_reentry", "am_idea_fail", "lc_second_swipe", "last_hour_target_done", "pd3_pm_window", "beginner_template")
 NUMS = ("cc_day_exit", "am_runner_hold_to", "chop_scalp_pts", "stop_ack_sec")
 STRS = ("scalp_mode", "recovery_exit", "reentry_mode")
@@ -77,7 +77,7 @@ def apply_presets(p) -> None:
 def any_on(p) -> bool:
     """Does any mid-trade switch of the chunk need the per-position state (pos["me3"])?"""
     return bool(any(getattr(p, k) for k in BOOLS) or any(getattr(p, k) for k in NUMS) or any(getattr(p, k) for k in STRS) or p.laggard_mult != 1.0 or p.ladder_trail == "rolling_bpr"
-                or p.abort_mode == "half" or p.chop_scalp_pts > 0 or p.conflicted_mode in ("one", "one_win") or p.pm_after_am_win != "off")
+                or p.abort_mode == "half" or p.chop_scalp_pts > 0 or p.conflicted_mode in ("one", "one_win") or p.pm_after_am_win != "off" or (p.new_day_stops and p.trader_mode == "new"))
 
 
 def order_on(p) -> bool:
@@ -260,11 +260,11 @@ def _pre_open_drift(ctx, sd, pos, i: int) -> bool:
     return bool(ks) and all(float(sd.c[k]) <= lo + (hi - lo) / 3.0 + 1e-9 for k in ks)
 
 
-def _fails_in_family(trades, fam: str, p) -> int:
+def _fails_in_family(trades, fam: str, p, skip=None) -> int:
     """13: the run of failed trades at the end of the family's closed trades (the X7c rule: a loss; with session_fail_mode "arrays" one that ended in a FAIL_REASONS exit)."""
     MG = _MG()
     run = 0
-    closed = sorted((t for t in trades if t.exits and _fam(t.session) == fam), key=lambda t: t.exits[-1][0])
+    closed = sorted((t for t in trades if t.exits and t is not skip and _fam(t.session) == fam), key=lambda t: t.exits[-1][0])
     for tr in closed:
         fail = MG._net(tr, p) < 0 and (p.session_fail_mode == "trades" or _last_reason(tr) in MG.FAIL_REASONS)
         run = run + 1 if fail else 0
@@ -293,6 +293,7 @@ def manage(ctx, sd, pos, tr, i: int, ts, p, state=None, done=None, trades=None) 
         ts_off = lo + 0.25 * r <= c <= lo + 0.75 * r
         top = lo + 0.75 * r
         if d.get("ir_top") and not d.get("ir_raid"):
+            hit("eval_ir_top_raid")
             fi = pos["fill_i"]
             _, pls = M2._piv(sd, fi, i - 1)
             lows = [q for q in pls if q.known <= i - 1 and q.price >= top - 1e-9]
@@ -331,7 +332,7 @@ def manage(ctx, sd, pos, tr, i: int, ts, p, state=None, done=None, trades=None) 
         hit("cc_day_exit")
         return
     # --- 127 the scalp's max hold is the order's exit_at (the ladder loop's time_exit)
-    # --- 124 London time-of-day partials
+    # --- 124 London time-of-day partials (bar-time convention: t = the bar's OPEN minute, so a partial fires on the first bar opening at or after the clock time, at that bar's close; the 04:55 and 06:55 checks are independent)
     if p.london_tod_partials and tr.session == "LON":
         hit("eval_london_tod")
         ft = d["fill_t"]
@@ -339,7 +340,7 @@ def manage(ctx, sd, pos, tr, i: int, ts, p, state=None, done=None, trades=None) 
             d["lon_0500"] = True
             M2.partial_close(pos, tr, sd, ts, c, p.london_tod_frac, "lon_0500", p)
             hit("lon_0500")
-        elif ft < 415 and t >= 415 and not d.get("lon_0700") and pos["left"]:
+        if ft < 415 and t >= 415 and not d.get("lon_0700") and pos["left"]:
             d["lon_0700"] = True
             M2.partial_close(pos, tr, sd, ts, c, p.london_tod_frac, "lon_0700", p)
             hit("lon_0700")
@@ -365,7 +366,8 @@ def manage(ctx, sd, pos, tr, i: int, ts, p, state=None, done=None, trades=None) 
     if p.session_fail_flatten and trades is not None and state is not None and done is not None:
         fam = _fam(tr.session)
         need = p.session_stop_after_fails or 3
-        if c < float(pos["fvg_bottom"]) - 1e-9 and _fails_in_family(trades, fam, p) + 1 >= need:
+        hit("eval_session_fail")
+        if c < float(pos["fvg_bottom"]) - 1e-9 and _fails_in_family(trades, fam, p, skip=tr) + 1 >= need:
             M2.close_all(pos, tr, sd, ts, c, "pd3_session")
             st = state.setdefault("stops", {"day": None})
             st.setdefault(fam, "pd3_session")
@@ -466,13 +468,18 @@ def manage(ctx, sd, pos, tr, i: int, ts, p, state=None, done=None, trades=None) 
 
 def lh_all(pos, t: int, p) -> bool:
     """119: from 15:00 on a fill of ANY rung closes everything left at that rung's price (X11: a target hit in the last hour = done)."""
-    return bool(p.last_hour_target_done and t >= p.last_hour[0])
+    on = bool(p.last_hour_target_done and t >= p.last_hour[0])
+    if on:
+        hit("eval_lh_target")
+    return on
 
 
 def rung_pre(ctx, sd, pos, tr, k: int, lv_, i: int, p, t: int):
     """8 lh_pool_timing: BEFORE the pool rung of a last-hour trade fills. At or after 15:50 the rung keeps a runner (lh_keep_frac of the units) with a new final rung lh_late_ext_pts beyond the
     pool, held to the flatten. Returns "reload" when the ladder was changed (the loop re-reads the rungs), else None."""
     d = pos.get("me3")
+    if p.lh_pool_timing and d and _is_lh_trade(tr):
+        hit("eval_lh_late")
     if not (p.lh_pool_timing and d and _is_lh_trade(tr)) or t < 950 or d.get("lh_ext"):
         return None
     kinds = list(pos.get("level_kinds") or [])
@@ -542,7 +549,11 @@ def _explosive(ctx, sd, pos, i: int, p) -> bool:
         return float(sd.h[a:k].max() - sd.l[a:k].min()) if k > a else 0.0
     ok = rng(k10) >= adr - 1e-9 or rng(k11) >= p.explosive_frac * adr - 1e-9
     if not ok:
-        return False
+        from . import setups as ST                                  # 117 T13 profile "two_session": the AM leg's profile (classified from the bars closed by 12:00) trends in the trade direction
+        prof = ST.cc_profile(ctx, i, p, at=720)
+        if not (prof and str(prof[0]).startswith("two_session") and int(prof[1]) == int(sd.sign)):
+            return False
+        hit("explosive_two_session")
     kx = a + int(np.argmax(sd.h[a:i + 1]))
     return bool(i - kx <= 15)
 
@@ -589,6 +600,8 @@ def am_skip(ctx, sd, pos, tr, i: int, ts, p, am_x: int) -> bool:
         d["am_hold"] = "day"
         hit("day_mode_no_am_exit")
         return True
+    if p.am_runner_hold_to and tr.session not in ("PM", "LUNCH"):
+        hit("eval_am_runner_hold")
     if p.am_runner_hold_to and tr.session not in ("PM", "LUNCH") and _closed(pos) >= 0.85 - 1e-9:
         d["am_hold"] = "runner"
         keep = 2 * p.lot
@@ -598,11 +611,15 @@ def am_skip(ctx, sd, pos, tr, i: int, ts, p, am_x: int) -> bool:
         _tag(tr, "am_runner")
         hit("am_runner_hold")
         return True
+    if p.explosive_runner:
+        hit("eval_explosive")
     if p.explosive_runner and _explosive(ctx, sd, pos, i, p):
         d["am_hold"] = "explosive"
         _tag(tr, "explosive_runner")
         hit("explosive_runner")
         return True
+    if p.am_exit_trend_hold:
+        hit("eval_trend_hold")
     if p.am_exit_trend_hold and _trend_hold(ctx, sd, pos, tr, i, p):
         d["am_hold"] = "trend"
         _tag(tr, "trend_hold")
@@ -631,13 +648,19 @@ def pre_close(pos, tr, state, p, i) -> bool:
         out = True
     n_all = sum(e[2] for e in tr.exits)
     last_q = tr.exits[-1][2] if tr.exits else 0
-    if p.runner_stop_no_reentry and reason in ("stop", "stop_gap", "be") and n_all > 0 and (n_all - last_q) / n_all >= p.runner_frac_done - 1e-9:
+    if runner_stop_on(p) and reason in ("stop", "stop_gap", "be") and n_all > 0 and (n_all - last_q) / n_all >= p.runner_frac_done - 1e-9:
         pos["runner_stop"] = True
         _tag(tr, "runner_stop")
         state["no_win_reentry"] = True                                       # sm7: the win / trail-win re-entries refuse this kind
         hit("runner_stop")
         out = True
     return out
+
+
+def runner_stop_on(p) -> bool:
+    """9: the runner_stop refusal ("the re-entry switches of items 2-3 refuse that kind") applies automatically whenever a win / trail-win re-entry switch is on; runner_stop_no_reentry also turns it on alone
+    (and adds the final-rung session end)."""
+    return bool(p.runner_stop_no_reentry or p.reentry_after_win or p.reentry_after_trail_win or p.breakaway_chase)
 
 
 def more_reentries(state, session: str, p) -> bool:
@@ -709,11 +732,13 @@ def after_close(ctx, pos, tr, done, key, state, p, i, lost, net, reopened: bool)
                 done[k] = True
             state["day_done"] = True
             hit("new_day_positive")
-        elif fam == "AM" and not (net < 0 and p.pm_recover_loss and p.trader_mode != "new"):
+        elif fam == "AM":
             done["PM"] = True
             hit("new_am_or_pm")
     if p.pm_after_am_win == "draw_open" and fam == "AM" and lost is None and net > 0 and done is not None and not (p.new_day_stops and p.trader_mode == "new"):
-        done["PM"] = bool(_htf_draw_touched(ctx, sd, pos, i)) if ctx is not None and i is not None else True
+        touched_ = bool(_htf_draw_touched(ctx, sd, pos, i)) if ctx is not None and i is not None else True
+        # the draw rule may re-open a PM that only no_pm_after_am_win closed - never one a stop / the day cap closed in this same close
+        done["PM"] = True if (touched_ or _MG().blocked_now(state, "PM") or state.get("day_done")) else False
         hit("pm_after_am_win")
     # --- 17 conflicted day: one entry, done after a win
     if p.conflicted_mode == "one_win" and getattr(ctx, "conflicted", False) and net > 0 and done is not None:
@@ -726,6 +751,8 @@ def after_close(ctx, pos, tr, done, key, state, p, i, lost, net, reopened: bool)
         fi = pos["fill_i"]
         avg = _avg(pos)
         arm = None
+        if p.reentry_breakaway and "breakaway" in (tr.lv_tags or ""):
+            hit("eval_breakaway_arm")
         if p.reentry_breakaway and "breakaway" in (tr.lv_tags or "") and float(sd.l[fi:i + 1].min()) <= float(pos["fvg_bottom"]) + 1e-9:
             lvl = _htf_level_below(ctx, sd, pos, i, avg, p)                                         # 65: the gap filled completely - it was not a breakaway
             arm = dict(kind="breakaway", side=tr.side, stop_i=int(i), lvl=lvl, a_i=(int(i) if lvl is None else None), pending=True)
@@ -768,7 +795,7 @@ def _htf_level_below(ctx, sd, pos, i: int, avg: float, p):
     from . import sm4
     try:
         arrs = sm4.conf_arrays(ctx, sd, i, ("D", "4h", "1h"), known_at_start=False)
-    except Exception:                                                                              # pragma: no cover - no confluence object in a stub context
+    except (AttributeError, KeyError, TypeError):                                                  # only the "no confluence object / array table" case of a stub or short context
         arrs = []
     cand = [float(a[0]) for a in arrs if float(a[0]) < float(pos["fvg_bottom"]) - p.tick]
     if cand:
@@ -795,7 +822,7 @@ def bar(ctx, i: int, p, state, done, trades, pos, want: int = 0):
     if p.am_idea_fail and want and not done.get("AM") and pos is None:
         t = int(ctx.t[i])
         k570 = _S()._idx_at(ctx, 570)
-        if t >= 570 and i > k570 and not any(_fam(x.session) == "AM" for x in trades):
+        if 570 <= t < (p.am_exit or 720) and i > k570 and not any(_fam(x.session) == "AM" for x in trades):
             sd = ctx.sides_map[want]
             opp = ctx.sides_map[-want]
             lev = float(opp.h[k570:i].max())                                                        # the AM session extreme on the opposite side (side space of the OPPOSITE Side: its highs)
@@ -833,6 +860,8 @@ def order_block(ctx, sd, sw, i: int, p, session: str, entry: float, tags: dict, 
         b = (state.get("blocked_side") or {}).get(session)
         if b is not None and b["side"] == sidename:
             brk = sw.get("broke")
+            if brk is None:
+                brk = sw.get("ext_i")                                  # a setup without an MSS bar: the bar of its sweep extreme dates the structure (a new leg formed after the close lifts the block)
             if brk is None or int(brk) <= int(b["i"]):
                 hit("abort_block_order")
                 return "x_abort_blocks_side"
@@ -854,6 +883,7 @@ def order_block(ctx, sd, sw, i: int, p, session: str, entry: float, tags: dict, 
         hit("cc_day_exit_block")
         return "x_cc_day_exit"
     if p.pd3_pm_window and session == "PM":
+        hit("eval_pm_window")
         win = state.get("pm_window")
         if win is not None and not (win[0] <= t < win[1]):
             hit("pm_window_block")
@@ -901,6 +931,7 @@ def flip_order(ctx, state, i: int, p, risk_mult: float):
     req = state.pop("flip_req", None)
     if not req:
         return None
+    hit("eval_offside_flip")
     S = _S()
     sg = -req["sign"]
     sd = ctx.sides_map[sg]

@@ -2986,7 +2986,7 @@ class Params:
     laggard_mult: float = 1.0            # new-laggard-slow-delivery (090 ~01:49:28): a trade taken in the index moving in sympathy after the leader reached its draw runs time_stop_min / meander_bars x this (test 2.0); tag laggard
     vol_div_exit: bool = False           # new-volume-divergence-exit (cc10_006 ~00:06:00; BOND futures volume, a test switch - not for SPY / ES without validation): a new session extreme on less than vol_div_ratio x the volume of the bar behind the prior extreme = half off
     vol_div_ratio: float = 1.0
-    day_mode_no_am_exit: bool = False    # D16-am-trade-held-into-pm (064 ~01:40:54; 026 ~01:32:26): a day-mode position (trade_type "day" / day_mode_auto) is exempt from am_exit (and the pending noon guard); flat by the session flat time
+    day_mode_no_am_exit: bool = True     # D16-am-trade-held-into-pm (064 ~01:40:54; 026 ~01:32:26): a day-mode position (trade_type "day" / day_mode_auto) is exempt from am_exit (and the pending noon guard); flat by the session flat time. DEFAULT ON (the spec: day mode itself is the exemption); False restores the old 12:00 close of a day-mode trade
     am_runner_hold_to: int = 0           # ... after >= 85 % off at 12:00 at most 2 lots stay on the current stop and close at this minute (900 = 15:00; 085 ~00:32:13; 0 = off)
     explosive_runner: bool = False       # D16-big-range-day-runner-past-noon (cc09_006 ~00:12:51; cc10_014 ~00:03:28): an explosive day (range >= ADR5 by 10:00 or >= explosive_frac x ADR5 by 11:00, the extreme made within the last 15 bars) keeps its runner past 12:00 to explosive_until
     explosive_frac: float = 1.25         # [our threshold]
@@ -3019,9 +3019,8 @@ class Params:
     chop_scalp_day_pts: float = 5.0
     session_fail_flatten: bool = False   # X7-three-failures-flatten-open-trade (044 ~01:54:41): the third failed array of the session closes the open position at the bar close (pd3_session), cancels orders, ends the family and its SB key
     pd3_pm_window: bool = False          # ... after that the PM window is 13:45-14:30
-    new_day_stops: bool = False          # X14-new-trader-stop-when-day-positive (065 ~04:16; 102 ~01:51:30): with trader_mode "new": stop once the day is net positive; AM or PM, not both
+    new_day_stops: bool = True           # X14-new-trader-stop-when-day-positive (065 ~04:16; 102 ~01:51:30): trader_mode "new" implies it (default ON; False = the old meaning of "new"): stop once the day is net positive; AM or PM, not both; a losing AM is not recovered in the PM (recovery is experienced-only: with trader_mode "experienced" nothing blocks the PM, so there is no separate switch)
     pm_after_am_win: str = "off"         # ... experienced: "draw_open" = a PM entry after an AM win only while the day's HTF draw is untouched (056 ~08:19)
-    pm_recover_loss: bool = False        # ... recovering a losing AM in the PM (experienced only; forced off in trader_mode "new")
     beginner_template: bool = False      # X14-beginner-template-numbers (095 ~00:47:08): preset - 1 contract, one setup, a single exit at beginner_target_pts, the stop at most 12 handles (max_stop_pts), trader_mode "new" with new_day_stops
     beginner_target_pts: float = 12.5
     conflicted_mode: str = "off"         # X14-conflicted-htf-one-entry (091 ~00:10:44): a conflicted HTF day (both sides valid / inside a daily BISI-SIBI): "skip" / "one" (one entry then done) / "one_win" (done after the first win)
@@ -4986,7 +4985,7 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
     key = pos.get("done_key", tr.session)
     _ME1.after_close(pos, tr, done, key)              # caption-gap management_exits #1/3: the hold_reached session slot, the delivery-speed tag
     _ME2.after_close(pos, tr, done, key, state, p)    # caption-gap management_exits #2/3: the pool lock's re-entry block / day done, the chop-close session rule
-    blocked3_ = _ME3.pre_close(pos, tr, state, p, i) if (p.abort_blocks_side or p.runner_stop_no_reentry) else False      # caption-gap management_exits #3/3: an abort-set exit abandons the leg's direction (no re-entry), a runner stop after the bulk was banked ends the move
+    blocked3_ = _ME3.pre_close(pos, tr, state, p, i) if (p.abort_blocks_side or _ME3.runner_stop_on(p)) else False      # caption-gap management_exits #3/3: an abort-set exit abandons the leg's direction (no re-entry), a runner stop after the bulk was banked ends the move
     reopened = False
     if (lost is not None and p.reentry_half and not tight_ and not blocked3_ and (not state["reentered"].get(tr.session) or _ME3.more_reentries(state, tr.session, p))      # (caption-gap D18-reentry-count-max-2: reentry_count_max attempts)
             and not (p.fomc_day_stop and "fomc" in events(tr.date))):            # N3.5: none on an FOMC day

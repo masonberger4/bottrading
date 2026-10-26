@@ -15,8 +15,8 @@ from test_caption_gap_ld1 import ENTRY, SYN
 from test_caption_gap_sm2b import _check_ran, _es_tf, _la, ES_NB, SYN_BASE, TAG_COLS
 
 COLS = ENTRY + TAG_COLS
-NEW_SWITCHES = ("implied_range", "vol_div_exit", "day_mode_no_am_exit", "explosive_runner", "last_hour_target_done", "pm_two_stage", "london_tod_partials", "abort_blocks_side", "open_reclaim_runner",
-                "reentry_breakaway", "ote_fail_ts", "lc_second_swipe", "am_idea_fail", "runner_stop_no_reentry", "session_fail_flatten", "pd3_pm_window", "new_day_stops", "pm_recover_loss",
+NEW_SWITCHES = ("implied_range", "vol_div_exit", "explosive_runner", "last_hour_target_done", "pm_two_stage", "london_tod_partials", "abort_blocks_side", "open_reclaim_runner",
+                "reentry_breakaway", "ote_fail_ts", "lc_second_swipe", "am_idea_fail", "runner_stop_no_reentry", "session_fail_flatten", "pd3_pm_window", 
                 "beginner_template", "late_week_flat", "recover_trail", "offside_flip", "lh_pool_timing", "am_exit_trend_hold", "pre_hold_open")
 GAP_IDS = (
     "new-implied-range-behaviour", "new-rolling-bpr-ceiling", "new-laggard-slow-delivery", "new-volume-divergence-exit", "D16-am-trade-held-into-pm", "D16-big-range-day-runner-past-noon",
@@ -35,7 +35,8 @@ def test_new_switch_defaults_and_validation():
             p.reentry_mode, p.reentry_cc_entry, p.lost_side_scope, p.pm_reset_t, p.reentry_count_max, p.reentry_ob_stop, p.runner_frac_done, p.chop_scalp_pts, p.chop_scalp_max, p.chop_scalp_day_pts,
             p.pm_after_am_win, p.beginner_target_pts, p.conflicted_mode, p.late_flat_t, p.abort_mode, p.abort_frac, p.lh_keep_frac, p.lh_late_ext_pts) == (
         1.0, 1.0, 0, 1.25, 900, 0, 0.25, "", 120, 0, "", "", "high", "day", 810, 1, "mt", 0.75, 0.0, 2, 5.0, "off", 12.5, "off", 900, "full", 0.5, 0.1, 3.0)
-    assert not me3.any_on(p) and not me3.order_on(p) and not me3.am_on(p)                      # the defaults leave the engine alone
+    assert p.day_mode_no_am_exit is True and p.new_day_stops is True                                   # (the two spec-implied defaults: day mode exempts itself from the 12:00 close; trader_mode "new" implies the day stops)
+    assert not me3.any_on(p) and not me3.order_on(p)                    # the defaults leave the engine alone
     assert p.reentry_max == 2 and p.ladder_trail == "fvg" and p.sloppy_mode == "stand_aside" and p.trader_mode == ""     # the names / defaults that already existed are untouched
     assert p.sb_model is False and p.sb_use_bias == Params().sb_use_bias and p.want_all_engines == Params().want_all_engines
     for bad in (dict(lost_side_scope="week"), dict(abort_mode="third"), dict(scalp_mode="2to1"), dict(recovery_exit="pro"), dict(reentry_mode="x"), dict(reentry_cc_entry="mid"),
@@ -89,13 +90,13 @@ NOON = dict(day_mode_auto=True, day_mode_no_am_exit=True, am_runner_hold_to=900,
 SYN_CASES = {
     # name: (seed, switches, the sm2.HITS counters the full run must have bumped)
     "noon_a": (3, NOON, ("laggard", "laggard_params", "cc_day_exit", "two_stage_hold", "eval_pre_hold_open")),
-    "noon_b": (7, dict(NOON, trade_type="day"), ("trend_hold", "cc_day_exit", "laggard")),
-    "range": (5, dict(implied_range=True, time_stop_min=10, vol_div_exit=True, ladder_trail="rolling_bpr", open_reclaim_runner=True, be_on="t1", **OFF), ("eval_implied_range", "eval_vol_div")),
+    "noon_b": (7, dict(NOON, trade_type="day"), ("trend_hold", "eval_trend_hold", "eval_explosive", "eval_am_runner_hold", "cc_day_exit", "laggard")),
+    "range": (5, dict(implied_range=True, time_stop_min=10, vol_div_exit=True, ladder_trail="rolling_bpr", open_reclaim_runner=True, be_on="t1", **OFF), ("eval_implied_range", "eval_vol_div", "eval_open_reclaim", "eval_rolling_bpr", "bpr_roll")),
     "reentry": (3, dict(reentry_half=True, abort_blocks_side=True, fvg_abort=True, abort_mode="half", reentry_count_max=2, reentry_mode="cc_ob", reentry_breakaway=True, ote_fail_ts=True, ote="limit",
                         lc_second_swipe=True, lc_tag=True, recovery_exit="new", late_week_flat=True, recover_trail=True, offside_exit=True, offside_flip=True, runner_stop_no_reentry=True, reentry_ob_stop="full"),
-                 ("reentry_count", "lc_second_swipe", "eval_abort_half", "eval_recovery", "eval_late_week_flat")),
+                 ("reentry_count", "reentry_ob_low", "lc_second_swipe", "eval_abort_half", "eval_recovery", "eval_late_week_flat")),
     "stops": (5, dict(session_fail_flatten=True, session_stop_after_fails=3, pd3_pm_window=True, trader_mode="new", new_day_stops=True, pm_after_am_win="draw_open", conflicted_mode="one_win",
-                      reverse_after_loss=False, lost_side_scope="session", am_idea_fail=True, chop_scalp_pts=2.5, sloppy_mode="scalp", scalp_mode="fixed_1to1", pm_recover_loss=True, stop_ack_sec=10, **OFF), ()),
+                      reverse_after_loss=False, lost_side_scope="session", am_idea_fail=True, chop_scalp_pts=2.5, sloppy_mode="scalp", scalp_mode="fixed_1to1", stop_ack_sec=10, **OFF), ("trader_mode_new", "eval_pm_window", "eval_session_fail", "new_day_positive")),
 }
 
 
@@ -116,15 +117,22 @@ W3 = ("2023-09-05", "2023-11-10")
 ES_CASES = {
     # name: (window, base, switches, counters)
     "range": (W8, ES_NB, dict(SMP, implied_range=True, time_stop_min=10, laggard_mult=2.0, meander_bars=5, vol_div_exit=True, ladder_trail="rolling_bpr", open_reclaim_runner=True, be_on="t1"),
-              ("eval_implied_range", "eval_rolling_bpr", "bpr_roll", "eval_open_reclaim", "open_reclaim", "reclaim_be_wait", "eval_vol_div")),
+              ("eval_implied_range", "eval_rolling_bpr", "bpr_roll", "eval_open_reclaim", "open_reclaim", "reclaim_be_wait", "eval_vol_div", "vol_div", "eval_ir_top_raid")),
     "reentry": (W8, ES_NB, dict(SMP, reentry_half=True, abort_blocks_side=True, fvg_abort=True, abort_mode="half", reentry_count_max=2, reentry_mode="cc_ob", reentry_breakaway=True, ote_fail_ts=True,
                                 lc_second_swipe=True, lc_tag=True, recovery_exit="new", late_week_flat=True, recover_trail=True, offside_exit=True, offside_flip=True, runner_stop_no_reentry=True,
                                 reentry_after_trail_win=True, trail=True),
                 ("abort_half", "reentry_count", "flat_week", "runner_stop", "abort_blocks_side", "eval_recovery", "eval_late_week_flat")),
-    "stops": (W8, ES_NB, dict(SMP, session_fail_flatten=True, session_stop_after_fails=3, pd3_pm_window=True, trader_mode="new", new_day_stops=True, pm_after_am_win="draw_open", conflicted_mode="one_win",
+    "stops": (W8, ES_NB, dict(SMP, session_fail_flatten=True, session_stop_after_fails=3, pd3_pm_window=True, trader_mode="new", pm_after_am_win="draw_open", conflicted_mode="one_win",
                               reverse_after_loss=False, lost_side_scope="session", am_idea_fail=True, chop_scalp_pts=2.5, sloppy_mode="scalp", scalp_mode="fixed_1to1"),
-              ("conflicted_one_win", "new_day_positive", "scalp_1to1", "new_am_or_pm")),
-    "noon": (W3, ES_NB, dict(SMP, **{k: v for k, v in NOON.items() if k not in ("pre_0900", "pm", "last_hour_own_slot", "pm_last_hour_model", "cc_day_exit", "turtle_soup")}),
+              ("conflicted_one_win", "new_day_positive", "scalp_1to1", "new_am_or_pm", "eval_session_fail", "eval_pm_window")),
+    "stops_bias": (W8, ES_NB, dict(SMP, am_idea_fail=True, htf_bias="combo", session_fail_flatten=True, session_stop_after_fails=3, pd3_pm_window=True, reverse_after_loss=False,
+                                   lost_side_scope="session"), ("eval_am_idea_fail", "eval_session_fail")),
+    "ote": (W8, ES_NB, dict(SMP, reentry_half=True, ote="limit", ote_fail_ts=True, reentry_breakaway=True, offside_exit=True, offside_flip=True, breakaway="tag"),
+            ("eval_breakaway_arm", "breakaway_fill_arm")),            # (the OTE turtle soup and the offside flip are rare on real data: the forced scenario-C look-ahead runs of test_caption_gap_me3d.py cover them)
+    "lh": (W3, ES_NB, dict(SMP, lh_pool_timing=True, last_hour_target_done=True, pm=(780, 950), last_hour_own_slot=True, pm_last_hour_model=True, moc_run=True, pre_hold_open=True, pre_0900=True,
+                           am_runner_hold_to=900, explosive_runner=True, am_exit_trend_hold=True, pm_two_stage=True),
+           ("eval_lh_target",)),
+    "noon": (W3, ES_NB, dict(SMP, **{k: v for k, v in NOON.items() if k not in ("cc_day_exit", "turtle_soup")}),
              ("eval_london_tod", "lon_0500")),
 }
 

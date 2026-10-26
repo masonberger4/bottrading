@@ -48,6 +48,27 @@ class StopAckWatch:
         return bool(s * (self.entry - float(close)) > self.p.tick + 1e-12)
 
 
+def watch_open_trades(watches: dict, trades, now, p: Params, acked=None, last_close: float | None = None) -> list:
+    """new-no-working-stop-close-exit (stop_ack_sec; paper order handling): one StopAckWatch per OPEN simulated trade (no exit yet), ticked once per poll. `acked(trade)` says whether the broker has
+    acknowledged the protective stop (None = the paper layer places no real order, so the stop counts as acknowledged at once). Returns the actions for the caller: ("unprotected", entry_time,
+    (levels, fracs)) the first time a position goes unprotected (work ONE 100 % rung at rung 1), and ("exit_market", entry_time, close) when a bar closes against an unprotected position."""
+    acts: list = []
+    if p.stop_ack_sec <= 0:
+        return acts
+    for tr in trades:
+        if tr.exits or tr.entry_time is None:
+            continue
+        w = watches.get(tr.entry_time)
+        if w is None:
+            w = watches[tr.entry_time] = StopAckWatch(p, tr.side, tr.entry, [tr.t1] + ([tr.t2] if tr.t2 is not None else []), [1.0], tr.entry_time)
+        was = w.unprotected
+        if w.tick(now, True if acked is None else bool(acked(tr))) and not was:
+            acts.append(("unprotected", tr.entry_time, w.ladder()))
+        if last_close is not None and w.adverse_close(last_close):
+            acts.append(("exit_market", tr.entry_time, float(last_close)))
+    return acts
+
+
 def history_days(minutes: int) -> int:
     """Calendar days to fetch (review fix): at least backtest.HIST_DAYS + 1 sessions, like the
     backtest (IPDA 40/60, ipda_eq_day, org_days > 5); 1-minute bars are capped by Schwab."""
@@ -183,6 +204,7 @@ def run(symbol="SPY", partner="QQQ", minutes=1, p: Params | None = None, out="ru
     c = client()
     Path(out).mkdir(parents=True, exist_ok=True)
     seen_arm, seen_tr = set(), {}
+    watches: dict = {}
     rs_path = Path(out) / f"risk_state_{symbol}.json"
     rs_start = load_risk_state(rs_path, datetime.now().date(), p)     # E10 carried across days
     rs_day = None
@@ -205,6 +227,8 @@ def run(symbol="SPY", partner="QQQ", minutes=1, p: Params | None = None, out="ru
                 seen_arm.add(ev)
                 print(f"{ev[0]:%H:%M} ARMED {ev[2]} {ev[3]} after {ev[4]} sweep: limit {ev[5]:.2f} "
                       f"stop {ev[6]:.2f} t1 {ev[7]:.2f}")
+        for act in watch_open_trades(watches, trades, now, p):                # caption-gap new-no-working-stop-close-exit: the stop acknowledgement watch of the open positions
+            print(f"{now:%H:%M} STOP-ACK {act[0]} {act[1]} {act[2]}")
         for tr in trades:
             r = tr.row(p.cost_per_share)
             key = (r["entry_time"], r["exit_reason"])

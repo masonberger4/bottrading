@@ -628,6 +628,24 @@ def objective_met_filter(t: pd.DataFrame, consol_only: bool = False, met: dict |
     return t[keep]
 
 
+def laggard_draw_tag(t: pd.DataFrame, met: dict | None = None) -> pd.DataFrame:
+    """new-laggard-slow-delivery: column `laggard_draw` = another instrument's draw was already met (moment <= this fill's entry_time) the same day. `met` = {(date, symbol): moment}; without it the
+    final_hit / exit_time of the books' own trades are read."""
+    t = t.copy()
+    t["laggard_draw"] = False
+    if not len(t) or not {"date", "symbol", "entry_time"} <= set(t.columns):
+        return t
+    moments: dict = {}
+    if met is not None:
+        moments = {k: v for k, v in met.items() if v is not None and v == v}
+    elif {"final_hit", "exit_time"} <= set(t.columns):
+        for (d, s), g in t[t.final_hit.eq(True) & t.exit_time.notna()].groupby(["date", "symbol"]):
+            moments[(d, s)] = g.exit_time.min()
+    for i, r in t.iterrows():
+        t.at[i, "laggard_draw"] = any(d == r["date"] and s != r["symbol"] and T <= r["entry_time"] for (d, s), T in moments.items())
+    return t
+
+
 def _fixed_es(t: pd.DataFrame) -> pd.DataFrame:
     """BH D15-which-index-contradiction: only ES fills stay; an ES fill is SMT-qualified when EITHER instrument's SMT tag of its slot (date + session)
     shows a divergence at the sweep (the other index's tag counts: the crack in any index signals the trade in ES)."""
@@ -672,8 +690,10 @@ def _group_pick(t: pd.DataFrame, pick: str) -> pd.DataFrame:
 
 def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, sb_one_market: bool = False,
             sb_am_done: bool = False, laggard_consol_only: bool = False, dual_deal: str = "", exec_exclude: tuple = ("YM",), prefer: str = "none",
-            max_exec: int = 2, max_exposure_pct: float = 0.0) -> pd.DataFrame:
-    """Caption-gap OT-D15-default-instrument / OT-max-two-correlated-markets (028 ~00:23:58; 055 ~00:27:38; setups_models #7/7): `exec_exclude` (Params.combine_exec_exclude, default ("YM",)) = the
+            max_exec: int = 2, max_exposure_pct: float = 0.0, laggard_tag: bool = False) -> pd.DataFrame:
+    """Caption-gap new-laggard-slow-delivery (090 ~01:49:28; management_exits #3/3): `laggard_tag` adds the column `laggard_draw` - True on a fill taken at or after the moment ANOTHER instrument's own draw was met
+    (the real-draw read of `_met_map`; the final_hit/exit_time read for hand-made books). REPORT ONLY (the in-run `Trade.laggard` flag, which drives the longer time-stop window, is the engine proxy).
+    Caption-gap OT-D15-default-instrument / OT-max-two-correlated-markets (028 ~00:23:58; 055 ~00:27:38; setups_models #7/7): `exec_exclude` (Params.combine_exec_exclude, default ("YM",)) = the
     symbols that are never EXECUTED - their rows are dropped before the pick (YM is the Dow: a reference for SMT only, it already enters as partner2 / smt2, so the bot's trades do not change; the
     "middle" pick, which ranks all three indices, drops them AFTER the pick); `prefer` (Params.combine_prefer) "es" = on a same-bar tie (same entry_time) keep the S&P row (ES / SPX / SPY) over
     the Nasdaq one (NQ / NDX / QQQ), ahead of the weak / relative-leg tie-break; `max_exec` (Params.max_exec_markets, default 2): at most two execution symbols may remain and, with two, they must be
@@ -691,6 +711,8 @@ def combine(*runs: pd.DataFrame, pick: str = "first", one_market: bool = False, 
     kw = dict(pick=pick, one_market=one_market, sb_one_market=sb_one_market, sb_am_done=sb_am_done, laggard_consol_only=laggard_consol_only, exec_exclude=tuple(exec_exclude), prefer=prefer,
               max_exec=int(max_exec))
     out = _combine_dual(runs, dual_deal, kw) if dual_deal else _combine(*runs, **kw)
+    if laggard_tag:
+        out = laggard_draw_tag(out, _met_map(runs, out))
     return _ES3.exposure_filter(out, max_exposure_pct) if max_exposure_pct else out       # caption-gap E11-portfolio-exposure-cap (Params.max_exposure_pct): open risk of all concurrent trades + the new one <= the cap
 
 

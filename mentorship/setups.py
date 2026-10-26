@@ -1269,7 +1269,7 @@ CC_PROFILES = {1: ("two_session_up", "am_rally_pm_reversal", "cons_am_rally_pm_d
                -1: ("two_session_down", "am_decline_pm_reversal", "cons_am_decline_pm_rally")}
 
 
-def cc_profile(ctx, i, p):
+def cc_profile(ctx, i, p, at: int = 810):
     """T13 [CC] six index day profiles (cc10_013 ~1:21-15:43; cc10_014) classified at 13:30 from
     bars closed by then [our interpretation of the classification - the source reads them off an
     HTF array map]: the AM leg (09:30-12:00) = +1 when its low came before its high and it closed
@@ -1280,25 +1280,26 @@ def cc_profile(ctx, i, p):
       - else the two-session trend profile (1 / 2);
       - NFP days: "seek_destroy" (the exception).
     Returns (name, PM direction: +1 / -1 / 0) or None before 13:30; cached on ctx."""
-    k810 = S._idx_at(ctx, 810)
-    if i < k810 or k810 >= len(ctx.t):
+    k810 = S._idx_at(ctx, at)                                # (caption-gap D16-big-range-day-runner-past-noon: at=720 classifies the profile at the 12:00 AM exit from the same AM leg - the bars closed by 12:00)
+    if i < (k810 if at == 810 else k810 - 1) or k810 >= len(ctx.t):
         return None
-    if getattr(ctx, "_cc_prof", None) is not None:
-        return ctx._cc_prof
+    ck = "_cc_prof" if at == 810 else "_cc_prof_%d" % at
+    if getattr(ctx, ck, None) is not None:
+        return getattr(ctx, ck)
     if "jobs" in events(ctx.day):
-        ctx._cc_prof = ("seek_destroy", 0)
-        return ctx._cc_prof
+        setattr(ctx, ck, ("seek_destroy", 0))
+        return getattr(ctx, ck)
     a, b = S._idx_at(ctx, 570), S._idx_at(ctx, 720)
     b = min(b, k810)
     if b - a < 2:
-        ctx._cc_prof = ("unclear", 0)
-        return ctx._cc_prof
+        setattr(ctx, ck, ("unclear", 0))
+        return getattr(ctx, ck)
     h, l, o, c = ctx.h[a:b], ctx.l[a:b], ctx.o[a:b], ctx.c[a:b]
     ih, il = int(np.argmax(h)), int(np.argmin(l))
     d = 1 if (il < ih and c[-1] > o[0]) else -1 if (ih < il and c[-1] < o[0]) else 0
     if d == 0:
-        ctx._cc_prof = ("unclear", 0)
-        return ctx._cc_prof
+        setattr(ctx, ck, ("unclear", 0))
+        return getattr(ctx, ck)
     from .calendar import release_times
     adr = S.adr5(getattr(ctx, "hist", [])[-5:])
     cons = (not any(R >= 600 for R in release_times(ctx.day)) and adr is not None
@@ -1310,8 +1311,8 @@ def cc_profile(ctx, i, p):
         x = float(h.max()) if d > 0 else float(l.min())
         at_arr = any(tf_ in ("4h", "D") for tf_ in conf.at(now, x, -d))   # the opposing array (real price)
     name = CC_PROFILES[d][2 if cons else 1 if at_arr else 0]
-    ctx._cc_prof = (name, d if name.startswith("two_session") else -d)
-    return ctx._cc_prof
+    setattr(ctx, ck, (name, d if name.startswith("two_session") else -d))
+    return getattr(ctx, ck)
 
 
 def finish_gates(ctx, sd, sw, i, p, session, entry, tags: dict, lvt: list, lvx: dict) -> bool:

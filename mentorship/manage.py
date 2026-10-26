@@ -623,7 +623,7 @@ def fam(session: str) -> str:
 
 def any_stop_switch(p, day=None) -> bool:
     """Any session / day stop in force. fomc_no_reentry (N3 / N3.5) counts only on an FOMC day (day=None: assume so)."""
-    return bool(p.session_stop_after_fails or p.loss_ends_morning or p.no_trade_after_win or p.chop_one_win
+    return bool(p.session_stop_after_fails or p.session_fail_flatten or p.loss_ends_morning or p.no_trade_after_win or p.chop_one_win
                 or p.obj_stop or p.done_if_target
                 or (p.fomc_day_stop and (day is None or "fomc" in events(day))))
 

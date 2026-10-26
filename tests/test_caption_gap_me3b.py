@@ -137,13 +137,13 @@ def test_trader_mode_day_positive():
     pos, tr, sd = _closed_trade(ctx, -50.0)
     me3.after_close(ctx, pos, tr, done, "AM", {"reentered": {}, "day_net": -50.0}, p, 10, "long", -50.0, False)
     assert done["PM"] and done["SB_PM"] is False and not done["AM"]                                # (the AM family's own flags are the session stops' business; the PM is the AM-or-PM rule)
-    # pm_recover_loss cannot lift it in "new"
-    done = keys()
-    me3.after_close(ctx, pos, tr, done, "AM", {"reentered": {}, "day_net": -50.0}, pk(trader_mode="new", new_day_stops=True, pm_recover_loss=True), 10, "long", -50.0, False)
-    assert done["PM"]
-    # the switch off: trader_mode "new" keeps its old meaning
+    # trader_mode "new" alone implies the stops (new_day_stops defaults on)
     done = keys()
     me3.after_close(ctx, pos, tr, done, "AM", {"reentered": {}, "day_net": 50.0}, pk(trader_mode="new"), 10, None, 50.0, False)
+    assert all(done.values())
+    # new_day_stops=False: trader_mode "new" keeps its old meaning
+    done = keys()
+    me3.after_close(ctx, pos, tr, done, "AM", {"reentered": {}, "day_net": 50.0}, pk(trader_mode="new", new_day_stops=False), 10, None, 50.0, False)
     assert not any(done.values())
     # experienced + draw_open
     q = pk(pm_after_am_win="draw_open")
