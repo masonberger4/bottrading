@@ -198,7 +198,7 @@ def _chop(row, adr) -> str:
     why = []
     if _i(row.get("in_bear_arr")) or _i(row.get("in_bull_arr")):
         why.append("in_array")
-    rng = row.get("on_range")
+    rng = row.get("on_range") if row.get("_use_on", True) else None          # caption-gap N8-overnight-not-precursor (cc10_009 ~00:00:55): n8_use_overnight False leaves the overnight range out
     if adr and rng == rng and rng is not None and rng < row.get("_chop_frac", 0.35) * adr:
         why.append("on_range")
     return "+".join(why)
@@ -228,7 +228,7 @@ def row_state(ctx, p, session: str, i: int) -> State:
         if test == "fifty_fifty" and _i(row.get("fifty")):
             hit = "fifty_fifty"
         elif test == "premium_chop":
-            hit = "premium_chop" if _chop(dict(row, _chop_frac=p.chop_on_adr), adr) else ""
+            hit = "premium_chop" if _chop(dict(row, _chop_frac=p.chop_on_adr, _use_on=p.n8_use_overnight), adr) else ""
             pre = True                                        # "stuck ... wait for 09:30" (010 ~14:05; Ep 08)
         elif test == "draw_delivered" and (od or ow):
             hit = "draw_delivered"
@@ -252,7 +252,7 @@ def row_state(ctx, p, session: str, i: int) -> State:
         S.block = S.block or "fifty_fifty"
     # Ep08.2 chop_mode
     if p.chop_mode != "off":
-        ch = _chop(dict(row, _chop_frac=p.chop_on_adr), adr)
+        ch = _chop(dict(row, _chop_frac=p.chop_on_adr, _use_on=p.n8_use_overnight), adr)
         if ch and not p.chop_in_array:
             ch = "on_range" if "on_range" in ch else ""
         if ch:

@@ -252,6 +252,8 @@ def plan(ctx, hist, p, week: dict | None = None, eve: tuple | None = None, dt: s
     _consol_rules(P, ctx, d, p, hist, eth, a5)
     _regime_rules(P, d, p, hist, eth)
     _misc_rules(P, ctx, d, p, hist, eth, a5)
+    from . import dwc1 as _D1
+    _D1.plan_rules(P, ctx, d, p, hist, eth, a5, dt)          # caption-gap pass day_week_context#1/3
     return P
 
 
@@ -259,7 +261,7 @@ def plan(ctx, hist, p, week: dict | None = None, eve: tuple | None = None, dt: s
 
 def _calendar_tags(d: date, p, ctx=None) -> set:
     t = set()
-    if CAL.is_holiday_eve(d, p.holiday_eve_bank):
+    if CAL.holiday_eve(d, p.holiday_eve_cases, p.holiday_eve_bank):          # (caption-gap DS2-holiday-eve-friday-before-tue-holiday: holiday_eve_cases "ab" adds the Friday before a Mon / Tue holiday)
         t.add("holiday_eve")
     if CAL.is_post_holiday(d):
         t.add("post_holiday")
@@ -293,7 +295,7 @@ def _calendar_rules(P: DayPlan, d: date, p, hist, ctx, a5) -> None:
     tg = P.tags
     if p.skip_holiday_eve and "holiday_eve" in tg:                          # N7.1 (cc08_006 ~5:06; cc10_008 ~6:54)
         P.block(None, "holiday_eve")
-    if p.skip_post_holiday_am and "post_holiday" in tg:                     # N7.2 (090 ~8:00)
+    if p.skip_post_holiday_am and "post_holiday" in tg and p.post_holiday_am != "symmetry":      # N7.2 (090 ~8:00); caption-gap N7-post-holiday-am-symmetry: "symmetry" releases it once ES / NQ agree (dwc1.gate)
         P.block(NY_MORNING if p.post_holiday_pre_open else NY_AM, "post_holiday_am")   # [our interpretation] the NY AM family
                                                                             # only (post_holiday_pre_open adds the 07:00-08:30 pre-open
                                                                             # windows); London is not "the morning"
@@ -946,7 +948,8 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()) -> str | None:
         if ed is not None and ed["done"]:
             return "x_dw_pre_draw"
     # N8.4 a large opening range gap: sacrifice the AM (033 ~13:27)
-    if p.big_day_am_skip and session in AM_SACRIFICE and t >= 570 and getattr(ctx, "org", None) and getattr(ctx, "org_today", False):
+    if (p.big_day_am_skip and session in AM_SACRIFICE and t >= 570 and not (p.big_day_am_resume and t >= p.big_day_am_resume)       # (caption-gap N8-large-org-day: big_day_am_resume)
+            and getattr(ctx, "org", None) and getattr(ctx, "org_today", False)):
         a = _adr(ctx, p)
         pc, op = ctx.org[-1]
         if a and abs(op - pc) >= p.big_day_org_frac * a:
@@ -968,7 +971,7 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()) -> str | None:
         return "x_dw_macro_no_move"
     # N9.3 objective done before lunch / X10d the AM delivered the range: the PM is done
     if session in LATE:
-        if p.objective_done_skip and objective_done(ctx, i, trades):
+        if p.objective_done_skip and p.objective_done_pm == "off" and objective_done(ctx, i, trades):      # (caption-gap N9-objective-before-lunch: objective_done_pm "reversal_only" trades the counter direction instead)
             return "x_dw_objective_done"
         if p.am_range_skip_pm and am_range_done(ctx, p, i):
             return "x_dw_am_range"
@@ -1013,6 +1016,10 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()) -> str | None:
         if not any(a <= t < b for a, b in p.tgif_timing):
             return "x_dw_tgif_timing"
     # N8.1 / N8.6 consolidation / seek-and-destroy handled via scalp_now (no gate)
+    from . import dwc1 as _D1                        # caption-gap pass day_week_context#1/3
+    why_ = _D1.gate(ctx, p, session, i, t, trades)
+    if why_ is not None:
+        return why_
     from . import bias_day as _BD                    # bias_htf: objective met, neutral gates, chop, intermarket, NWOG regime ...
     return _BD.gate(ctx, p, session, i, t)
 
@@ -1256,6 +1263,10 @@ def side_ok(ctx, p, sign: int, session: str, i: int) -> str | None:
             if b and sign != b:
                 return "x_dw_tue_week_extreme"
     # N8.6 seek & destroy context required for no_hold is a scalp rule (see scalp_now); nothing here
+    from . import dwc1 as _D1                        # caption-gap pass day_week_context#1/3
+    why_ = _D1.side_ok(ctx, p, sign, session, i)
+    if why_ is not None:
+        return why_
     from . import bias_day as _BD                    # bias_htf: the bias side (all engines), weekly open, judas, filters ...
     return _BD.side_ok(ctx, p, sign, session, i)
 
@@ -1281,6 +1292,10 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p) -> str | None:
             taken = bool(dh is not None and (dh[0] > hi if sd.sign < 0 else dh[1] < lo))
             if not taken:
                 return "x_dw_tgif_week_sweep"
+    from . import dwc1 as _D1                        # caption-gap pass day_week_context#1/3
+    why_ = _D1.order_ok(ctx, sd, o, session, i, p)
+    if why_ is not None:
+        return why_
     from . import bias_day as _BD                    # bias_htf: mwd_nest, mmbm_zone, 50/50 and the order tags
     return _BD.order_ok(ctx, sd, o, session, i, p)
 
@@ -1299,6 +1314,10 @@ def scalp_now(ctx, p, session: str, i: int | None = None) -> str:
         if (not p.sd_context_required) or P.info.get("sd_week"):
             if seek_destroy(ctx, i):
                 return "sd_no_hold"
+    from . import dwc1 as _D1                        # caption-gap pass day_week_context#1/3
+    why_ = _D1.scalp_now(ctx, p, session, i)
+    if why_:
+        return why_
     from . import bias_day as _BD                    # bias_htf: neutral bias / no narrative / chop / consolidation-week scalps
     return _BD.scalp_now(ctx, p, session, i)
 
@@ -1348,6 +1367,8 @@ def day_risk(ctx, p, lvt: list | None = None) -> float:
         m *= p.roll_risk
         if lvt is not None:
             lvt.append("size_roll_week")
+    from . import dwc1 as _D1
+    m *= _D1.size_mult(ctx, p, lvt)                 # caption-gap pass day_week_context#1/3: August light, holiday weeks, season_quality "size"
     return m
 
 
@@ -1512,6 +1533,10 @@ def stamp(ctx, trades, p) -> None:
             tr.eve_draw_px, tr.eve_draw_side, tr.eve_draw_done = ed["px"], ed["side"], ed["done"]
         if k >= 0:
             tags |= _entry_tags(ctx, p, P, d, s, k, tr)
+            from . import dwc1 as _D1
+            tags |= _D1.entry_tags(ctx, p, P, k)         # caption-gap pass day_week_context#1/3
+        if P.info.get("wk_profile"):
+            tr.wk_profile = P.info["wk_profile"]
         tr.dw_tags = "|".join(sorted(tags))
 
 

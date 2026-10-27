@@ -402,3 +402,141 @@ def trading_days_between(a: date, b: date) -> int:
 def month_trading_day(d: date) -> int:
     """1-based trading-day number of d in its month."""
     return trading_days_between(date(d.year, d.month, 1) - timedelta(days=1), d)
+
+
+# --- Caption-gap pass, package day_week_context#1/3 (digests/rulebook_gaps; dwc1.py) --------------------------------------------------
+# US presidential election days (N7-election, cc04_002 ~00:26:40; cc04_003 ~00:32:20: ICT's personal practice, not a stated rule).
+ELECTIONS = {date(2020, 11, 3), date(2024, 11, 5), date(2028, 11, 7)}
+
+
+def election_block(d: date, mode: str) -> bool:
+    """skip_election: "two_weeks" = Nov 1 of an election year to election day + 9 calendar days ("the first two weeks of November",
+    [our interpretation]); "narrow" = election day and the next trading day [our interpretation]."""
+    if mode == "off":
+        return False
+    for e in ELECTIONS:
+        if e.year != d.year:
+            continue
+        if mode == "two_weeks":
+            if date(e.year, 11, 1) <= d <= e + timedelta(days=9):
+                return True
+        elif mode == "narrow":
+            if d == e or d == next_trading_day(e):
+                return True
+    return False
+
+
+def holiday_eve_b(d: date) -> bool:
+    """DS2-holiday-eve-friday-before-tue-holiday (cc10_019 ~00:23:45): case (b) - a Friday whose following Monday or Tuesday is a weekday
+    market holiday (July 4 on a Tuesday: the Monday in between is an early-close / thin session). Case (a) is is_holiday_eve."""
+    if d.weekday() != 4 or not is_trading_day(d):
+        return False
+    return any((d + timedelta(days=k)) in DT.HOLIDAYS for k in (3, 4))
+
+
+def holiday_eve(d: date, cases: str = "a", bank: bool = False) -> bool:
+    """skip_holiday_eve cases: "a" = the trading day before a market holiday, "ab" = also the Friday before a Monday / Tuesday holiday."""
+    return bool(is_holiday_eve(d, bank) or (cases == "ab" and holiday_eve_b(d)))
+
+
+def holiday_mon_wed(d: date) -> bool:
+    """A weekday market holiday on Monday-Wednesday of d's week (N7-holiday-week: 072, Tuesday July 4 of NFP week)."""
+    return any(x in DT.HOLIDAYS for x in week_dates(d)[:3])
+
+
+RELEASES_LANDMINE = {"cpi", "jobs", "fomc", "pce", "ppi"}
+
+
+def landmine_count(d: date) -> int:
+    """D20-landmine-week-monday (064 ~00:10:18): the high-impact release days among Tuesday-Friday of d's week."""
+    return sum(bool(DT.events(x) & RELEASES_LANDMINE) for x in week_dates(d)[1:])
+
+
+# B23 seasonal windows (tags only; 050 ~00:02:22; 074 ~00:18:21; cc10_015 ~00:02:03; cc10_016 ~00:02:11; cc10_017 ~00:01:54; cc10_018 ~00:23:16).
+# (name, direction, (month, day) first, (month, day) last, wrap?) - inclusive calendar windows; win_long_fall wraps the year end.
+SEASON_WINDOWS = (
+    ("win_buy_june", 1, (5, 15), (6, 21)),            # the 3rd week of May to the 3rd week of June (the June low, 074)
+    ("win_short_may", -1, (5, 1), (6, 14)),           # May into the 1st-2nd week of June (050)
+    ("win_short_jan", -1, (1, 1), (1, 31)),           # January (cc10_017)
+    ("win_short_summer", -1, (6, 15), (9, 15)),       # through July to about Aug 1 (cc10_017) or mid-Sep (cc10_018)
+    ("win_long_fall", 1, (9, 15), (2, 7)),            # mid-Sep/Oct to year end, about the first week of Feb (050)
+    ("win_long_spring", 1, (2, 1), (5, 31)),          # Feb to May (cc10_016/018)
+)                                                      # [our interpretation] the priority order: the more specific (shorter) window wins where they overlap
+
+
+def _in_window(d: date, a: tuple, b: tuple) -> bool:
+    k, ka, kb = (d.month, d.day), a, b
+    return (ka <= k <= kb) if ka <= kb else (k >= ka or k <= kb)
+
+
+def season_tags(d: date) -> set:
+    """B23-index-seasonal-windows: the regime layer (regime_hi_bull Jan-Apr, regime_range May-Oct, regime_q4 Oct-Dec) and every window the date
+    falls in. Tags only (no gate)."""
+    t = set()
+    if d.month <= 4:
+        t.add("regime_hi_bull")
+    if 5 <= d.month <= 10:
+        t.add("regime_range")
+    if d.month >= 10:
+        t.add("regime_q4")
+    for name, _dr, a, b in SEASON_WINDOWS:
+        if _in_window(d, a, b):
+            t.add(name)
+    return t
+
+
+def season_window(d: date):
+    """The primary (most specific) window of d as (name, direction), or None - the priority order of SEASON_WINDOWS."""
+    for name, dr, a, b in SEASON_WINDOWS:
+        if _in_window(d, a, b):
+            return name, dr
+    return None
+
+
+def window_instance(name: str, d: date):
+    """(first, last) dates of the most recent instance of window `name` that ended before d (None if the table has no such window)."""
+    for nm, _dr, a, b in SEASON_WINDOWS:
+        if nm != name:
+            continue
+        best = None
+        for y in (d.year, d.year - 1, d.year - 2):
+            last = date(y, b[0], b[1])
+            first = date(y - 1 if a > b else y, a[0], a[1])
+            if last < d and (best is None or last > best[1]):
+                best = (first, last)
+        return best
+    return None
+
+
+# B23-intramonth-detail (cc10_015 ~00:05:47): (month, week of month 1-4) -> direction. Weeks: days 1-7, 8-14, 15-21, 22+.
+SEASON_DIR_TABLE = {(9, 1): 1, (9, 2): 1, (9, 3): -1, (9, 4): -1, (3, 2): -1, (3, 3): -1, (3, 4): 1, (4, 1): -1, (4, 2): -1, (4, 3): 1, (4, 4): 1,
+                    (5, 1): -1, (5, 2): -1, (5, 3): -1, (5, 4): 1}
+for _w in (1, 2, 3, 4):
+    SEASON_DIR_TABLE.update({(7, _w): 1, (11, _w): 1, (12, _w): 1})            # Jul bullish into the mid-year high, Nov bullish, Dec Santa Claus
+
+
+def week_of_month(d: date) -> int:
+    return min(4, (d.day - 1) // 7 + 1)
+
+
+def season_dir(d: date) -> int:
+    """+1 / -1 / 0: the intramonth seasonal direction (Aug and the unlisted weeks are 0)."""
+    return SEASON_DIR_TABLE.get((d.month, week_of_month(d)), 0)
+
+
+# B23-daily-seasonal-review (cc05_012 ~00:13:05): the precomputed per-instrument month direction list (from the B23 map: bull +1, bear -1, else 0).
+SEASONAL_MONTHS = {"ES": {m + 1: {"bull": 1, "bear": -1}.get(v, 0) for m, v in enumerate(
+    ("bear", "bull", "cons", "bull", "bear", "cons", "bull", "cons", "split", "bull", "bull", "bull"))}}
+
+
+def season_quality(d: date, autumn_start: int = 9) -> str:
+    """B23-seasonal-quality (079 ~00:24:47; 100 ~00:29:55; 102 ~00:10:24): "prime" = (Sep 1 or Oct 1) to Dec 10 plus Feb 1-May 31,
+    "poor" = August and Dec 11-31, "off" = everything else."""
+    m, day = d.month, d.day
+    if m == 8 or (m == 12 and day >= 11):
+        return "poor"
+    if 2 <= m <= 5:
+        return "prime"
+    if (m >= autumn_start and m <= 11) or (m == 12 and day <= 10):
+        return "prime"
+    return "off"

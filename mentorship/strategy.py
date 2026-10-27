@@ -3085,6 +3085,52 @@ class Params:
     hard_day_one_trade: bool = False     # ... the target fill ends the day
     pre_entry_guard: bool = False        # T4-no-early-entry-conditions (100 ~01:26:48): no pre-open entry when a 10:00+ release is pending or an untaken pool lies within one risk distance beyond the stop
     chop_wait_bars: int = 0              # new-10min-wait-choppy (027 ~00:25:03): 0 = off (test 10) - after the chop detector turns on wait this many bars, then require displacement
+    # --- Caption-gap pass, package day_week_context#1/3 (digests/rulebook_gaps; dwc1.py). Everything defaults off. ---------------------------------------------------------------------
+    pre_cpi_mon: str = "off"             # day_selection N4-pre-cpi-monday-gap (028 ~00:34:21): Monday before a Tuesday CPI: "tag" (pre_cpi_mon_small / pre_cpi_mon_gap) / "gap" (a large NWOG: only the side that reprices into the gap) / "skip_small" (skip a small-NWOG Monday)
+    pre_cpi_gap_adr: float = 0.5         # ... [our interpretation] large = |Sunday open - Friday close| > this x ADR5
+    landmine_min: int = 0                # D20-landmine-week-monday (064 ~00:10:18): 0 = off (test 2) - a week with this many high-impact release days Tue-Fri exempts Monday from skip_monday
+    post_holiday_am: str = "off"         # N7-post-holiday-am-symmetry (090 ~02:07:38): "skip" = the AM after a holiday / abbreviated session / large-range day is blocked; "symmetry" = ... until ES and NQ break the same side of the 09:30-09:45 range (lifts skip_post_holiday_am); "off" = skip_post_holiday_am alone
+    holiday_nfp_override: bool = False   # N7-holiday-week (072 ~00:04:19): a holiday on Mon-Wed of NFP week: the Thursday is not blocked by nfp_week_block (clean Thu / Fri)
+    holiday_week_mult: float = 1.0       # N7-holiday-week (045 ~00:44:04): holiday weeks (wonky delivery): risk multiplier (test 0.5); != 1 also means no pyramiding on holiday_week days
+    august_mode: str = "off"             # N7-august (079 ~00:10:14; 081; 084; 087): the whole month - "skip" or "light" (experienced: risk x0.5, no adds, a single exit at the first target)
+    summer_off: bool = False             # N7-august (084 ~00:28:06; 087 ~00:01:56): no trading Jun-Aug
+    season_quality: str = "off"          # B23-seasonal-quality (079 ~00:24:47; 100; 102; cc10_015): "tag" (season_prime / season_poor / season_off / season_may_overlap) or "size" (risk x 1.0 / 0.5 / 0.75 [our interpretation])
+    season_autumn_start: int = 9         # ... the autumn prime window starts Sep 1 (079) or 10 = Oct 1 (cc10_015)
+    season_march_mult: float = 1.0       # ... March risk multiplier in "size" mode (B23 flags March low probability; test 0.5)
+    skip_election: str = "off"           # N7-election (cc04_002 ~00:26:40): "two_weeks" (Nov 1 to election day + 9) / "narrow" (election day and the next trading day) - ICT's personal practice
+    holiday_eve_cases: str = "a"         # DS2-holiday-eve-friday-before-tue-holiday (cc10_019 ~00:23:45): "a" = the day before a holiday, "ab" = also the Friday before a Monday / Tuesday holiday (skip_holiday_eve)
+    objective_frac_gate: float = 0.0     # N9-objective-before-lunch (015 ~00:16:22): 0 = off (test 0.5) - once the move to the session's locked draw is past this share, no continuation entry toward it [our interpretation: the 'more than about half' threshold]
+    objective_done_pm: str = "off"       # ... "reversal_only": after the AM draw traded before 12:00 the PM trades only the counter direction (not the whole PM skipped as objective_done_skip does)
+    sd_intraday: str = "off"             # N8-intraday-seek-destroy (015 ~00:21:31; 024 ~00:19:27): "tag" or "rules" (single exit, no entry before the range breaks, none after the locked HTF level traded)
+    sd_intraday_until: int = 630         # ... [our interpretation] the detector window 09:30-10:30
+    sd_intraday_frac: float = 0.35       # ... [our interpretation] the session range < this x ADR5
+    sd_week_detect: bool = False         # N8-seek-destroy-week (cc07_002 ~00:07:57): the S&D week needs the Mon-Wed/Thu shallow two-sided run (sd_shallow_frac x ADR5, no daily close beyond) on top of the FOMC / NFP / July-August calendar condition
+    sd_shallow_frac: float = 0.25        # ... [our interpretation]
+    sd_after_array: bool = False         # ... the week is released again once its extreme touched a D / W array (a new setup is then allowed)
+    big_day_am_resume: int = 0           # N8-large-org-day (033 ~00:13:51): 0 = off (test 645) - big_day_am_skip lets the AM resume from this minute
+    nwog_templates: str = "off"          # BH-NWOG-week-open-scenarios (084; 028; 029; 103; 101): "tag" / "gate" the Monday templates (nwog_up_bull, nwog_dn_bear, nwog_flat_bear, nwog_below_wick_bull + fill status)
+    thu_strict: bool = False             # BH-N10-thursday-not-top-call (044 ~00:16:07): Thursday after a one-sided week: a counter-trend entry needs an HTF array at the sweep, a displaced MSS (x1.5) and a 10:00-11:00 fill
+    fri_one_sided: str = "off"           # BH-B17-friday-after-one-sided-week (045 ~00:11:00): "tag" / "raid_first" (longs need the sweep below the 09:30 open; T1 capped at fri_t1_pts)
+    fri_t1_pts: float = 5.0
+    season_windows: str = "off"          # BH-B23-index-seasonal-windows / B23-intramonth-detail / seasonal-failure / X3-seasonal-*: "tag" = the regime / window / intramonth / result / prime-minor tags (reported by dw_tags)
+    season_gate: bool = False            # ... the gate: intramonth season_dir, the window only when strength / regime / weekly tone / macro agree, no shorts after a failed-up result
+    season_move_adr: float = 1.0         # BH-B23-seasonal-failure [our interpretation]: the counter / consolidation yardstick = this x ADR5 x window sessions / 5
+    season_min_rank: float = 0.0         # X3-seasonal-strength-grading (cc05_010): 0 = off (test 0.67) - windows whose composite swing ranks below it (prior years only) give no tag / gate
+    macro_risk_dates: object = ""        # BH-mixed-HTF-intraday-only (068 ~04:27) / X3-seasonal-macro-override (cc05_011 ~00:22:19): a CSV path (columns week, direction) or a tuple of "YYYY-MM-DD[:dir]" flagged weeks; "" = off
+    tgif_strict: bool = False            # BH-M14-TGIF-preconditions (066 ~00:15:52): the tgif tags need a weekly / monthly array reached, tgif_weeks strong prior weeks and Mon-Thu each closing up
+    tgif_weeks: int = 2                  # ... [our interpretation] "several weeks" = at least 2
+    mo_overdue: bool = False             # B11-monthly-five-up-closes (078 ~00:16:48): tag mo_overdue_dn / mo_overdue_up for the month after 5+ same-way monthly closes into a monthly array
+    mon_how: str = "off"                 # NEW-monday-high-of-week-profile (078 ~01:07:29): "tag" / "gate" (Tue-Thu shorts need an entry under Monday's high; mirror for bullish)
+    mon_how_edge: str = "low"            # ... Monday closed below the array's "low" (default) or its "ce"
+    wk_push_range: bool = False          # NEW-failed-weekly-push-range (102 ~00:11:29): last week pushed to a prior weekly wick's CE and failed: this week is a range (orders scalp) until a daily close beyond the wick's 75 % level
+    wk_profile: str = "off"              # M17-weekly-profiles-selection (cc07_002 ~00:00:50): "tag" - classic_tue_low / wed_low / consol_thu_reversal / mon_how (mirrored for a bearish week), Trade.wk_profile
+    iw_reversal_watch: bool = False      # B17-intraweek-reversal-profile (cc07_007 ~00:20:55): tag iw_reversal_watch on Wed / Thu after a Mon / Tue range > iw_k x ADR5 closing at an HTF array
+    iw_k: float = 1.5                    # ... [our interpretation] ICT gives no multiple
+    iw_no_measured: bool = False         # ... drop the measured-move (equal-leg) targets on those days
+    three_day_small: bool = False        # B11-three-closes-day4 (cc08_006 ~00:02:07): day 4 after three same-way closes: tag day4, every order a scalp (single target, no runners)
+    day_profile: str = "off"             # T13-day-profile-selection (cc10_013 ~00:04:22): "tag" profile_day two_session / am_pm_reversal
+    day_profile_gate: bool = False       # ... on am_pm_reversal days the PM lock side is the opposite of the AM's once the array traded; on two_session days the PM goes with the AM side only
+    n8_use_overnight: bool = True        # N8-overnight-not-precursor (cc10_009 ~00:00:55): False = the consolidation / trending classification ignores the overnight range (premium_chop on_range); the N9 narrow-overnight skip is its own switch
 
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
@@ -3279,6 +3325,19 @@ class Params:
             raise ValueError(f"macro_gate_set {self.macro_gate_set!r}: entries must be keys of nct2.MACRO_SET")
         if self.fomc_whip_frac < 0 or self.pre_fomc_week_mult <= 0 or self.am_search_minutes < 0 or self.chop_wait_bars < 0:
             raise ValueError("news_calendar_times#1/1: fomc_whip_frac >= 0, pre_fomc_week_mult > 0, am_search_minutes >= 0, chop_wait_bars >= 0")
+        for name, ok in (("pre_cpi_mon", ("off", "tag", "gap", "skip_small")), ("post_holiday_am", ("off", "skip", "symmetry")),
+                         ("august_mode", ("off", "skip", "light")), ("season_quality", ("off", "tag", "size")),
+                         ("skip_election", ("off", "two_weeks", "narrow")), ("holiday_eve_cases", ("a", "ab")),
+                         ("objective_done_pm", ("off", "reversal_only")), ("sd_intraday", ("off", "tag", "rules")),
+                         ("nwog_templates", ("off", "tag", "gate")), ("fri_one_sided", ("off", "tag", "raid_first")),
+                         ("season_windows", ("off", "tag")), ("mon_how", ("off", "tag", "gate")), ("mon_how_edge", ("low", "ce")),
+                         ("wk_profile", ("off", "tag")), ("day_profile", ("off", "tag"))):          # caption-gap pass day_week_context#1/3
+            if getattr(self, name) not in ok:
+                raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
+        if (self.pre_cpi_gap_adr < 0 or self.landmine_min < 0 or self.holiday_week_mult <= 0 or self.season_march_mult <= 0 or not 0 <= self.season_min_rank <= 1
+                or self.objective_frac_gate < 0 or self.sd_intraday_frac < 0 or self.sd_shallow_frac < 0 or self.big_day_am_resume < 0 or self.tgif_weeks < 1
+                or self.iw_k <= 0 or self.fri_t1_pts <= 0 or self.season_move_adr <= 0 or self.season_autumn_start not in (9, 10)):
+            raise ValueError("day_week_context#1/3: fractions / multiples >= 0 (holiday_week_mult, season_march_mult > 0), season_min_rank in [0, 1], tgif_weeks >= 1, season_autumn_start 9 or 10")
         if (self.fomc_eve_risk <= 0 or self.pre_fomc_risk <= 0 or self.pre_cpi_risk <= 0 or self.or_deep_pd < 0
                 or self.run_done_adr < 0 or self.or_wide_adr < 0 or self.news_judas_ref_min < 1):
             raise ValueError("news_calendar_times: risk multipliers > 0, fractions / ADR multiples >= 0, news_judas_ref_min >= 1")
@@ -3646,6 +3705,11 @@ class Params:
         return bias_htf.bx_string(self)
 
     @property
+    def dw1_hist(self) -> int:
+        """Sessions of history the day_week_context#1/3 switches need (the seasonal windows and the 252-session trend, five monthly closes): 0 = the default."""
+        return 270 if (self.season_windows != "off" or self.mo_overdue) else 0
+
+    @property
     def dw_needs_week(self) -> bool:
         """The switches that read the week's trade state (backtest.week_state)."""
         return bool(self.max_trades_week or self.friday_week_done == "trades" or self.stall_at_htf or self.late_week_flat)
@@ -3761,7 +3825,8 @@ def blocked(d: date, session: str, p: "Params | None" = None, t: int = 0) -> str
         w = d.weekday() + sh                         # the day's place as if the NFP were on a Friday
         if w >= 3 and not (p is not None and p.nfp_thu and w == 3):
             if not (p is not None and p.holiday_week_thu_fri == "trade" and d.weekday() in (3, 4)
-                    and _calendar.holiday_in_week(d)):          # N7.3: holiday weeks deliver cleaner Thu / Fri
+                    and _calendar.holiday_in_week(d)) \
+                    and not (p is not None and p.holiday_nfp_override and w == 3 and _calendar.holiday_mon_wed(d)):          # N7.3: holiday weeks deliver cleaner Thu / Fri (caption-gap N7-holiday-week 072 ~00:04:19: holiday_nfp_override - a holiday on Mon-Wed of NFP week frees the Thursday)
                 return "nfp_week_thu_fri"
         if w == 2 and (session == "PM" or (p is not None and p.nfp_wed_cutoff and t >= p.nfp_wed_cutoff)):
             return "nfp_week_wed_pm"                 # caption-gap N2-nfp-wed-after-11 (101 ~01:29:18): the Wednesday cutoff minute (11:00; test 12:00) - AM-family entries from it are blocked too
@@ -3778,10 +3843,11 @@ def blocked(d: date, session: str, p: "Params | None" = None, t: int = 0) -> str
     if p is not None and p.skip_monday and d.weekday() == 0:
         mon = d - timedelta(days=d.weekday())
         week = [mon + timedelta(days=k) for k in range(5)]
-        if not _calendar.nfp_date(d) and not any("fomc" in events(x) for x in week):
+        if not _calendar.nfp_date(d) and not any("fomc" in events(x) for x in week) and not _DWC.landmine_exempt(d, p):      # (caption-gap D20-landmine-week-monday 064 ~00:10:18: landmine_min releases Tue-Fri)
             return "monday"
     if p is not None:
-        return _NC.calendar_block(d, session, p, t)
+        why = _NC.calendar_block(d, session, p, t)
+        return why if why is not None else _DWC.calendar_block(d, session, p, t)         # caption-gap pass day_week_context#1/3: skip_election, summer_off
     return None
 
 
@@ -3898,6 +3964,8 @@ class Trade:
     stop_day: str = ""             # what ended the day when this trade closed (obj_stop / done_target / chop_win / win)
     # package news_calendar_times
     macro_wins: str = ""           # T7: every ICT macro window the order was armed in, "HHMM|..." (macro_win keeps the first)
+    # package day_week_context#1/3
+    wk_profile: str = ""           # M17-weekly-profiles-selection: the week's profile at the entry (classic_tue_low / wed_low / consol_thu_reversal / mon_how / none)
     news_tags: str = ""            # the day's news tags: nfp, nfp_week, fomc, fomc_only, fomc_eve, fomc_after, cpi, pre_cpi,
                                    # two_driver, fed_chair, auction, claims, minutes (newscal.day_tags)
 
@@ -5204,6 +5272,10 @@ def day_context(hist: list[pd.DataFrame], day, p: "Params | None" = None, eth: d
                     tags.add("tgif_short"); block["tgif"] = (1,)
                 elif c <= lo + 0.25 * (hi - lo):
                     tags.add("tgif_long"); block["tgif"] = (-1,)
+    if p is not None and p.tgif_strict and ("tgif_short" in tags or "tgif_long" in tags):
+        if not _DWC.tgif_strict_ok(hist, day, p, eth, conf, "tgif_short" in tags):      # caption-gap BH-M14-TGIF-preconditions (066 ~00:15:52)
+            tags -= {"tgif_short", "tgif_long"}
+            block.pop("tgif", None)
     return tags, block
 
 
@@ -5652,6 +5724,7 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
         keep_ = set(_LD3.round_filter([c_[0] for c_ in cands if c_[2] == "round"], [c_[0] for c_ in cands if c_[2] != "round" and c_[1] == "pool"], p))
         cands = [c_ for c_ in cands if c_[2] != "round" or c_[0] in keep_]
     cands = prefs + cands                          # review fix: a preferred draw keeps its own name
+    cands = _DWC.lock_filter(ctx, cands)           # caption-gap BH-mixed-HTF-intraday-only (068 ~04:27): a macro-risk week inside a fresh weekly FVG - session pools only
     pref_keys = {(round(v, 9), k) for v, k, *_ in prefs}
     near = lambda v: any(abs(v - s) <= p.es_pt for s in spent)
 
@@ -5864,7 +5937,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             bias_by_cut: dict | None = None, meta=None, locks: list | None = None, skips: list | None = None,
             eth: dict | None = None, risk_state: dict | None = None, week: dict | None = None,
             eve: tuple | None = None, prev_full: pd.DataFrame | None = None, objective: list | None = None,
-            post_eve: pd.DataFrame | None = None) -> list[Trade]:
+            post_eve: pd.DataFrame | None = None, daily_all: dict | None = None) -> list[Trade]:
     """Trades for one day (see `_run_day_once` for the arguments). The main loop runs BEFORE the Silver Bullet / Ma Deuce
     (they read its trades), so the session / day stops (X7c / X12 / X13a / X14b / X14d) would be one-way. With a stop
     switch on and an extra engine on, this wrapper makes them two-way by a fixed point: pass 1 as usual; its Silver Bullet
@@ -5884,7 +5957,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         _TP3.hit("pool_exit_fomc")
     kw = dict(partner=partner, live=live, bias=bias, conf=conf, gaps=gaps, closes=closes, evening=evening,
               partner2=partner2, intermarket=intermarket, equity=equity, bias_by_cut=bias_by_cut, meta=meta, eth=eth,
-              week=week, eve=eve, prev_full=prev_full, post_eve=post_eve)
+              week=week, eve=eve, prev_full=prev_full, post_eve=post_eve, daily_all=daily_all)
     if not ((_MG.any_stop_switch(p, df.index[0].date()) or p.max_trades_week) and (p.ma_deuce or p.sb_model)
             and p.stops_passes > 1):                       # (the D19 / X15 week budget is two-way across the engines the same way)
         return _run_day_once(df, hist, symbol, p, tf, log=log, locks=locks, skips=skips, risk_state=risk_state, objective=objective, **kw)
@@ -5921,7 +5994,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             locks: list | None = None, skips: list | None = None, eth: dict | None = None,
             risk_state: dict | None = None, week: dict | None = None, eve: tuple | None = None,
             prev_full: pd.DataFrame | None = None, _ext: list | None = None, _out: dict | None = None,
-            objective: list | None = None, post_eve: pd.DataFrame | None = None) -> list[Trade]:
+            objective: list | None = None, post_eve: pd.DataFrame | None = None, daily_all: dict | None = None) -> list[Trade]:
     """Trades for one day. With `live`, a position still open at the last bar is returned
     with no exit (exit_reason "open") instead of being closed at the last price.
     equity     (#12) start-of-day equity for risk_basis="equity"
@@ -5952,6 +6025,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     ctx.bias_row = bias                                   # setups_models: htf table row (draws)
     _BD.apply_open_src(ctx, p, intermarket)               # bias_htf D22: bias_open_src "spy" / "es_map"
     ctx.eth = eth
+    ctx.daily_all = daily_all                             # caption-gap pass day_week_context#1/3: {date: close} of every completed session (season_min_rank composite; prior years only are read)
     ctx.eve = eve                                         # caption-gap new-intra-week-extreme-raid: the evening before today (Sunday's for a Monday)
     ctx.prev_full = prev_full
     _attach_meta(ctx, meta, p, symbol)
@@ -6014,6 +6088,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     ctx.day_tags = "|".join(sorted(dt))
     ctx.bias_by_cut = bias_by_cut or {}                   # (bias_htf rows known before 09:30 come from these cuts)
     dw = _DW.plan(ctx, hist, p, week, eve, dt)            # day_week_context: the day's blocks / flags / tags
+    p = _DWC.day_params(p, dw)                            # caption-gap pass day_week_context#1/3: iw_no_measured
     _BD.plan(dw, ctx, hist, p, dt)                        # bias_htf: day tags, range_market reading, ctx.bh_on
     wl = dw.info.get("week_left")                         # D19 / X15: trades left in the week's budget (None = no cap)
     why_dw = next((r_ for ss_, r_ in dw.blocks if ss_ is None), None)
@@ -9471,7 +9546,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         lvt.append("scalp_" + dws)
     if (sl and p.sloppy_mode == "scalp") or _NC.scalp_now(ctx, p, session) or dws:   # #10 scalp mode (N3.3: the FOMC-only AM):
                                           # one exit at min(+5, T1), no adds
-        lv, kinds, scalp, final_T = [min(entry + (p.chop_scalp_pts if (p.chop_scalp_pts > 0 and sl and p.sloppy_mode == "scalp") else p.sloppy_scalp_pts) * p.es_pt, lv[0])], [kinds[0]], True, False
+        lv, kinds, scalp, final_T = [min(entry + (p.chop_scalp_pts if (p.chop_scalp_pts > 0 and sl and p.sloppy_mode == "scalp") else (p.fri_t1_pts if dws == "fri_one_sided" else p.sloppy_scalp_pts)) * p.es_pt, lv[0])], [kinds[0]], True, False
     smt_n = int(sw["smt"] is True) + int(sw.get("smt2") is True)
     if smt_n < p.smt_min:
         _f("x_no_smt")
@@ -9725,6 +9800,7 @@ def _smt_rel_eq(ctx, sd, i, level, pctx, ps, j, p):
 
 from . import newscal as _NC  # noqa: E402  (news_calendar_times package; imports this module back)
 from . import nct2 as _NCT  # noqa: E402  (caption-gap pass, news_calendar_times#1/1: engine glue)
+from . import dwc1 as _DWC  # noqa: E402  (caption-gap pass, day_week_context#1/3: engine glue)
 from . import setups as _SM   # noqa: E402  (setups_models package; imports this module back)
 from . import entries as _EN  # noqa: E402  (entries_stops_sizing package; imports this module back)
 from . import targets as _TP  # noqa: E402  (targets_partials package: speed bump, rung plan, partials)

@@ -215,6 +215,7 @@ def hist_days(p: Params) -> int:
         n = max(n, int(p.tf_lookback["D"]) + 1)
     if getattr(p, "ipda_beyond_days", 0):
         n = max(n, p.ipda_beyond_days + 1)
+    n = max(n, getattr(p, "dw1_hist", 0))           # caption-gap pass day_week_context#1/3: the seasonal windows / 252-session trend / monthly closes
     return max(n, getattr(p, "org_days", 0) + 1)
 
 
@@ -294,6 +295,7 @@ class Prepared:
     eve: dict | None = None        # day_week_context: {date: (open, high, low, close)} of the evening session before that date
     midnight_map: dict | None = None   # bias_htf D22 bias_open_src="es_map": {date: the futures midnight open mapped to this instrument}
     reb: dict | None = None        # caption-gap L5 nwog_rebalanced: {(high, low): (known_time, near_edge, exit_edge)} of the rebalanced NWOGs
+    daily_all: dict | None = None  # caption-gap pass day_week_context#1/3 (season_min_rank): {date: RTH close} of every session (run_day reads prior years only)
 
 
 def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
@@ -336,7 +338,8 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
         else:
             from .levels import map_midnight
             mm = map_midnight(ref_df, df)
-    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth, eve, mm, reb)
+    da = {g.index[0].date(): float(rth(g).close.iloc[-1]) for g in ds} if p.season_min_rank > 0 else None
+    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth, eve, mm, reb, da)
 
 
 def evenings(df: pd.DataFrame) -> dict:
@@ -384,7 +387,8 @@ def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: d
                              if pr.midnight_map and d in pr.midnight_map else intermarket), equity=equity,
                 bias_by_cut={m: t_.loc[d].to_dict() for m, t_ in pr.cuts.items() if d in t_.index},
                 meta=pr.meta, week=week, eve=(pr.eve or {}).get(d),
-                post_eve=_SM4.post_evening(pr.df, d) if p.asia_session else None)
+                post_eve=_SM4.post_evening(pr.df, d) if p.asia_session else None,
+                daily_all=pr.daily_all)
 
 
 def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
@@ -505,7 +509,7 @@ def report(t: pd.DataFrame) -> dict:
     if not len(t):
         return out
     for col in ("setup", "side", "day_type", "unicorn", "unicorn_side", "lh_sweet", "capped", "lock_capped",
-                "sloppy", "draw_side", "entry_kind", "smt", "swept", "exit_reason"):
+                "sloppy", "draw_side", "entry_kind", "smt", "swept", "exit_reason", "wk_profile"):
         if col not in t:
             continue
         out[f"by_{col}"] = {str(k): stats(g) for k, g in t.groupby(t[col].astype(str))}
@@ -515,6 +519,11 @@ def report(t: pd.DataFrame) -> dict:
         out["capture"] = {"trades": int(len(c)), "mean": round(float(c.mean()), 3),
                           "winners_mean": round(float(w.mean()), 3) if len(w) else None,
                           "winners_median": round(float(w.median()), 3) if len(w) else None}
+    if "dw_tags" in t:                    # caption-gap pass day_week_context#1/3 (B23 "no map, tag or report"): the seasonal / week-template tags, one row per tag
+        ex = t.assign(_tag=t.dw_tags.fillna("").astype(str).str.split("|")).explode("_tag")
+        ex = ex[ex._tag.str.startswith(DW1_REPORT_TAGS)]
+        if len(ex):
+            out["by_dw_tag"] = {str(k): stats(g.drop(columns="_tag")) for k, g in ex.groupby("_tag")}
     t = t.assign(month=pd.to_datetime(t.entry_time.astype(str).str[:10]).dt.strftime("%Y-%m"))
     out["by_month"] = {k: stats(g) for k, g in t.groupby("month")}
     return out
@@ -553,6 +562,10 @@ def save(t: pd.DataFrame, rep: dict, out: str) -> None:
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     t.to_csv(out, index=False)
     Path(out).with_suffix(".json").write_text(json.dumps(rep, indent=1, default=str))
+
+
+DW1_REPORT_TAGS = ("season_", "win_", "regime_", "sr_", "nwog_", "profile_", "wk_profile_", "mon_how", "wk_push_range", "iw_reversal", "one_sided", "mo_overdue", "pre_cpi_mon", "day4",
+                   "august_mode", "macro_risk", "sd_intraday", "post_holiday_trigger")      # day_week_context#1/3 tags reported by report()
 
 
 CONSOL_MARKS = ("consol_", "daily_range", "inside_day", "big_prev", "inside_week", "bh_nwog_cons", "bh_bond_range", "bh_chop",

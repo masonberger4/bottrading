@@ -446,6 +446,8 @@ def adds_blocked(ctx, sd, pos, i, p) -> bool:
         return True
     if p.pre_fomc_week_light and S._NCT.adds_off(ctx, p, i):      # caption-gap N3-fomc-week-mon-wed (094): no pyramiding in FOMC week before the statement
         return True
+    if (p.august_mode == "light" or p.holiday_week_mult != 1.0) and S._DWC.adds_off(ctx, p):
+        return True                        # caption-gap N7-august / N7-holiday-week (day_week_context#1/3): no pyramiding
     if p.decoupled_no_adds and decoupled(ctx, i, p):
         return True
     if p.low_prob_no_adds and pos.get("low_prob"):
