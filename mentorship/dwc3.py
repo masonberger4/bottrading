@@ -1349,11 +1349,11 @@ def session_veto(ctx, p, day: date, session: str, t: int, blocked_fn, news_fn=No
     appended to the run's skips once per (session, reason); `news_fn` None = the engine does not apply skip_news there (the Silver Bullet). The sloppy stand-aside and the side blocks stay where they are (they need the per-bar state). Returns the reason or None."""
     why = None
     if p.day_filter:
-        why = blocked_fn(day, session, p, t)
+        why = blocked_fn(day, session, p, t) or None          # a falsy return (False / "" / None) is no veto
     if why is None and news_fn is not None and p.skip_news and news_fn(day) != "none":
         why = "skip_news"
     if why is not None:
-        log_veto(ctx, day, session, why)
+        log_veto(ctx, day, session, why if isinstance(why, str) else "blocked")
     return why
 
 
