@@ -254,6 +254,8 @@ def plan(ctx, hist, p, week: dict | None = None, eve: tuple | None = None, dt: s
     _misc_rules(P, ctx, d, p, hist, eth, a5)
     from . import dwc1 as _D1
     _D1.plan_rules(P, ctx, d, p, hist, eth, a5, dt)          # caption-gap pass day_week_context#1/3
+    from . import dwc2 as _D2
+    _D2.plan_rules(P, ctx, d, p, hist, eth, a5, dt)          # caption-gap pass day_week_context#2/3
     return P
 
 
@@ -565,6 +567,7 @@ def _monday_rules(P: DayPlan, ctx, d: date, p, hist, eth, a5) -> None:
                 P.block(MORNING | {"LUNCH"}, "monday_pm_only")
             elif p.monday_mode == "obvious":
                 P.info["monday_obvious"] = True           # evaluated at 09:30 (the htf row): gate()
+            # monday_mode "big_into_array" (caption-gap N10-monday-weekly-extreme): decided in dwc2.plan_rules / gate
     if monday_like and p.monday_small_range and not _nfp_fomc_week(d, p):
         P.info["monday_small"] = True
     # N10.2 / cc12_003: "let Monday go" - Tuesday off Monday's extreme, Wednesday off Tuesday's
@@ -866,7 +869,16 @@ def london_adr_hit(ctx, p, i: int) -> bool:
         return False
     w = p.london_adr_win
     r = _run(ctx, "london", i, w[0], w[1])
-    return bool(r is not None and (r[0] - r[1]) >= p.london_adr_skip * a)
+    hit_ = bool(r is not None and (r[0] - r[1]) >= p.london_adr_skip * a)
+    if hit_ and p.adr_news_exempt and any(x >= 600 for x in CAL.release_times(ctx.day)):     # caption-gap DS2-adr-filled-news-extends (cc09_007 ~00:18:32): a 10:00 / 14:00 release after the open extends the range - no ADR skip
+        P_ = getattr(ctx, "dplan", None)
+        if P_ is not None:
+            P_.info["adr_filled_news"] = True
+            P_.tags.add("adr_filled_news")
+        from . import dwc2 as _D2
+        _D2.hit("adr_news_exempt")
+        return False
+    return hit_
 
 
 def macro_failed(ctx, p, session: str, i: int, t: int) -> bool:
@@ -1020,6 +1032,10 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()) -> str | None:
     # N8.1 / N8.6 consolidation / seek-and-destroy handled via scalp_now (no gate)
     from . import dwc1 as _D1                        # caption-gap pass day_week_context#1/3
     why_ = _D1.gate(ctx, p, session, i, t, trades)
+    if why_ is not None:
+        return why_
+    from . import dwc2 as _D2                        # caption-gap pass day_week_context#2/3
+    why_ = _D2.gate(ctx, p, session, i, t, trades)
     if why_ is not None:
         return why_
     from . import bias_day as _BD                    # bias_htf: objective met, neutral gates, chop, intermarket, NWOG regime ...
@@ -1253,7 +1269,9 @@ def side_ok(ctx, p, sign: int, session: str, i: int) -> str | None:
         up = bool(dh is not None and dh[0] > hh)
         dn = bool(dh is not None and dh[1] < ll)
         if up != dn and sign != (1 if up else -1):
-            return "x_dw_thu_fri_break"
+            from . import dwc2 as _D2                # caption-gap N10-mon-wed-range-break: mw_break_bias counts only the weekly-bias side's break
+            if not p.mw_break_bias or _D2.weekly_bias(ctx, getattr(ctx, "hist", []), d, p) == (1 if up else -1):
+                return "x_dw_thu_fri_break"
     # T14 Tuesday of a bullish / bearish week: the week's extreme forms on Tuesday (switch built from study_week)
     if p.tue_week_extreme == "side" and d.weekday() == 1:
         row = getattr(ctx, "bias_row", None)
@@ -1267,6 +1285,10 @@ def side_ok(ctx, p, sign: int, session: str, i: int) -> str | None:
     # N8.6 seek & destroy context required for no_hold is a scalp rule (see scalp_now); nothing here
     from . import dwc1 as _D1                        # caption-gap pass day_week_context#1/3
     why_ = _D1.side_ok(ctx, p, sign, session, i)
+    if why_ is not None:
+        return why_
+    from . import dwc2 as _D2                        # caption-gap pass day_week_context#2/3
+    why_ = _D2.side_ok(ctx, p, sign, session, i)
     if why_ is not None:
         return why_
     from . import bias_day as _BD                    # bias_htf: the bias side (all engines), weekly open, judas, filters ...
@@ -1296,6 +1318,10 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p) -> str | None:
                 return "x_dw_tgif_week_sweep"
     from . import dwc1 as _D1                        # caption-gap pass day_week_context#1/3
     why_ = _D1.order_ok(ctx, sd, o, session, i, p)
+    if why_ is not None:
+        return why_
+    from . import dwc2 as _D2                        # caption-gap pass day_week_context#2/3
+    why_ = _D2.order_ok(ctx, sd, o, session, i, p)
     if why_ is not None:
         return why_
     from . import bias_day as _BD                    # bias_htf: mwd_nest, mmbm_zone, 50/50 and the order tags
@@ -1371,6 +1397,8 @@ def day_risk(ctx, p, lvt: list | None = None) -> float:
             lvt.append("size_roll_week")
     from . import dwc1 as _D1
     m *= _D1.size_mult(ctx, p, lvt)                 # caption-gap pass day_week_context#1/3: August light, holiday weeks, season_quality "size"
+    from . import dwc2 as _D2
+    m *= _D2.size_mult(ctx, p, lvt)                 # caption-gap pass day_week_context#2/3: the Monday into an array is half size
     return m
 
 
@@ -1378,11 +1406,18 @@ def day_risk(ctx, p, lvt: list | None = None) -> float:
 # targets and pools (N10.3 pool_mon_wed, N8.5 expansion_targets)
 # --------------------------------------------------------------------------------------------------------------
 
+def _mw_pool_on(ctx, p, P) -> bool:
+    """pool_mon_wed (N10.3), or (caption-gap new-consolidation-thursday-reversal) the Thursday false-break trade: the Mon-Wed extremes are pools on a flagged Thursday."""
+    if P is None or "mw" not in P.info:
+        return False
+    return bool(p.pool_mon_wed or (p.thu_reversal_trade and ctx.day.weekday() == 3 and P.info.get("thu_rev")))
+
+
 def target_pools(ctx, sd, i: int, p) -> list:
     """pool_mon_wed (N10.3): on Thursday / Friday the week's Mon-Wed high (low) is a buy-side (sell-side) pool and
     target, from the start of the day (completed sessions, full sessions when ctx.eth has them). [(level, created)]."""
     P = getattr(ctx, "dplan", None)
-    if not p.pool_mon_wed or P is None or "mw" not in P.info:
+    if not _mw_pool_on(ctx, p, P):
         return []
     hh, ll = P.info["mw"]
     return [(sd.x(hh if sd.sign > 0 else ll), ctx.start)]
@@ -1391,7 +1426,7 @@ def target_pools(ctx, sd, i: int, p) -> list:
 def sell_pools(ctx, sd, i: int, p) -> dict:
     """pool_mon_wed as the sell-side pool (side space) the sweep may take."""
     P = getattr(ctx, "dplan", None)
-    if not p.pool_mon_wed or P is None or "mw" not in P.info:
+    if not _mw_pool_on(ctx, p, P):
         return {}
     hh, ll = P.info["mw"]
     return {"mon_wed": sd.x(ll if sd.sign > 0 else hh)}
@@ -1402,6 +1437,9 @@ def expansion_levels(ctx, sd, i: int, p) -> list:
     ~23:33) the day's extreme so far plus each multiple of ADR5 is an array target (side space) [our interpretation:
     measured from today's extreme at the closed bar i, the sweep extreme of the setup]."""
     P = getattr(ctx, "dplan", None)
+    if p.expansion_targets and P is not None and p.expansion_strict and P.info.get("expansion_pending") and P.info.get("adr5_prev"):
+        from . import dwc2 as _D2                    # caption-gap N8-expansion-day-conditions: the strict day (bias + manipulation leg opposite) adds 1.5 x ADR5 from the manipulation extreme
+        return _D2.expansion_rungs(ctx, sd, i, p, P.info["adr5_prev"])
     if not p.expansion_targets or P is None or not P.info.get("expansion_due"):
         return []
     a = P.info.get("adr5_prev")
@@ -1537,6 +1575,8 @@ def stamp(ctx, trades, p) -> None:
             tags |= _entry_tags(ctx, p, P, d, s, k, tr)
             from . import dwc1 as _D1
             tags |= _D1.entry_tags(ctx, p, P, k)         # caption-gap pass day_week_context#1/3
+            from . import dwc2 as _D2
+            tags |= _D2.entry_tags(ctx, p, P, k)         # caption-gap pass day_week_context#2/3
         if P.info.get("wk_profile"):
             tr.wk_profile = P.info["wk_profile"]
         tr.dw_tags = "|".join(sorted(tags))

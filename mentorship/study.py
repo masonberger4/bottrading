@@ -2692,6 +2692,8 @@ def _dec_job(job):
               partner2=p2, ref_df=ref,
               bias_table=_bias_cache(tf, 570, p.vi_arrays, p.flip_triggers, B.table_kw(p)), meta=B.load_meta(SYMS[0], tf, SRC),
               lock_cuts=_lock_cache(tf, p))
+    if t.attrs.get("day_summary") and name in ("current", "defaults"):          # caption-gap day_week_context#2/3 (LLT 63 / 157 / 160): print the day-summary distributions once per year
+        print("day_summary", tf, year, day_summary_report(t), flush=True)
     if p.smt_pick != "first" or p.one_market or p.sb_one_market or p.sb_am_done or p.dual_deal or len(p.markets) > 1 or p.combine_prefer != "none" or p.max_exposure_pct:    # SB package: M3.9 / gap 7 need the second market too (BH-M3-scan-all-indices: markets)
         # Ep03.11 (review fix): smt_pick only acts when two instruments are combined - run the
         # partner as its own book (es_pt scaled by the price ratio, as main_index) and combine
@@ -2791,3 +2793,46 @@ _DWC1_DECISIONS = {
     "N8-overnight-not-precursor": dict(n8_use_overnight=False, **SM_POST),
 }
 DECISIONS.update(_DWC1_DECISIONS)
+
+
+# --- Caption-gap pass, package day_week_context#2/3 (digests/rulebook_gaps; dwc2.py) -------------------------------------------------------------------------------------------
+_DWC2_DECISIONS = {
+    "N8-consolidation-tradeable_range_trade": dict(consolidation_mode="range_trade", **SM_POST),
+    "N8-consolidation-tradeable_fade_with_htf": dict(consolidation_mode="fade_with_htf", htf_bias="combo", **SM_POST),
+    "N8-consolidation-tradeable_scalp": dict(consolidation_mode="scalp", **SM_POST),
+    "N8-expansion-day-conditions": dict(expansion_due=True, expansion_targets=(1.5, 2.0), expansion_strict=True, htf_bias="combo", **SM_POST),
+    "DS2-contraction-precedes-expansion": dict(expansion_mode="tag", **SM_POST),
+    "DS2-contraction-precedes-expansion_full": dict(expansion_mode="full", **SM_POST),
+    "DS2-trending-day-direction": dict(trend_recipe="side", trend_side_rule=True, htf_bias="combo", **SM_POST),
+    "N10-friday-preopen-delivered": dict(fri_delivered_stop=True, eve_draw=True, **SM_POST),
+    "N10-friday-pool-choice": dict(fri_pool_choice=True, **SM_POST),
+    "N10-monday-weekly-extreme": dict(monday_mode="big_into_array", mon_big_frac=0.5, htf_bias="combo", **SM_POST),
+    "N10-mon-wed-range-break": dict(thu_fri_break="side", mw_break_bias=True, mw_carry=True, **SM_POST),
+    "T14-wednesday-weekly-extreme": dict(wed_week_extreme=True, htf_bias="combo", **SM_POST),
+    "new-consolidation-thursday-reversal": dict(thu_reversal_tag=True, **SM_POST),
+    "new-consolidation-thursday-reversal_trade": dict(thu_reversal_trade=True, htf_bias="combo", **SM_POST),
+    "DS2-monday-ideal-day_mon_wed": dict(days_mode="mon_wed", **SM_POST),
+    "DS2-monday-ideal-day_tue_wed": dict(days_mode="tue_wed", **SM_POST),
+    "DS2-mon-wed-fallback-thu-fri": dict(days_mode="mon_wed", late_week_fallback=True, **SM_POST),
+    "DS2-weekly-template-sequence": dict(no_long_after_thu_noon=True, htf_bias="combo", **SM_POST),
+    "DS2-tue-to-thu-horizon": dict(tue_off_monday="ote", **SM_POST),
+    "DS2-ny-continuation-adr-pending": dict(ny_cont_gate=True, htf_bias="combo", **SM_POST),
+    "DS2-adr-filled-news-extends": dict(london_adr_skip=0.8, adr_news_exempt=True, **SM_POST),
+    "new-london-low-violated": dict(london_low_guard=True, htf_bias="combo", **SM_POST),
+    "N8-london-filters-gate-london": dict(london_filters=True, london_kz=True, fomc_whipsaw_skip="off", **SM_POST),
+    "T13-po3-small-open-wick": dict(po3_adr_invalid=True, htf_bias="combo", **SM_POST),
+    "M14-reversal-threshold_30": dict(tgif_model=True, tgif_reversal_pct=0.30, **SM_POST),
+    "M14-reversal-threshold_40": dict(tgif_model=True, tgif_reversal_pct=0.40, **SM_POST),
+    "M14-tgif-daily-fvg-ce-cap": dict(tgif_model=True, tgif_fvg_cap=True, **SM_POST),
+    "LLT3-adr-fib-close-zone": dict(adr_close_runner=True, adr_target=True, **SM_POST),
+    "X5-friday-tight-trail": dict(fri_trail_from=900, **SM_POST),
+    "L16-adr-contraction-runner": dict(adr_met_runner=True, adr_runner_until=840, runner_frac=0.2, adr_contracted_tag=True, **SM_POST),
+}
+DECISIONS.update(_DWC2_DECISIONS)
+
+
+def day_summary_report(trades) -> dict:
+    """Items 63 (5-handle legs), 157 (PDH / PDL touch rate), 160 (the ADR fib close zone): the distributions of the per-day reporting fields a backtest keeps in `trades.attrs["day_summary"]`
+    (dwc2.day_summary). Printed by `python -m mentorship.study` runs that call it; no trading effect."""
+    from . import dwc2
+    return dwc2.summary_stats(trades.attrs.get("day_summary") or [])

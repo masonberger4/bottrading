@@ -16,6 +16,7 @@ from . import sm4 as _SM4
 from . import es3 as _ES3
 from . import tp4 as _TP4
 from . import me2 as _ME2
+from . import dwc2 as _DWC2
 from .entries import new_risk_state
 from .strategy import ROUND_STEP, SMT_PICKS, Params, resolve_session_close, run_day
 
@@ -215,6 +216,7 @@ def hist_days(p: Params) -> int:
         n = max(n, int(p.tf_lookback["D"]) + 1)
     if getattr(p, "ipda_beyond_days", 0):
         n = max(n, p.ipda_beyond_days + 1)
+    n = max(n, getattr(p, "dw2_hist", 0))           # caption-gap pass day_week_context#2/3: the 60-session ADR5 tercile / 60-day EQ
     n = max(n, getattr(p, "dw1_hist", 0))           # caption-gap pass day_week_context#1/3: the seasonal windows / 252-session trend / monthly closes
     return max(n, getattr(p, "org_days", 0) + 1)
 
@@ -406,6 +408,7 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     pmap = {g.index[0].date(): g for g in days(partner, tf, partial_last, p.session_close)} if partner is not None else {}
     pmap2 = {g.index[0].date(): g for g in days(partner2, tf, partial_last, p.session_close)} if partner2 is not None else {}
     locks, skips, objective = [], [], []
+    dsum: list = []
     hist_p: list[pd.DataFrame] = []
     hist_p2: list[pd.DataFrame] = []
     rows = []
@@ -433,6 +436,10 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             if p.trader_mode or p.freq_ref > 0:       # caption-gap E8-new-trader-graduation / E9-frequency-small-size: the track record and the last 5 sessions size the day
                 kw["p"] = _ES3.day_params(kw["p"], rows, {x.index[0].date() for x in ds[max(0, k - 5):k]})
             day_trades = run_day(partner=pa, partner2=pa2, locks=locks, skips=skips, risk_state=rs, objective=objective, **kw)
+            try:                                       # caption-gap pass day_week_context#2/3 (LLT 63 / 157 / 160, 118, 207): the per-day reporting fields, no trading effect
+                dsum.append(_DWC2.day_summary(g, kw["hist"], p, kw.get("bias"), tf))
+            except Exception:                          # a reporting field never stops a backtest
+                pass
             if p.max_trades_week:                        # X15: the week's budget is applied in ENTRY-time order (run_day did it
                 day_trades = sorted(day_trades, key=lambda t_: t_.entry_time)[:p.max_trades_week - n_wk]   # already; the main loop first, then
                                                          # the Silver Bullet / Ma Deuce: the old slice dropped the earlier trade)
@@ -452,6 +459,7 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             out.attrs.update(attrs)
     out.attrs["locks"] = locks
     out.attrs["skips"] = skips
+    out.attrs["day_summary"] = dsum
     if objective:                          # D15 laggard_objective: the per-day, per-instrument draw-met moments (also for days without a trade)
         out.attrs["objective_met"] = {(r["date"], r["symbol"]): r["t"] for r in objective}
     return out
@@ -519,6 +527,8 @@ def report(t: pd.DataFrame) -> dict:
         out["capture"] = {"trades": int(len(c)), "mean": round(float(c.mean()), 3),
                           "winners_mean": round(float(w.mean()), 3) if len(w) else None,
                           "winners_median": round(float(w.median()), 3) if len(w) else None}
+    if t.attrs.get("day_summary"):        # caption-gap pass day_week_context#2/3: PDH / PDL touch rate, 5-handle legs, the ADR fib close zone
+        out["day_summary"] = _DWC2.summary_stats(t.attrs["day_summary"])
     if "dw_tags" in t:                    # caption-gap pass day_week_context#1/3 (B23 "no map, tag or report"): the seasonal / week-template tags, one row per tag
         ex = t.assign(_tag=t.dw_tags.fillna("").astype(str).str.split("|")).explode("_tag")
         ex = ex[ex._tag.str.startswith(DW1_REPORT_TAGS)]
@@ -565,7 +575,9 @@ def save(t: pd.DataFrame, rep: dict, out: str) -> None:
 
 
 DW1_REPORT_TAGS = ("season_", "win_", "regime_", "sr_", "nwog_", "profile_", "wk_profile_", "mon_how", "wk_push_range", "iw_reversal", "one_sided", "mo_overdue", "pre_cpi_mon", "day4",
-                   "august_mode", "macro_risk", "sd_intraday", "post_holiday_trigger")      # day_week_context#1/3 tags reported by report()
+                   "august_mode", "macro_risk", "sd_intraday", "post_holiday_trigger",      # day_week_context#1/3 tags reported by report()
+                   "expansion_candidate", "thu_reversal", "wk_ext_candidate", "adr_contracted", "adr_filled_news", "late_week", "wk_reversal_flag", "consol_mode_", "trend_side_",
+                   "wed_low", "wed_high", "wed_week_extreme", "mon_big", "tgif_fvg_cap", "thu_rev_setup")      # day_week_context#2/3 tags
 
 
 CONSOL_MARKS = ("consol_", "daily_range", "inside_day", "big_prev", "inside_week", "bh_nwog_cons", "bh_bond_range", "bh_chop",

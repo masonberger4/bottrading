@@ -694,7 +694,7 @@ def tgif_info(ctx, sd, i: int, p, entry: float):
     ext_now = float(ctx.l[a:i + 1].min()) if sd.sign < 0 else float(ctx.h[a:i + 1].max())
     retr_max = (whi - ext_now) / rng if sd.sign < 0 else (ext_now - wlo) / rng
     return dict(levels=sorted(sd.x(v) for v in real), retrace=float(retr),
-                stand_down=bool(max(retr, retr_max) >= p.tgif_stand_down), held=held)
+                stand_down=bool(max(retr, retr_max) >= min(p.tgif_stand_down, p.tgif_reversal_pct)), held=held)
 
 
 def matrix_breakers(sd, p):
@@ -818,11 +818,12 @@ def extra_sources(ctx, sd, i: int, p, sw: dict, entry: float, risk: float, leg_h
               and h[q.i + 1:i + 1].max(initial=-np.inf) < q.price]
         if qs:
             out.append((float(min(q.price for q in qs)), "swing"))       # the nearest untaken short-term high
-    if p.adr_target:
+    from . import dwc2 as _D2
+    if p.adr_target or _D2.ny_cont_rung(ctx, p, i, sd):               # caption-gap DS2-ny-continuation-adr-pending (cc09_003 ~00:12:11): the LOD + ADR5 rung of a gated continuation entry
         adr = S.adr5(getattr(ctx, "hist", [])[-5:])
         if adr:
             from . import tp3 as _T3
-            out.append((_T3.adr_low(ctx, sd, i, p) + p.adr_frac * adr, "adr" if p.adr_before_frac > 0 else "array"))    # caption-gap L16 adr_anchor (day / London low); X2-exit-buffer-before-day-extreme: kind 'adr' exits adr_before_frac x ADR5 early
+            out.append((_T3.adr_low(ctx, sd, i, p) + (p.adr_frac if p.adr_target else 1.0) * adr, "adr" if p.adr_before_frac > 0 else "array"))    # caption-gap L16 adr_anchor (day / London low); X2-exit-buffer-before-day-extreme: kind 'adr' exits adr_before_frac x ADR5 early
             lvt.append("adr_target")
     return [(float(v), k) for v, k in out if v > above]
 
