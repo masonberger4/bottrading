@@ -262,7 +262,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
           vi_dead_rule: str = "full_span", vi_two_sided: bool = False, ipda_first20: bool = False,
           nwog_cfd_src: str = "auto", single_pass_draw: bool = False, void_rt_ob: bool = False, htf_ob_ltf_drill: bool = False,
           balance_tf: str = "own", tf_lookback: dict | None = None, monthly_arrays: bool = False, rb_closes: bool = False,
-          ipda_window: str | None = None, ob_reach: str = "wick") -> pd.DataFrame:
+          ipda_window: str | None = None, ob_reach: str = "wick", wk_joint: dict | None = None) -> pd.DataFrame:
     """One row per trading day: react / draw / pd / combo bias and the draw levels.
     Caption-gap A12-ob-reached-body (cc03_002 ~8:33; `ob_reach`): "body" = an order block counts as reached only when a BODY of the last `react_days` COMPLETED sessions enters it
     (min(open, close) <= its top; max(open, close) >= its bottom for a bearish block) - a wick through the whole block does not; "wick" (built) uses the lows / highs and tonight's range.
@@ -289,7 +289,8 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     `rb_closes` (A17: the untaken rejection-block closes of the daily swing candles as the columns rb_up / rb_dn - the nearest above / below the
     price; they never enter the bias), `ipda_window` (B21-reference-points-in-windows, Params.ipda_arrays: the IPDA anchor - "rolling" / "month" /
     "current_month" / "swing" - whose 60-session window limits the daily arrays and swing draws of each row to those formed inside the 60 sessions
-    ending at the anchor, `levels.ipda_end_index`; None = the lookback alone)."""
+    ending at the anchor, `levels.ipda_end_index`; None = the lookback alone).
+    Caption-gap pass (bias_htf#1/7): `wk_joint` (B8-weekly-ith-both-indices-close; bh1.wk_joint_map) = {date of a week's last session: the joint ES + NQ weekly-ITH state}: the wk_dc -1 flip applies only while it is True."""
     from . import bias_htf as BH
     X = BH.parse(bx)
     d = sessions(df)
@@ -493,18 +494,33 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     if X:
         cols += [k_ for k_ in (rows[0] if rows else {}) if k_ not in cols]
     out = pd.DataFrame(rows, columns=cols or None).set_index("date")
-    if flip_triggers and len(out):
-        fl = _flip(d, w, arrs, flip_triggers)
+    b1 = X.get("b1") or {}
+    defer = bool(flip_triggers and "ob_low_touch" in flip_triggers and X)          # caption-gap BH-B9-HTF-OB-low-trade-through: the objective-met columns come from add_columns
+    if flip_triggers and len(out) and not defer:
+        fl = _flip(d, w, arrs, flip_triggers, dict(b1.get("fl") or {}, **({"wk_joint": wk_joint} if wk_joint is not None else {})))
         out["flip"] = [fl.get(pd.Timestamp(x), 0) for x in out.index]
     if X and len(out):
         out = BH.add_columns(out, X, d, w, arrs, og_df, on, df, es_pt, vi)
+    if defer and len(out):
+        cfg_ = dict(b1.get("fl") or {})
+        if wk_joint is not None:
+            cfg_["wk_joint"] = wk_joint
+        if "obj_day" in out or "obj_week" in out:
+            pos_k = {t_.date(): q for q, t_ in enumerate(d.index)}
+            om = np.zeros(len(d), int)
+            for x_, a_, b_ in zip(out.index, out.obj_day.values if "obj_day" in out else np.zeros(len(out), int), out.obj_week.values if "obj_week" in out else np.zeros(len(out), int)):
+                om[pos_k[x_]] = int(bool(a_) or bool(b_))
+            cfg_["obj"] = om
+        fl = _flip(d, w, arrs, flip_triggers, cfg_)
+        out["flip"] = [fl.get(pd.Timestamp(x), 0) for x in out.index]
     return out
 
 
-FLIP_TRIGGERS = ("ob_mt", "wk_dc", "flip_pd3", "flip_close_above", "flip_thu_wopen")
+FLIP_TRIGGERS = ("ob_mt", "wk_dc", "flip_pd3", "flip_close_above", "flip_thu_wopen",
+                 "wk_bisi", "inv3", "ob_low_touch", "wk_rb", "d_breaker")       # (caption-gap bias_htf#1/7, bh1.py: the last five)
 
 
-def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple) -> dict:
+def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple, cfg: dict | None = None) -> dict:
     """Stateful bias column (B8; shared helper for B8a-f, B9, B13, B17.3). The state persists
     from day to day and changes only on a trigger, evaluated at each completed session's close
     and applied from the NEXT session (no look-ahead). Triggers:
@@ -521,6 +537,18 @@ def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple) -> dict
               result is set to neutral); mirrored for a bullish state [our interpretation: any one]
       flip_thu_wopen  (B8e; cc08_001 ~24:20) a Thursday body close back across the week's
               opening price against the state -> the other side
+    Caption-gap pass (bias_htf#1/7, bh1.FlipState; `cfg` = the "fl" block of Params.bx plus an optional "obj" array of the B17.3 objective-met flags per session):
+      wk_bisi       (BH-weekly-BISI-CE-and-full-close, 011 ~5:06; 047 ~2:05) a weekly close below the low of the nearest weekly bull FVG under the previous weekly close -> -1 (above the
+                    top of the nearest weekly bear FVG above it -> +1); with cfg "ce" a weekly close below its CE (above, for the bear one) turns a bullish (bearish) state neutral
+      inv3          (BH-B8-draw-flip-via-inversion, 011 ~0:49; 063 ~2:57) bias -> neutral when the guarding daily swing low is taken and price trades into the nearest daily bull FVG under it
+                    (the opposing inefficiency) -> the opposite bias after a daily close through that FVG and a later day that trades back into it and closes below it again
+      ob_low_touch  (BH-B9-HTF-OB-low-trade-through, 062 ~22:39) objective met: a daily trade (no close needed) below the last bullish daily OB candle's low -> neutral (not bearish)
+      wk_rb         (BH-weekly-rejection-block-range-proof, 070 ~1:01) an indecisive weekly candle (body < 30 % of its range) that traded into a weekly FVG -> neutral until a daily high above its
+                    body top (+1) or a daily low below its low (-1)
+      d_breaker     (BH-B8-daily-breaker-bias, 035 ~51:30) a daily bearish (bullish) breaker, once a later day trades into it and closes below (above) it -> -1 (+1); a close above its top
+                    (below its bottom) -> neutral
+    cfg "persist" (BH-B9-retrace-above-swing-low, 077 ~11:02) suppresses a flip to the opposite state while the daily low (high) stays above (below) the last daily pivot low (high) and the
+    nearest bull (bear) daily FVG is still partly open; cfg "b7" ('mt_trade' / 'ob_close') changes the level the ob_mt trigger tests (BH-B7-last-daily-OB-guard).
     stop_flip (B8f) is intraday and lives in the engine (Params.stop_flip), not in this column.
     Returns {session date: state known before that session}."""
     if "stop_flip" in triggers:
@@ -545,16 +573,35 @@ def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple) -> dict
     last_week = None                               # the last COMPLETED week's row
     last_fri = None                                # index of the last completed Friday session
     broken: set = set()                            # flip_pd3: arrays closed through in this state
+    cfg = cfg or {}
+    joint = cfg.get("wk_joint")
+    b7 = cfg.get("b7", "mt_close")
+    new_tr = bool(set(triggers) & {"wk_bisi", "inv3", "ob_low_touch", "wk_rb", "d_breaker"}) or bool(cfg.get("persist"))
+    fs = None
+    if new_tr:
+        from . import bh1
+        fs = bh1.FlipState(d, w, arrs, triggers, cfg)
     for k in range(len(d)):
         out[d.index[k]] = state                     # known before session k
         prev = state
         if "ob_mt" in triggers and k >= 1:
             bull = [a for a in obs if a.kind == "bull" and a.known <= k]
             bear = [a for a in obs if a.kind == "bear" and a.known <= k]
-            if bull and c[k] < bull[-1].ce <= c[k - 1]:
-                state = -1
-            if bear and c[k] > bear[-1].ce >= c[k - 1]:
-                state = 1
+            if b7 == "mt_trade":                    # caption-gap BH-B7-last-daily-OB-guard: any trade through the MT (a wick) counts
+                if bull and l[k] < bull[-1].ce <= c[k - 1]:
+                    state = -1
+                if bear and h[k] > bear[-1].ce >= c[k - 1]:
+                    state = 1
+            elif b7 == "ob_close":                  # ... or a close through the OB's far side
+                if bull and c[k] < bull[-1].bottom <= c[k - 1]:
+                    state = -1
+                if bear and c[k] > bear[-1].top >= c[k - 1]:
+                    state = 1
+            else:
+                if bull and c[k] < bull[-1].ce <= c[k - 1]:
+                    state = -1
+                if bear and c[k] > bear[-1].ce >= c[k - 1]:
+                    state = 1
         if "flip_pd3" in triggers and state != 0 and k >= 1:
             for j, a in enumerate(pd_arrs):
                 if j in broken or a.known > k or a.kind != ("bull" if state > 0 else "bear"):
@@ -598,11 +645,14 @@ def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple) -> dict
             if last_dn_week is not None and r.close > last_dn_week:
                 state = 1
             elif last_up_week is not None and r.close < last_up_week:
-                state = -1
+                if joint is None or joint.get(d.index[k].date(), False):
+                    state = -1                       # (caption-gap B8-weekly-ith-both-indices-close: with wk_dc_joint only while ES and NQ both closed below)
             if r.close < r.open:
                 last_dn_week = r.high
             elif r.close > r.open:
                 last_up_week = r.low
+        if fs is not None:
+            state = fs.step(k, state, last_week, prev)       # caption-gap bias_htf#1/7: the five new triggers and the B9 persistence
         if k in wk_last:
             last_week = wk_last[k]
         if d.index[k].weekday() == 4:

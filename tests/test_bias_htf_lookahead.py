@@ -39,7 +39,12 @@ SEL_WIN = {"OT-one-state-tool-pairing_expansion_ob": [("2023-09-01", "2023-10-01
 # No trade in 7 years of quarterly windows even with the enabling switches: the check runs on the surrogate (the same state / trigger code computed without the filter).
 ZERO_OK = {"OT-one-state-tool-pairing_retracement_void": dict(pairing="all", state_tag=True),
            "OT-one-state-tool-pairing_consolidation_eq": dict(pairing="all", state_tag=True),
-           "M13-ote-needs-bias-trigger-structure": dict(ote_need_trigger=False)}
+           "M13-ote-needs-bias-trigger-structure": dict(ote_need_trigger=False),
+           # caption-gap bias_htf#1/7: these gates leave no trade in the 2024 windows (the 15m / 60m order-flow state and the three-step minimum criteria reject nearly everything); the surrogate runs the
+           # sibling code on the same 60m / 15m bars without the filter (bellwether_tf: swing breaks of tf_bars; bisi60_draw: the 60m FVG helpers); tests/test_caption_gap_bh1g.py checks the real paths with junk future bars
+           "BH-B6-intraday-iof_15": dict(iof_tf=0, bellwether_tf=15, htf_bias="combo"),
+           "BH-B6-intraday-iof_60": dict(iof_tf=0, bellwether_tf=60, htf_bias="combo"),
+           "BH-B4-HTF-bias-minimum-criteria": dict(min_criteria=False, bisi60_draw=True, htf_bias="combo")}
 RARE = ("B9_objective_neutral", "T13-judas-news-driver_require")
 LONG_HISTORY = ("wpr", "qshift", "mwd", "B22", "B20.3", "B10")
 LA_COLS = ["entry_time", "entry", "stop", "t1", "side", "day_tags", "dw_tags"]

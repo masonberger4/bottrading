@@ -1304,6 +1304,10 @@ def side_ok(ctx, p, sign: int, session: str, i: int) -> str | None:
     why_ = _D3.side_ok(ctx, p, sign, session, i)
     if why_ is not None:
         return why_
+    from . import bh1e as _B1                        # caption-gap pass bias_htf#1/7
+    why_ = _B1.side_ok(ctx, p, sign, session, i)
+    if why_ is not None:
+        return why_
     from . import bias_day as _BD                    # bias_htf: the bias side (all engines), weekly open, judas, filters ...
     return _BD.side_ok(ctx, p, sign, session, i)
 
@@ -1341,11 +1345,15 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p) -> str | None:
     why_ = _D3.order_ok(ctx, sd, o, session, i, p)
     if why_ is not None:
         return why_
+    from . import bh1e as _B1                        # caption-gap pass bias_htf#1/7
+    why_ = _B1.order_ok(ctx, sd, o, session, i, p)
+    if why_ is not None:
+        return why_
     from . import bias_day as _BD                    # bias_htf: mwd_nest, mmbm_zone, 50/50 and the order tags
     return _BD.order_ok(ctx, sd, o, session, i, p)
 
 
-def scalp_now(ctx, p, session: str, i: int | None = None) -> str:
+def scalp_now(ctx, p, session: str, i: int | None = None, sign: int = 0) -> str:
     """The day-context reason an order of `session` is a scalp (one exit min(+5, T1), no adds), else "": the
     DayPlan's static scalp flags (inside week, low-volatility day, consolidation day, Friday objective met) and
     the dynamic seek-and-destroy no-hold (N8.6: both sides of yesterday's range run today)."""
@@ -1361,6 +1369,10 @@ def scalp_now(ctx, p, session: str, i: int | None = None) -> str:
                 return "sd_no_hold"
     from . import dwc1 as _D1                        # caption-gap pass day_week_context#1/3
     why_ = _D1.scalp_now(ctx, p, session, i)
+    if why_:
+        return why_
+    from . import bh1e as _B1                        # caption-gap pass bias_htf#1/7
+    why_ = _B1.scalp_now(ctx, p, session, i, sign)
     if why_:
         return why_
     from . import bias_day as _BD                    # bias_htf: neutral bias / no narrative / chop / consolidation-week scalps

@@ -3211,6 +3211,53 @@ class Params:
     tgif_branch: bool = False            # M14-tgif-timing (066 ~00:46:41): TGIF Friday: a 09:30 Judas -> entries from 10:00 after the MSS; else no AM entry and entries from tgif_pm_from after an MSS of a high formed 11:30-14:00
     tgif_pm_from: int = 810
     consol_pm_news_skip_am: bool = False  # N8-consolidation-pm-news (cc10_008 ~00:16:34): a consolidation day with a PM release (at / after 12:00) has no AM trade
+    # --- Caption-gap pass, package bias_htf#1/7 (digests/rulebook_gaps/bias_htf_intermarket.md; bh1.py table side, bh1e.py engine side). Everything defaults off. -----------------------------------
+    drange_scalp: bool = False           # BH-B17-daily-range-scalp-regime (002 ~00:06:57; 043 ~00:06:55; ~00:13:48): in a multi-day daily consolidation every order is a scalp (one target, no adds, T1 capped at drange_t1_pts), after one side's pool ran only the opposite side trades, the day stops after drange_day_pts or two wins; after the range breaks only the breakout side trades, runners allowed
+    drange_n: int = 5                    # ... [our interpretation] the range = the last N daily closes inside the first of those days' high-low
+    drange_break: str = "close"          # ... a breakout = a daily "close" beyond the range or a "wick" beyond it (undefined by the source: test both)
+    drange_t1_pts: float = 5.0           # ... scalp target distance, ES points (~5 handles)
+    drange_day_pts: float = 10.0         # ... stop for the day after about 10 handles
+    b7_mode: str = "mt_close"            # BH-B7-last-daily-OB-guard (058 ~00:06:43; 072 ~00:17:12; 101 ~00:33:35): what breaks the last daily OB's guard - "mt_close" (a daily close below its MT; wicks allowed), "mt_trade" (any trade below the MT), "ob_close" (a close below the OB's low); also the ob_mt flip trigger's level
+    wk_high_in_gate: bool = False        # ... after a daily close below the guard MT the week's high is in: longs lose every target above the week's high (a long that needs a new weekly high is no trade); not a short signal. Mirror
+    bisi60_draw: bool = False            # BH-A8-60m-BISI-loss-draw (007 ~00:06:46, single source): a 60m close below the nearest discount 60m BISI (under the swing's 50 %) before the lock leans the lock to the sell-side below; tag bisi60_lost. Mirror
+    neutral_lean: bool = False           # BH-B17-neutral-lean (010 ~00:36:36): with htf_bias on and a neutral bias, the gun-to-head lean at a daily premium (discount) array probed repeatedly without a close through it becomes the bias - scalp-tagged unless the prior (Tuesday) high / low was raided before the entry
+    lean_n: int = 2                      # ... [our interpretation] repeated failed attempts = the last N daily highs (lows) probed the array
+    lean_tol_pts: float = 5.0            # ... [our interpretation] "at the array" = within this many ES pts
+    wk_bisi_ce_neutral: bool = False     # BH-weekly-BISI-CE-and-full-close (011 ~00:05:06; 047 ~00:02:05): with the flip trigger "wk_bisi" a weekly close below the weekly BISI's CE (but not its low) turns a bullish state neutral [our interpretation of "in doubt"]
+    ceiling_ladder: bool = False         # BH-B1-imbalance-ceiling-ladder (011 ~00:00:24): while no daily body closes above the nearest overhead daily VI / FVG the lower arrays are drawn in order: the session lock is the sell-side (buy-side under a floor); suspended once price traded above it and held it as support
+    bpr_lean: bool = False               # BH-A11-BPR-lean (011 ~00:01:51, opinion): a 1h down-up-down BPR formed in the last 24 h with a bearish state leans the lock to the nearest pool below (mirror); tag bpr_lean
+    nwog_ref: str = "current"            # BH-B14-NWOG-flip-edge (030 ~1:19:54; 046 ~26:00; 060 ~35:36; 058): "current" = this week's NWOG holds the bias state, "previous" = last week's (030); the reclaim edge is nwog_bias_reclaim ("high" = 030 / 046 / 060, "low" = 058 and the built default - owner question)
+    nwog_bias_basis: str = "px"          # ... a reclaim is judged on the row's 09:30 price ("px", built) or on the previous daily CLOSE ("close")
+    raid_gap_guard: bool = False         # BH-B14-protective-gap-and-low (061 ~02:28:31): after a sell-side raid below the prior session's range the lock is long toward the current NWOG's near edge until the raid low is taken while the small bear gap left after the raid is still open (then the lock flips to the sell-side). Mirror
+    inval_src: str = "off"               # BH-B8-pre-stated-invalidation-price (012 ~00:27:58): "array" (the far edge of the nearest opposing daily array beyond the lock price) / "manual" (data/mentorship/inval_levels.csv: date, session, price) - a TOUCH flips the session's lock side and cancels the old side's pending order
+    bellwether_tf: int = 0               # BH-B5-bellwether (013 ~2:46; cc01_003 ~19:10; cc03_001 ~20:13): 0 off, 15 or 60 - an order needs the last swing break (3-candle pivots) of the 15m / 60m chart to be in its direction; 15 needs a known bias / weekly expansion side, else the 60m chart is used
+    org_gap_filter: bool = False         # BH-B15-gap-down-ORG-no-shorts (059 ~00:14:52; 018 ~00:03:09): a gap down at 09:30 blocks shorts (gap up: longs) unless the flip state agrees and the dollar is on its side (INTERMARKET dxy), or the B15 tell fired (no attempt by 10:00)
+    org_tell_seq: bool = False           # BH-B15-ORG-tell-details (030 ~01:29:44): the sequence tell - no meaningful attempt back toward the prior close 09:33-10:00, then a displacement close through the CE and the low of yesterday's FVG: the bias for the AM rest (org_tell is the older attempt-only tell)
+    org_attempt_frac: float = 0.25       # ... [our interpretation] "meaningful attempt" = a retrace of at least this share of the gap
+    org_tell_skip_min: int = 3           # ... the first minutes after 09:30 are ignored
+    org_tell_end: int = 600              # ... the tell is judged at this minute (10:00)
+    org_consol_case: bool = False        # BH-B15-ORG-consolidation-case (055 ~00:18:18): objective met / a consolidating market (daily range or NWOG regime) and the ORG filled: the day ranges inside the gap - every later order a scalp capped at the opposite ORG edge or CE; tag org_consol
+    dxy_filter: str = "off"              # BH-B19-DXY-soft-filter-for-indices (063 ~00:10:53; 046 ~02:13:40; 028 ~00:22:53): "tag" counter_dxy / dxy_ok, "soft" (a counter-dollar index order trades at dxy_soft_risk x risk as a scalp, tagged counter_dxy), "hard" (block longs with the dollar rising, shorts with it falling); prior-day dollar vs its 20-day mean
+    dxy_soft_risk: float = 0.5           # ... [our interpretation] the reduced size of a counter-dollar index trade
+    low_in_relock: bool = False          # BH-failed-sweeps-low-in (022 ~02:01:51): after the AM sell-side draw is delivered, repeated short-term highs taken against few new lows = the morning low is in: re-lock the session buy-side (a second trade); tag low_in. Mirror
+    low_in_min_highs: int = 3            # ... [our interpretation] at least this many short-term highs taken
+    low_in_ratio: float = 2.0            # ... and at least this many times the new lows made since the delivery
+    fifty_rel: bool = False              # BH-B17-REL-REH-both-intact (025 ~00:10:58): the 50/50 test - price inside a daily FVG with the nearest REL below and the buy-side above both untaken: the session lock is neutral; a sweep of the REL then an MSS up re-locks long (mirror: REH). (neutral_gate "fifty_fifty" is the older reaction-weight test)
+    iof_tf: int = 0                      # BH-B6-intraday-iof (028 ~00:21:27; 085 ~00:10:28; 099 ~00:15:03): 0 off, else the bar size (e.g. 15 / 60) of the intraday order-flow state - bearish while up-close candles hold as resistance and down-close candles are closed through; orders against it are rejected
+    allow_counter_trend: bool = False    # BH-B3-counter-bias-modes (095 ~11:56; 030 ~25:11): after the session's locked draw was taken and a MSS the other way formed, one counter-bias trade to the nearest pool on the other side (single target, scalp, no adds); tag counter_trend
+    draw_order: str = "nearest"          # BH-B2-draw-by-proximity (067 ~1:30:55; cc02_008 ~13:11; 054 ~6:38; 065A ~50:00): "nearest" (built), "nearest_tb" (near-ties within eq_tol_pts go to the candidate with fewer arrays between, then the newer) or "inefficiency_first" (the table's draw column = the ordered B2 pick)
+    wick_ce_draw: bool = False           # BH-B2-wick-CE-draw (065A ~39:00): with no inefficiency left the draw is the nearest untaken weekly (else daily) wick's CE (first objective), its extreme the full one (draw_ext_lvl)
+    stack_far: bool = False              # BH-B2-two-HTF-FVGs-farther (069 ~1:59): two stacked daily FVGs in the bias direction: the draw is the farther gap's near edge, the nearer one's near edge a partial rung (draw_mid_lvl)
+    no_htf_top_pick: bool = False        # BH-no-HTF-top-picking (061 ~01:40:32; 074 ~00:37:14; 076 ~00:05:21; cc06_001 ~00:06:55; 104 ~00:44:07): while the flip state is up and the HTF draw unmet, no turtle-soup / three-drive / reversal shorts (mirror)
+    min_criteria: bool = False           # BH-B4-HTF-bias-minimum-criteria (075 ~00:34:50): the long lock needs (1) price at a daily bull array, (2) a swept 60m REL, (3) a later 60m high above the last 60m pivot high - else the lock is neutral. Mirror
+    wk_po3: bool = False                 # BH-B13-weekly-PO3 (066 ~00:08:51; 072 ~00:07:07; cc07_006 ~00:08:30): after the week traded below the weekly open into a daily array and closed back above it (mirror above/below), the opposing side is blocked for the rest of the week and the lock is long toward the weekly draw; an NFP week stays 0 until Friday
+    run_extreme_lean: bool = False       # BH-consolidation-takes-run-high (046 ~00:09:16): with a neutral lock, lock toward the high (low) of a >= 2 x ADR5 run followed by >= 2 inside days until it is taken
+    pwh_giveback_draw: bool = False      # BH-PWH-run-giveback-weekly-gap (047 ~00:01:31): the week ran above the previous week's high and gave back giveback_frac of its range: the nearest weekly BISI's CE is a sell-side lock candidate (tag pwh_giveback)
+    giveback_frac: float = 0.5           # ... [our interpretation] "much of"
+    htf_monthly: bool = False            # BH-A5-HTF-FVG-own-timeframe (068 ~3:02): alias of htf_monthly_arrays (monthly FVGs on monthly bars, usable the session after the month closes); weekly arrays are already built on weekly bars
+    bisi60_hold: str = "off"             # BH-B8-1h-BISI-CE-hold (072 ~00:13:53, ~00:15:19): "trade" / "close" - with a +1 lock the latest 60m BISI: a trade (60m close) below its CE tags bias_weak, below its low sets the lock to neutral for the session and cancels the pending order. Mirror
+    wk_dc_joint: bool = False            # B8-weekly-ith-both-indices-close (077 ~00:09:44): the wk_dc -1 flip applies only when ES and NQ BOTH closed the week below their own last down-close week's low (backtest.run with a partner; persists until a +1 on either)
+    b9_persist: bool = False             # B9-retrace-above-swing-low (077 ~00:11:02): a flip to the opposite state is suppressed while the daily low (high) holds the last daily pivot low (high) and the lower (upper) breakaway FVG stays partly open
 
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
@@ -3744,6 +3791,21 @@ class Params:
             for nm_ in ("cot_tag", "oi_tag", "wpr_tag"):
                 if nm_ not in self.cot_oi_model_skip:
                     setattr(self, nm_, "tag")
+        # caption-gap pass bias_htf#1/7 (bh1.py / bh1e.py)
+        for name, ok in (("drange_break", ("close", "wick")), ("b7_mode", ("mt_close", "mt_trade", "ob_close")), ("nwog_ref", ("current", "previous")),
+                         ("nwog_bias_basis", ("px", "close")), ("inval_src", ("off", "array", "manual")), ("dxy_filter", ("off", "tag", "soft", "hard")),
+                         ("draw_order", ("nearest", "nearest_tb", "inefficiency_first")), ("bisi60_hold", ("off", "trade", "close"))):
+            if getattr(self, name) not in ok:
+                raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
+        if self.bellwether_tf not in (0, 15, 60) or self.iof_tf not in (0, 5, 15, 30, 60, 240):
+            raise ValueError("bellwether_tf: 0 / 15 / 60; iof_tf: 0 or a bar size of 5 / 15 / 30 / 60 / 240 minutes")
+        if (self.drange_n < 3 or self.drange_t1_pts <= 0 or self.drange_day_pts <= 0 or self.lean_n < 1 or self.lean_tol_pts < 0 or not 0 < self.org_attempt_frac <= 1
+                or self.org_tell_skip_min < 0 or not 570 < self.org_tell_end <= 720 or not 0 < self.dxy_soft_risk <= 1 or self.low_in_min_highs < 1 or self.low_in_ratio <= 0
+                or not 0 < self.giveback_frac < 1):
+            raise ValueError("bias_htf#1/7: drange_n >= 3, drange_t1_pts / drange_day_pts > 0, lean_n >= 1, lean_tol_pts >= 0, org_attempt_frac in (0, 1], org_tell_skip_min >= 0, "
+                             "org_tell_end in (570, 720], dxy_soft_risk in (0, 1], low_in_min_highs >= 1, low_in_ratio > 0, giveback_frac in (0, 1)")
+        if self.htf_monthly:
+            self.htf_monthly_arrays = True        # BH-A5-HTF-FVG-own-timeframe: the named alias of the built monthly arrays
         inert = []                                  # switches the current draw_lock / vi_arrays make inert
         if (self.draw_lock_pick != "nearest" or self.draw_ext_target or self.cond_draw) and self.draw_lock != "session":
             inert.append("draw_lock_pick / draw_ext_target / cond_draw act only in the #9 lock (draw_lock='session')")
@@ -4692,6 +4754,8 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
         lv = _TP1.targets_post(ctx, sd, i, p, lv)                     # caption-gap A3-reh-under-older-high / A23-stubby-wick-first-approach (targets_partials #1/4)
     if _TP2.targets_on(p):
         lv = _TP2.targets_post(ctx, sd, i, p, above, lv, eq, ext_i)    # caption-gap targets_partials #2/4: session-pool filter, defended pools, break gate, swept pools, event horizon, NWOG magnet, overnight FVGs, HTF OB open
+    if _BH1E.targets_on(p):
+        lv = _BH1E.targets_post(ctx, sd, i, p, above, lv)              # caption-gap bias_htf#1/7: no long target above a week whose high is in (wk_high_in_gate), the stacked-gap partial rung
     out = []
     for v, kind in sorted(x for x in set(lv) if x[0] > above):   # merge levels within ~1 ES point
         if not out or v - out[-1][0] > p.es_pt:
@@ -5294,6 +5358,8 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
             done[k] = True
         state["day_done"] = True
         _TP1.hit("eve_bnb_day_done")
+    if p.drange_scalp and ctx is not None:
+        _BH1E.after_close(ctx, tr, done, state, p, net_)              # caption-gap BH-B17-daily-range-scalp-regime: the day's points / wins on a range day
     if p.day_target_pts:                              # X14a test (owner #2): N net ES pts -> done
         gross, costs = tr.pnl(p.cost_per_share)
         units = tr.shares + sum(q for *_, q in tr.adds)
@@ -5789,6 +5855,7 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
     cands += _LD4.lock_cands(ctx, p, t_lock, kl)           # caption-gap levels_detectors #3/3 (week pools, previous London, rejection-block closes)
     cands += _TP2.lock_cands(ctx, p, t_lock, kl)           # caption-gap X1-london-0300-fvg-draw (018 ~00:03:49): the overnight 5m FVGs
     cands += _TP3.lock_cands(ctx, p, t_lock, kl)           # caption-gap LLT3-session-targets-15m-60m (cc10_014 ~00:04:18): the opposing 15m / 1h arrays as session objectives
+    cands += _BH1E.lock_cands(ctx, p, row, t_lock, S)      # caption-gap pass bias_htf#1/7: the weekly BISI CE after a PWH give-back, the wick CE draw
     mw_ = getattr(getattr(ctx, "dplan", None), "info", {}).get("mw")
     if p.pool_mon_wed and mw_ is not None:             # day_week_context N10.3: the Mon-Wed extremes on Thu / Fri
         cands += [(mw_[0], "pool", "mon_wed_high", 1, S), (mw_[1], "pool", "mon_wed_low", -1, S)]
@@ -5913,6 +5980,8 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
         side, up, dn = fp_
     elif p.draw_lock_pick != "nearest" and not pf and not (p.pool_rank or p.draw_below_eq or p.session_obj_tf):
         side, up, dn = _BD.ordered_side(up, dn, row, p)   # B2 / B3: inefficiency first, then liquidity by P/D ("largest": the bigger move)
+    elif up and dn and p.draw_order == "nearest_tb" and abs(up[0][0] - dn[0][0]) <= p.eq_tol_pts * p.es_pt:
+        side = _BH1E.tiebreak(up, dn, mk, cands)       # caption-gap BH-B2-draw-by-proximity: near-ties go to the side with fewer arrays in between, then the newer
     elif up and (not dn or up[0][0] < dn[0][0]):
         side = 1
     elif dn and (not up or dn[0][0] < up[0][0]):
@@ -5937,7 +6006,7 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
                     [(w[s_], "array", "wick_ce", 0) for w in getattr(ctx, "wicks", [ctx.wick])
                      for s_ in ("upper", "lower")] if p.wick_partial else []),
                 delivered=False, delivered_t=None, delivered_i=None, traded=False)
-    return lock
+    return _BH1E.lock_post(ctx, p, row, t_lock, session, kl, px, lock, mk)      # caption-gap pass bias_htf#1/7: ceiling ladder, weekly PO3, 60m BISI loss, BPR lean, raid gap, minimum criteria, 50/50, run extreme, invalidation
 
 
 # --- owner #11: Ep 07 order block at the sweep low ----------------------------------------
@@ -7002,8 +7071,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         if lk is not None and lk["delivered"]:
             org_ok_ = lh_slot and p.lh_org_fill and _SM4.lh_org_open(ctx, i, p)      # caption-gap M5-lasthour-reversal-into-org: the last hour may still trade toward an unfilled ORG
             org_ok_ = bool(org_ok_ or (lh_slot and _SM7.lh_after_open(ctx, i, p)))   # caption-gap T7-lasthour-after-target: ... or the reversal after a noon-delivered objective
-            if not org_ok_ and not flip_ and not (lh_slot and p.lh_no_lock and not _SM.lh_on(p, "lh_htf_done_skip") and not p.pm_last_hour_model):
-                continue                              # #9: the session's draw delivered - done
+            if not org_ok_ and not flip_ and not lk.get("ct_open") and not (lh_slot and p.lh_no_lock and not _SM.lh_on(p, "lh_htf_done_skip") and not p.pm_last_hour_model):
+                continue                              # #9: the session's draw delivered - done (caption-gap BH-B3-counter-bias-modes: allow_counter_trend reopens it for the counter-bias trade)
             lk = None                                 # lh_no_lock (the first build, a switch): the LH
                                                       # slot trades on without a locked draw
         if p.ipda_eq_day == "skip":                   # B21: range day until the first release
@@ -7044,6 +7113,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             if flip_ and state["only_side"].get(session) == sd.sign:
                 w_ = sd.sign                                  # caption-gap M1-one-segment: the flipped leg trades its own side (the bias read the first leg)
             counter_, curve_ = False, ""
+            ct_ = _BH1E.counter_kind(ctx, sd, i, p, w_ if want is not None else 0, session) if p.allow_counter_trend else ""      # caption-gap BH-B3-counter-bias-modes (095 ~11:56): the counter-bias trade after the delivered draw
             if want is not None:
                 if w_ and w_ != sd.sign:
                     if p.stoprun_rearm:
@@ -7052,12 +7122,16 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                         curve_ = _SM6.counter_kind(ctx, sd, i, p, w_) if (p.curve_short or p.pmh_contrarian) else ""     # caption-gap M1-short-sell-side-of-buy-curve / M12-contrarian-pmh (setups_models #6/7)
                         if not curve_ and (p.m0950_branch in ("rev", "both") or p.allow_opposite_after_target in ("lod", "both")):
                             curve_ = _SM7.counter_kind7(ctx, sd, i, p, w_)       # caption-gap T7-0950-reversal-or-continuation / X14-opposite-second-trade-after-win (setups_models #7/7)
+                        if not curve_ and ct_:
+                            curve_ = ct_
                         if not curve_:
                             continue
                     else:
                         counter_ = True                   # caption-gap new-counter-bias-scalp-exit (013 ~15:07): an opt-in scalp against the bias
                 if not w_ and p.bias_neutral == "skip":
                     continue
+            if ct_ and not curve_ and not counter_:
+                curve_ = ct_                                  # (with no bias filter, or a bias that agrees / is neutral, the reopened session still trades its counter side as the single-exit counter-trend order)
             if p.three_day_rule and sd.sign in block_side.get("three", ()):
                 continue
             if p.tgif and sd.sign in block_side.get("tgif", ()):
@@ -7313,6 +7387,19 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
             if lk["side"] == 0 and p.draw_lock_neutral == "skip":
                 done[s_] = True
     for s_, lk in list(ctx.lock.items()):
+        if _BH1E.lock_on(p):                           # caption-gap pass bias_htf#1/7: invalidation touch, 60m BISI hold, raid gap guard, 50/50 and low-in re-locks, the counter-trend reopen
+            r_ = _BH1E.lock_bar(ctx, p, s_, lk, i, done, spent)
+            if r_ is not None:
+                nl_, cancel_ = r_
+                all_locks.append(dict(lk, failed=True))
+                ctx.lock_hist.setdefault(s_, []).append((i + 1, lk))
+                ctx.lock[s_] = lk = nl_
+                _f("x_bh1_relock")
+                if nl_["side"] == 0 and p.draw_lock_neutral == "skip":
+                    done[s_] = True
+                if cancel_ and pending is not None and ("LH" if pending.get("done_key") == "LH" else pending["session"]) == s_ and pending["side"].sign != nl_["side"]:
+                    pending = None
+                continue
         if not lk["side"] or lk["delivered"]:
             continue
         if lk["name"] == "org_far" and _org_break(ctx, p, i):
@@ -9068,6 +9155,11 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         _SM7.hit("lod_short")
     elif cn6_ == "m0950":                # caption-gap T7-0950-reversal-or-continuation (073 ~00:25:56): the NFP reversal profile after the pool run in 09:50-10:10
         lvt.append("m0950_rev_counter")
+    elif cn6_ == "ct":                   # caption-gap BH-B3-counter-bias-modes (095 ~11:56; 030 ~25:11): a counter-bias trade after the delivered draw - the nearest pool only, one exit, no adds
+        tags["single_exit"] = True
+        tags["no_adds"] = True
+        lvt.append("counter_trend")
+        _BH1E.hit("counter_trend")
     elif cn6_ == "pmh":                  # caption-gap M12-contrarian-pmh: only the previous month's extreme, one exit at the nearest pool
         if str(sw.get("key", "")) != "pml_month":
             _f("x_pmh_key")
@@ -9696,7 +9788,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             lv, kinds = [f] + lv, ["fixed"] + kinds
     scalp = False
     sl = getattr(ctx, "cur_sloppy", "")
-    dws = _DW.scalp_now(ctx, p, session, i)                    # day_week_context: inside week, low-vol day, S&D, ...
+    dws = _DW.scalp_now(ctx, p, session, i, sd.sign)           # day_week_context: inside week, low-vol day, S&D, ... (caption-gap bias_htf#1/7: the side for the dxy / lean reasons)
     if dws:
         lvt.append("scalp_" + dws)
     if (sl and p.sloppy_mode == "scalp") or _NC.scalp_now(ctx, p, session) or dws:   # #10 scalp mode (N3.3: the FOMC-only AM):
@@ -9704,6 +9796,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         _dsc = getattr(getattr(ctx, "dplan", None), "scalp", {})
         if "august_light" in _dsc and not (sl and p.sloppy_mode == "scalp"):       # N7-august "light": a single exit AT the first target (no +5 cap)
             _cap = lv[0]
+        elif dws.startswith("bh1_") and _BH1E.scalp_cap(ctx, sd, i, p, dws, entry, lv[0]) is not None:
+            _cap = _BH1E.scalp_cap(ctx, sd, i, p, dws, entry, lv[0])      # caption-gap bias_htf#1/7: drange_t1_pts / the opposite ORG edge
         else:
             _cap = min(entry + (p.chop_scalp_pts if (p.chop_scalp_pts > 0 and sl and p.sloppy_mode == "scalp") else (p.fri_t1_pts if (dws == "fri_one_sided" or "fri_one_sided" in _dsc) else p.sloppy_scalp_pts)) * p.es_pt, lv[0])
         lv, kinds, scalp, final_T = [_cap], [kinds[0]], True, False
@@ -9987,3 +10081,4 @@ from . import me1 as _ME1  # noqa: E402  (caption-gap pass, management_exits #1/
 from . import me2 as _ME2  # noqa: E402  (caption-gap pass, management_exits #2/3: engine glue)
 from . import me3 as _ME3  # noqa: E402  (caption-gap pass, management_exits #3/3: engine glue)
 from . import tp4 as _TP4  # noqa: E402  (caption-gap pass, targets_partials #4/4: engine glue)
+from . import bh1e as _BH1E  # noqa: E402  (caption-gap pass, bias_htf#1/7: engine glue)

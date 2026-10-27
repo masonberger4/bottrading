@@ -183,7 +183,7 @@ def lock_cuts(p: Params) -> set:
     return cuts
 
 
-def lock_tables(df: pd.DataFrame, p: Params, bias_table: pd.DataFrame | None = None) -> dict:
+def lock_tables(df: pd.DataFrame, p: Params, bias_table: pd.DataFrame | None = None, wk_joint: dict | None = None) -> dict:
     """#9: one htf table per draw-lock minute in use (bars closed by that minute), cut 570 being
     the ordinary bias table. {cut: table}; empty without overnight bars or with draw_lock off."""
     if p.draw_lock == "off" or not htf.has_overnight(df):
@@ -193,7 +193,7 @@ def lock_tables(df: pd.DataFrame, p: Params, bias_table: pd.DataFrame | None = N
         if m == 570 and bias_table is not None:
             out[m] = bias_table
         else:
-            out[m] = htf.table(df, p.es_pt, cut_min=m, vi=p.vi_arrays, flip_triggers=p.flip_triggers,
+            out[m] = htf.table(df, p.es_pt, cut_min=m, vi=p.vi_arrays, flip_triggers=p.flip_triggers, wk_joint=wk_joint,
                                **table_kw(p))
     return out
 
@@ -305,7 +305,7 @@ class Prepared:
 def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             partial_last: bool = False, bias_table: pd.DataFrame | None = None,
             confluence: bool = True, meta: pd.DataFrame | None = None,
-            lock_cuts: dict | None = None, ref_df: pd.DataFrame | None = None) -> Prepared:
+            lock_cuts: dict | None = None, ref_df: pd.DataFrame | None = None, wk_joint: dict | None = None) -> Prepared:
     p = resolve_session_close(p or Params(), df, symbol)        # owner #1: 16:15 futures, 16:00 SPY
     ov = htf.has_overnight(df)
     inert = meta is None or p.price_frame == "back_adjusted"
@@ -314,8 +314,8 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
                       f"meta {'missing' if meta is None else 'given'}): no front-month mapping",
                       stacklevel=3)
     bt = bias_table if bias_table is not None else (
-        htf.table(df, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers, **table_kw(p)) if ov else None)
-    cuts = lock_cuts if lock_cuts is not None else lock_tables(df, p, bt)
+        htf.table(df, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers, wk_joint=wk_joint, **table_kw(p)) if ov else None)
+    cuts = lock_cuts if lock_cuts is not None else lock_tables(df, p, bt, wk_joint)
     og = htf.opening_gaps(df, p.es_pt, 1.0, p.nwog_cfd_src, p.gap_views, p.org_close or p.session_close or 960) if ov else None   # (gap_views "both": + the RTH weekend gap)
     reb = htf.nwog_rebalanced(df, og, p.tick) if (ov and p.nwog_rebalanced) else None       # caption-gap L5 nwog_rebalanced
     tt = df.index.hour * 60 + df.index.minute
@@ -405,7 +405,13 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     price frame; `lock_cuts` (#9): {minute: htf table cut there} (built here when None);
     `ref_df` (D22 bias_open_src="es_map"): the futures / CFD frame whose midnight open is mapped to this instrument.
     The result's attrs carry "days", "locks" (one row per session lock) and "skips"."""
-    pr = prepare(df, tf, symbol, p, partial_last, bias_table, confluence, meta, lock_cuts, ref_df)
+    wk_joint = None
+    if (p or Params()).wk_dc_joint and partner is not None and htf.has_overnight(partner):       # caption-gap B8-weekly-ith-both-indices-close: the partner index's weeks decide the joint flag (the partner frame needs overnight bars; without them the flag is False = no wk_dc -1 flip)
+        from . import bh1
+        wk_joint = bh1.wk_joint_map(df, partner)
+    elif (p or Params()).wk_dc_joint:
+        wk_joint = {}
+    pr = prepare(df, tf, symbol, p, partial_last, bias_table, confluence, meta, lock_cuts, ref_df, wk_joint)
     p, ds = pr.p, pr.ds
     if not p.stock_intraday and str(symbol).upper() not in _DWC3.INDEX_SYMBOLS:
         warnings.warn(f"{symbol}: individual stocks are swing-only (OT-stocks-swing-only, cc10_018 ~33:36) - run_day returns no intraday trades (stock_intraday=True lifts it)", RuntimeWarning, stacklevel=2)

@@ -78,6 +78,8 @@ def bx_string(p) -> str:
         x["woa"] = p.weekly_open_array_days
     if hb == "nwog" or p.nwog_regime != "off" or p.nwog_bias != "off" or p.nwog_sr_entries or p.nwog_revert_targets:     # (caption-gap L5-nwog-sr-levels: the regime column is read by nwog_sr_entries)
         x["nwog"] = [p.nwog_leave_adr, p.nwog_returns_cons, p.nwog_converge_pts, p.nwog_bias_reclaim, p.nwog_converge_mode]
+        if p.nwog_ref != "current" or p.nwog_bias_basis != "px":
+            x["nwog"] += [p.nwog_ref, p.nwog_bias_basis]       # caption-gap BH-B14-NWOG-flip-edge: which week's NWOG and the daily-close reclaim basis
     if hb == "candle" or p.bias_candle_tag:
         x["bc"] = "midnight" if p.bias_candle_open == "midnight" else 1
     if hb == "draw_pd":
@@ -96,6 +98,18 @@ def bx_string(p) -> str:
         x["deep"] = p.deep_run_weeks
     if p.post_raid_cap:                        # caption-gap X3-a21-eq-after-raid (cc05_002 ~00:15:30): the post-raid columns
         x["pr"] = 1
+    from . import bh1                          # caption-gap pass bias_htf#1/7 (bh1.py): the columns / flip configuration of its 35 items
+    b1 = bh1.bx_cfg(p)
+    if b1:
+        x["b1"] = b1
+    if bh1.needs_objective(p) or p.org_consol_case or p.no_htf_top_pick:
+        x["obj"] = 1                           # the B17.3 objective-met columns (ob_low_touch, the ORG consolidation case, the top-picking ban read them)
+    if p.org_consol_case and "nwog" not in x:
+        x["nwog"] = [p.nwog_leave_adr, p.nwog_returns_cons, p.nwog_converge_pts, p.nwog_bias_reclaim, p.nwog_converge_mode]      # (the consolidation regime tag)
+    if p.wk_po3 and "wk" not in x:
+        x["wk"] = 1                            # the weekly draw levels (wk_draw_up / wk_draw_dn) the weekly-PO3 lock aims at
+    if p.wick_ce_draw or p.stack_far or p.draw_order == "inefficiency_first":
+        x["ord"] = 1                           # (the ordered draw columns the wick CE / stacked gaps / inefficiency-first order rewrite)
     return json.dumps(x, sort_keys=True, separators=(",", ":")) if x else ""
 
 
@@ -342,6 +356,13 @@ def row_extras(X: dict, px, oh, ol, d_open, wk_open, draws_up, draws_dn, pdb, ru
             else:
                 sd_, lv = 0, nan
             ex[f"bc_{tag}"], ex[f"bc_{tag}_lvl"] = sd_, float(lv)
+    if "ord" in X and "b1" in X:
+        from . import bh1
+        c1 = X["b1"]
+        if c1.get("stack"):
+            bh1.stack_far_post(ex, draws_up, draws_dn)
+        if c1.get("ofirst") and ex.get("draw_ord"):
+            ex["draw"] = ex["draw_ord"]            # caption-gap BH-B2-draw-by-proximity: draw_order 'inefficiency_first' - the table's draw is the ordered pick
     if "onr" in X:
         ex["on_range"] = float(oh - ol)
         bull = bear = 0
@@ -567,6 +588,9 @@ def add_columns(out: pd.DataFrame, X: dict, d: pd.DataFrame, w: pd.DataFrame, ar
         out = _next_array(out, X["nof"], d, arrs, ks, px, on, o, h, l, c)
     if "persist" in X:
         out = _persist(out, int(X["persist"]), ks, d, w, arrs)
+    if "b1" in X:                                         # caption-gap pass bias_htf#1/7 (bh1.py)
+        from . import bh1
+        out = bh1.add_columns(out, X["b1"], d, w, arrs, ks, px, es_pt)
     return out
 
 
@@ -781,6 +805,8 @@ def _nwog(out, cfg, d, og, ks, px, es_pt):
     """B14 / B14.1-3 from the NWOGs of the opening-gap table `og` (kind "nwog": high, low, ce, up, known, week)."""
     leave_adr, ret_cons, conv_pts, reclaim = cfg[:4]
     conv_mode = cfg[4] if len(cfg) > 4 else "near"
+    ref = cfg[5] if len(cfg) > 5 else "current"           # caption-gap BH-B14-NWOG-flip-edge: "previous" = last week's NWOG decides the bias state (030), "current" this week's (046 / 060)
+    basis = cfg[6] if len(cfg) > 6 else "px"              # ... "close" = the state moves on the previous DAILY close (a reclaim is a daily close beyond the edge), "px" = the row's 09:30 price (built)
     nan = float("nan")
     o, h, l, c = (d[k].values.astype(float) for k in ("open", "high", "low", "close"))
     wk_of = d.index.to_period("W-FRI")
@@ -801,6 +827,8 @@ def _nwog(out, cfg, d, og, ks, px, es_pt):
             bias.append(0)
             state, state_j = 0, -1
             continue
+        jb = j - 1 if (ref == "previous" and j >= 1) else j      # the NWOG that holds the bias state (the regime columns stay on this week's gap)
+        gb = nw.iloc[jb]
         g = nw.iloc[j]
         # returns: sessions of this week before k that came back into the gap after a session fully outside it
         k0 = next(q for q in range(len(d)) if wk_of[q] == wk)
@@ -830,10 +858,10 @@ def _nwog(out, cfg, d, og, ks, px, es_pt):
         else:
             rg = ""
         # B14.3 hold-until-reclaim
-        if state_j != j:
-            state, state_j = 0, j
-        hi, lo, ce = float(g.high), float(g.low), float(g.ce)
-        x = float(px[r])
+        if state_j != jb:
+            state, state_j = 0, jb
+        hi, lo, ce = float(gb.high), float(gb.low), float(gb.ce)
+        x = float(c[k - 1]) if (basis == "close" and k >= 1) else float(px[r])
         if x > hi:
             state = 1
         elif x < lo:

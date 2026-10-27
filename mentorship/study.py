@@ -2882,6 +2882,62 @@ _DWC3_DECISIONS = {
 DECISIONS.update(_DWC3_DECISIONS)
 
 
+# --- Caption-gap pass, package bias_htf#1/7 (digests/rulebook_gaps/bias_htf_intermarket.md; bh1.py / bh1e.py): one variant per switch (name prefix = the gap id). The lock stays on (draw_lock "session") - most of
+# these act on the lock; the bias reading is named where the switch needs it. -------------------------------------------------------------------------------------------------------------------
+BH1_BASE = dict(ob_entry="post_mss", htf_resist_cap=False, htf_bias="combo")
+BH1_FLIPS = ("ob_mt", "wk_dc", "wk_bisi", "inv3", "ob_low_touch", "wk_rb", "d_breaker")
+_BH1_DECISIONS = {
+    "BH-B17-daily-range-scalp-regime_close": dict(drange_scalp=True, drange_n=5, drange_break="close", drange_t1_pts=5.0, drange_day_pts=10.0, **BH1_BASE),
+    "BH-B17-daily-range-scalp-regime_wick": dict(drange_scalp=True, drange_break="wick", **BH1_BASE),
+    "BH-B7-last-daily-OB-guard_mt_close": dict(b7_mode="mt_close", wk_high_in_gate=True, flip_triggers=("ob_mt", "wk_dc"), **BH1_BASE),
+    "BH-B7-last-daily-OB-guard_mt_trade": dict(b7_mode="mt_trade", wk_high_in_gate=True, flip_triggers=("ob_mt", "wk_dc"), **BH1_BASE),
+    "BH-B7-last-daily-OB-guard_ob_close": dict(b7_mode="ob_close", wk_high_in_gate=True, flip_triggers=("ob_mt", "wk_dc"), **BH1_BASE),
+    "BH-A8-60m-BISI-loss-draw": dict(bisi60_draw=True, **BH1_BASE),
+    "BH-B17-neutral-lean": dict(neutral_lean=True, lean_n=2, lean_tol_pts=5.0, **BH1_BASE),
+    "BH-weekly-BISI-CE-and-full-close_close": dict(htf_bias="flip", flip_triggers=("ob_mt", "wk_dc", "wk_bisi"), ob_entry="post_mss", htf_resist_cap=False),
+    "BH-weekly-BISI-CE-and-full-close_ce_neutral": dict(htf_bias="flip", flip_triggers=("ob_mt", "wk_dc", "wk_bisi"), wk_bisi_ce_neutral=True, ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B8-draw-flip-via-inversion": dict(htf_bias="flip", flip_triggers=("ob_mt", "wk_dc", "inv3"), ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B1-imbalance-ceiling-ladder": dict(ceiling_ladder=True, vi_arrays=True, **BH1_BASE),
+    "BH-A11-BPR-lean": dict(bpr_lean=True, htf_bias="flip", ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B14-NWOG-flip-edge_current_high": dict(nwog_bias="filter", nwog_bias_reclaim="high", nwog_ref="current", nwog_bias_basis="close", htf_bias="nwog", ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B14-NWOG-flip-edge_previous_low": dict(nwog_bias="filter", nwog_bias_reclaim="low", nwog_ref="previous", nwog_bias_basis="px", htf_bias="nwog", ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B14-protective-gap-and-low": dict(raid_gap_guard=True, **BH1_BASE),
+    "BH-B8-pre-stated-invalidation-price_array": dict(inval_src="array", **BH1_BASE),
+    "BH-B8-pre-stated-invalidation-price_manual": dict(inval_src="manual", **BH1_BASE),
+    "BH-B9-HTF-OB-low-trade-through": dict(htf_bias="flip", flip_triggers=("ob_mt", "wk_dc", "ob_low_touch"), objective_neutral="week", ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B5-bellwether_15": dict(bellwether_tf=15, **BH1_BASE),
+    "BH-B5-bellwether_60": dict(bellwether_tf=60, **BH1_BASE),
+    "BH-B15-gap-down-ORG-no-shorts": dict(org_gap_filter=True, htf_bias="flip", ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B15-ORG-tell-details": dict(org_tell_seq=True, org_attempt_frac=0.25, org_tell_skip_min=3, org_tell_end=600, ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B15-ORG-consolidation-case": dict(org_consol_case=True, drange_scalp=True, objective_met_stop="off", **BH1_BASE),
+    "BH-B19-DXY-soft-filter-for-indices_tag": dict(dxy_filter="tag", ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B19-DXY-soft-filter-for-indices_soft": dict(dxy_filter="soft", dxy_soft_risk=0.5, ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B19-DXY-soft-filter-for-indices_hard": dict(dxy_filter="hard", ob_entry="post_mss", htf_resist_cap=False),
+    "BH-failed-sweeps-low-in": dict(low_in_relock=True, low_in_min_highs=3, low_in_ratio=2.0, ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B17-REL-REH-both-intact": dict(fifty_rel=True, ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B6-intraday-iof_15": dict(iof_tf=15, ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B6-intraday-iof_60": dict(iof_tf=60, ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B3-counter-bias-modes": dict(allow_counter_trend=True, **BH1_BASE),
+    "BH-B2-draw-by-proximity_tb": dict(draw_order="nearest_tb", ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B2-draw-by-proximity_inefficiency_first": dict(draw_order="inefficiency_first", htf_bias="draw", ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B2-wick-CE-draw": dict(wick_ce_draw=True, htf_bias="ordered", draw_lock_pick="ordered", ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B2-two-HTF-FVGs-farther": dict(stack_far=True, htf_bias="ordered", draw_lock_pick="ordered", ob_entry="post_mss", htf_resist_cap=False),
+    "BH-no-HTF-top-picking": dict(no_htf_top_pick=True, htf_bias="flip", objective_neutral="week", turtle_soup="external", ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B4-HTF-bias-minimum-criteria": dict(min_criteria=True, **BH1_BASE),
+    "BH-B13-weekly-PO3": dict(wk_po3=True, weekly_open="either", **BH1_BASE),
+    "BH-consolidation-takes-run-high": dict(run_extreme_lean=True, **BH1_BASE),
+    "BH-PWH-run-giveback-weekly-gap": dict(pwh_giveback_draw=True, giveback_frac=0.5, **BH1_BASE),
+    "BH-A5-HTF-FVG-own-timeframe": dict(htf_monthly=True, htf_bias="combo", htf_targets=("15m", "1h", "4h", "D", "W", "M"), ob_entry="post_mss", htf_resist_cap=False),
+    "BH-weekly-rejection-block-range-proof": dict(htf_bias="flip", flip_triggers=("ob_mt", "wk_dc", "wk_rb"), ob_entry="post_mss", htf_resist_cap=False),
+    "BH-B8-1h-BISI-CE-hold_trade": dict(bisi60_hold="trade", **BH1_BASE),
+    "BH-B8-1h-BISI-CE-hold_close": dict(bisi60_hold="close", **BH1_BASE),
+    "BH-B8-daily-breaker-bias": dict(htf_bias="flip", flip_triggers=("ob_mt", "wk_dc", "d_breaker"), ob_entry="post_mss", htf_resist_cap=False),
+    "B8-weekly-ith-both-indices-close": dict(htf_bias="flip", wk_dc_joint=True, ob_entry="post_mss", htf_resist_cap=False),
+    "B9-retrace-above-swing-low": dict(htf_bias="flip", b9_persist=True, ob_entry="post_mss", htf_resist_cap=False),
+}
+DECISIONS.update(_BH1_DECISIONS)
+
+
 def macro_runs_study(days, macro_run_pts: float = 5.0, leg_extra_min: int = 0) -> dict:
     """T7-1500-at-least-one (022 ~03:16:44): see dwc3.macro_runs_study. No engine change."""
     from . import dwc3

@@ -94,10 +94,14 @@ def want_at(ctx, p, session: str, i: int) -> int:
     k = (id(row) if row is not None else None)
     if k not in c:
         c[k] = bias_value(row, p)
+    v = c[k]
     if p.carry_weekly_draw:
         from . import dwc3 as _D3                    # caption-gap N10-unmet-target-carries-to-monday: the carried draw's side when the table has none; neutral once it traded
-        return _D3.want_override(ctx, p, c[k])
-    return c[k]
+        v = _D3.want_override(ctx, p, v)
+    if p.neutral_lean or p.org_tell_seq:
+        from . import bh1e as _B1                    # caption-gap bias_htf#1/7: the neutral lean, the confirmed ORG tell
+        v = _B1.want_adjust(ctx, p, session, i, v)
+    return v
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -552,7 +556,15 @@ def fifty_blocked(ctx, session: str) -> bool:
 
 
 def size_mult(ctx, sd, i: int, p, lvt) -> float:
-    """B22 qshift_size: the risk multiplier against the 252-session trend while a quarterly shift is due [our interpretation]."""
+    """B22 qshift_size: the risk multiplier against the 252-session trend while a quarterly shift is due [our interpretation]; caption-gap BH-B19-DXY-soft-filter-for-indices: dxy_soft_risk for a counter-dollar order."""
+    m1 = 1.0
+    if p.dxy_filter == "soft":
+        from . import bh1e as _B1
+        m1 = _B1.size_mult(ctx, sd, i, p, lvt)
+    return m1 * _size_mult_q(ctx, sd, i, p, lvt)
+
+
+def _size_mult_q(ctx, sd, i: int, p, lvt) -> float:
     if p.qshift_size == 1.0:
         return 1.0
     row = row_for(ctx, "", i)                        # (review fix) the cut row before 09:30 too: the quarterly columns are daily
