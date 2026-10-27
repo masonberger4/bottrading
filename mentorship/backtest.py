@@ -438,8 +438,8 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             day_trades = run_day(partner=pa, partner2=pa2, locks=locks, skips=skips, risk_state=rs, objective=objective, **kw)
             try:                                       # caption-gap pass day_week_context#2/3 (LLT 63 / 157 / 160, 118, 207): the per-day reporting fields, no trading effect
                 dsum.append(_DWC2.day_summary(g, kw["hist"], p, kw.get("bias"), tf))
-            except Exception:                          # a reporting field never stops a backtest
-                pass
+            except Exception as e_:                    # a reporting field never stops a backtest, but the failure is not silent
+                warnings.warn(f"day_summary failed on {d}: {e_!r}", RuntimeWarning)
             if p.max_trades_week:                        # X15: the week's budget is applied in ENTRY-time order (run_day did it
                 day_trades = sorted(day_trades, key=lambda t_: t_.entry_time)[:p.max_trades_week - n_wk]   # already; the main loop first, then
                                                          # the Silver Bullet / Ma Deuce: the old slice dropped the earlier trade)

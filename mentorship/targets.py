@@ -694,7 +694,7 @@ def tgif_info(ctx, sd, i: int, p, entry: float):
     ext_now = float(ctx.l[a:i + 1].min()) if sd.sign < 0 else float(ctx.h[a:i + 1].max())
     retr_max = (whi - ext_now) / rng if sd.sign < 0 else (ext_now - wlo) / rng
     return dict(levels=sorted(sd.x(v) for v in real), retrace=float(retr),
-                stand_down=bool(max(retr, retr_max) >= min(p.tgif_stand_down, p.tgif_reversal_pct)), held=held)
+                stand_down=bool(max(retr, retr_max) >= (p.tgif_stand_down if p.tgif_reversal_pct is None else p.tgif_reversal_pct)), held=held)
 
 
 def matrix_breakers(sd, p):

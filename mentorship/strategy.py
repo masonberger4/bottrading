@@ -3155,7 +3155,7 @@ class Params:
     london_low_guard: bool = False       # new-london-low-violated (092 ~02:29:00): bias set, NY trades through the London low (high): no entries that day; bias side only; entries from 10:00
     london_filters: bool = False         # N8-london-filters-gate-london (cc08_006 ~00:13:20): the FOMC whipsaw / multi-release filters gate the London windows only
     po3_adr_invalid: bool = False        # T13-po3-small-open-wick (cc08_008 ~9:13): after a daily discount (premium) reaction a low below midnight open - ADR5 (high above + ADR5) clears the long (short) bias
-    tgif_reversal_pct: float = 0.40      # M14-reversal-threshold (066 ~25:34 / ~18:12): the Friday retrace share of the weekly range that flags a reversal (0.30 | 0.40); the effective TGIF stand-down is min(tgif_stand_down, this); tag wk_reversal_flag next week
+    tgif_reversal_pct: float | None = None  # M14-reversal-threshold (066 ~25:34 / ~18:12): the Friday retrace share of the weekly range that flags a reversal (0.30 | 0.40); None = tgif_stand_down (0.40, unchanged); when set it IS the effective TGIF stand-down; tag wk_reversal_flag next week
     tgif_fvg_cap: bool = False           # M14-tgif-daily-fvg-ce-cap (089 ~00:02:57): TGIF short entry at or below the CE of the nearest daily SIBI above, stop above max(CE, longest-wick CE), PDL / FVG-low rungs, cancelled after two 5m closes above the CE
     adr_close_runner: bool = False       # LLT3-adr-fib-close-zone (cc09_006 ~00:26:59): the runner leaves at H - 0.20 x ADR5 once price traded H = L + ADR5 and turned
     fri_trail_from: int = 0              # X5-friday-tight-trail (103 ~00:30:33): 0 = off (test 900) - from this minute on a Friday the stop ratchets under each new 1-bar pivot low
@@ -3373,8 +3373,8 @@ class Params:
         for name, ok in (("consolidation_mode", ("skip", "range_trade", "fade_with_htf", "scalp")), ("expansion_mode", ("off", "tag", "full")), ("days_mode", ("all", "mon_wed", "tue_wed"))):
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
-        if (self.consol_range_days < 1 or self.mon_big_frac < 0 or self.expansion_judas_adr < 0 or not 0 < self.tgif_reversal_pct < 1 or self.fri_trail_from < 0 or self.adr_runner_until <= 0
-                or self.adr_runner_until > 1440 or (self.tgif_zone and self.tgif_reversal_pct < self.tgif_cap)):
+        if (self.consol_range_days < 1 or self.mon_big_frac < 0 or self.expansion_judas_adr < 0 or (self.tgif_reversal_pct is not None and not 0 < self.tgif_reversal_pct < 1) or self.fri_trail_from < 0 or self.adr_runner_until <= 0
+                or self.adr_runner_until > 1440 or (self.tgif_zone and self.tgif_reversal_pct is not None and self.tgif_reversal_pct < self.tgif_cap)):
             raise ValueError("day_week_context#2/3: consol_range_days >= 1, mon_big_frac >= 0, 0 < tgif_reversal_pct < 1 (and >= tgif_cap with tgif_zone), fri_trail_from >= 0, 0 < adr_runner_until <= 1440")
         if (self.fomc_eve_risk <= 0 or self.pre_fomc_risk <= 0 or self.pre_cpi_risk <= 0 or self.or_deep_pd < 0
                 or self.run_done_adr < 0 or self.or_wide_adr < 0 or self.news_judas_ref_min < 1):

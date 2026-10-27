@@ -27,7 +27,7 @@ KNOBS = {"consol_range_days", "mon_big_frac", "adr_runner_until", "expansion_jud
 OFF = {"consolidation_mode": "skip", "expansion_strict": False, "expansion_mode": "off", "trend_side_rule": False, "fri_delivered_stop": False, "fri_pool_choice": False, "mw_break_bias": False,
        "mw_carry": False, "thu_reversal_tag": False, "thu_reversal_trade": False, "wed_week_extreme": False, "days_mode": "all", "late_week_fallback": False, "no_long_after_thu_noon": False,
        "ny_cont_gate": False, "adr_news_exempt": False, "london_low_guard": False, "london_filters": False, "po3_adr_invalid": False, "tgif_fvg_cap": False, "adr_close_runner": False,
-       "fri_trail_from": 0, "adr_met_runner": False, "adr_contracted_tag": False, "tgif_reversal_pct": 0.40, "monday_mode": "trade", "tue_off_monday": "off"}
+       "fri_trail_from": 0, "adr_met_runner": False, "adr_contracted_tag": False, "tgif_reversal_pct": None, "monday_mode": "trade", "tue_off_monday": "off"}
 
 
 def first_date(pred, start=date(2023, 1, 2), n=900):
@@ -124,6 +124,8 @@ def test_consolidation_mode_routes(monkeypatch):
     assert D2.order_ok(c, sl, order(sl, 100.0, 99.0, [102.0], entry_kind="ts_cc_limit"), "AM", i_(c), p) is None
     assert D2.order_ok(c, sl, order(sl, 100.0, 99.0, [102.0], entry_kind="ifvg"), "AM", i_(c), p) == "x_dw_consol_fade"
     assert D2.order_ok(c, ss, order(ss, ss.x(100.0), ss.x(101.0), [ss.x(98.0)], entry_kind="ts_cc_limit"), "AM", i_(c), p) == "x_dw_consol_fade"
+    cc = mk(d, h, p, bias_row={"draw": 0, "combo": 1})                                          # the table's bias (combo) is the one read, not the draw
+    assert D2.order_ok(cc, cc.sides_map[1], order(cc.sides_map[1], 100.0, 99.0, [102.0], entry_kind="ts_cc_limit"), "AM", i_(cc), p) is None
     c_nob = mk(d, h, p)
     assert D2.order_ok(c_nob, c_nob.sides_map[1], order(c_nob.sides_map[1], 100.0, 99.0, [102.0], entry_kind="ts_cc_limit"), "AM", i_(c_nob), p) == "x_dw_consol_fade_bias"
     # range_trade: turtle soup / OTE / sick sister only, targets inside the 3-session range
@@ -132,7 +134,12 @@ def test_consolidation_mode_routes(monkeypatch):
     assert c.dplan.info["consol_range"] == (108.0, 90.0)
     sl = c.sides_map[1]
     o = order(sl, 100.0, 99.0, [105.0, 110.0, 112.0], entry_kind="turtle_soup", runner=True)
-    assert D2.order_ok(c, sl, o, "AM", i_(c), p) is None and o["levels"] == [105.0] and o["t2"] is None and not o["final_T"] and "runner" not in o
+    assert D2.order_ok(c, sl, o, "AM", i_(c), p) is None and o["levels"] == [105.0, 108.0] and o["level_kinds"][-1] == "pool" and not o["final_T"] and "runner" not in o       # capped at the range high, which becomes the last rung
+    o3 = order(sl, 100.0, 99.0, [106.0], entry_kind="turtle_soup", runner=True)
+    c.conf = Conf(z={})
+    c.conf.arrays_any = lambda now, side, tfs: [(104.0, 105.0), (109.0, 110.0)]          # an open bearish 4h array inside the range, one beyond it
+    assert D2.order_ok(c, sl, o3, "AM", i_(c), p) is None and o3["levels"] == [104.0, 106.0, 108.0] and o3["t1"] == 104.0              # the opposite open FVG and the range high as rungs
+    c.conf = None
     assert D2.order_ok(c, sl, order(sl, 100.0, 99.0, [105.0], entry_kind="ifvg"), "AM", i_(c), p) == "x_dw_consol_range_setup"
     ote = order(sl, 95.0, 94.0, [105.0], entry_kind="ifvg", leg=(90.0, 108.0))                   # 95 sits in 93.78-96.84 (62-79 % of the 90-108 leg)
     assert D2.order_ok(c, sl, ote, "AM", i_(c), p) is None
@@ -144,9 +151,10 @@ def test_consolidation_mode_routes(monkeypatch):
     assert c.dplan.info["consol_apply"] and DW.scalp_now(c, p, "AM", i_(c)) == "consol_day" and DW.scalp_now(c, p, "PM", i_(c)) == ""
     q = D2.day_params(replace(p, consol_am_out=0), c.dplan)
     assert q.consol_am_out == 660
-    # no consolidation predictor: nothing
+    # no consolidation predictor: nothing, and the intraday chop stand-aside stays ON for the day (it is switched off only on the days the mode applies to)
     monkeypatch.setattr(DW, "_consol_predictors", lambda ctx, d, p, hist, eth: [])
-    assert "consol_mode" not in mk(d, h, Params(**BASE, consolidation_mode="range_trade", drr_tests=())).dplan.info
+    cn = mk(d, h, Params(**BASE, consolidation_mode="range_trade", drr_tests=()))
+    assert "consol_mode" not in cn.dplan.info and "consol_nochop" not in cn.dplan.info
 
 
 # --- items 50 / 53: expansion -------------------------------------------------------------------------------------------------
@@ -398,8 +406,9 @@ def test_mw_carry_keeps_the_bias_when_the_target_is_missed():
     assert D2.carried_bias(h2, d) == 0
 
 
-def test_thu_reversal_tag_and_trade():
+def test_thu_reversal_tag_and_trade(monkeypatch):
     d = date(2026, 5, 21)
+    monkeypatch.setattr(D2, "thu_release", lambda x: True)                                                  # a release (08:30 / 14:00) on the day
     h = _thu_hist(True)
     p = Params(**BASE, thu_reversal_tag=True, thu_reversal_trade=True)
     spec = {"09:30": (102.5, 102.6, 101.5, 101.7), "09:35": (101.7, 102.8, 101.6, 102.7)}
@@ -416,6 +425,15 @@ def test_thu_reversal_tag_and_trade():
     assert D2.side_ok(c, p, -1, "AM", i) == "x_dw_thu_reversal_side" and D2.side_ok(c, p, 1, "AM", i) is None
     assert D2.order_ok(c, sl, order(sl, 102.5, 101.5, [104.0], swept="mon_wed"), "AM", i, p) is None
     assert D2.order_ok(c, sl, order(sl, 102.5, 101.5, [104.0], swept="pdl1"), "AM", i, p) == "x_dw_thu_reversal_pool"
+    # no release on the Thursday (the real calendar of 2026-05-21 has none): no setup, no trade filter
+    monkeypatch.setattr(D2, "thu_release", lambda x: False)
+    assert "thu_rev" not in mk(d, h, p, rows=rows_5m(spec, "09:30"), base=102.5).dplan.info
+    monkeypatch.setattr(D2, "thu_release", lambda x: True)
+    # the day-level tag (reporting): traded under the Mon-Wed low and closed back above it
+    g = day(rows_5m(spec, "09:30"), d=d, start="09:30", base=102.5)
+    assert D2.thu_day_tag(g, h, p) == "thu_reversal" and D2.thu_day_tag(g, [], p) == ""
+    gq = day(rows_5m({"09:30": (102.5, 102.6, 102.2, 102.4)}, "09:30"), d=d, start="09:30", base=102.5)
+    assert D2.thu_day_tag(gq, h, p) == ""
     # off: nothing; a Mon-Wed range above 1.5 x ADR5 is no consolidation
     assert "thu_rev" not in mk(d, h, Params(**BASE), rows=rows_5m(spec, "09:30"), base=102.5).dplan.info
     wide = _thu_hist(True, mw=((102.0, 140.0, 100.0, 102.5),) * 3)
@@ -494,6 +512,36 @@ def test_wed_week_extreme():
         assert "wed_ext" not in mk(wed, base + cur, Params(**BASE)).dplan.info
     finally:
         D1._alive_zones = orig
+
+
+def test_wed_week_extreme_takes_the_nearest_array():
+    wed = date(2026, 5, 20)
+    base = weeks(date(2026, 5, 4), [(100.0, 101.0, 90.0, 95.0), (95.0, 103.0, 94.0, 102.0)])
+    near_z = SimpleNamespace(i=3, top=100.0, bottom=99.0, kind="bull")                   # the nearest daily array under the Monday open (102)
+    far_z = SimpleNamespace(i=2, top=96.0, bottom=94.0, kind="bull")
+    p = Params(**BASE, wed_week_extreme=True)
+    orig = D1._alive_zones
+    D1._alive_zones = lambda hist, kind, end=None: [far_z, near_z] if kind == "bull" else []
+    try:
+        mon_hits_near = base + [daily(date(2026, 5, 18), 102.0, 103.0, 99.5, 102.5), daily(date(2026, 5, 19), 102.5, 103.0, 101.8, 102.2)]       # Monday reached the NEAR zone only
+        assert "wed_ext" not in mk(wed, mon_hits_near, p).dplan.info
+        none = base + [daily(date(2026, 5, 18), 102.0, 103.0, 101.5, 102.5), daily(date(2026, 5, 19), 102.5, 103.0, 101.8, 102.2)]
+        assert mk(wed, none, p).dplan.info["wed_ext"] == 1
+        tue_hits = base + [daily(date(2026, 5, 18), 102.0, 103.0, 101.5, 102.5), daily(date(2026, 5, 19), 102.5, 103.0, 99.9, 102.2)]            # Tuesday did
+        assert "wed_ext" not in mk(wed, tue_hits, p).dplan.info
+    finally:
+        D1._alive_zones = orig
+
+
+def test_expansion_strict_uses_the_avoidance_filters():
+    h = history(D0, first=(120.0, 80.0), hi=102.0, lo=98.0)
+    p = Params(**BASE, expansion_due=True, expansion_targets=(1.5,), expansion_strict=True)
+    assert D2.strict_filters(first_date(lambda x: x in __import__("claude_hf.daytypes", fromlist=["JOBS"]).JOBS), p) == "nfp"
+    assert D2.strict_filters(first_date(lambda x: C.is_holiday_eve(x) and x not in __import__("claude_hf.daytypes", fromlist=["JOBS"]).JOBS), p) == "holiday_eve"
+    assert D2.strict_filters(first_date(lambda x: C.fomc_info(x)["fomc"]), p) == "fomc"
+    assert D2.strict_filters(first_date(lambda x: C.fomc_info(x)["after"]), p) == "fomc"
+    ok = first_date(lambda x: not D2.strict_filters(x, p))
+    assert D2.strict_filters(ok, p) == ""
 
 
 def test_tue_off_monday_ote_anchor():
@@ -699,6 +747,25 @@ def test_tgif_reversal_flag_threshold():
         assert info is not None and info["stand_down"] is want, (pct, info)
 
 
+def test_tgif_reversal_pct_default_leaves_the_stand_down_alone():
+    """tgif_reversal_pct=None (the default) does not touch tgif_stand_down: a stand-down above 0.40 stays; an explicit value IS the threshold."""
+    mon = date(2026, 5, 11)
+    wk = [daily(mon, 100.0, 105.0, 99.0, 104.0), daily(mon + timedelta(days=1), 104.0, 112.0, 103.0, 110.0), daily(mon + timedelta(days=2), 110.0, 120.0, 109.0, 118.0),
+          daily(mon + timedelta(days=3), 118.0, 119.5, 117.0, 119.0)]
+    fri = mon + timedelta(days=4)
+
+    def stand(**kw):
+        p = Params(**BASE, tgif_zone=True, **kw)
+        c = mk(fri, wk, p, base=114.0)
+        c.day_tags = "tgif_short"
+        sd = c.sides_map[-1]
+        return T.tgif_info(c, sd, at(c, "10:00"), p, sd.x(111.0))["stand_down"]            # (120 - 111) / 21 = 43 %
+    assert stand() is True and stand(tgif_stand_down=0.50) is False and stand(tgif_stand_down=0.50, tgif_reversal_pct=0.40) is True
+    # the direction of the week is the Mon-Thu close against the Monday open (no outer-quarter precondition): a Thursday close mid-range still flags
+    mid = wk[:3] + [daily(mon + timedelta(days=3), 118.0, 119.5, 100.0, 108.0), daily(mon + timedelta(days=4), 108.0, 108.5, 100.0, 101.0)]
+    assert D2.reversal_flag(mid, mon + timedelta(days=7), 0.40) is True
+
+
 def test_tgif_fvg_ce_cap():
     fri = date(2026, 5, 15)
     # a daily SIBI 15500-15560 above the open (CE 15530): candle 1 low 15560, candle 3 high 15500
@@ -722,6 +789,13 @@ def test_tgif_fvg_ce_cap():
     c2 = mk(fri, h, p, rows=rows_5m(spec, "09:30", base=15525.0), base=15525.0, dt={"tgif_short"})
     assert D2.side_ok(c2, p, -1, "AM", at(c2, "09:30")) is None and D2.side_ok(c2, p, -1, "AM", at(c2, "09:35")) == "x_dw_tgif_fvg_closes"
     assert D2.side_ok(c2, p, 1, "AM", at(c2, "09:35")) is None
+    # the two closes must be consecutive 5m closes
+    spec3 = {"09:30": (15525.0, 15532.0, 15524.0, 15531.0), "09:35": (15531.0, 15531.5, 15526.0, 15527.0), "09:40": (15527.0, 15533.0, 15526.0, 15532.0)}
+    c3 = mk(fri, h, p, rows=rows_5m(spec3, "09:30", base=15525.0), base=15525.0, dt={"tgif_short"})
+    assert D2.side_ok(c3, p, -1, "AM", at(c3, "09:40")) is None
+    # a stop tighter than the order's own is set to the spec value (CE of the longest wick of the last 5m swing + 1 tick); the size is kept
+    o_t = order(ss, ss.x(15525.0), ss.x(15560.0), [ss.x(15480.0)], kinds=["pool"], ext_i=c.start + at(c, "09:30") - c.start)
+    assert D2.order_ok(c, ss, o_t, "AM", i, p) is None and ss.x(o_t["stop"]) < 15560.0 and o_t["shares"] == 100 and o_t["t2"] == (o_t["levels"][1] if len(o_t["levels"]) > 1 else None)
     assert "tgif_fvg" not in mk(fri, h, Params(**BASE), base=15525.0, dt={"tgif_short"}).dplan.info
     assert "tgif_fvg" not in mk(fri, h, p, base=15525.0).dplan.info                                          # not a TGIF short Friday
 
@@ -834,9 +908,16 @@ def test_adr_close_runner_exit():
     D2.adr_close_exit(c, sd, pos, tr, at(c, "09:30"), "t0", p)
     assert pos["left"] == 4                                                                                   # traded H but the close is not back under it yet
     D2.adr_close_exit(c, sd, pos, tr, at(c, "09:35"), "t1", p)
-    assert pos["left"] == 4 and pos["adr_close"]["turned"]                                                     # a close back below H
+    assert pos["left"] == 4 and pos["adr_close"]["turn_j"] == at(c, "09:35")                                                     # a close back below H
     D2.adr_close_exit(c, sd, pos, tr, at(c, "09:40"), "t2", p)
     assert pos["left"] == 0 and tr.exits == [("t2", px, 4, "adr_close")]
+    # H moves with the running low: the level that traded (140) is the one the close is judged against, not today's lower H
+    spec2 = {"09:30": (100.0, 141.0, 99.9, 140.5), "09:35": (140.5, 141.0, 90.0, 135.0)}
+    c2 = mk(d, h, p, rows=rows_5m(spec2, "09:30", base=100.0), base=100.0)
+    pos3 = _pos(at(c2, "09:30"), 95.0, left=4, n=10, t1_done=True)
+    D2.adr_close_exit(c2, c2.sides_map[1], pos3, SimpleNamespace(exits=[]), at(c2, "09:30"), "a", p)
+    D2.adr_close_exit(c2, c2.sides_map[1], pos3, SimpleNamespace(exits=[]), at(c2, "09:35"), "b", p)
+    assert pos3["adr_close"]["H"] == pytest.approx(float(c2.l[c2.start:at(c2, "09:30") + 1].min()) + DW._adr(c2, p)) and pos3["adr_close"]["turn_j"] == at(c2, "09:35")                    # 135 < 139.9, though above 90 + ADR5
     # no first partial: a runner only
     pos2 = _pos(at(c, "09:30"), 95.0, left=4, n=10)
     D2.adr_close_exit(c, sd, pos2, SimpleNamespace(exits=[]), at(c, "09:40"), "t2", p)
@@ -998,10 +1079,11 @@ LA_D2 = {   # name -> (window, switches); NEED = at least one of the dwc2.HITS c
                          tgif_model=True, tgif_fvg_cap=True, runner_frac=0.2)),
     "scalp": ("W2", dict(consolidation_mode="scalp", sd_intraday="tag")),
 }
-NEED_D2 = {"week": ("late_week_open", "late_week_blocked", "mon_big_wait", "mon_big_reject", "thu_noon_block", "thu_rev_setup", "wed_week_extreme", "tue_ote_pass", "tue_ote_reject"),
-           "day": ("consol_mode_range_trade", "expansion_candidate", "ny_cont_extreme", "london_guard_pre_wait", "london_guard_wait", "adr_contracted", "expansion_strict_static_off"),
-           "exits": ("fri_trail", "adr_runner_short", "adr_runner_on", "adr_runner_not_banked", "fri_pool_long", "fri_pool_short", "fri_single_exit", "adr_close_exit"),
-           "scalp": ("consol_mode_scalp",)}
+NEED_D2 = {   # name -> one group per switch ("a|b" = either counter): EVERY group must have run in the window (the rest of the switches are covered by the CAUSAL cases)
+    "week": ("late_week_open|late_week_blocked", "thu_noon_block", "thu_rev_setup", "wed_week_extreme", "tue_ote_pass|tue_ote_reject", "mon_big_wait|mon_big_reject", "wk_reversal_flag"),
+    "day": ("consol_mode_range_trade", "expansion_candidate", "expansion_strict_static_off", "expansion_full"),
+    "exits": ("fri_pool_long|fri_pool_short", "fri_delivered_block", "wk_reversal_flag"),
+    "scalp": ("consol_mode_scalp",)}
 _RUNS = {}
 
 
@@ -1024,7 +1106,8 @@ def test_look_ahead_synthetic_dwc2(name):
     assert len(full) >= 1, f"{name}: no trades in window {wname}"
     p = Params(**SYN, sb_model=True, ma_deuce=True, **kw)
     _no_look_ahead(x, 5, "ES", p, COLS, every=max(1, len(full) // 3), partner=y, exits=True, min_trades=1)
-    assert any(D2.HITS.get(h) for h in NEED_D2[name]), f"{name}: none of these paths ran: {NEED_D2[name]} (ran: {sorted(D2.HITS)})"
+    missing = [g for g in NEED_D2[name] if not any(D2.HITS.get(h) for h in g.split("|"))]
+    assert not missing, f"{name}: these switch paths did not run: {missing} (ran: {sorted(D2.HITS)})"
 
 
 def test_look_ahead_sets_fire_something():
@@ -1056,6 +1139,217 @@ def test_look_ahead_hand_made_days():
             trend_side_rule=True, trend_recipe="side", po3_adr_invalid=True, consolidation_mode="range_trade")
     _day_la(D0, A_ROWS, "09:50", ("10:05", "10:30"), min_trades=0, adr_met_runner=True, adr_close_runner=True, london_filters=True, adr_news_exempt=True, london_adr_skip=0.1)
     _day_la(fri, A_ROWS, "09:50", ("10:05", "10:30"), min_trades=0, fri_trail_from=600, fri_delivered_stop=True, eve_draw=True, fri_pool_choice=True)
+
+
+# --- no look-ahead per path: the same function at the same closed bar on the full day, a day whose later bars are poisoned, and a day cut right after the bar ---------------------
+# (the full-run comparisons above cannot reach every dwc2 path in a small window; each path listed here is asserted to RUN, and to give the same answer in the three variants)
+
+def mk3(d, hist, p, probe, variant, rows=(), start="09:30", base=100.0, bias_row=None, conf=None, spike=False, dt=None):
+    df = day(list(rows), d=d, start=start, spike=spike, base=base)
+    ts = pd.Timestamp(f"{d} {probe}", tz=B.NY)
+    if variant == "cut":
+        df = df[df.index <= ts]
+    elif variant == "poison":
+        df = df.copy()
+        m = df.index > ts
+        for col, v in (("open", base + 60.0), ("high", base + 300.0), ("low", base - 300.0), ("close", base - 60.0)):
+            df.loc[m, col] = v
+    ctx = S.DayCtx(df, d, hist, 5)
+    ctx.hist = hist
+    ctx.lock = {}
+    ctx.eth = None
+    ctx.eve = None
+    ctx.bias_row = bias_row
+    ctx.conf = conf
+    ctx.daily_all = None
+    mg = p.min_fvg_pts * p.es_pt
+    ctx.sides_map = {1: S.Side(1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, mg), -1: S.Side(-1, ctx.o, ctx.h, ctx.l, ctx.c, p.pivot_n, mg)}
+    ctx.dplan = DW.plan(ctx, hist, p, None, None, dt)
+    return ctx
+
+
+def _causal(case, mp, need):
+    """Run `case(variant, mp)` -> a comparable result for the three variants; the full run must bump every counter in `need`."""
+    D2.HITS.clear()
+    full = case("full", mp)
+    ran = set(D2.HITS)
+    assert set(need) <= ran, f"paths that did not run: {sorted(set(need) - ran)} (ran: {sorted(ran)})"
+    assert case("poison", mp) == full, "a later bar changed the decision at the probe bar"
+    assert case("cut", mp) == full, "cutting the day after the probe bar changed the decision"
+
+
+def _case_trend(v, mp):
+    mp.setattr(DW, "news_class", lambda x: "high")
+    bull = SimpleNamespace(i=10, top=95.0, bottom=93.0, kind="bull")
+    mp.setattr(D1, "_alive_zones", lambda hist, kind, end=None: [bull] if kind == "bull" else [])
+    p = Params(**BASE, trend_recipe="side", trend_side_rule=True)
+    h = history(D0, n=25)
+    out = []
+    for br in ({"draw": 1}, {"draw": -1}):
+        c = mk3(D0, h, p, "10:00", v, bias_row=br)
+        out.append((D2.side_ok(c, p, 1, "AM", at(c, "09:00")), D2.side_ok(c, p, 1, "AM", at(c, "10:00")), c.dplan.info.get("trend_side")))
+    return out
+
+
+def _case_adr_news(v, mp):
+    d10 = first_date(lambda x: 600 in C.release_times(x) and 510 not in C.release_times(x) and x.weekday() in (1, 2, 3) and not C.is_post_holiday(x) and not C.holiday_in_week(x))
+    spec = {"02:00": (100.0, 107.2, 100.0, 107.0), "02:05": (107.0, 107.2, 91.0, 92.0)}
+    rows = rows_5m({**spec, "09:55": (92.0, 92.2, 91.8, 92.0)}, "02:00", base=92.0)
+    p = Params(**BASE, london_adr_skip=0.8, adr_news_exempt=True)
+    c = mk3(d10, history(d10), p, "09:30", v, rows=rows, start="02:00")
+    i = at(c, "09:30")
+    return (DW.gate(c, p, "AM", i, 570), sorted(D2.entry_tags(c, p, c.dplan, i)), "adr_filled_news" in c.dplan.tags)
+
+
+def _case_london_filters(v, mp):
+    d = first_date(lambda x: C.fomc_info(x)["after"] and x.weekday() in (2, 3))
+    p = Params(**BASE, london_filters=True)
+    mp.setattr(N2, "whip_flag", lambda ctx, p, day: True)
+    c = mk3(d, history(d), p, "03:00", v)
+    r1 = D2.gate(c, p, "LON", at(c, "03:00"), 180)
+    mp.setattr(N2, "whip_flag", lambda ctx, p, day: False)
+    mp.setattr(N2, "rel_count", lambda day, p: 2)
+    c2 = mk3(D0, history(D0), p, "03:00", v)
+    return (r1, D2.gate(c2, p, "LON", at(c2, "03:00"), 180))
+
+
+def _case_tgif_cap(v, mp):
+    fri = date(2026, 5, 15)
+    h = [daily(date(2026, 5, 11), 15600.0, 15620.0, 15560.0, 15570.0), daily(date(2026, 5, 12), 15570.0, 15575.0, 15480.0, 15490.0), daily(date(2026, 5, 13), 15490.0, 15500.0, 15450.0, 15460.0),
+         daily(date(2026, 5, 14), 15460.0, 15490.0, 15440.0, 15450.0)]
+    p = Params(**BASE, tgif_fvg_cap=True)
+    spec = {"09:30": (15525.0, 15532.0, 15524.0, 15531.0), "09:35": (15531.0, 15533.0, 15530.5, 15532.0), "09:40": (15532.0, 15540.0, 15520.0, 15521.0)}
+    c = mk3(fri, h, p, "09:35", v, rows=rows_5m(spec, "09:30", base=15525.0), base=15525.0, dt={"tgif_short"})
+    ss = c.sides_map[-1]
+    o = order(ss, ss.x(15525.0), ss.x(15527.0), [ss.x(15480.0)], kinds=["pool"], ext_i=at(c, "09:30"))
+    r = D2.order_ok(c, ss, o, "AM", at(c, "09:30"), p)
+    return (D2.side_ok(c, p, -1, "AM", at(c, "09:30")), D2.side_ok(c, p, -1, "AM", at(c, "09:35")), r, round(o["stop"], 6), o["shares"], tuple(o["levels"]))
+
+
+def _case_mon_big(v, mp):
+    d = date(2026, 5, 18)
+    p = Params(**BASE, monday_mode="big_into_array", mon_big_frac=0.1)
+    rows = rows_5m({"09:30": (100.0, 100.4, 99.6, 100.1), "09:35": (100.1, 100.5, 99.9, 100.2), "09:45": (100.0, 130.0, 70.0, 100.0)}, "09:30")
+    c = mk3(d, _bear_weeks(), p, "09:35", v, spike=True, conf=Conf(z={"D": zone(-1, 102.0, 106.0)}), rows=rows)
+    i = at(c, "09:35")
+    return (D2.gate(c, p, "AM", at(c, "09:00"), 540), D2.gate(c, p, "AM", i, 575), D2.side_ok(c, p, 1, "AM", i), D2.size_mult(c, p), sorted(D2.entry_tags(c, p, c.dplan, i)))
+
+
+def _case_am_exit(v, mp):
+    d = D0
+    h = history(d, hi=130.0, lo=100.0, first=(130.0, 100.0))
+    p = Params(**BASE, adr_met_runner=True, runner_frac=0.2)
+    rows = rows_5m({"09:25": (100.0, 132.5, 100.0, 132.0), "11:55": (132.0, 133.0, 131.0, 132.0), "12:05": (132.0, 300.0, 5.0, 100.0)}, "09:25", base=100.0)
+    c = mk3(d, h, p, "11:55", v, rows=rows, start="09:25", base=100.0)
+    sd = c.sides_map[1]
+    i = at(c, "11:55")
+    pos = _pos(at(c, "09:40"), 95.0, left=24, n=100)
+    tr = SimpleNamespace(exits=[])
+    x = D2.am_exit_for(c, sd, pos, tr, i, "ts", p, 720, 132.0)
+    return (x, tuple(map(tuple, tr.exits)), pos["left"])
+
+
+def _case_adr_close(v, mp):
+    d = D0
+    h = history(d, hi=140.0, lo=100.0, first=(140.0, 100.0))
+    p = Params(**BASE, adr_close_runner=True)
+    spec = {"09:30": (100.0, 141.0, 99.9, 140.5), "09:35": (140.5, 140.7, 138.0, 139.0), "09:40": (139.0, 139.5, 131.0, 131.5), "09:45": (131.5, 135.0, 120.0, 125.0)}
+    c = mk3(d, h, p, "09:40", v, rows=rows_5m(spec, "09:30", base=100.0))
+    sd = c.sides_map[1]
+    pos = _pos(at(c, "09:30"), 95.0, left=4, n=10, t1_done=True)
+    tr = SimpleNamespace(exits=[])
+    for hh in ("09:30", "09:35", "09:40"):
+        D2.adr_close_exit(c, sd, pos, tr, at(c, hh), "t" + hh, p)
+    return (tuple(map(tuple, tr.exits)), pos["left"])
+
+
+def _case_thu_rev(v, mp):
+    d = date(2026, 5, 21)
+    mp.setattr(D2, "thu_release", lambda x: True)
+    p = Params(**BASE, thu_reversal_tag=True, thu_reversal_trade=True)
+    spec = {"09:30": (102.5, 102.6, 101.5, 101.7), "09:35": (101.7, 102.8, 101.6, 102.7), "09:40": (102.7, 130.0, 70.0, 100.0)}
+    c = mk3(d, _thu_hist(True), p, "09:35", v, rows=rows_5m(spec, "09:30", base=102.5), base=102.5)
+    sl = c.sides_map[1]
+    i = at(c, "09:35")
+    return (D2.order_ok(c, sl, order(sl, 102.5, 101.5, [104.0], swept="mon_wed"), "AM", i, p), D2.side_ok(c, p, -1, "AM", i), sorted(D2.entry_tags(c, p, c.dplan, i)))
+
+
+def _case_range_cap(v, mp):
+    mp.setattr(DW, "_consol_predictors", lambda ctx, d, p, hist, eth: ["no_report"])
+    p = Params(**BASE, consolidation_mode="range_trade")
+    c = mk3(D0, history(D0), p, "10:00", v, rows=rows_5m({"09:30": (100.0, 100.4, 99.6, 100.1), "10:05": (100.0, 130.0, 70.0, 100.0)}, "09:30"))
+    sl = c.sides_map[1]
+    o = order(sl, 100.0, 99.0, [105.0, 110.0, 112.0], entry_kind="turtle_soup", runner=True)
+    r = D2.order_ok(c, sl, o, "AM", at(c, "10:00"), p)
+    return (r, tuple(o["levels"]), tuple(o["level_kinds"]))
+
+
+def _case_mw_break(v, mp):
+    d = date(2026, 5, 21)
+    p = Params(**BASE, thu_fri_break="side", mw_break_bias=True, mw_carry=True)
+    hd = _thu_hist(False)
+    c = mk3(d, hd, p, "09:30", v, rows=rows_5m({"09:30": (103.0, 105.0, 102.9, 104.9), "09:35": (104.9, 140.0, 60.0, 100.0)}, "09:30", base=103.0), base=103.0)
+    i = at(c, "09:30")
+    h2 = weeks(date(2026, 5, 4), [(100.0, 101.0, 90.0, 95.0), (95.0, 103.0, 94.0, 102.0), (102.0, 102.5, 92.0, 93.0)])
+    c2 = mk3(date(2026, 5, 25), h2, p, "09:30", v)
+    c3 = mk3(d, hd, p, "09:30", v, rows=rows_5m({"09:30": (102.5, 102.6, 100.5, 100.6), "09:35": (100.6, 140.0, 60.0, 100.0)}, "09:30", base=102.5), base=102.5)          # the break DOWN is with the bearish week
+    return (DW.side_ok(c, p, -1, "AM", i), DW.side_ok(c, p, 1, "AM", i), DW.side_ok(c3, p, 1, "AM", i), c2.dplan.info.get("wk_bias"))
+
+
+def _case_ny_cont(v, mp):
+    p = Params(**BASE, ny_cont_gate=True)
+    spec = {"03:00": (100.0, 100.1, 97.0, 99.0), "05:00": (99.0, 99.5, 98.8, 99.4), "09:30": (100.0, 100.2, 99.8, 100.0), "09:55": (100.0, 150.0, 60.0, 100.0)}
+    c = mk3(D0, history(D0), p, "09:30", v, rows=rows_5m(spec, "00:00"), start="00:00", bias_row={"draw": 1}, conf=ArrConf())
+    i = at(c, "09:30")
+    sl, ss = c.sides_map[1], c.sides_map[-1]
+    return (D2.side_ok(c, p, 1, "AM", i), D2.ny_cont_rung(c, p, i, sl), D2.ny_cont_rung(c, p, i, ss))
+
+
+def _case_expansion(v, mp):
+    p = Params(**BASE, expansion_due=True, expansion_targets=(1.5,), expansion_strict=True, expansion_mode="full")
+    d = first_date(lambda x: x.weekday() in (1, 2) and 510 in C.release_times(x) and DW.news_class(x) in ("high", "medium") and not D2.strict_filters(x, p) and not C.is_post_holiday(x) and not C.holiday_in_week(x))
+    h = history(d, first=(120.0, 80.0), hi=102.0, lo=98.0)
+    spec = {"09:30": (100.0, 100.1, 95.0, 95.2), "09:35": (95.2, 99.0, 95.0, 98.9), "09:40": (98.9, 100.5, 98.8, 100.4), "09:45": (100.4, 101.0, 100.3, 100.9), "10:00": (100.0, 160.0, 40.0, 100.0)}
+    c = mk3(d, h, p, "09:45", v, rows=rows_5m(spec, "09:30"), bias_row={"draw": 1})
+    i = at(c, "09:45")
+    sd = c.sides_map[1]
+    return (D2.expansion_live(c, p, i), DW.expansion_levels(c, sd, i, p), sorted(D2.entry_tags(c, p, c.dplan, i)), D2.day_params(p, c.dplan).po3_runner)
+
+
+CAUSAL = {
+    "trend_side_rule": (_case_trend, ("trend_side_rule", "trend_wait", "trend_draw_mismatch")),
+    "adr_news_exempt": (_case_adr_news, ("adr_news_exempt",)),
+    "london_filters": (_case_london_filters, ("london_filter_whipsaw", "london_filter_rel2plus")),
+    "tgif_fvg_cap": (_case_tgif_cap, ("tgif_fvg_cap_plan", "tgif_fvg_cancel", "tgif_fvg_pass")),
+    "monday_big": (_case_mon_big, ("mon_big_wait", "mon_big_size")),
+    "adr_met_runner": (_case_am_exit, ("adr_runner_on",)),
+    "adr_close_runner": (_case_adr_close, ("adr_close_exit",)),
+    "thu_reversal": (_case_thu_rev, ("thu_rev_setup", "thu_rev_pass", "thu_rev_side")),
+    "consol_range": (_case_range_cap, ("consol_mode_range_trade", "consol_range_cap")),
+    "mw_break_mw_carry": (_case_mw_break, ("mw_break_bias", "mw_carry")),
+    "ny_cont": (_case_ny_cont, ()),
+    "expansion": (_case_expansion, ("expansion_strict_rungs", "expansion_full", "expansion_candidate")),
+}
+
+
+@pytest.mark.parametrize("name", list(CAUSAL))
+def test_dwc2_paths_are_causal(name, monkeypatch):
+    case, need = CAUSAL[name]
+    _causal(case, monkeypatch, need)
+
+
+def test_single_exit_friday_and_every_switch_is_covered():
+    fri = first_date(lambda x: x.weekday() == 4 and not C.nfp_date(x), start=date(2026, 6, 1))
+    p = Params(**BASE, fri_pool_choice=True, runner_frac=0.3, po3_runner=True)
+    D2.HITS.clear()
+    cp = mk(fri, history(fri), p, dt={"tgif_short"})
+    q = D2.day_params(p, cp.dplan)
+    assert q.runner_frac == 0.0 and D2.HITS["fri_single_exit"] == 1
+    covered = {"consolidation_mode", "consol_range_days", "expansion_strict", "expansion_judas_adr", "expansion_mode", "trend_side_rule", "fri_delivered_stop", "fri_pool_choice", "mon_big_frac",
+               "mw_break_bias", "mw_carry", "thu_reversal_tag", "thu_reversal_trade", "wed_week_extreme", "days_mode", "late_week_fallback", "no_long_after_thu_noon", "ny_cont_gate",
+               "adr_news_exempt", "london_low_guard", "london_filters", "po3_adr_invalid", "tgif_reversal_pct", "tgif_fvg_cap", "adr_close_runner", "fri_trail_from", "adr_met_runner",
+               "adr_runner_until", "adr_contracted_tag"}          # = the synthetic / ES full-run groups plus the CAUSAL cases above
+    assert set(NEW_FIELDS) <= covered
 
 
 ES_D2 = {   # name -> switches; one 5-week ES window (2022-09-12 .. 2022-10-14), every group produces trades there and bumps its counters

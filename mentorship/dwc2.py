@@ -69,6 +69,21 @@ def _draw(ctx, i):
         return 0
 
 
+def _combo(ctx, i):
+    """The htf.table 'bias' of the closed bar i (the combo column; the draw column when the row has none) - the 'HTF bias != 0' of item 48 (the table is cut at 09:30)."""
+    from .entries import bias_row_known
+    row = bias_row_known(ctx, i)
+    if row is None:
+        return 0
+    for k in ("combo", "draw"):
+        try:
+            v = int(np.sign(float(row[k])))
+        except Exception:
+            continue
+        return v
+    return 0
+
+
 def _react(ctx, i):
     from .entries import bias_row_known
     row = bias_row_known(ctx, i)
@@ -115,6 +130,8 @@ def weekly_bias(ctx, hist, d: date, p) -> int:
         b = 0
         if p.mw_carry:
             b = carried_bias(hist, d)
+        if b and b != D1.weekly_state(hist, d):
+            hit("mw_carry")                                   # the carried bias differs from the plain weekly tone: the switch acted
         c[k] = b or D1.weekly_state(hist, d) or D1.flip_state(ctx, hist, d)
     return c[k]
 
@@ -182,7 +199,8 @@ def _eq60(hist) -> float | None:
 def trend_side(d: date, p, hist, eth, a5):
     """Item 54 DS2-trending-day-direction (cc10_009 ~1:17-2:46, ~4:15). Returns the expected side (+1 / -1) when the recipe holds, else None:
       (1) "small" = the previous daily range is the smallest of the prior 5 [our threshold], OR the ranges contracted over the last 3 days (strictly decreasing);
-      (2) those days recently (the last 3 sessions) traded down into a daily bullish FVG below the 60-day EQ (mirror: up into a bearish FVG above it);
+      (2) those days recently (the last 3 sessions) traded down into a daily bullish FVG below the 60-day EQ (mirror: up into a bearish FVG above it). [our interpretation] the "daily discount
+          array" is the daily FVG only (htf._arrays also has daily order blocks - not armed here) and "recently" = the last 3 sessions;
       (3) high / medium USD news at 08:30 (news_class in p.trend_news);
       (the PD matrix / order-flow agreement, (3) of the text = htf.table draw, is checked at the bar: side_ok, it needs the table row cut at 09:30)."""
     DW = _DW()
@@ -221,11 +239,13 @@ def plan_rules(P, ctx, d: date, p, hist, eth, a5, dt) -> None:
     wd = d.weekday()
     # --- item 48 N8-consolidation-tradeable (053 ~00:01:13; cc01_005 ~00:11:01; cc04_012 ~00:07:57; cc09_004 ~00:20:24; cc10_008 ~00:09:01)
     if p.consolidation_mode != "skip":
-        P.info["consol_nochop"] = True                       # the intraday chop stand-aside is the "skip" mode: replaced by the mode's own rules
         preds = DW._consol_predictors(ctx, d, p, hist, eth)
         reg = DW.range_regime(hist, p, eth) if p.drr_tests else []
         is_c = len(preds) >= p.consol_min_predictors or "range" in reg
         if is_c:
+            # the intraday chop stand-aside ("skip") is replaced by the mode's own rules ONLY on the days this mode applies to; every other day (and a chop day the predictors miss, [our interpretation]:
+            # the stand-aside machinery of owner #10 keeps acting there) is unchanged
+            P.info["consol_nochop"] = True
             tg.add("consol_day")
             tg.add("consol_mode_" + p.consolidation_mode)
             P.info["consol_mode"] = p.consolidation_mode
@@ -244,18 +264,23 @@ def plan_rules(P, ctx, d: date, p, hist, eth, a5, dt) -> None:
     # --- item 50 N8-expansion-day-conditions (cc08_006 ~00:24:37)
     if p.expansion_strict and "expansion_due" in tg:
         S_sl = S.sloppy_day(hist, d, p)
-        if S_sl or dt & {"big_prev", "three_up", "three_down"}:
+        why = strict_filters(d, p)
+        if S_sl or why or dt & {"big_prev", "three_up", "three_down"}:
             tg.discard("expansion_due")
             P.info.pop("expansion_due", None)
             hit("expansion_strict_static_off")
         else:
             P.info["expansion_pending"] = True                # bias != 0 and the manipulation leg opposite the bias: the bar (expansion_live)
             P.info.pop("expansion_due", None)
-            tg.discard("expansion_due")
+            tg.discard("expansion_due")                       # re-created as a day-level tag by entry_tags / the day summary once the dynamic condition holds
     # --- item 53 DS2-contraction-precedes-expansion (cc10_008 ~17:40; cc09_007 ~22:04-22:37)
     if p.expansion_mode != "off" and a5 and hist:
+        # "hist[-1] (or hist[-2]) range < ADR5 OR was tagged consol": a previous session counts as a consolidation day when the multi-day range regime read as of that session says "range"
         small = _rng(hist[-1]) < a5 or (len(hist) > 1 and _rng(hist[-2]) < a5)
-        rel = [r for r in CAL.release_times(d) if 510 <= r <= 600]
+        if not small and p.drr_tests and (p.consolidation_mode != "skip" or p.consol_day_rules != "off"):      # consolidation tags only exist with a consolidation switch on
+            small = any("range" in DW.range_regime(hist[:len(hist) - k], p, eth) for k in (0, 1) if len(hist) - k > p.drr_days)
+        # the high / medium impact class of the 08:30 news (DW.news_class) - not any release in 08:30-10:00 [our interpretation: a 10:00 release counts when it is a high / medium one]
+        rel = [r for r in CAL.release_times(d) if 510 <= r <= 600] and DW.news_class(d) in ("high", "medium")
         if (small or "consol_day" in tg) and rel:
             tg.add("expansion_candidate")
             P.info["expansion_candidate"] = True
@@ -307,7 +332,7 @@ def plan_rules(P, ctx, d: date, p, hist, eth, a5, dt) -> None:
                 P.side_block("no_long_after_thu_noon", (wb,))
                 hit("friday_after_thu_block")
     # --- item 63 / 62: Thursday Mon-Wed range, the false break; Wednesday week extreme
-    if wd == 3 and (p.thu_reversal_tag or p.thu_reversal_trade) and a5:
+    if wd == 3 and (p.thu_reversal_tag or p.thu_reversal_trade) and a5 and thu_release(d):
         mw = [x for x in hist if DW._week_key(x.index[0].date()) == DW._week_key(d) and x.index[0].date().weekday() <= 2]
         if mw:
             hh, ll = DW._week_hl(mw, eth, True)
@@ -322,11 +347,12 @@ def plan_rules(P, ctx, d: date, p, hist, eth, a5, dt) -> None:
         if len(wk) >= 2 and wk[0].index[0].date().weekday() == 0:
             pre = [x for x in hist if x.index[0].date() < wk[0].index[0].date()]
             kind = "bull" if wb > 0 else "bear"
-            zs = D1._alive_zones(pre, kind)
-            untouched = [z for z in zs if not any(t_ is z for t_ in D1._touched(wk[:2], zs, kind) if t_ is not None)]
             ref = float(wk[0].open.iloc[0])
-            near = [z for z in untouched if (z.top < ref if wb > 0 else z.bottom > ref)]
-            if near:
+            # the NEAREST daily array of the bias side to the Monday open (as study_week.nearest_array picks it); neither Monday nor Tuesday may have traded into it. Only daily FVGs are armed
+            # (no old M / W / D lows, broken-high retests or OBs [our interpretation, recorded in build_log])
+            zs = [z for z in D1._alive_zones(pre, kind) if (z.top < ref if wb > 0 else z.bottom > ref)]
+            near = (max(zs, key=lambda z: z.top) if wb > 0 else min(zs, key=lambda z: z.bottom)) if zs else None
+            if near is not None and not any(float(x.low.min()) <= near.top and float(x.high.max()) >= near.bottom for x in wk[:2]):
                 P.info["wed_ext"] = wb
                 P.side_block("wed_week_extreme", (-wb,))
                 tg.add("wed_week_extreme")
@@ -339,7 +365,7 @@ def plan_rules(P, ctx, d: date, p, hist, eth, a5, dt) -> None:
         P.block(None, "monday_no_bias")                     # a Monday without a weekly bias has no 'against the bias' extreme to trade
     # --- item 81 M14-reversal-threshold: the Friday-retrace flag for the next week (reported)
     if p.tgif_zone and wd < 5:
-        f = reversal_flag(hist, d, p.tgif_reversal_pct)
+        f = reversal_flag(hist, d, p.tgif_stand_down if p.tgif_reversal_pct is None else p.tgif_reversal_pct)
         if f:
             tg.add("wk_reversal_flag")
             hit("wk_reversal_flag")
@@ -358,9 +384,54 @@ def plan_rules(P, ctx, d: date, p, hist, eth, a5, dt) -> None:
     # --- item 30 Friday trail (position loop) needs no plan state
 
 
+def strict_filters(d: date, p) -> str:
+    """Item 50: the cc08_006 avoidance filters beyond the sloppy-day tests: a jobs (NFP) day, the eve of a holiday, an FOMC decision / day-after (whipsaw) day, a day with two or more releases
+    08:30-11:00 (the news-count test of N5). Returns the first reason or ''. [our interpretation: the video lists these as the days that are not 'clean'.]"""
+    from claude_hf.daytypes import JOBS
+    from . import nct2 as N2
+    if d in JOBS:
+        return "nfp"
+    if CAL.is_holiday_eve(d):
+        return "holiday_eve"
+    fi = CAL.fomc_info(d)
+    if fi["fomc"] or fi["after"]:
+        return "fomc"
+    if N2.rel_count(d, p) >= 2:
+        return "multi_release"
+    return ""
+
+
+def thu_release(d: date) -> bool:
+    """Item 63 (cc07_002 ~00:04:51): the precise Thursday reversal needs a scheduled release on the day (08:30 / 14:00, minutes 510 or 840)."""
+    return any(r in (510, 840) for r in CAL.release_times(d))
+
+
+def thu_day_tag(g: pd.DataFrame, hist, p) -> str:
+    """Item 63 day-level tag from the Thursday frame `g` (post-hoc reporting): 'thu_reversal' when Thursday traded under the Mon-Wed low (tick) and a bar CLOSED back above it, 'thu_reversal_bear'
+    for the high; needs the Mon-Wed range <= 1.5 x ADR5 and a release on the day. '' otherwise. Never read by a decision."""
+    DW = _DW()
+    d = g.index[0].date()
+    if d.weekday() != 3 or not hist or not thu_release(d):
+        return ""
+    a5 = _S().adr5(list(hist)[-5:])
+    mw = [x for x in hist if DW._week_key(x.index[0].date()) == DW._week_key(d) and x.index[0].date().weekday() <= 2]
+    if not mw or not a5:
+        return ""
+    hh, ll = max(float(x.high.max()) for x in mw), min(float(x.low.min()) for x in mw)
+    if hh - ll > 1.5 * a5:
+        return ""
+    h, l, c = (g[k].values.astype(float) for k in ("high", "low", "close"))
+    j = np.flatnonzero(l <= ll - p.tick)
+    if len(j) and (c[j[0]:] > ll).any():
+        return "thu_reversal"
+    j = np.flatnonzero(h >= hh + p.tick)
+    if len(j) and (c[j[0]:] < hh).any():
+        return "thu_reversal_bear"
+    return ""
+
+
 def reversal_flag(hist, d: date, pct: float) -> bool:
-    """Item 81 M14-reversal-threshold (066 ~25:34 "beyond 30 percent"; ~18:12 "40 % or more"): the PREVIOUS completed week was a strong up (down) week by the TGIF quarter rule (the Thursday
-    close in the top (bottom) quarter of the Mon-Thu range) and its Friday retraced >= `pct` of that range from the extreme. Tag wk_reversal_flag for the next week (reported, no trading effect)."""
+    """Item 81 M14-reversal-threshold (066 ~25:34 "beyond 30 percent"; ~18:12 "40 % or more"): the PREVIOUS completed week was an up (down) week (Mon-Thu close above (below) the Monday open) and its Friday retraced >= `pct` of the Mon-Thu range from the extreme. Tag wk_reversal_flag for the next week (reported, no trading effect)."""
     DW = _DW()
     prev = [x for x in hist if x.index[0].date() < d and DW._week_key(x.index[0].date()) != DW._week_key(d)]
     if not prev:
@@ -376,10 +447,12 @@ def reversal_flag(hist, d: date, pct: float) -> bool:
     if rng <= 0:
         return False
     c = float(mt[-1].close.iloc[-1])
+    o = float(mt[0].open.iloc[0])
     f = fri[0]
-    if c >= hi - 0.25 * rng:
+    # [our interpretation] the week's direction = the Mon-Thu close against the Monday open; the retrace is measured from the Mon-Thu extreme against that direction
+    if c > o:
         return (hi - float(f.low.min())) / rng >= pct - 1e-12
-    if c <= lo + 0.25 * rng:
+    if c < o:
         return (float(f.high.max()) - lo) / rng >= pct - 1e-12
     return False
 
@@ -650,13 +723,12 @@ def ny_cont_rung(ctx, p, i, sd=None) -> bool:
 
 
 def tgif_fvg_cancelled(ctx, ce: float, i: int) -> bool:
-    """Item 97: two 5m closes above the daily FVG CE today (closed bars through i; on a 1m frame two consecutive 5-bar-aligned closes are read from the frame's bars every 5 minutes)."""
+    """Item 97: two consecutive 5m closes above the daily FVG CE today (closed bars through i; on a 1m frame two consecutive 5-bar-aligned closes are read from the frame's bars every 5 minutes)."""
     S = ctx.start
     m = ctx.t[S:i + 1]
     c = ctx.c[S:i + 1]
     five = [float(c[k]) for k in range(len(m)) if (int(m[k]) + ctx.tf) % 5 == 0]
-    n = sum(1 for x in five if x > ce)
-    return n >= 2
+    return any(a > ce and b > ce for a, b in zip(five[:-1], five[1:]))                    # two CONSECUTIVE 5m closes above the CE
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -698,11 +770,53 @@ def _cap_levels(o: dict, bound: float) -> bool:
     return True
 
 
-def _rescale(o: dict, new_stop: float) -> bool:
-    """Widen the order's stop (side space) to `new_stop` keeping the risk: the units shrink with the distance. False when fewer than one unit is left."""
+def _range_rungs(ctx, sd, o: dict, bound: float, i: int, tol: float) -> None:
+    """Item 48 range_trade targets: "the opposite open FVG or equal highs / lows inside the range": the near edge of every open opposing 1h / 4h / D array between the entry and the range
+    extreme, and the range extreme itself (the equal-highs stand-in, [our interpretation]) are added as rungs when no existing rung sits within a tick-size of them. Side space."""
+    cf = getattr(ctx, "conf", None)
+    cand = []
+    if cf is not None:
+        try:
+            now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
+            for near, _far in cf.arrays_any(now, sd.sign, ("1h", "4h", "D")):
+                cand.append((sd.x(near), "array"))
+        except Exception:
+            pass
+    cand.append((bound, "pool"))
+    lv, kd = list(o["levels"]), list(o["level_kinds"])
+    rp = o.get("rung_plan")
+    n0 = len(lv)
+    for v, k in cand:
+        if v <= o["entry"] + 1e-9 or v > bound + 1e-9 or any(abs(v - x) <= tol for x in lv):
+            continue
+        lv.append(v)
+        kd.append(k)
+        if rp:
+            m0 = next((x for x in rp if x["role"] == "main"), None)
+            if m0 is not None:
+                rp.append(dict(m0, v=v, k=k))
+    if len(lv) == n0:
+        return
+    order = sorted(range(len(lv)), key=lambda q: lv[q])
+    o["levels"] = [lv[q] for q in order]
+    o["level_kinds"] = [kd[q] for q in order]
+    o["t1"] = o["levels"][0]
+    if rp:
+        rp.sort(key=lambda x: x["v"])
+    hit("consol_range_rungs")
+
+
+def _rescale(o: dict, new_stop: float, tighten: bool = False) -> bool:
+    """Move the order's stop (side space) to `new_stop`. A WIDER stop keeps the risk: the units shrink with the distance (False when fewer than one unit is left). A tighter stop is applied only
+    with `tighten` (item 97, where the spec value is the stop) and keeps the units [our interpretation: no size increase from a rule that only asks for a stop]."""
     old = o["entry"] - o["stop"]
     new = o["entry"] - new_stop
+    if new <= 0:
+        return False
     if new <= old + 1e-12:
+        if tighten and new < old - 1e-12:
+            o["stop"] = new_stop
+            o["rungs"] = []
         return True
     n = int(o["shares"] * old / new)
     if n < 1:
@@ -736,10 +850,11 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p):
             if not _cap_levels(o, bound):
                 hit("consol_range_no_target")
                 return "x_dw_consol_range_target"
+            _range_rungs(ctx, sd, o, bound, i, p.tick)
         o.pop("runner", None)                                  # B14: no runners or breakout trades inside a range
         o.pop("htf_runner", None)
     elif cm == "fade_with_htf" and P.info.get("consol_fade"):
-        b = _draw(ctx, i)
+        b = _combo(ctx, i)
         if not b:
             hit("consol_fade_no_bias")
             return "x_dw_consol_fade_bias"
@@ -779,15 +894,15 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p):
             hit("tgif_fvg_entry_above_ce")
             return "x_dw_tgif_fvg_ce"
         k = int(o.get("ext_i", i))
-        w = range(max(ctx.start, k - 4), k + 1)
-        # the longest upper wick of the last 5 bars: its CE
+        w = range(max(ctx.start, k - max(1, 25 // ctx.tf) + 1), k + 1)             # the last 5m swing: the last 25 minutes of bars up to the sweep extreme
+        # the longest upper wick of that swing: its CE
         best, bl = ce, -1.0
         for j in w:
             wl = float(ctx.h[j]) - max(float(ctx.o[j]), float(ctx.c[j]))
             if wl > bl:
                 bl, best = wl, (float(ctx.h[j]) + max(float(ctx.o[j]), float(ctx.c[j]))) / 2.0
         stop_real = max(ce, best) + p.tick
-        if not _rescale(o, sd.x(stop_real)):
+        if not _rescale(o, sd.x(stop_real), True):
             hit("tgif_fvg_size")
             return "x_dw_tgif_fvg_ce"
         # the ladder: PDL - 1 tick, the daily FVG low (if below the entry), then the zone band (the existing tgif_zone rungs stay)
@@ -810,6 +925,7 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p):
         o["levels"] = [lv[q] for q in order]
         o["level_kinds"] = [kd[q] for q in order]
         o["t1"] = o["levels"][0]
+        o["t2"] = o["levels"][1] if len(o["levels"]) > 1 else None
         if rp:
             rp.sort(key=lambda x: x["v"])
         hit("tgif_fvg_pass")
@@ -899,6 +1015,7 @@ def entry_tags(ctx, p, P, k: int) -> set:
         t.add("adr_filled_news")
     if P.info.get("expansion_pending") and k >= ctx.start and expansion_live(ctx, p, k):
         t.add("expansion_due")
+        P.tags.add("expansion_due")                        # the day-level tag once the dynamic condition holds (readers of the tag see it from then on)
     if P.info.get("wed_ext"):
         t.add("wed_low" if P.info["wed_ext"] > 0 else "wed_high")
     return t
@@ -960,34 +1077,44 @@ def am_exit_for(ctx, sd, pos, tr, i: int, ts, p, am_x: int, c: float) -> int:
 
 
 def adr_close_exit(ctx, sd, pos, tr, i: int, ts, p) -> None:
-    """Item 160 LLT3-adr-fib-close-zone (cc09_006 ~00:26:59): H = L + ADR5 (L = the day's low so far, the London low once London is complete); once price has traded H and a bar closes back below H,
-    the runner (after the first partial) is out at H - 0.20 x ADR5 (a resting exit: a gap through fills at the open). Side space."""
+    """Item 160 LLT3-adr-fib-close-zone (cc09_006 ~00:26:59): H = L + ADR5 (L = the day's low so far, the London low once London is complete); once price has traded H AS IT STOOD (H moves with the
+    running low) and a 5m bar closes back below it (a 1m frame reads only the closes at 5-minute boundaries), the runner (after the first partial) is out at H - 0.20 x ADR5 (a resting exit: a gap
+    through fills at the open). Side space. State is advanced one closed bar at a time from the day's first bar."""
     if not p.adr_close_runner or not pos["left"] or not pos.get("t1_done"):
         return
     DW = _DW()
     a = DW._adr(ctx, p)
     if not a:
         return
-    st = pos.setdefault("adr_close", {"turned": False})
-    lo = float(sd.l[ctx.start:i + 1].min())
+    st = pos.setdefault("adr_close", {"turn_j": None, "H": None, "j": ctx.start - 1, "lo": np.inf})
     ls = getattr(ctx, "sess", {}).get("london")
-    if ls is not None and ctx.t[i] >= ls[2]:
-        lo = float(sd.x(ls[1] if sd.sign > 0 else ls[0]))
-    H = lo + a
-    px = H - 0.20 * a
-    if st["turned"]:
-        if float(sd.l[i]) <= px + 1e-12:
-            fill = min(px, float(sd.o[i]))
-            tr.exits.append((ts, sd.x(fill), pos["left"], "adr_close"))
-            pos["left"] = 0
-            hit("adr_close_exit")
+    for j in range(st["j"] + 1, i + 1):
+        st["j"] = j
+        if st["turn_j"] is not None:
+            break
+        st["lo"] = min(st["lo"], float(sd.l[j]))
+        lo = st["lo"]
+        if ls is not None and ctx.t[j] >= ls[2]:
+            lo = float(sd.x(ls[1] if sd.sign > 0 else ls[0]))
+        H = lo + a
+        if st["H"] is not None:
+            if j > pos["fill_i"] and (int(ctx.t[j]) + ctx.tf) % 5 == 0 and float(sd.c[j]) < st["H"]:
+                st["turn_j"] = j                                   # a 5m close back below the level that traded
+        elif float(sd.h[j]) >= H - 1e-12:
+            st["H"] = H                                            # H traded, as it stood at that bar (the turn is read from the next bar on)
+    if st["turn_j"] is None:
         return
-    if float(sd.h[:i + 1][ctx.start:].max()) >= H - 1e-12 and float(sd.c[i]) < H and i > pos["fill_i"] and float(sd.h[ctx.start:i].max()) >= H - 1e-12:
-        st["turned"] = True
+    px = st["H"] - 0.20 * a
+    if st["turn_j"] == i:
         if float(sd.c[i]) <= px + 1e-12:
             tr.exits.append((ts, sd.x(float(sd.c[i])), pos["left"], "adr_close"))
             pos["left"] = 0
             hit("adr_close_exit")
+    elif float(sd.l[i]) <= px + 1e-12:
+        fill = min(px, float(sd.o[i]))
+        tr.exits.append((ts, sd.x(fill), pos["left"], "adr_close"))
+        pos["left"] = 0
+        hit("adr_close_exit")
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -1075,6 +1202,8 @@ def day_summary(g: pd.DataFrame, hist, p, bias_row=None, tf: int = 5) -> dict:
             out["po3_open_low_adr"] = round(((op - float(l.min())) if r > 0 else (float(h.max()) - op)) / a5, 4)
     if hist and p.adr_contracted_tag:
         out["adr_contracted"] = int(adr_contracted(hist))
+    if hist and (p.thu_reversal_tag or p.thu_reversal_trade):
+        out["thu_reversal"] = thu_day_tag(g, hist, p)
     m15 = t < 900
     if m15.any() and (t >= 900).any():
         out["ny_close_1500"] = float(c[np.flatnonzero(m15)[-1]])

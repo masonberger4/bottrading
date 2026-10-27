@@ -1271,7 +1271,10 @@ def side_ok(ctx, p, sign: int, session: str, i: int) -> str | None:
         if up != dn and sign != (1 if up else -1):
             from . import dwc2 as _D2                # caption-gap N10-mon-wed-range-break: mw_break_bias counts only the weekly-bias side's break
             if not p.mw_break_bias or _D2.weekly_bias(ctx, getattr(ctx, "hist", []), d, p) == (1 if up else -1):
+                if p.mw_break_bias:
+                    _D2.hit("mw_break_bias")
                 return "x_dw_thu_fri_break"
+            _D2.hit("mw_break_against_bias")
     # T14 Tuesday of a bullish / bearish week: the week's extreme forms on Tuesday (switch built from study_week)
     if p.tue_week_extreme == "side" and d.weekday() == 1:
         row = getattr(ctx, "bias_row", None)
