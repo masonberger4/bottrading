@@ -515,7 +515,8 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()):
             hit("mon_big_reject")
             return "x_dw_mon_big"
     # item 73 NEW-london-low-violated (092 ~02:29:00)
-    if p.london_low_guard and session in DW.NY:
+    from . import dwc3 as D3                       # caption-gap T3-london-extreme-consolidation: on a consol_overnight day the London extreme is a pool, not the protected extreme
+    if p.london_low_guard and session in DW.NY and not D3.london_unprotected(ctx, p, i):
         if t < 570:
             hit("london_guard_pre_wait")
             return "x_dw_london_guard_wait"
@@ -664,7 +665,7 @@ def side_ok(ctx, p, sign: int, session: str, i: int):
                 hit("ny_cont_" + why)
                 return "x_dw_ny_cont_" + why
     # item 73: while the London extreme holds, only the bias side
-    if p.london_low_guard and session in DW.NY and t >= 570:
+    if p.london_low_guard and session in DW.NY and t >= 570 and not _D3_unprot(ctx, p, i):
         b = _bias(ctx, p, i)
         if b and sign != b:
             hit("london_guard_side")
@@ -690,6 +691,11 @@ def side_ok(ctx, p, sign: int, session: str, i: int):
     return None
 
 
+def _D3_unprot(ctx, p, i: int) -> bool:
+    from . import dwc3 as D3
+    return D3.london_unprotected(ctx, p, i)
+
+
 def ny_cont_reject(ctx, p, b: int, i: int):
     """Item 71 (the three requirements, side b): "extreme" = the day's extreme against the bias did not print in 0-300; "array" = a 4h / D array of the bias side (a bearish one above price for a
     long) was touched intraday since 00:00; "adr" = the day's range so far is already >= ADR5. Returns the failing reason or None. No Confluence = the array test cannot be made and passes."""
@@ -697,7 +703,7 @@ def ny_cont_reject(ctx, p, b: int, i: int):
     S = ctx.start
     seg_l, seg_h = ctx.l[S:i + 1], ctx.h[S:i + 1]
     j = S + int(np.argmin(seg_l) if b > 0 else np.argmax(seg_h))
-    if not 0 <= int(ctx.t[j]) < 300:
+    if not 0 <= int(ctx.t[j]) < 300 and not _D3_unprot(ctx, p, i):      # (caption-gap T3-london-extreme-consolidation: on a consol_overnight day the London extreme is not required)
         return "extreme"
     a5 = DW._adr(ctx, p)
     if a5 and float(seg_h.max() - seg_l.min()) >= a5 - 1e-12:

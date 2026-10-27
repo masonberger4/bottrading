@@ -395,3 +395,10 @@ if __name__ == "__main__":
     ap.add_argument("--out", default="runs/mentorship")
     a = ap.parse_args()
     print(json.dumps(main(a.symbol, a.minutes, a.source, a.out), indent=1, default=str))
+
+
+def week_state_labels(days: list) -> dict:
+    """T14-weekly-template (cc01_002 ~24:06; caption-gap pass day_week_context#3/3): the weekday states (consol / expansion / reversal), the weekday of the weekly high and low and the template
+    count, as stats only - see dwc3.week_state_labels. `days` = daily regular-session frames, oldest first."""
+    from . import dwc3
+    return dwc3.week_state_labels(days)

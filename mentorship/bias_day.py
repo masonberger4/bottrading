@@ -94,6 +94,9 @@ def want_at(ctx, p, session: str, i: int) -> int:
     k = (id(row) if row is not None else None)
     if k not in c:
         c[k] = bias_value(row, p)
+    if p.carry_weekly_draw:
+        from . import dwc3 as _D3                    # caption-gap N10-unmet-target-carries-to-monday: the carried draw's side when the table has none; neutral once it traded
+        return _D3.want_override(ctx, p, c[k])
     return c[k]
 
 

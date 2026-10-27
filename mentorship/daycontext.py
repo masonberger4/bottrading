@@ -256,6 +256,8 @@ def plan(ctx, hist, p, week: dict | None = None, eve: tuple | None = None, dt: s
     _D1.plan_rules(P, ctx, d, p, hist, eth, a5, dt)          # caption-gap pass day_week_context#1/3
     from . import dwc2 as _D2
     _D2.plan_rules(P, ctx, d, p, hist, eth, a5, dt)          # caption-gap pass day_week_context#2/3
+    from . import dwc3 as _D3
+    _D3.plan_rules(P, ctx, d, p, hist, eth, a5, dt)          # caption-gap pass day_week_context#3/3
     return P
 
 
@@ -1038,6 +1040,10 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()) -> str | None:
     why_ = _D2.gate(ctx, p, session, i, t, trades)
     if why_ is not None:
         return why_
+    from . import dwc3 as _D3                        # caption-gap pass day_week_context#3/3
+    why_ = _D3.gate(ctx, p, session, i, t, trades)
+    if why_ is not None:
+        return why_
     from . import bias_day as _BD                    # bias_htf: objective met, neutral gates, chop, intermarket, NWOG regime ...
     return _BD.gate(ctx, p, session, i, t)
 
@@ -1294,6 +1300,10 @@ def side_ok(ctx, p, sign: int, session: str, i: int) -> str | None:
     why_ = _D2.side_ok(ctx, p, sign, session, i)
     if why_ is not None:
         return why_
+    from . import dwc3 as _D3                        # caption-gap pass day_week_context#3/3
+    why_ = _D3.side_ok(ctx, p, sign, session, i)
+    if why_ is not None:
+        return why_
     from . import bias_day as _BD                    # bias_htf: the bias side (all engines), weekly open, judas, filters ...
     return _BD.side_ok(ctx, p, sign, session, i)
 
@@ -1325,6 +1335,10 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p) -> str | None:
         return why_
     from . import dwc2 as _D2                        # caption-gap pass day_week_context#2/3
     why_ = _D2.order_ok(ctx, sd, o, session, i, p)
+    if why_ is not None:
+        return why_
+    from . import dwc3 as _D3                        # caption-gap pass day_week_context#3/3
+    why_ = _D3.order_ok(ctx, sd, o, session, i, p)
     if why_ is not None:
         return why_
     from . import bias_day as _BD                    # bias_htf: mwd_nest, mmbm_zone, 50/50 and the order tags
@@ -1402,6 +1416,8 @@ def day_risk(ctx, p, lvt: list | None = None) -> float:
     m *= _D1.size_mult(ctx, p, lvt)                 # caption-gap pass day_week_context#1/3: August light, holiday weeks, season_quality "size"
     from . import dwc2 as _D2
     m *= _D2.size_mult(ctx, p, lvt)                 # caption-gap pass day_week_context#2/3: the Monday into an array is half size
+    from . import dwc3 as _D3
+    m *= _D3.size_mult(ctx, p, lvt)                 # caption-gap pass day_week_context#3/3: the low-magnitude months (May-October)
     return m
 
 
@@ -1420,10 +1436,12 @@ def target_pools(ctx, sd, i: int, p) -> list:
     """pool_mon_wed (N10.3): on Thursday / Friday the week's Mon-Wed high (low) is a buy-side (sell-side) pool and
     target, from the start of the day (completed sessions, full sessions when ctx.eth has them). [(level, created)]."""
     P = getattr(ctx, "dplan", None)
+    from . import dwc3 as _D3                        # caption-gap pass day_week_context#3/3: the carried weekly draw, the PM narrative's gap, the noon-reversal PM draw
+    extra = _D3.target_pools(ctx, sd, i, p)
     if not _mw_pool_on(ctx, p, P):
-        return []
+        return extra
     hh, ll = P.info["mw"]
-    return [(sd.x(hh if sd.sign > 0 else ll), ctx.start)]
+    return [(sd.x(hh if sd.sign > 0 else ll), ctx.start)] + extra
 
 
 def sell_pools(ctx, sd, i: int, p) -> dict:
@@ -1580,9 +1598,13 @@ def stamp(ctx, trades, p) -> None:
             tags |= _D1.entry_tags(ctx, p, P, k)         # caption-gap pass day_week_context#1/3
             from . import dwc2 as _D2
             tags |= _D2.entry_tags(ctx, p, P, k)         # caption-gap pass day_week_context#2/3
+            from . import dwc3 as _D3
+            tags |= _D3.entry_tags(ctx, p, P, k)         # caption-gap pass day_week_context#3/3
         if P.info.get("wk_profile"):
             tr.wk_profile = P.info["wk_profile"]
         tr.dw_tags = "|".join(sorted(tags))
+    from . import dwc3 as _D3
+    _D3.stamp(ctx, trades, p)                        # caption-gap pass day_week_context#3/3: cl_fail
 
 
 def entry_array_tf(ctx, tr, p, k: int) -> str:

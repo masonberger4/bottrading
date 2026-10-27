@@ -31,6 +31,7 @@ import pandas as pd
 
 from . import levels as L
 from . import me1 as _ME1
+from . import dwc3 as _DWC3                    # caption-gap day_week_context#3/3: the shared session veto
 
 
 def _dailies(ctx, hist, p, day, n: int):
@@ -83,7 +84,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
     if p.md_need_news and news(day) != "0830":
         _f("md_x_need_news")
         return []                                      # setups_models M15: the release delivers
-    if p.md_blocked and ((p.day_filter and blocked(day, "AM", p, 480)) or (p.skip_news and news(day) != "none")):
+    if p.md_blocked and _DWC3.session_veto(ctx, p, day, "AM", 480, blocked, news) is not None:      # caption-gap OT-filters-before-bias: the shared veto helper
         _f("md_x_blocked")
         return []
     oo, hh, ll, cc = _dailies(ctx, hist, p, day, 10 if p.md_big_candle else 4)

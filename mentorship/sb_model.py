@@ -39,6 +39,7 @@ import pandas as pd
 from . import levels as L
 from . import me1 as _ME1
 from . import daycontext as _DW
+from . import dwc3 as _DWC3                    # caption-gap day_week_context#3/3: the shared session veto
 
 MSS_MODES = ("close", "wick")
 
@@ -1286,7 +1287,7 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
                 continue
             if b_n != win.b:
                 win = _dc_replace(win, b=b_n)
-        if p.day_filter and blocked(day, win.session, p, win.a):
+        if _DWC3.session_veto(ctx, p, day, win.session, win.a, blocked) is not None:      # caption-gap OT-filters-before-bias: the same veto helper as the main loop (no skip_news here)
             continue
         if NC.sb_gate(ctx, p, day, win.session, win.a):   # N3.2 fomc_am="recipe"
             continue

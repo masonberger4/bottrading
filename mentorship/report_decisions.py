@@ -21,8 +21,11 @@ def table(t: pd.DataFrame, tf: int) -> pd.DataFrame:
         rows.append(s)
     out = pd.DataFrame(rows).set_index("variant")
     cols = ["trades", "win_rate", "avg_R", "R_se", "sum_R", "top5_R", "profit_factor", "net",
-            "max_dd_pct", "years_up"]
-    return out[cols].sort_values("avg_R", ascending=False)
+            "max_dd_pct", "years_up", "expectancy_R", "ann_dd_pct_max", "ann_ret_pct", "accept"]
+    # caption-gap OT-backtest-acceptance: rank by the acceptance verdict, then the lower annual drawdown, then the total R (the smoother curve first)
+    rank = {"ok": 0, "tolerable": 1, "reject": 2}
+    out = out.assign(_a=out["accept"].map(rank))
+    return out.sort_values(["_a", "ann_dd_pct_max", "sum_R"], ascending=[True, True, False])[cols]
 
 
 def m3_scan(*runs: pd.DataFrame) -> dict:

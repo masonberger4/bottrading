@@ -17,10 +17,12 @@ from . import es3 as _ES3
 from . import tp4 as _TP4
 from . import me2 as _ME2
 from . import dwc2 as _DWC2
+from . import dwc3 as _DWC3
 from .entries import new_risk_state
 from .strategy import ROUND_STEP, SMT_PICKS, Params, resolve_session_close, run_day
 
 DATA = Path("data/mentorship")
+ACCEPT = dict(dd_ok=15, dd_max=25, ret_lo=18, ret_hi=25)   # caption-gap OT-backtest-acceptance (cc02_004 ~00:19:52; cc05_013 ~00:02:17): annual drawdown % tolerable / unacceptable, annual return % target band
 NY = "America/New_York"
 
 
@@ -405,6 +407,8 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     The result's attrs carry "days", "locks" (one row per session lock) and "skips"."""
     pr = prepare(df, tf, symbol, p, partial_last, bias_table, confluence, meta, lock_cuts, ref_df)
     p, ds = pr.p, pr.ds
+    if not p.stock_intraday and str(symbol).upper() not in _DWC3.INDEX_SYMBOLS:
+        warnings.warn(f"{symbol}: individual stocks are swing-only (OT-stocks-swing-only, cc10_018 ~33:36) - run_day returns no intraday trades (stock_intraday=True lifts it)", RuntimeWarning, stacklevel=2)
     pmap = {g.index[0].date(): g for g in days(partner, tf, partial_last, p.session_close)} if partner is not None else {}
     pmap2 = {g.index[0].date(): g for g in days(partner2, tf, partial_last, p.session_close)} if partner2 is not None else {}
     locks, skips, objective = [], [], []
@@ -428,23 +432,30 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             if p.risk_basis == "equity":               # #12: start-of-day equity, closed trades only
                 eq = p.account_equity + sum(r["net"] for r in rows)
             wk_ = week_state(rows, d) if p.dw_needs_week else None
-            if p.rr_month_gate:                        # caption-gap new-rr-month-gate (cc02_001 ~12:11): the big winners (>= rr_big R) closed in this calendar month so far
-                wk_ = dict(wk_ or {}, month_big=_TP4.month_big(rows, d, p))
-            kw = day_kwargs(pr, k, eq, (intermarket or INTERMARKET()).get(d), wk_)
-            if p.target_stage:                         # caption-gap OT-target-progression (099 ~40:55): the week's staged fixed target (10 -> 15 -> 20); the risk / size never change
-                kw["p"] = _TP4.stage_params(rows, d, kw["p"])
-            if p.trader_mode or p.freq_ref > 0:       # caption-gap E8-new-trader-graduation / E9-frequency-small-size: the track record and the last 5 sessions size the day
-                kw["p"] = _ES3.day_params(kw["p"], rows, {x.index[0].date() for x in ds[max(0, k - 5):k]})
-            day_trades = run_day(partner=pa, partner2=pa2, locks=locks, skips=skips, risk_state=rs, objective=objective, **kw)
-            try:                                       # caption-gap pass day_week_context#2/3 (LLT 63 / 157 / 160, 118, 207): the per-day reporting fields, no trading effect
-                dsum.append(_DWC2.day_summary(g, kw["hist"], p, kw.get("bias"), tf))
-            except Exception as e_:                    # a reporting field never stops a backtest, but the failure is not silent
-                warnings.warn(f"day_summary failed on {d}: {e_!r}", RuntimeWarning)
-            if p.max_trades_week:                        # X15: the week's budget is applied in ENTRY-time order (run_day did it
-                day_trades = sorted(day_trades, key=lambda t_: t_.entry_time)[:p.max_trades_week - n_wk]   # already; the main loop first, then
-                                                         # the Silver Bullet / Ma Deuce: the old slice dropped the earlier trade)
-            for tr in day_trades:
-                rows.append(tr.row(p.cost_per_share))
+            why3 = None
+            if _DWC3.needs_week(p):                    # caption-gap pass day_week_context#3/3: the month / week budgets (monthly cap, weekly goal, Friday after a profitable week, August drawdown)
+                wk_, why3 = _DWC3.week_extra(wk_, rows, d, p)
+                if why3:
+                    skips.append((d, symbol, "day_week", why3))
+            if why3 is None:
+                if p.rr_month_gate:                        # caption-gap new-rr-month-gate (cc02_001 ~12:11): the big winners (>= rr_big R) closed in this calendar month so far
+                    wk_ = dict(wk_ or {}, month_big=_TP4.month_big(rows, d, p))
+                kw = day_kwargs(pr, k, eq, (intermarket or INTERMARKET()).get(d), wk_)
+                if p.target_stage:                         # caption-gap OT-target-progression (099 ~40:55): the week's staged fixed target (10 -> 15 -> 20); the risk / size never change
+                    kw["p"] = _TP4.stage_params(rows, d, kw["p"])
+                if p.trader_mode or p.freq_ref > 0:       # caption-gap E8-new-trader-graduation / E9-frequency-small-size: the track record and the last 5 sessions size the day
+                    kw["p"] = _ES3.day_params(kw["p"], rows, {x.index[0].date() for x in ds[max(0, k - 5):k]})
+                day_trades = run_day(partner=pa, partner2=pa2, locks=locks, skips=skips, risk_state=rs, objective=objective, **kw)
+                try:                                       # caption-gap pass day_week_context#2/3 (LLT 63 / 157 / 160, 118, 207): the per-day reporting fields, no trading effect
+                    dsum.append(_DWC2.day_summary(g, kw["hist"], p, kw.get("bias"), tf))
+                except Exception as e_:                    # a reporting field never stops a backtest, but the failure is not silent
+                    warnings.warn(f"day_summary failed on {d}: {e_!r}", RuntimeWarning)
+                if p.max_trades_week:                        # X15: the week's budget is applied in ENTRY-time order (run_day did it
+                    day_trades = sorted(day_trades, key=lambda t_: t_.entry_time)[:p.max_trades_week - n_wk]   # already; the main loop first, then
+                                                             # the Silver Bullet / Ma Deuce: the old slice dropped the earlier trade)
+                day_trades = _DWC3.cap_day_trades(day_trades, p, wk_)           # caption-gap X15-monthly-cap: the month's budget in entry-time order
+                for tr in day_trades:
+                    rows.append(tr.row(p.cost_per_share))
         if d in pmap:
             hist_p = (hist_p + [rth(pmap[d])])[-21:]
         if d in pmap2:
@@ -505,11 +516,38 @@ def stats(t: pd.DataFrame, account: float = 100_000.0) -> dict:
     eq = t.sort_values("entry_time").net.cumsum()
     dd = float((eq.cummax().clip(lower=0) - eq).max())
     wins, losses = t.net[t.net > 0].sum(), -t.net[t.net < 0].sum()
-    return {"trades": int(len(t)), "win_rate": round(float((t.net > 0).mean()), 3),
-            "profit_factor": round(float(wins / losses), 2) if losses else float("inf"),
-            "avg_R": round(float(t.R.mean()), 3), "net": round(float(t.net.sum()), 2),
-            "gross": round(float(t.gross.sum()), 2), "costs": round(float(t.costs.sum()), 2),
-            "max_dd": round(dd, 2), "max_dd_pct": round(100 * dd / account, 2)}
+    out = {"trades": int(len(t)), "win_rate": round(float((t.net > 0).mean()), 3),
+           "profit_factor": round(float(wins / losses), 2) if losses else float("inf"),
+           "avg_R": round(float(t.R.mean()), 3), "net": round(float(t.net.sum()), 2),
+           "gross": round(float(t.gross.sum()), 2), "costs": round(float(t.costs.sum()), 2),
+           "max_dd": round(dd, 2), "max_dd_pct": round(100 * dd / account, 2)}
+    out.update(acceptance(t, account))
+    return out
+
+
+def acceptance(t: pd.DataFrame, account: float = 100_000.0) -> dict:
+    """OT-backtest-acceptance (cc02_004 ~00:19:52; cc05_013 ~00:02:17): avg_win_R, avg_loss_R, expectancy_R (= mean R = p * avg_win_R + (1 - p) * avg_loss_R), R_per_month (sum R / the distinct
+    months traded), ann_ret_pct (the mean over calendar years of the year's net in % of the account), ann_dd_pct_max (the largest within-year max drawdown in % of the account, reset each
+    1 January) and accept: "reject" when expectancy_R <= 0 or ann_dd_pct_max > ACCEPT["dd_max"], "tolerable" above ACCEPT["dd_ok"], else "ok". Reporting only; the trades are unchanged."""
+    R = pd.to_numeric(t.R, errors="coerce")
+    ts = pd.to_datetime(t.entry_time.astype(str).str[:10] if "entry_time" in t else t.date.astype(str).str[:10])
+    win, los = R[t.net > 0], R[t.net <= 0]
+    exp = float(R.mean())
+    months = ts.dt.strftime("%Y-%m").nunique()
+    order = np.argsort(ts.values, kind="stable")
+    net = t.net.values[order]
+    yrs = ts.dt.year.values[order]
+    ann, ddy = [], []
+    for y in sorted(set(yrs)):
+        n_y = net[yrs == y]
+        e_y = np.cumsum(n_y)
+        ann.append(float(n_y.sum()) / account * 100.0)
+        ddy.append(float((np.maximum.accumulate(np.maximum(e_y, 0.0)) - e_y).max()) / account * 100.0)
+    dd_pct = max(ddy) if ddy else 0.0
+    accept = "reject" if (exp <= 0 or dd_pct > ACCEPT["dd_max"]) else ("tolerable" if dd_pct > ACCEPT["dd_ok"] else "ok")
+    return {"avg_win_R": round(float(win.mean()), 3) if len(win) else 0.0, "avg_loss_R": round(float(los.mean()), 3) if len(los) else 0.0,
+            "expectancy_R": round(exp, 3), "R_per_month": round(float(R.sum()) / months, 3) if months else 0.0,
+            "ann_ret_pct": round(float(np.mean(ann)), 2) if ann else 0.0, "ann_dd_pct_max": round(dd_pct, 2), "accept": accept}
 
 
 def report(t: pd.DataFrame) -> dict:
@@ -534,6 +572,7 @@ def report(t: pd.DataFrame) -> dict:
         ex = ex[ex._tag.str.startswith(DW1_REPORT_TAGS)]
         if len(ex):
             out["by_dw_tag"] = {str(k): stats(g.drop(columns="_tag")) for k, g in ex.groupby("_tag")}
+    out.update(_DWC3.journal_report(t))   # caption-gap OT-X16-time-to-move-journal: by_pre_fomc and the time-to-move medians (only when journal_timing filled the columns)
     t = t.assign(month=pd.to_datetime(t.entry_time.astype(str).str[:10]).dt.strftime("%Y-%m"))
     out["by_month"] = {k: stats(g) for k, g in t.groupby("month")}
     return out

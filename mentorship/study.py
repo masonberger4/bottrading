@@ -2836,3 +2836,70 @@ def day_summary_report(trades) -> dict:
     (dwc2.day_summary). Printed by `python -m mentorship.study` runs that call it; no trading effect."""
     from . import dwc2
     return dwc2.summary_stats(trades.attrs.get("day_summary") or [])
+
+
+# --- Caption-gap pass, package day_week_context#3/3 (digests/rulebook_gaps; dwc3.py) -------------------------------------------------------------------------------------------
+_DWC3_DECISIONS = {
+    "T13-consolidation-pm-fizzle": dict(consol_pm_need_sweep=True, consol_day_rules="tag", **SM_POST),
+    "N8-choppy-week-no-hold": dict(choppy_week_tag=True, htf_bias="combo", **SM_POST),
+    "M14-tgif-invalidation-timing": dict(tgif=True, tgif_week_high_exit=True, **SM_POST),
+    "M14-tgif-am-timing_am": dict(tgif=True, tgif_window="am", tgif_htf_array=True, tgif_min_adr=3.0, **SM_POST),
+    "M14-tgif-am-timing_london_close": dict(tgif=True, tgif_window="london_close", **SM_POST),
+    "M14-tgif-am-timing_pm": dict(tgif=True, tgif_window="pm", **SM_POST),
+    "B17-M15-madeuce-inside-bisi": dict(sloppy_tests=("inside_bisi",), inside_bisi_redelivered=True, bisi_ce_band=0.15, ma_deuce=True, **SM_POST),
+    "M17-weekly-judas-po3": dict(weekly_po3=True, htf_bias="combo", **SM_POST),
+    "OT-X16-time-to-move-journal": dict(journal_timing=True, fav_pts=2.0, **SM_POST),
+    "OT-filters-before-bias": dict(**SM_POST),
+    "OT-pre-session-checklist-order_tag": dict(checklist="tag", **SM_POST),
+    "OT-pre-session-checklist-order_gate": dict(checklist="gate", cl_days=(0, 1, 2), cl_pm_ok=True, **SM_POST),
+    "OT-stocks-swing-only": dict(stock_intraday=False, **SM_POST),
+    "N9-pm-narrative-from-am-chop": dict(pm_narrative=True, pm_narr_gap_pts=5.0, **SM_POST),
+    "X15-monthly-cap_3": dict(max_trades_month=3, **SM_POST),
+    "X15-monthly-cap_10": dict(max_trades_month=10, **SM_POST),
+    "X15-monthly-cap_skip_aug": dict(skip_months=(8,), **SM_POST),
+    "X15-three-per-week-htf-quality": dict(htf_quality_only=True, max_trades_week=3, **SM_POST),
+    "X15-weekly-goal-stop_pct": dict(weekly_target_pct=1.5, **SM_POST),
+    "X15-weekly-goal-stop_pts": dict(weekly_cap_pts=12.0, **SM_POST),
+    "N10-unmet-target-carries-to-monday": dict(carry_weekly_draw=True, carry_neutral_after=True, htf_bias="combo", **SM_POST),
+    "N10-thursday-reversal-after-targets-met": dict(thu_targets_met_block=True, **SM_POST),
+    "N10-friday-skip-profitable-week": dict(skip_fri_if_week_up=True, **SM_POST),
+    "N10-mon-wed-extreme-trending-week": dict(mw_extreme_need_array=True, trend_k=0.8, **SM_POST),
+    "N10-missed-mon-wed-no-chase_nearest": dict(missed_week_mode="nearest", **SM_POST),
+    "N10-missed-mon-wed-no-chase_skip": dict(missed_week_mode="skip", **SM_POST),
+    "M14-tgif-timing-and-precondition_loose": dict(tgif=True, tgif_htf_array=True, tgif_precond="loose", **SM_POST),
+    "M14-tgif-timing-and-precondition_seq": dict(tgif=True, tgif_seq=True, tgif_thu=True, tgif_consol_frac=0.25, tgif_no_rel=True, **SM_POST),
+    "N8-consolidation-pm-full-exit-at-pool": dict(consol_pm_pool_exit=True, consol_day_rules="apply", **SM_POST),
+    "N7-august-drawdown-restart": dict(aug_dd_stop_pct=2.5, **SM_POST),
+    "E9-may-october": dict(low_mag_months=(5, 6, 7, 8, 9, 10), low_mag_mult=0.5, low_mag_week_cap=2, **SM_POST),
+    "T8-lunch-three-behaviours-reversal_tag": dict(lunch_kind_tag=True, **SM_POST),
+    "T8-lunch-three-behaviours-reversal_flat": dict(noon_rev_flat=True, noon_rev_pm=True, **SM_POST),
+    "T9-pm-faster-measured-move": dict(pm_mm_target=True, **SM_POST),
+    "T3-london-extreme-consolidation": dict(london_ext_consol=True, london_low_guard=True, htf_bias="combo", **SM_POST),
+    "M14-tgif-timing": dict(tgif=True, tgif_branch=True, tgif_pm_from=810, **SM_POST),
+    "N8-consolidation-pm-news": dict(consol_pm_news_skip_am=True, consol_day_rules="apply", **SM_POST),
+}
+DECISIONS.update(_DWC3_DECISIONS)
+
+
+def macro_runs_study(days, macro_run_pts: float = 5.0, leg_extra_min: int = 0) -> dict:
+    """T7-1500-at-least-one (022 ~03:16:44): see dwc3.macro_runs_study. No engine change."""
+    from . import dwc3
+    return dwc3.macro_runs_study(days, macro_run_pts, leg_extra_min)
+
+
+def pm_profile_study(days) -> dict:
+    """T9-pm-faster-measured-move (067 ~39:22): see dwc3.pm_profile_study. No engine change."""
+    from . import dwc3
+    return dwc3.pm_profile_study(days)
+
+
+def session_template_study(days) -> dict:
+    """T13-fx-daily-session-template (065 ~02:10:04): see dwc3.session_template_study. No engine change."""
+    from . import dwc3
+    return dwc3.session_template_study(days)
+
+
+def wed_news_reversal(weeks) -> dict:
+    """new-wednesday-news-weekly-reversal (cc07_003 ~00:36:11): see dwc3.wed_news_reversal. Report only."""
+    from . import dwc3
+    return dwc3.wed_news_reversal(weeks)

@@ -3162,6 +3162,54 @@ class Params:
     adr_met_runner: bool = False         # L16-adr-contraction-runner (cc09_008 ~00:47:45): ADR5 covered by 09:30 in the trade direction: the last runner share leaves at adr_runner_until, not at am_exit
     adr_runner_until: int = 840
     adr_contracted_tag: bool = False     # ... (a) the context tag adr_contracted: ADR5 in the bottom tercile of the last 60 sessions
+    # --- Caption-gap pass, package day_week_context#3/3 (digests/rulebook_gaps; dwc3.py). Everything defaults off unless a comment says otherwise. ---------------------------------------------
+    consol_pm_need_sweep: bool = False   # T13-consolidation-pm-fizzle (cc10_013 ~00:13:57): on a consolidation day the PM trades only after a bar traded beyond the lunch (12:00-13:30) or session high / low (else the PM fizzles: no trade)
+    choppy_week_tag: bool = False        # N8-choppy-week-no-hold (079 ~00:21:40): after choppy_week_days consecutive days that each swept the prior day's high (bearish week; low if bullish) before the bias-direction extreme: tag choppy_week; the day takes the slow ladder and no runner
+    choppy_week_days: int = 2            # ... [our interpretation] "consecutive days" = 2
+    tgif_week_high_exit: bool = True     # M14-tgif-invalidation-timing (075 ~01:40:30): with tgif on, a TGIF order is void (pending cancelled, stop at the level) beyond the week high (low) that preceded it
+    tgif_window: str = "off"             # M14-tgif-am-timing (085 ~00:17:32; 089 ~00:01:29): TGIF entries only in "am" (09:30-12:00) | "london_close" (10:00-12:00) | "pm" (13:30-15:00); "off" = no window (the spec default "pm" would narrow the existing tgif / tgif_timing behaviour - owner question)
+    tgif_min_adr: float = 0.0            # M14-tgif-am-timing: the Mon-Thu range must exceed this x ADR5 for a TGIF tag (0 = off; spec value 3.0)
+    inside_bisi_redelivered: bool = False  # B17-M15-madeuce-inside-bisi (091 ~00:15:17): the sloppy "inside_bisi" fires only when yesterday already traded through the daily FVG's CE and today opens within bisi_ce_band of it; Ma Deuce is exempt when the open is in the premium (discount) half and the CE was never traded through
+    bisi_ce_band: float = 0.15           # ... [our interpretation] the band = this share of the FVG's height around its CE
+    weekly_po3: bool = False             # M17-weekly-judas-po3 (cc07_008 ~00:31:31): weekly bias set: Mon-Wed entries in its direction only while price is beyond the weekly open (above for bearish), the other side blocked; tag weekly_judas
+    journal_timing: bool = False         # OT-X16-time-to-move-journal (042 ~00:51:03): Trade.min_to_fav / min_to_exit / first_exit_kind / mfe_pts / mae_pts and the day tags pre_fomc / news_day (reporting only)
+    fav_pts: float = 2.0                 # ... [our interpretation] a "favourable move" = this many ES pts from the fill
+    checklist: str = "off"               # OT-pre-session-checklist-order (cc12_004 ~00:22:21): "tag" (Trade.cl_fail = the failing steps) / "gate" (also skip the session's entries when a step fails)
+    cl_days: tuple = (0, 1, 2)           # ... the preferred weekdays (Mon-Wed); Thu / Fri pass when the week had no target hit yet
+    cl_pm_ok: bool = True                # ... [our interpretation] the PM passes the IPDA true-day step
+    stock_intraday: bool = False         # OT-stocks-swing-only (cc10_018 ~00:33:36): False = run_day returns nothing for an individual stock symbol (index futures / ETF proxies are unaffected)
+    pm_narrative: bool = False           # N9-pm-narrative-from-am-chop (022 ~02:26:36): a chop AM + an unfilled opening gap + SMT at the AM extreme + repeated AM runs -> the PM trades toward the gap only, one attempt
+    pm_narr_gap_pts: float = 5.0         # ... [our interpretation] "large" gap = at least this many ES pts
+    max_trades_month: int = 0            # X15-monthly-cap (095 ~00:49:31): 0 = off (test 3 / 10)
+    skip_months: tuple = ()              # X15-monthly-cap: month numbers with no trading (our mapping, e.g. (8,))
+    htf_quality_only: bool = False       # X15-three-per-week-htf-quality (099 ~00:47:36): the final target must be a daily / weekly array, PDH / PDL, PWH / PWL or NWOG level and the setup must sit on a 1h / 4h swing / array (combine with max_trades_week=3)
+    weekly_target_pct: float = 0.0       # X15-weekly-goal-stop (cc02_001 ~00:22:57): no new trades for the rest of the week once the week's closed P&L reaches this % of the start-of-week account (test 1.5)
+    weekly_cap_pts: float = 0.0          # ... or this many ES points (test 10-15 [our interpretation])
+    carry_weekly_draw: bool = False      # N10-unmet-target-carries-to-monday (061 ~02:32:51): a weekly draw not reached keeps its side (and the level as a target) on Monday / Tuesday of the next week
+    carry_neutral_after: bool = True     # ... once the carried level traded the rest of that week is neutral (bias 0)
+    thu_targets_met_block: bool = False  # N10-thursday-reversal-after-targets-met (099 ~01:02:20): the week's HTF draw hit Mon-Wed -> Thu / Fri block the with-trend side; the counter-trend side exits fully at the nearest pool
+    skip_fri_if_week_up: bool = False    # N10-friday-skip-profitable-week (100 ~00:07:18): no Friday trading when the week's closed P&L is above 0
+    mw_extreme_need_array: bool = False  # N10-mon-wed-extreme-trending-week (cc07_006 ~00:21:27): in a trending week Mon-Wed with-trend entries need the sweep inside a D / W array (or at the 20 / 40 / 60-day extreme)
+    trend_k: float = 0.8                 # ... [our interpretation] trending = the previous week's range >= 5 x ADR5 x trend_k and a close in its outer quarter
+    missed_week_mode: str = "off"        # N10-missed-mon-wed-no-chase (cc07_006 ~00:24:29): Thu / Fri after a visibly started Mon-Wed move the bot did not trade: "nearest" (with-trend orders exit fully at the nearest pool) | "skip" (no trade)
+    tgif_precond: str = "strict"         # M14-tgif-timing-and-precondition (084 ~00:15:56): "strict" = tgif_htf_array decides (an HTF array reached); "loose" = the large one-way week alone (no array needed)
+    tgif_thu: bool = False               # ... Thursday holding the week's low (high) after 10:00 with Wednesday's taken earlier: the TGIF side block applies Thursday PM
+    tgif_seq: bool = False               # ... Friday sequencing: a new weekly extreme in the AM -> entries 10:00-12:00, or 13:30-15:00 when 10:00-12:00 consolidates
+    tgif_consol_frac: float = 0.25       # ... [our interpretation] consolidation = the 10:00-12:00 range under this x ADR5
+    tgif_no_rel: bool = False            # ... on a TGIF Friday the with-trend side does not target the relative equal highs / lows
+    consol_pm_pool_exit: bool = False    # N8-consolidation-pm-full-exit-at-pool (cc10_008 ~00:10:24): a consolidation-day PM is one scalp to the nearest untapped pool (ONH / ONL, AM H/L, PDH / PDL), 100 % out there; none when the AM ran a pool
+    aug_dd_stop_pct: float = 0.0         # N7-august-drawdown-restart (079 ~00:25:46): in August a drawdown of this % (from the August peak, or the month's net) stops trading until September (test 2-3)
+    low_mag_months: tuple = (5, 6, 7, 8, 9, 10)   # E9-may-october (cc10_015 ~00:03:49): the low-magnitude months
+    low_mag_mult: float = 1.0            # ... the risk multiplier there (test 0.5); August keeps its own row (the smaller wins)
+    low_mag_week_cap: int = 0            # ... optional weekly trade cap there (0 = off)
+    lunch_kind_tag: bool = True          # T8-lunch-three-behaviours-reversal (073 ~00:29:35): tag lunch_consol / lunch_run / lunch_open / lunch_reversal on PM trades (no behaviour change)
+    noon_rev_flat: bool = False          # ... the lunch reversal (MSS against the morning after the noon extreme at a 1h FVG's far edge) flattens the open AM-direction position (exit "noon_rev")
+    noon_rev_pm: bool = False            # ... and the PM trades the opposite side toward the AM range's opposite extreme / the ORG
+    pm_mm_target: bool = False           # T9-pm-faster-measured-move (067 ~39:22): a PM continuation order adds a rung at the AM extreme + the AM leg's size
+    london_ext_consol: bool = False      # T3-london-extreme-consolidation (010 ~00:39:18): on a consol_overnight day the London high / low is not the protected extreme (tag consol_overnight)
+    tgif_branch: bool = False            # M14-tgif-timing (066 ~00:46:41): TGIF Friday: a 09:30 Judas -> entries from 10:00 after the MSS; else no AM entry and entries from tgif_pm_from after an MSS of a high formed 11:30-14:00
+    tgif_pm_from: int = 810
+    consol_pm_news_skip_am: bool = False  # N8-consolidation-pm-news (cc10_008 ~00:16:34): a consolidation day with a PM release (at / after 12:00) has no AM trade
 
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
@@ -3376,6 +3424,15 @@ class Params:
         if (self.consol_range_days < 1 or self.mon_big_frac < 0 or self.expansion_judas_adr < 0 or (self.tgif_reversal_pct is not None and not 0 < self.tgif_reversal_pct < 1) or self.fri_trail_from < 0 or self.adr_runner_until <= 0
                 or self.adr_runner_until > 1440 or (self.tgif_zone and self.tgif_reversal_pct is not None and self.tgif_reversal_pct < self.tgif_cap)):
             raise ValueError("day_week_context#2/3: consol_range_days >= 1, mon_big_frac >= 0, 0 < tgif_reversal_pct < 1 (and >= tgif_cap with tgif_zone), fri_trail_from >= 0, 0 < adr_runner_until <= 1440")
+        # caption-gap pass (day_week_context#3/3)
+        for name, ok in (("tgif_window", ("off", "am", "london_close", "pm")), ("tgif_precond", ("strict", "loose")), ("missed_week_mode", ("off", "nearest", "skip")),
+                         ("checklist", ("off", "tag", "gate"))):
+            if getattr(self, name) not in ok:
+                raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
+        if (self.choppy_week_days < 1 or self.tgif_min_adr < 0 or self.bisi_ce_band < 0 or self.fav_pts <= 0 or self.pm_narr_gap_pts < 0 or self.max_trades_month < 0 or self.weekly_target_pct < 0
+                or self.weekly_cap_pts < 0 or self.trend_k <= 0 or self.tgif_consol_frac < 0 or self.aug_dd_stop_pct < 0 or self.low_mag_mult <= 0 or self.low_mag_week_cap < 0
+                or not 0 <= self.tgif_pm_from <= 1440 or any(not 1 <= m_ <= 12 for m_ in tuple(self.skip_months) + tuple(self.low_mag_months)) or set(self.cl_days) - {0, 1, 2, 3, 4}):
+            raise ValueError("day_week_context#3/3: choppy_week_days >= 1, fractions / caps / percentages >= 0, fav_pts > 0, trend_k > 0, low_mag_mult > 0, 0 <= tgif_pm_from <= 1440, months 1-12, cl_days weekdays 0-4")
         if (self.fomc_eve_risk <= 0 or self.pre_fomc_risk <= 0 or self.pre_cpi_risk <= 0 or self.or_deep_pd < 0
                 or self.run_done_adr < 0 or self.or_wide_adr < 0 or self.news_judas_ref_min < 1):
             raise ValueError("news_calendar_times: risk multipliers > 0, fractions / ADR multiples >= 0, news_judas_ref_min >= 1")
@@ -3755,7 +3812,7 @@ class Params:
     @property
     def dw_needs_week(self) -> bool:
         """The switches that read the week's trade state (backtest.week_state)."""
-        return bool(self.max_trades_week or self.friday_week_done == "trades" or self.stall_at_htf or self.late_week_flat)
+        return bool(self.max_trades_week or self.friday_week_done == "trades" or self.stall_at_htf or self.late_week_flat or _DWC3.needs_week(self))
 
     # --- package entries_stops_sizing helpers --------------------------------------------------
     @property
@@ -3891,7 +3948,8 @@ def blocked(d: date, session: str, p: "Params | None" = None, t: int = 0) -> str
     if p is not None:
         why = _NC.calendar_block(d, session, p, t)
         why = why if why is not None else _DWC.calendar_block(d, session, p, t)         # caption-gap pass day_week_context#1/3: skip_election, summer_off
-        return why if why is not None else _DWC2.calendar_block(d, session, p, t)        # caption-gap pass day_week_context#2/3: days_mode
+        why = why if why is not None else _DWC2.calendar_block(d, session, p, t)        # caption-gap pass day_week_context#2/3: days_mode
+        return why if why is not None else _DWC3.calendar_block(d, session, p, t)       # caption-gap pass day_week_context#3/3: skip_months
     return None
 
 
@@ -4070,6 +4128,13 @@ class Trade:
     resist_speed: str = ""        # L4-resistance-is-delivery-speed (resistance_def "speed"): "low" (the first rung came within resist_speed_bars bars of the fill) / "high" (later or never)
     # package entries_stops_sizing #1/3 (caption-gap pass)
     mt_warn: bool = False         # D4-mt-source-tally mt_break "warn": price traded under the OB MT after the fill (a warning, not the failure) - set during the trade, so it is no entry column
+    # package day_week_context#3/3 (caption-gap pass; None / "" while the switch is off)
+    min_to_fav: float | None = None    # OT-X16-time-to-move-journal (journal_timing): minutes fill -> the first bar whose favourable excursion reached fav_pts
+    min_to_exit: float | None = None   # ... minutes fill -> the final exit
+    first_exit_kind: str = ""          # ... "stop" / "target" / "other" (the first exit)
+    mfe_pts: float | None = None       # ... maximum favourable excursion after the fill (ES pts)
+    mae_pts: float | None = None       # ... maximum adverse excursion (ES pts, <= 0)
+    cl_fail: str = ""                  # OT-pre-session-checklist-order (checklist): the failing step names of the trade's session, "" = all green
 
     REAL_FIELDS = ("entry", "stop", "t1", "t2", "draw_px", "bz_top", "bz_bottom", "bz_mt",
                    "resist_lo", "resist_hi", "ext_px", "leg_hi_px", "eve_draw_px")
@@ -4502,6 +4567,8 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
     at = lambda m: _idx_at(ctx, m)
     _LD4._c(ctx)["tgt_ext"] = (ext_i, None if leg is None else leg[0])      # caption-gap new-trendline-trap-target: the sweep this call prices
     pdk = ("pdh1", "pdh2", "pdh3") if sd.sign > 0 else ("pdl1", "pdl2", "pdl3")
+    if p.tgif_no_rel and sd.sign in getattr(ctx, "block_side", {}).get("tgif", ()):
+        eq = []                             # caption-gap M14-tgif-timing-and-precondition (084 ~00:18:42): the with-trend side of a TGIF Friday does not target the remaining relative equal highs / lows
     if p.matrix_days == "ict":              # Ep08.10: today (pool_today_hl) + yesterday + the day before
         pdk = pdk[:2]
     pools = [(sd.x(ctx.pd[k]), ctx.start) for k in pdk if k in ctx.pd] + [(v, None) for v in eq]
@@ -5127,6 +5194,8 @@ def _draw_prefs(ctx, sd, i: int, entry: float, p, session: str, keep: list) -> l
 
 def _close(pos, trades, p):
     tr = pos["trade"]
+    if p.journal_timing:
+        _DWC3.journal_close(pos, tr, p)                   # caption-gap OT-X16-time-to-move-journal: minutes to the first favourable move / to the exit, MFE / MAE
     tr.capture = _TP.capture_ratio(pos, tr)           # X3h: how much of the best-case run the exits took
     if pos.get("tp4"):
         _TP4.close_note(pos, tr, p)                   # caption-gap targets_partials #4/4: half_range_ok, capture_b, strength
@@ -5293,6 +5362,8 @@ def day_context(hist: list[pd.DataFrame], day, p: "Params | None" = None, eth: d
             tags.add("year_end_long" if side > 0 else "year_end_short")
             if p.year_end != "tag":
                 block["year_end"] = (-side,)
+    if p is not None and p.journal_timing:
+        tags |= _DWC3.journal_day_tags(day)                   # caption-gap OT-X16-time-to-move-journal: pre_fomc / news_day
     if len(hist) < 7:
         return tags, block
     rng = [float(x.high.max() - x.low.min()) for x in hist]
@@ -5305,7 +5376,7 @@ def day_context(hist: list[pd.DataFrame], day, p: "Params | None" = None, eth: d
     if len(d) == 3 and abs(d.sum()) == 3:
         tags.add("three_up" if d[0] > 0 else "three_down")
         block["three"] = (int(d[0]),)
-    if day.weekday() == 4 and p is not None and p.tgif_htf_array:
+    if day.weekday() == 4 and p is not None and p.tgif_htf_array and p.tgif_precond == "strict":      # (caption-gap M14-tgif-timing-and-precondition: "loose" = the large one-way week alone, the elif branch)
         tag_, blk_ = _DW.tgif_context(hist, day, p, eth, conf)        # M14.1: full-session week + the HTF array check
         if tag_:
             tags.add(tag_)
@@ -5328,6 +5399,9 @@ def day_context(hist: list[pd.DataFrame], day, p: "Params | None" = None, eth: d
                     tags.add("tgif_short"); block["tgif"] = (1,)
                 elif c <= lo + 0.25 * (hi - lo):
                     tags.add("tgif_long"); block["tgif"] = (-1,)
+    if p is not None and p.tgif_min_adr and ("tgif_short" in tags or "tgif_long" in tags) and not _DWC3.tgif_adr_ok(hist, day, p):
+        tags -= {"tgif_short", "tgif_long"}                    # caption-gap M14-tgif-am-timing: the trending week must exceed tgif_min_adr x ADR5
+        block.pop("tgif", None)
     if p is not None and p.tgif_strict and ("tgif_short" in tags or "tgif_long" in tags):
         if not _DWC.tgif_strict_ok(hist, day, p, eth, conf, "tgif_short" in tags):      # caption-gap BH-M14-TGIF-preconditions (066 ~00:15:52)
             tags -= {"tgif_short", "tgif_long"}
@@ -5341,7 +5415,7 @@ def day_context(hist: list[pd.DataFrame], day, p: "Params | None" = None, eth: d
 # 00:18:23-00:18:49 FOMC + NFP week tends to sloppy delivery. ICT never defines "sloppy"; the
 # day-level reasons and the intraday chop test below are our reading.
 
-def sloppy_day(hist: list[pd.DataFrame], day, p: "Params") -> set:
+def sloppy_day(hist: list[pd.DataFrame], day, p: "Params", open_px: float | None = None) -> set:
     """Day-level sloppy reasons known before the session: "big_prev" (yesterday's range >
     sloppy_big_mult x ADR5 of the 5 days before it), "nfp_week" / "nfp_week:PM" (the beginner
     NFP-week blocks via blocked() with nfp_week_block forced on; nfp_thu is kept - OWNER
@@ -5366,7 +5440,8 @@ def sloppy_day(hist: list[pd.DataFrame], day, p: "Params") -> set:
         if fomc and (not p.sloppy_fomc_nfp or any(x in JOBS for x in wk)):
             out.add("fomc_week")
     if "inside_bisi" in p.sloppy_tests and _inside_daily_fvg(hist):
-        out.add("inside_bisi")
+        if not p.inside_bisi_redelivered or _DWC3.bisi_two_sided(hist, open_px, p):        # caption-gap B17-M15-madeuce-inside-bisi: only when both sides are arguable
+            out.add("inside_bisi")
     return out
 
 
@@ -6004,6 +6079,10 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
     SB's), until the extras' trades stop changing (at most `stops_passes` passes). Every decision only uses trades closed
     by its own bar, so there is no look-ahead; the side effects (locks, skips, log, the E10 risk state) come from the last
     pass only."""
+    if not p.stock_intraday and str(symbol).upper() not in _DWC3.INDEX_SYMBOLS:
+        if skips is not None:                    # caption-gap OT-stocks-swing-only (cc10_018 ~00:33:36): individual stocks are swing-only - no intraday setups
+            skips.append((df.index[0].date(), symbol, "stock", "swing_only"))
+        return []
     if p.entry_discipline != "any":
         p = _SM6.apply_discipline(p)             # caption-gap M12-setup-selection-order: the discipline preset of the path switches
     if _ES2.sizing_on(p):
@@ -6076,6 +6155,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     ctx.gaps = gaps if (p.gap_mode == "ict" and gaps is not None) else None
     ctx.equity = float(equity) if (equity is not None and p.risk_basis == "equity") else p.account_equity
     ctx.symbol = symbol
+    ctx.skips_ref = skips                                 # caption-gap OT-filters-before-bias: session_veto logs every veto here
     ctx.hist = hist
     ctx.no_origin = 4 * p.eq_tol_pts * p.es_pt if p.no_origin_retest else None     # caption-gap NEW-no-return-to-origin-ob: the "same daily low" tolerance (eq_tol_pts x 4)
     ctx.am_lunch_end = p.am[1]
@@ -6131,12 +6211,16 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             skips.append((day, symbol, "sloppy", "big_prev"))
         return []
     # owner #10: sloppy days ("off" = tag only; neutral_skip above is the old alias)
-    sl_day = sloppy_day(hist, day, p) if p.sloppy_tests else set()
+    sl_day = sloppy_day(hist, day, p, ctx.opens.get("midnight")) if p.sloppy_tests else set()
     sl_all_day = {r for r in sl_day if not r.endswith(":PM")}
+    md_only = False
     if p.sloppy_mode == "stand_aside" and sl_all_day:
-        if skips is not None:
-            skips.append((day, symbol, "sloppy", "|".join(sorted(sl_all_day))))
-        return []
+        if p.ma_deuce and p.inside_bisi_redelivered and sl_all_day == {"inside_bisi"} and _DWC3.md_inside_exempt(hist, ctx.opens.get("midnight"), p):
+            md_only = True                                # caption-gap B17-M15-madeuce-inside-bisi: Ma Deuce alone may trade inside the not-yet-re-delivered range (the main loop stands aside per bar)
+        else:
+            if skips is not None:
+                skips.append((day, symbol, "sloppy", "|".join(sorted(sl_all_day))))
+            return []
     ctx.sl_day = sl_day
     if p.conflicted_mode != "off":                       # caption-gap X14-conflicted-htf-one-entry (091 ~00:10:44): both sides valid / inside a daily BISI-SIBI
         ctx.conflicted = _ME3.conflicted_day(hist, bias, p)
@@ -6149,6 +6233,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     dw = _DW.plan(ctx, hist, p, week, eve, dt)            # day_week_context: the day's blocks / flags / tags
     p = _DWC.day_params(p, dw)                            # caption-gap pass day_week_context#1/3: iw_no_measured
     p = _DWC2.day_params(p, dw)                           # caption-gap pass day_week_context#2/3: expansion_mode "full", the Friday single exit, the consolidation scalp outs
+    p = _DWC3.day_params(p, dw)                           # caption-gap pass day_week_context#3/3: choppy week - slow ladder, no runner
     _BD.plan(dw, ctx, hist, p, dt)                        # bias_htf: day tags, range_market reading, ctx.bh_on
     wl = dw.info.get("week_left")                         # D19 / X15: trades left in the week's budget (None = no cap)
     why_dw = next((r_ for ss_, r_ in dw.blocks if ss_ is None), None)
@@ -6228,6 +6313,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             tr, sd = pos["trade"], pos["side"]
             o, h, l, c = sd.o[i], sd.h[i], sd.l[i], sd.c[i]
             pos["best"] = max(pos["best"], h)         # X3h capture metric: the best-case run includes this bar
+            if p.journal_timing:
+                _DWC3.journal_bar(pos, sd, i, ts, p)  # caption-gap OT-X16-time-to-move-journal: MFE / MAE and the first favourable bar (read-only)
             if pos.get("rungs"):                      # E2 / D11 entry ladder: the deeper rungs rest as limits
                 if pos["t1_done"]:
                     pos["rungs"] = []
@@ -6494,6 +6581,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 _DWC2.adr_close_exit(ctx, sd, pos, tr, i, ts, p)         # caption-gap LLT3-adr-fib-close-zone (cc09_006 ~00:26:59): the runner leaves at H - 0.20 x ADR5 after the turn
             if pos["left"] and p.fri_trail_from:
                 _DWC2.fri_trail(ctx, sd, pos, tr, i, p)                  # caption-gap X5-friday-tight-trail (103 ~00:30:33): the Friday stop ratchets under each new pivot low
+            if pos["left"] and p.noon_rev_flat:
+                _DWC3.noon_rev_exit(ctx, sd, pos, tr, i, ts, p, float(c))   # caption-gap T8-lunch-three-behaviours-reversal (059 ~00:15:28): the lunch reversal flattens the AM-direction position
             if pos["left"] and t + tf >= flat:
                 tr.exits.append((ts, sd.x(c), pos["left"], "eod")); pos["left"] = 0
             if pos["left"] and p.daily_loss_pct > 0 and _ES3.daily_loss_hit(ctx, state, pos, tr, sd, i, ts, p):
@@ -6881,8 +6970,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                and not done.get("PMR"))
         if skip_main and not pmr:
             continue
-        if (p.day_filter and blocked(day, session, p, t)) or (p.skip_news and news(day) != "none"):
-            continue
+        if _DWC3.session_veto(ctx, p, day, session, int(t), blocked, news) is not None:
+            continue                                  # caption-gap OT-filters-before-bias: the explicit veto order (blocked() then skip_news), before any bias is read
         why_ = _DW.gate(ctx, p, session, i, t, trades)        # day_week_context: the day / week rules (N7-N10, X10d, X15d ...)
         if why_ is not None:
             _f(why_)
@@ -7058,7 +7147,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     if p.ma_deuce:
         from .pre_open import run_ma_deuce
         trades += run_ma_deuce(ctx, hist, p, day, symbol, btag, sides)
-    if p.sb_model:
+    if p.sb_model and not md_only:
         from .sb_model import run_sb
         trades += run_sb(ctx, sides, p, day, symbol, blocked, btag)
     if p.ndog_scalp and post_eve is not None and len(post_eve):
@@ -9873,6 +9962,7 @@ from . import newscal as _NC  # noqa: E402  (news_calendar_times package; import
 from . import nct2 as _NCT  # noqa: E402  (caption-gap pass, news_calendar_times#1/1: engine glue)
 from . import dwc1 as _DWC  # noqa: E402  (caption-gap pass, day_week_context#1/3: engine glue)
 from . import dwc2 as _DWC2  # noqa: E402  (caption-gap pass, day_week_context#2/3: engine glue)
+from . import dwc3 as _DWC3  # noqa: E402  (caption-gap pass, day_week_context#3/3: engine glue)
 from . import setups as _SM   # noqa: E402  (setups_models package; imports this module back)
 from . import entries as _EN  # noqa: E402  (entries_stops_sizing package; imports this module back)
 from . import targets as _TP  # noqa: E402  (targets_partials package: speed bump, rung plan, partials)
