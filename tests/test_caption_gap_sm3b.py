@@ -65,8 +65,8 @@ SYN_CASES = {
 }
 # a synthetic book with two strong trend weeks (Monday-Thursday ramps of +25 %, the Friday after them) so the TGIF day tag fires: seed 7 reaches the draw gate and the SD level
 TGIF_CASES = {
-    "tgif_draw": (7, dict(tgif=True, tgif_zone=True, tgif_need_draw=True), ("tgif_draw",)),
-    "tgif_sd": (7, dict(tgif=True, tgif_zone=True, tgif_sd_exit=True), ("tgif_sd_eval", "tgif_sd")),
+    "tgif_draw": (7, dict(tgif=True, tgif_window="off", tgif_min_adr=0.0, tgif_need_htf_array=False, tgif_zone=True, tgif_need_draw=True), ("tgif_draw",)),
+    "tgif_sd": (7, dict(tgif=True, tgif_window="off", tgif_min_adr=0.0, tgif_need_htf_array=False, tgif_zone=True, tgif_sd_exit=True), ("tgif_sd_eval", "tgif_sd")),
 }
 
 
@@ -109,7 +109,7 @@ ES_CASES = {
     "vb_close_above": (("2024-02-26", "2024-03-18"), 5, ES_NB, dict(vb_trade=True, vb_min_gap_pts=0.3, vb_entry="close_above", vb_back_full=True), ("vb_trade", "vb_back_full")),
     "fs_sweep": (W_A, 5, ES_NB, dict(cc_swings="failure", cc_fail_pts=8.0, fs_def="no_new_extreme", fs_sweep_close=True), ("fs_sweep_close",)),
     "recap_nearest": (W_A, 5, ES_B, dict(recap_ob_entry=True, unfulfilled_nearest=True), ("recap_ob", "unfulfilled")),
-    "tgif_week": (("2024-11-04", "2024-12-30"), 5, ES_NB, dict(tgif=True, tgif_zone=True, tgif_need_draw=True, tgif_sd_exit=True, wk_high_proj=True, weekly_gate="tag"),
+    "tgif_week": (("2024-11-04", "2024-12-30"), 5, ES_NB, dict(tgif=True, tgif_window="off", tgif_min_adr=0.0, tgif_need_htf_array=False, tgif_zone=True, tgif_need_draw=True, tgif_sd_exit=True, wk_high_proj=True, weekly_gate="tag"),
                   ("tgif_draw", "tgif_sd_eval", "wk_proj_eval", "wk_proj")),
     "reh_fade": (("2023-01-23", "2023-02-13"), 5, ES_NB, dict(reh_fade_gate=True), ("reh_fade_gate", "reh_fade")),
     "ma_deuce": (("2023-01-02", "2023-01-23"), 5, ES_NB, dict(ma_deuce=True, ma_deuce_ladder=True, md_second=True), ("ma_deuce_far",)),

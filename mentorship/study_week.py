@@ -387,6 +387,20 @@ def main(symbol: str = "ES", minutes: int = 5, source: str = "databento", out: s
     return rep
 
 
+def week_state_labels(days: list) -> dict:
+    """T14-weekly-template (cc01_002 ~24:06; caption-gap pass day_week_context#3/3): the weekday states (consol / expansion / reversal), the weekday of the weekly high and low and the template
+    count, as stats only - see dwc3.week_state_labels. `days` = daily regular-session frames, oldest first."""
+    from . import dwc3
+    return dwc3.week_state_labels(days)
+
+
+def midweek_turn_by_month(days: list) -> dict:
+    """N10-thursday-reversal-after-targets-met (caption-gap pass day_week_context#3/3): per month, the weeks with a Monday + Tuesday range above ADR5 whose weekly extreme was set Wednesday /
+    Thursday - see dwc3.midweek_turn_by_month. `days` = daily regular-session frames, oldest first."""
+    from . import dwc3
+    return dwc3.midweek_turn_by_month(days)
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--symbol", default="ES")
@@ -395,10 +409,3 @@ if __name__ == "__main__":
     ap.add_argument("--out", default="runs/mentorship")
     a = ap.parse_args()
     print(json.dumps(main(a.symbol, a.minutes, a.source, a.out), indent=1, default=str))
-
-
-def week_state_labels(days: list) -> dict:
-    """T14-weekly-template (cc01_002 ~24:06; caption-gap pass day_week_context#3/3): the weekday states (consol / expansion / reversal), the weekday of the weekly high and low and the template
-    count, as stats only - see dwc3.week_state_labels. `days` = daily regular-session frames, oldest first."""
-    from . import dwc3
-    return dwc3.week_state_labels(days)

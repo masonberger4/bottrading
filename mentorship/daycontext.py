@@ -1028,7 +1028,7 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()) -> str | None:
         if not partners_in_step(ctx, i):
             return "x_dw_post_holiday_sync"
     # M14.3 TGIF timing windows
-    if "tgif" in str(getattr(ctx, "day_tags", "")) and p.tgif_timing and d.weekday() == 4:
+    if "tgif" in str(getattr(ctx, "day_tags", "")) and p.tgif_timing and d.weekday() == 4 and not _tgif_window_governs(p):      # (caption-gap M14-tgif-am-timing: an active tgif_window replaces the tgif_timing windows)
         if not any(a <= t < b for a, b in p.tgif_timing):
             return "x_dw_tgif_timing"
     # N8.1 / N8.6 consolidation / seek-and-destroy handled via scalp_now (no gate)
@@ -1490,6 +1490,16 @@ def _array_touch(conf, when: pd.Timestamp, price: float, want_kind: int, tfs, to
     return False
 
 
+def _tgif_array(p) -> bool:
+    from . import dwc3
+    return dwc3.tgif_array_needed(p)
+
+
+def _tgif_window_governs(p) -> bool:
+    from . import dwc3
+    return dwc3.tgif_window_governs(p)
+
+
 def tgif_context(hist, day: date, p, eth=None, conf=None) -> tuple:
     """M14 / M14.1: (side tag, blocked direction) for a Friday, else (None, None). The week's Mon-Thu range counts the
     full sessions (Sunday 18:00 on) when `eth` has them (tgif_htf_array); it must be >= 1.5 x the average of the
@@ -1507,7 +1517,7 @@ def tgif_context(hist, day: date, p, eth=None, conf=None) -> tuple:
             prior.setdefault(k, []).append(x)
     if not wk or len(prior) < 2:
         return None, None
-    use = bool(p.tgif_htf_array and eth)
+    use = bool(_tgif_array(p) and eth)
     hi, lo = _week_hl(wk, eth, use)
     avg = np.mean([(lambda a_: a_[0] - a_[1])(_week_hl(v, eth, use)) for v in prior.values()])
     c = float(wk[-1].close.iloc[-1])
@@ -1519,7 +1529,7 @@ def tgif_context(hist, day: date, p, eth=None, conf=None) -> tuple:
         tag, blk, ext, kind = "tgif_long", -1, lo, 1
     else:
         return None, None
-    if p.tgif_htf_array and conf is not None:
+    if _tgif_array(p) and conf is not None:
         # the session that made the extreme (full-session extremes when eth has them)
         best, bd = None, None
         for x in wk:

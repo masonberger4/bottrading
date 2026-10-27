@@ -281,8 +281,8 @@ def plan_rules(P, ctx, d: date, p, hist, eth, a5, dt) -> None:
     week = getattr(ctx, "week", None) or {}
     # --- #18 / #38: the month's and the low-magnitude season's trade budgets join the week's budget (DayPlan.info["week_left"], read by daycontext.budget_full and the run_day truncation)
     low_mag = d.month in p.low_mag_months
-    if low_mag and (p.low_mag_week_cap or p.low_mag_mult != 1.0):
-        tg.add("low_mag_season")
+    if low_mag:
+        tg.add("low_mag_season")                          # E9: every date in low_mag_months carries the tag (the cap / size switches act on it separately)
     budgets = []
     if p.max_trades_month:
         budgets.append(("month_cap", int(p.max_trades_month) - int(week.get("month_n", 0))))
@@ -312,7 +312,7 @@ def plan_rules(P, ctx, d: date, p, hist, eth, a5, dt) -> None:
         P.info["choppy_week"] = True
         hit("choppy_week")
     # --- #27 N10-unmet-target-carries-to-monday
-    if p.carry_weekly_draw and wd in (0, 1):
+    if p.carry_weekly_draw and (wd in (0, 1) or (wd >= 2 and p.carry_neutral_after)):       # Wed-Fri: only the neutral-after-hit state (the carry side / pool stay Mon-Tue)
         cd = carry_draw(hist, d)
         if cd is not None:
             side, lvl = cd
@@ -322,7 +322,7 @@ def plan_rules(P, ctx, d: date, p, hist, eth, a5, dt) -> None:
                     P.info["carry_neutral"] = True
                     tg.add("carry_neutral")
                     hit("carry_neutral")
-            else:
+            elif wd in (0, 1):
                 P.info["carry"] = (side, lvl)
                 tg.add("carry_weekly_draw")
                 P.side_block("carry_weekly_draw", (-side,))
@@ -395,9 +395,9 @@ def _range_bars(ctx, i: int, a: int, b: int):
     return _DW()._run(ctx, "d3_%d_%d" % (a, b), i, a, b)
 
 
-def mss_after(ctx, side: int, j: int, i: int):
+def mss_after(ctx, side: int, j: int, i: int, from_t: int = 0):
     """Real-price MSS: after a high at bar j (side>0) a close below the last pivot low (2-bar confirmed, formed before j); after a low at j (side<0) a close above the last pivot high. Returns the
-    bar index of the first such close in (j, i], else None."""
+    bar index of the first such close in (j, i] whose bar starts at or after minute `from_t`, else None."""
     n = 2
     h, l, c = ctx.h, ctx.l, ctx.c
     lo = max(ctx.start, j - 60)
@@ -410,7 +410,7 @@ def mss_after(ctx, side: int, j: int, i: int):
         if ref is None:
             ref = float(l[lo:j + 1].min())
         for m in range(j + 1, i + 1):
-            if c[m] < ref:
+            if c[m] < ref and ctx.t[m] >= from_t:
                 return m
     else:
         ref = None
@@ -421,7 +421,7 @@ def mss_after(ctx, side: int, j: int, i: int):
         if ref is None:
             ref = float(h[lo:j + 1].max())
         for m in range(j + 1, i + 1):
-            if c[m] > ref:
+            if c[m] > ref and ctx.t[m] >= from_t:
                 return m
     return None
 
@@ -586,6 +586,39 @@ def tgif_tag(ctx) -> str:
 TGIF_WIN = {"am": (570, 720), "london_close": (600, 720), "pm": (810, 900)}
 
 
+def tgif_array_needed(p) -> bool:
+    """M14-tgif-am-timing (085 ~00:17:32): the Friday sweep must be at a same-side HTF array - the first-pass `tgif_htf_array`, or (the spec default) `tgif_need_htf_array` with tgif on, unless the
+    tgif_model umbrella was told to skip tgif_htf_array."""
+    return bool(p.tgif_htf_array or (p.tgif and p.tgif_need_htf_array and "tgif_htf_array" not in p.tgif_model_skip))
+
+
+def tgif_window_governs(p) -> bool:
+    """M14-tgif-am-timing: `tgif_window` is the TGIF entry window with tgif on; under the tgif_model umbrella the M14.3 `tgif_timing` windows stay authoritative unless "tgif_timing" is in
+    tgif_model_skip."""
+    return bool(p.tgif and p.tgif_window != "off" and (not p.tgif_model or "tgif_timing" in p.tgif_model_skip))
+
+
+def oneway_week_so_far(hist, d: date, ext: int) -> bool:
+    """#33 tgif_thu precondition: the Monday-Wednesday range of d's week is >= 1.5 x the average of the prior weeks' ranges (two prior weeks needed) and Wednesday closed in the outer quarter
+    toward `ext` (the week's low for ext<0, the high for ext>0) - the same large one-way-week test as the Friday TGIF tag, a day earlier."""
+    wk = [x for x in D1._this_week(hist, d) if x.index[0].date().weekday() <= 2]
+    if len(wk) < 3:
+        return False
+    mon = wk[0].index[0].date()
+    prior = {}
+    for x in hist:
+        if x.index[0].date() < mon:
+            prior.setdefault(x.index[0].date().isocalendar()[:2], []).append(x)
+    if len(prior) < 2:
+        return False
+    avg = float(np.mean([max(float(x.high.max()) for x in v) - min(float(x.low.min()) for x in v) for v in prior.values()]))
+    hi, lo = max(float(x.high.max()) for x in wk), min(float(x.low.min()) for x in wk)
+    c = float(wk[-1].close.iloc[-1])
+    if hi - lo < 1.5 * avg:
+        return False
+    return bool(c <= lo + 0.25 * (hi - lo)) if ext < 0 else bool(c >= hi - 0.25 * (hi - lo))
+
+
 def tgif_seq_ok(ctx, p, hist, i: int, t: int, tag: str):
     """#33 M14-tgif-timing-and-precondition (084 ~00:15:56) item (3) Friday sequencing: with a new weekly low (high for tgif_short) printed in the Friday AM (09:30-12:00) the TGIF entry
     window is 10:00-12:00; with the 10:00-12:00 range under `tgif_consol_frac` x ADR5 it moves to 13:30-15:00. None = allowed, else the reject key. No new extreme = unconstrained."""
@@ -648,9 +681,9 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()):
             return "x_dw_pm_narr_done"
     # TGIF windows (Fridays with a TGIF tag)
     if d.weekday() == 4:
-        tag = tgif_tag(ctx)
+        tag = tgif_tag(ctx) if p.tgif else ""            # (the windows / sequencing act only with tgif on - the tag is computed on every Friday)
         if tag:
-            if p.tgif_window != "off":
+            if tgif_window_governs(p):
                 a, b = TGIF_WIN[p.tgif_window]
                 if not a <= t < b:
                     hit("tgif_window_block")
@@ -685,7 +718,7 @@ def checklist(ctx, hist, day: date, session: str, p, i: int, t: int) -> dict:
     out["dow"] = bool(wd in p.cl_days or (wd in (3, 4) and int(wkd.get("final_hits", 0)) == 0))
     pm = session in DW.LATE
     # [our interpretation of the IPDA true day, bulk 03:00-10:00 NY] every pre-open / AM session window lies inside it; the PM fails the step unless cl_pm_ok
-    out["ipda"] = bool((not pm) or p.cl_pm_ok)
+    out["ipda"] = bool((180 <= t < 600) if not pm else p.cl_pm_ok)       # the session window must START inside 03:00-10:00 (t = the session's first gated bar); a 10:00+ window fails
     # the kill zones: the AM window, the Silver Bullet windows, the London window (a PM arming is inside only when a Silver Bullet window holds it)
     out["kz"] = bool((p.am_win[0] <= t < p.am_win[1]) or any(a <= t < b_ for a, b_ in p.sb_windows) or (120 <= t < 300) or session in ("PRE7", "PRE8", "PRE9", "LON", "NEWS"))
     ok = True
@@ -714,9 +747,13 @@ def checklist_for(ctx, p, session: str, i: int, t: int) -> str:
     if session not in c:
         r = checklist(ctx, getattr(ctx, "hist", []), ctx.day, session, p, i, t)
         c[session] = ",".join(k for k, v in r.items() if not v)
+        ctx.cl = c                                       # the per-session failing steps (read by stamp -> Trade.cl_fail)
         hit("checklist_eval")
         if c[session]:
             hit("checklist_fail")
+            sk = getattr(ctx, "skips_ref", None)
+            if sk is not None:
+                sk.append((ctx.day, getattr(ctx, "symbol", ""), "checklist", f"{session}:{c[session]}"))
     return c[session]
 
 
@@ -743,36 +780,6 @@ def thu_extreme_held(ctx, hist, i: int, ext: int) -> bool:
     wref = float(wed.low.min()) if ext < 0 else float(wed.high.max())
     brk = np.nonzero((ctx.l[ctx.start:j + 1] < wref) if ext < 0 else (ctx.h[ctx.start:j + 1] > wref))[0]
     return bool(len(brk) and ctx.start + int(brk[0]) < j)
-
-
-def mss_after(ctx, side: int, j: int, i: int):
-    """The MSS against the extreme at bar j: after a high (side>0) the first close in (j, i] under the last confirmed 2-bar pivot low formed before j (the lowest low of the 60 bars before j when
-    there is none); after a low (side<0) a close over the last pivot high. The bar index or None until it has closed. [our interpretation of the MSS]"""
-    n = 2
-    h, l, c = ctx.h, ctx.l, ctx.c
-    lo = max(ctx.start, j - 60)
-    ref = None
-    if side > 0:
-        for q in range(j - n, lo + n - 1, -1):
-            if q - n >= ctx.start and l[q] < min(l[q - n:q].min(), l[q + 1:q + n + 1].min()):
-                ref = float(l[q])
-                break
-        if ref is None:
-            ref = float(l[lo:j + 1].min())
-        for m in range(j + 1, i + 1):
-            if c[m] < ref:
-                return m
-    else:
-        for q in range(j - n, lo + n - 1, -1):
-            if q - n >= ctx.start and h[q] > max(h[q - n:q].max(), h[q + 1:q + n + 1].max()):
-                ref = float(h[q])
-                break
-        if ref is None:
-            ref = float(h[lo:j + 1].max())
-        for m in range(j + 1, i + 1):
-            if c[m] > ref:
-                return m
-    return None
 
 
 def tgif_branch_ok(ctx, p, hist, sign: int, i: int, t: int, tag: str):
@@ -874,7 +881,7 @@ def lunch_state(ctx, p, i: int):
                     far = list(cf.targets(now, ref, am_dir, ("1h",), far_edge=True))
                 except Exception:
                     far = []
-            if lk is not None and lk.get("side") == am_dir and lk.get("target") is not None:
+            if lk is not None and lk.get("side") == am_dir and lk.get("target") is not None:       # (a draw delivered before 11:50 is behaviour (1), not a noon extreme)
                 far.append(float(lk["target"]))
             c["lunch0"] = dict(kind=kind, am_dir=am_dir, far=far)
     base = c["lunch0"]
@@ -889,8 +896,8 @@ def lunch_state(ctx, p, i: int):
     rev_i = None
     kind = base["kind"]
     if noon_i is not None:
-        m = mss_after(ctx, am_dir, noon_i, i)
-        if m is not None and ctx.t[m] >= 720:
+        m = mss_after(ctx, am_dir, noon_i, i, 720)        # the first MSS close AT OR AFTER 12:00 (an earlier 11:50-11:59 close does not hide it)
+        if m is not None:
             rev_i, kind = m, "reversal"
     return dict(kind=kind, am_dir=am_dir, noon_i=noon_i, rev_i=rev_i)
 
@@ -930,12 +937,12 @@ def side_ok(ctx, p, sign: int, session: str, i: int):
         if (wb < 0 and c_ <= wo) or (wb > 0 and c_ >= wo):
             hit("weekly_po3_open")
             return "x_dw_weekly_po3_open"
-    if p.tgif_thu and d.weekday() == 3 and session in DW.LATE:
+    if p.tgif and p.tgif_thu and d.weekday() == 3 and session in DW.LATE:
         for ext in (-1, 1):
-            if sign == ext and thu_extreme_held(ctx, hist, i, ext):
+            if sign == ext and oneway_week_so_far(hist, d, ext) and thu_extreme_held(ctx, hist, i, ext):
                 hit("tgif_thu_block")
                 return "x_dw_tgif_thu"
-    if p.tgif_branch and d.weekday() == 4:
+    if p.tgif and p.tgif_branch and d.weekday() == 4:
         tag = tgif_tag(ctx)
         if tag:
             why = tgif_branch_ok(ctx, p, hist, sign, i, t, tag)
@@ -1055,27 +1062,29 @@ def htf_discount_hit(ctx, sd, o: dict, i: int, p) -> bool:
 
 
 def _final_target_htf(ctx, sd, o: dict, i: int, p) -> bool:
-    """#20 (a): the order's FINAL target is a daily / weekly array edge or CE, a prior-day high / low (PDH / PDL), a prior-week high / low or an NWOG level (matched to two ticks)."""
+    """#20 (a): the order's FINAL target is a daily / weekly array edge or CE, the previous day's high / low (PDH / PDL: pdh1 / pdl1 only), the previous week's high / low or an NWOG level (matched to
+    two ticks). Matched by price against the level sets (the order carries no level_kinds before it is placed)."""
     if not o.get("levels"):
         return False
     real = float(sd.x(o["levels"][-1]))
     tol = 2 * p.tick
     cand = []
-    for k, v in ctx.pd.items():
-        if k[:3] in ("pdh", "pdl"):
-            cand.append(float(v))
+    for k in ("pdh1", "pdl1"):
+        if k in ctx.pd:
+            cand.append(float(ctx.pd[k]))
     pw = getattr(ctx, "pw", None)
     if pw is not None:
         cand += [float(pw[0]), float(pw[1])]
     for g in getattr(ctx, "gaps", None) or ():
-        cand += [float(g[1]), float(g[2]), float(g[3])]
+        if g[0] in ("nwog", "nwog_rth"):                  # the NWOG only (not the NDOG / ORG kinds)
+            cand += [float(g[1]), float(g[2]), float(g[3])]
     cf = getattr(ctx, "conf", None)
     if cf is not None:
         try:
             for near, far in cf.arrays_any(_now(ctx, i), sd.sign, ("D", "W")):
                 cand += [float(near), float(far), (float(near) + float(far)) / 2.0]
         except Exception:
-            pass
+            hit("htf_quality_conf_err")                   # counted, never silent: a Confluence signature change would show here
     return any(abs(real - v) <= tol for v in cand)
 
 
@@ -1121,7 +1130,7 @@ def htf_quality_ok(ctx, sd, o: dict, i: int, p) -> bool:
             if set(cf.at(_now(ctx, i), real, sd.sign, _now(ctx, i))) & {"1h", "4h", "D", "W"}:
                 return True
         except Exception:
-            pass
+            hit("htf_quality_conf_err")
     return hourly_swing_near(ctx, sd, i, real, 8 * p.tick)
 
 
@@ -1344,21 +1353,26 @@ def session_veto(ctx, p, day: date, session: str, t: int, blocked_fn, news_fn=No
     if why is None and news_fn is not None and p.skip_news and news_fn(day) != "none":
         why = "skip_news"
     if why is not None:
-        seen = ctx.__dict__.setdefault("_veto_seen", set())
-        if (session, why) not in seen:
-            seen.add((session, why))
-            sk = getattr(ctx, "skips_ref", None)
-            if sk is not None:
-                sk.append((day, getattr(ctx, "symbol", ""), "veto", f"{session}:{why}"))
-            hit("veto")
+        log_veto(ctx, day, session, why)
     return why
+
+
+def log_veto(ctx, day: date, session: str, why: str) -> None:
+    """One 'veto' skips row per (session, reason) per day (also used for the per-bar sloppy stand-aside, which needs the bar's chop state and so stays in the loop right after the calendar veto)."""
+    seen = ctx.__dict__.setdefault("_veto_seen", set())
+    if (session, why) not in seen:
+        seen.add((session, why))
+        sk = getattr(ctx, "skips_ref", None)
+        if sk is not None:
+            sk.append((day, getattr(ctx, "symbol", ""), "veto", f"{session}:{why}"))
+        hit("veto")
 
 
 # --------------------------------------------------------------------------------------------------------------
 # #7 the time-to-move journal
 # --------------------------------------------------------------------------------------------------------------
 
-INDEX_SYMBOLS = {"SPY", "QQQ", "DIA", "SPX", "NDX", "ES", "NQ", "YM", "MES", "MNQ", "MYM", "RTY", "M2K", "IWM", "RUT", "RW", "ZB", "ZN", "US500", "NAS100", "US30"}
+INDEX_SYMBOLS = {"SPY", "QQQ", "DIA", "SPX", "NDX", "ES", "NQ", "YM", "MES", "MNQ", "MYM", "RTY", "M2K", "IWM", "RUT", "RW", "ZB", "ZN", "US500", "NAS100", "US30"}      # (re-exported as strategy.INDEX_SYMBOLS; wider than the spec's eight - owner question)
 
 
 def journal_bar(pos: dict, sd, i: int, ts, p) -> None:
@@ -1383,11 +1397,49 @@ def journal_close(pos: dict, tr, p) -> None:
     t0 = pd.Timestamp(tr.entry_time)
     if pos.get("fav_t") is not None:
         tr.min_to_fav = float((pd.Timestamp(pos["fav_t"]) - t0).total_seconds() / 60.0)
-    tr.min_to_exit = float((pd.Timestamp(tr.exits[-1][0]) - t0).total_seconds() / 60.0)
     r = str(tr.exits[0][3])
-    tr.first_exit_kind = "stop" if r.startswith("stop") or r == "be" else ("target" if (r.startswith("t") and r[1:].isdigit()) or r.endswith("target") else "other")
+    tr.first_exit_kind = _exit_kind(r)
+    if "j_entry" not in pos:
+        return                                           # stopped on the fill bar: no later bar was seen - no exit minutes, no excursions (None, not 0)
+    tr.min_to_exit = float((pd.Timestamp(tr.exits[-1][0]) - t0).total_seconds() / 60.0)
     tr.mfe_pts = round(pos.get("mfe", 0.0) / p.es_pt, 4)
     tr.mae_pts = round(-pos.get("mae", 0.0) / p.es_pt, 4)
+
+
+def _exit_kind(r: str) -> str:
+    return "stop" if r.startswith("stop") or r == "be" else ("target" if (r.startswith("t") and r[1:].isdigit()) or r.endswith("target") else "other")
+
+
+def journal_extras(ctx, trades, p) -> None:
+    """OT-X16-time-to-move-journal for the Silver Bullet / Ma Deuce rows (their engines have no shared close hook): after the trade closed, replay the bars strictly after the fill bar through the
+    last exit bar (never a bar later than the exit) with the same definitions as journal_bar / journal_close. Read-only."""
+    if not p.journal_timing:
+        return
+    idx = ctx.idx
+    for tr in trades:
+        if not tr.exits or getattr(tr, "min_to_exit", None) is not None or getattr(tr, "first_exit_kind", ""):
+            continue
+        t0, tx = pd.Timestamp(tr.entry_time), pd.Timestamp(tr.exits[-1][0])
+        sel = [k for k in range(ctx.start, len(idx)) if t0 < idx[k] <= tx]
+        tr.first_exit_kind = _exit_kind(str(tr.exits[0][3]))
+        if not sel:
+            continue
+        e = float(tr.entry)
+        sgn = 1.0 if tr.side == "long" else -1.0
+        mfe = mae = 0.0
+        fav_t = None
+        for k in sel:
+            up = (float(ctx.h[k]) - e) if sgn > 0 else (e - float(ctx.l[k]))
+            dn = (e - float(ctx.l[k])) if sgn > 0 else (float(ctx.h[k]) - e)
+            mfe, mae = max(mfe, up), max(mae, dn)
+            if fav_t is None and up >= p.fav_pts * p.es_pt - 1e-12:
+                fav_t = idx[k]
+        if fav_t is not None:
+            tr.min_to_fav = float((pd.Timestamp(fav_t) - t0).total_seconds() / 60.0)
+        tr.min_to_exit = float((tx - t0).total_seconds() / 60.0)
+        tr.mfe_pts = round(mfe / p.es_pt, 4)
+        tr.mae_pts = round(-mae / p.es_pt, 4)
+        hit("journal_extras")
 
 
 def journal_day_tags(day: date) -> set:
@@ -1591,12 +1643,43 @@ def week_state_labels(days: list) -> dict:
         hi_d = max(wk, key=lambda x: float(x.high.max())).index[0].date().weekday()
         lo_d = min(wk, key=lambda x: float(x.low.min())).index[0].date().weekday()
         late = labs[3] == "reversal" or labs[4] == "reversal" or (labs[3] in ("other", "expansion") and labs[4] in ("other", None))
-        tmpl = bool(labs[0] == "expansion" and labs[1] == "reversal" and ("consol" in (labs[2], labs[3])) and late)
-        rows.append(dict(week=key, labels=tuple(labs), high_day=hi_d, low_day=lo_d, template=tmpl))
+        tmpl_loose = bool(labs[0] == "expansion" and labs[1] == "reversal" and ("consol" in (labs[2], labs[3])) and late)
+        # the strict template also needs the "expansion" step BETWEEN the Tuesday reversal and the midweek consolidation (Wed expansion -> Thu consolidation -> Fri reversal / retrace). A Monday
+        # reversal cannot follow a Monday expansion, so the reversal day is Tuesday [our interpretation]
+        tmpl = bool(labs[0] == "expansion" and labs[1] == "reversal" and labs[2] == "expansion" and labs[3] == "consol" and (labs[4] in ("reversal", "other")))
+        rows.append(dict(week=key, labels=tuple(labs), high_day=hi_d, low_day=lo_d, template=tmpl, template_loose=tmpl_loose))
     n = len(rows)
-    return dict(rows=rows, summary=dict(weeks=n, template=sum(r["template"] for r in rows), template_share=round(sum(r["template"] for r in rows) / n, 3) if n else None,
+    return dict(rows=rows, summary=dict(weeks=n, template=sum(r["template"] for r in rows), template_loose=sum(r["template_loose"] for r in rows), template_share=round(sum(r["template"] for r in rows) / n, 3) if n else None,
                                         mon_expansion=sum(r["labels"][0] == "expansion" for r in rows),
                                         low_tue=sum(r["low_day"] == 1 for r in rows), high_tue=sum(r["high_day"] == 1 for r in rows)))
+
+
+def midweek_turn_by_month(days: list) -> dict:
+    """#28 N10-thursday-reversal-after-targets-met (cc07_007 ~00:27:48 / 061): per month, the weeks whose Monday + Tuesday range exceeded ADR5 (the five sessions before the week) and whose
+    weekly extreme (high or low) was then set on Wednesday or Thursday - the "turn" - against all such big-start weeks. `days` = daily regular-session frames, oldest first. Report only."""
+    byw = {}
+    for k, fr in enumerate(days):
+        byw.setdefault(fr.index[0].date().isocalendar()[:2], []).append(k)
+    mon = {}
+    for key in sorted(byw):
+        ks = [k for k in byw[key] if days[k].index[0].date().weekday() <= 4]
+        if len(ks) < 4 or ks[0] < 5:
+            continue
+        wk = [days[k] for k in ks]
+        wds = [x.index[0].date().weekday() for x in wk]
+        if wds[0] != 0 or wds[1] != 1:
+            continue
+        adr = float(np.mean([float(x.high.max() - x.low.min()) for x in days[ks[0] - 5:ks[0]]]))
+        rng = max(float(wk[0].high.max()), float(wk[1].high.max())) - min(float(wk[0].low.min()), float(wk[1].low.min()))
+        if adr <= 0 or rng <= adr:
+            continue
+        hi_d = wds[int(np.argmax([float(x.high.max()) for x in wk]))]
+        lo_d = wds[int(np.argmin([float(x.low.min()) for x in wk]))]
+        ym = f"{wk[0].index[0].year}-{wk[0].index[0].month:02d}"
+        r = mon.setdefault(ym, dict(big_start=0, turn=0))
+        r["big_start"] += 1
+        r["turn"] += int(hi_d in (2, 3) or lo_d in (2, 3))
+    return dict(by_month=mon, summary=dict(big_start=sum(v["big_start"] for v in mon.values()), turn=sum(v["turn"] for v in mon.values())))
 
 
 def wed_news_reversal(weeks: list, tol_frac: float = 0.15) -> dict:
@@ -1662,14 +1745,15 @@ def tgif_adr_ok(hist, day: date, p) -> bool:
     return bool(max(float(x.high.max()) for x in wk) - min(float(x.low.min()) for x in wk) > p.tgif_min_adr * a5)
 
 
-def _inside_zone(hist):
-    """The daily FVG (zone, kind) yesterday's whole range sat inside (same test as strategy._inside_daily_fvg, which returns only a flag), else None. Also returns yesterday's high / low."""
+def _inside_zones(hist):
+    """EVERY daily FVG (zone, yesterday high, yesterday low) yesterday's whole range sat inside (same test as strategy._inside_daily_fvg, which returns only a flag), [] if none."""
     from . import levels as L
     S = _S()
     if len(hist) < 4:
-        return None
+        return []
     o, h, l, c = S._daily(hist)
     k = len(h) - 1
+    out = []
     for z in L.fvgs(h[:k], l[:k]):
         after = c[z.i + 1:k]
         if z.kind == "bull" and len(after) and after.min() < z.bottom:
@@ -1677,31 +1761,35 @@ def _inside_zone(hist):
         if z.kind == "bear" and len(after) and after.max() > z.top:
             continue
         if z.bottom <= l[k] and h[k] <= z.top:
-            return z, float(h[k]), float(l[k])
-    return None
+            out.append((z, float(h[k]), float(l[k])))
+    return out
 
 
 def bisi_two_sided(hist, open_px, p) -> bool:
     """#93 B17-M15-madeuce-inside-bisi: B17's inside-BISI no-trade applies only when BOTH sides are arguable - yesterday's range already traded through the FVG's CE (below it for a BISI,
-    above for a SIBI) and today opens within `bisi_ce_band` x the gap's height of the CE. Without today's open the old rule stands (True)."""
-    r = _inside_zone(hist)
-    if r is None or open_px is None:
+    above for a SIBI) and today opens within `bisi_ce_band` x the gap's height of the CE. Without today's open the old rule stands (True). With several qualifying zones any two-sided one counts."""
+    rs = _inside_zones(hist)
+    if not rs or open_px is None:
         return True
-    z, yh, yl = r
-    ce = (z.top + z.bottom) / 2.0
-    redeliv = (yl < ce) if z.kind == "bull" else (yh > ce)
-    near = abs(float(open_px) - ce) <= p.bisi_ce_band * (z.top - z.bottom)
-    return bool(redeliv and near)
+    for z, yh, yl in rs:
+        ce = (z.top + z.bottom) / 2.0
+        redeliv = (yl < ce) if z.kind == "bull" else (yh > ce)
+        near = abs(float(open_px) - ce) <= p.bisi_ce_band * (z.top - z.bottom)
+        if redeliv and near:
+            return True
+    return False
 
 
 def md_inside_exempt(hist, open_px, p) -> bool:
-    """#93: Ma Deuce is exempt from the inside-BISI stand-aside when price opens in the premium half of a BISI (the discount half of a SIBI) whose range was not yet re-delivered (yesterday never
-    traded through the CE)."""
-    r = _inside_zone(hist)
-    if r is None or open_px is None:
-        return False
-    z, yh, yl = r
-    ce = (z.top + z.bottom) / 2.0
-    if z.kind == "bull":
-        return bool(float(open_px) > ce and yl >= ce - 1e-12)
-    return bool(float(open_px) < ce and yh <= ce + 1e-12)
+    """#93: Ma Deuce is allowed inside the range when price opens in the premium half of a BISI (the discount half of a SIBI) whose range was not yet re-delivered (yesterday never traded
+    through the CE). In that state bisi_two_sided() is False, so the sloppy "inside_bisi" stand-aside does not fire at all (the whole engine, Ma Deuce included, trades): the exemption is
+    therefore implicit; this predicate only names the state (used by the test and the debug counter)."""
+    for z, yh, yl in _inside_zones(hist):
+        ce = (z.top + z.bottom) / 2.0
+        if open_px is None:
+            continue
+        if z.kind == "bull" and float(open_px) > ce and yl >= ce - 1e-12:
+            return True
+        if z.kind != "bull" and float(open_px) < ce and yh <= ce + 1e-12:
+            return True
+    return False

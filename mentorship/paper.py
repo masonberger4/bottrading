@@ -12,6 +12,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import backtest as B
+from . import dwc3 as _DWC3
 from .strategy import Params, run_day
 
 
@@ -150,6 +151,31 @@ def week_state(out_dir: Path, symbol: str, today) -> dict:
     return dict(n=n, net=net, final_hits=fh_, all_final=bool(n) and fh_ == n)
 
 
+def paper_rows(out_dir: Path, symbol: str, today) -> list:
+    """Caption-gap pass day_week_context#3/3 (the month / week budgets: max_trades_month, weekly_target_pct / weekly_cap_pts, skip_fri_if_week_up, aug_dd_stop_pct, low_mag_week_cap): the trade rows
+    of every earlier paper day as the backtest's `rows` ({date, net, gross, shares, side, entry_time}), one per trade (a trade logged again at its close counts once, the last row wins)."""
+    last: dict = {}
+    for f in sorted(Path(out_dir).glob(f"paper_{symbol}_*.csv")):
+        try:
+            d = datetime.strptime(f.stem.rsplit("_", 1)[1], "%Y%m%d").date()
+        except ValueError:
+            continue
+        if d >= today:
+            continue
+        with f.open(newline="") as fh:
+            for r in csv.DictReader(fh):
+                last[(d, r.get("entry_time"))] = r
+    rows = []
+    for (d, et), r in sorted(last.items(), key=lambda kv: (kv[0][0], str(kv[0][1]))):
+        def num(k):
+            try:
+                return float(r.get(k) or 0.0)
+            except ValueError:
+                return 0.0
+        rows.append(dict(date=d, net=num("net"), gross=num("gross"), shares=int(num("shares")), side=r.get("side", ""), entry_time=et, exit_reason=r.get("exit_reason", "")))
+    return rows
+
+
 def snapshot(c, symbol: str, partner: str | None, minutes: int, p: Params, risk_state: dict | None = None,
              week: dict | None = None):
     """Today's trades and armed setups from the bars closed so far (Schwab). `risk_state` (E10) is
@@ -218,7 +244,14 @@ def run(symbol="SPY", partner="QQQ", minutes=1, p: Params | None = None, out="ru
         try:
             rs_try = None if rs_start is None else dict(rs_start)
             wk_ = week_state(Path(out), symbol, now.date()) if p.dw_needs_week else None   # X15 / D19 weekly cap
-            trades, log = snapshot(c, symbol, partner, minutes, p, risk_state=rs_try, week=wk_)
+            why3 = None
+            if _DWC3.needs_week(p):                   # caption-gap pass day_week_context#3/3: the month / week budgets, from the earlier paper days (the backtest's week_extra)
+                wk_, why3 = _DWC3.week_extra(wk_, paper_rows(Path(out), symbol, now.date()), now.date(), p)
+            if why3:
+                trades, log = [], []                  # the budget stopped the day
+            else:
+                trades, log = snapshot(c, symbol, partner, minutes, p, risk_state=rs_try, week=wk_)
+                trades = _DWC3.cap_day_trades(trades, p, wk_)
             rs_day = rs_try
         except Exception as e:                        # keep going through API hiccups
             print(f"{now:%H:%M:%S} fetch failed: {e}"); trades, log = [], []

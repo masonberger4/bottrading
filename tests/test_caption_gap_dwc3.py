@@ -21,13 +21,13 @@ from test_caption_gap_dwc1 import mk, at, hm, weeks, Conf, zone, _day_la, COLS, 
 from test_caption_gap_dwc2 import rows_5m, order, first_date, mk3  # noqa: E402
 
 NEW_FIELDS = (
-    "consol_pm_need_sweep", "choppy_week_tag", "choppy_week_days", "tgif_week_high_exit", "tgif_window", "tgif_min_adr", "inside_bisi_redelivered", "bisi_ce_band", "weekly_po3",
+    "consol_pm_need_sweep", "choppy_week_tag", "choppy_week_days", "tgif_week_high_exit", "tgif_window", "tgif_min_adr", "tgif_need_htf_array", "inside_bisi_redelivered", "bisi_ce_band", "weekly_po3",
     "journal_timing", "fav_pts", "checklist", "cl_days", "cl_pm_ok", "stock_intraday", "pm_narrative", "pm_narr_gap_pts", "max_trades_month", "skip_months", "htf_quality_only",
     "weekly_target_pct", "weekly_cap_pts", "carry_weekly_draw", "carry_neutral_after", "thu_targets_met_block", "skip_fri_if_week_up", "mw_extreme_need_array", "trend_k",
     "missed_week_mode", "tgif_precond", "tgif_thu", "tgif_seq", "tgif_consol_frac", "tgif_no_rel", "consol_pm_pool_exit", "aug_dd_stop_pct", "low_mag_months", "low_mag_mult",
     "low_mag_week_cap", "lunch_kind_tag", "noon_rev_flat", "noon_rev_pm", "pm_mm_target", "london_ext_consol", "tgif_branch", "tgif_pm_from", "consol_pm_news_skip_am")
 KNOBS = {"choppy_week_days", "bisi_ce_band", "fav_pts", "cl_days", "cl_pm_ok", "pm_narr_gap_pts", "carry_neutral_after", "trend_k", "tgif_consol_frac", "low_mag_months", "tgif_pm_from"}
-OFF = {"consol_pm_need_sweep": False, "choppy_week_tag": False, "tgif_week_high_exit": True, "tgif_window": "off", "tgif_min_adr": 0.0, "inside_bisi_redelivered": False, "weekly_po3": False,
+OFF = {"consol_pm_need_sweep": False, "choppy_week_tag": False, "tgif_week_high_exit": True, "tgif_window": "pm", "tgif_min_adr": 3.0, "tgif_need_htf_array": True, "inside_bisi_redelivered": False, "weekly_po3": False,
        "journal_timing": False, "checklist": "off", "stock_intraday": False, "pm_narrative": False, "max_trades_month": 0, "skip_months": (), "htf_quality_only": False, "weekly_target_pct": 0.0,
        "weekly_cap_pts": 0.0, "carry_weekly_draw": False, "thu_targets_met_block": False, "skip_fri_if_week_up": False, "mw_extreme_need_array": False, "missed_week_mode": "off",
        "tgif_precond": "strict", "tgif_thu": False, "tgif_seq": False, "tgif_no_rel": False, "consol_pm_pool_exit": False, "aug_dd_stop_pct": 0.0, "low_mag_mult": 1.0, "low_mag_week_cap": 0,
@@ -203,13 +203,28 @@ def test_tgif_band_target_am():
     assert "tgif_short" in S.day_context(hist, fri, lp, None, miss)[0]
     hit = Conf(z={"W": zone(-1, 129.0, 133.0)})
     assert "tgif_short" in S.day_context(hist, fri, sp, None, hit)[0]
-    # tgif_min_adr: the Mon-Thu range (131 - 120 = 11 up to ..) must exceed k x ADR5 of the sessions before the week
-    base_tags = S.day_context(hist, fri, Params(**BASE), None, None)[0]
+    # the spec default tgif_need_htf_array (True) with tgif on needs the array like tgif_htf_array; tgif off leaves the tag as it was
+    dflt = Params(**BASE, tgif=True)
+    assert "tgif_short" not in S.day_context(hist, fri, dflt, None, miss)[0] and "tgif_short" in S.day_context(hist, fri, dflt, None, hit)[0]
+    assert "tgif_short" in S.day_context(hist, fri, replace(dflt, tgif_need_htf_array=False), None, miss)[0]
+    assert "tgif_short" in S.day_context(hist, fri, replace(dflt, tgif_precond="loose"), None, miss)[0]
+    assert "tgif_short" in S.day_context(hist, fri, Params(**BASE), None, miss)[0]
+    # the windows act only with tgif on (the tag is computed on every Friday)
+    assert D3.gate(c, replace(p, tgif=False), "PM", at(c, "14:00"), 840) is None
+    # an active tgif_window replaces tgif_timing; under tgif_model the timing stays unless it is skipped
+    tm = Params(**BASE, tgif=True, tgif_window="am", tgif_timing=((810, 900),))
+    assert DW.gate(c, tm, "AM", at(c, "09:30"), 570, []) is None
+    mod = Params(tgif_model=True, tgif_window="am")
+    assert not D3.tgif_window_governs(mod) and D3.tgif_window_governs(replace(mod, tgif_model_skip=("tgif_timing",)))
+    # tgif_min_adr: the Mon-Thu range (131 - 120 = 11 up to ..) must exceed k x ADR5 of the sessions before the week (with tgif on)
+    nm = dict(tgif=True, tgif_need_htf_array=False, tgif_min_adr=0.0)
+    base_tags = S.day_context(hist, fri, Params(**BASE, **nm), None, None)[0]
     assert "tgif_short" in base_tags
-    big = replace(Params(**BASE), tgif_min_adr=50.0)
+    big = replace(Params(**BASE, **nm), tgif_min_adr=50.0)
     assert "tgif_short" not in S.day_context(hist, fri, big, None, None)[0]
     assert "tgif" not in S.day_context(hist, fri, big, None, None)[1]
-    assert "tgif_short" in S.day_context(hist, fri, replace(Params(**BASE), tgif_min_adr=0.01), None, None)[0]
+    assert "tgif_short" in S.day_context(hist, fri, replace(big, tgif_min_adr=0.01), None, None)[0]
+    assert "tgif_short" in S.day_context(hist, fri, replace(big, tgif=False), None, None)[0]          # tgif off: the tag is not trimmed
 
 
 # --- #93 inside BISI ------------------------------------------------------------------------------------------------------------------
@@ -239,7 +254,7 @@ def test_inside_bisi_two_sided_only():
     assert D3.md_inside_exempt(h2, 108.0, q) and not D3.md_inside_exempt(h2, 104.0, q)
     assert not D3.md_inside_exempt(h, 108.0, q)                                                # already traded below the CE
     assert not D3.md_inside_exempt(h2, None, q) and not D3.md_inside_exempt(h2[:2], 108.0, q)
-    # the engine: the exempt day is not returned empty (the main loop stands aside per bar, Ma Deuce may run)
+    # the engine: in the not-yet-re-delivered premium-half state "inside_bisi" does not fire at all, so nothing stands aside (Ma Deuce included)
     sk = []
     df = day(A_ROWS, d=day_, start="09:50", spike=True, base=108.0)
     pm = Params(**BASE, sloppy_tests=("inside_bisi",), inside_bisi_redelivered=True, ma_deuce=True)
@@ -337,7 +352,16 @@ def test_journal_time_to_move():
     assert tr2.first_exit_kind == "target" and tr2.min_to_exit == 30.0
     tr3 = SimpleNamespace(entry_time=t0, exits=[(t0, 99.0, 3, "stop")], min_to_fav=None, min_to_exit=None, first_exit_kind="", mfe_pts=None, mae_pts=None)
     D3.journal_close({}, tr3, p)                                  # stopped on the fill bar: no later bar was seen
-    assert tr3.min_to_fav is None and tr3.min_to_exit == 0.0 and tr3.mfe_pts == 0.0
+    assert tr3.min_to_fav is None and tr3.min_to_exit is None and tr3.mfe_pts is None and tr3.mae_pts is None and tr3.first_exit_kind == "stop"
+    # the Silver Bullet / Ma Deuce rows: replayed from the bars after the fill through the exit bar (a short here: favourable = down)
+    cx = SimpleNamespace(idx=idx, h=np.full(40, 100.4), l=np.full(40, 99.7), start=0)
+    cx.l[4] = 97.8
+    cx.h[8] = 101.2
+    cx.h[12] = 104.0                                              # after the exit: never read
+    te = SimpleNamespace(entry_time=idx[1], entry=100.0, side="short", exits=[(idx[10], 98.0, 1, "t1")], min_to_fav=None, min_to_exit=None, first_exit_kind="", mfe_pts=None, mae_pts=None)
+    D3.journal_extras(cx, [te], p)
+    assert te.min_to_fav == 3.0 and te.min_to_exit == 9.0 and te.first_exit_kind == "target" and te.mfe_pts == pytest.approx(2.2) and te.mae_pts == pytest.approx(-1.2)
+    D3.journal_extras(cx, [te], replace(p, journal_timing=False))      # off: nothing
     # the day tags: the day before an FOMC decision, a news day
     pf = first_date(lambda d: C.fomc_info(d)["eve"])
     assert "pre_fomc" in D3.journal_day_tags(pf)
@@ -352,7 +376,7 @@ def test_journal_time_to_move():
         b = B.run(x, 5, "ES", Params(**SYN, journal_timing=True), y)
     cols = ["entry_time", "entry", "stop", "shares", "net", "exit_reason"]
     pd.testing.assert_frame_equal(a[cols], b[cols])
-    assert b.min_to_exit.notna().all() and (b.min_to_exit >= 0).all() and b.first_exit_kind.isin(["stop", "target", "other"]).all()
+    assert b.min_to_exit.notna().any() and (b.min_to_exit.dropna() >= 0).all() and b.first_exit_kind.isin(["stop", "target", "other"]).all()
     assert a.min_to_exit.isna().all()
     rep = B.report(b)
     assert "time_to_move" in rep and "by_pre_fomc" in rep and "time_to_move" not in B.report(a)
@@ -435,7 +459,8 @@ def test_session_veto_refactor_identical(monkeypatch):
         old = B.run(x, 5, "ES", p, y)
     assert len(new) >= 1
     pd.testing.assert_frame_equal(new[cols], old[cols])
-    assert any(r[2] == "veto" for r in new.attrs["skips"]) and not any(r[2] == "veto" for r in old.attrs["skips"])
+    cal = lambda sk: [r for r in sk if r[2] == "veto" and ":sloppy:" not in r[3]]          # the calendar / news vetoes (the sloppy stand-aside logs its own rows)
+    assert cal(new.attrs["skips"]) and not cal(old.attrs["skips"])
 
 
 def test_stock_intraday_guard():
@@ -468,16 +493,16 @@ def test_checklist_steps():
     p = Params(**BASE)
     c = mk(tue, history(tue), p, bias_row=br, lock=lock, week={"final_hits": 0})
     i = at(c, "10:00")
-    r = D3.checklist(c, c.hist, tue, "AM", p, i, 600)
+    r = D3.checklist(c, c.hist, tue, "AM", p, i, 575)
     assert all(r.values()), r
     cth = mk(thu, history(thu), p, bias_row=br, lock=lock, week={"final_hits": 1})
-    r2 = D3.checklist(cth, cth.hist, thu, "AM", p, at(cth, "10:00"), 600)
+    r2 = D3.checklist(cth, cth.hist, thu, "AM", p, at(cth, "10:00"), 575)
     assert [k for k, v in r2.items() if not v] == ["dow"]
     cth0 = mk(thu, history(thu), p, bias_row=br, lock=lock, week={"final_hits": 0})
-    assert all(D3.checklist(cth0, cth0.hist, thu, "AM", p, at(cth0, "10:00"), 600).values())              # Mon-Wed produced no target hit: the Thu / Fri template is open
+    assert all(D3.checklist(cth0, cth0.hist, thu, "AM", p, at(cth0, "10:00"), 575).values())              # Mon-Wed produced no target hit: the Thu / Fri template is open
     # the other steps
     nob = mk(tue, history(tue), p, bias_row={"combo": 0, "draw": 0}, lock={}, week={})
-    r3 = D3.checklist(nob, nob.hist, tue, "AM", p, at(nob, "10:00"), 600)
+    r3 = D3.checklist(nob, nob.hist, tue, "AM", p, at(nob, "10:00"), 575)
     assert not r3["htf"] and not r3["levels"]
     assert D3.checklist(c, c.hist, tue, "PM", p, at(c, "14:00"), 840)["ipda"] and not D3.checklist(c, c.hist, tue, "PM", replace(p, cl_pm_ok=False), at(c, "14:00"), 840)["ipda"]
     assert not D3.checklist(c, c.hist, tue, "PM", p, at(c, "13:30"), 810)["kz"] and D3.checklist(c, c.hist, tue, "PM", p, at(c, "14:30"), 870)["kz"]        # the PM Silver Bullet window 14:00-15:00 (13:30 is outside every kill zone)
@@ -486,11 +511,20 @@ def test_checklist_steps():
     # tag / gate through the DayPlan hooks
     tg, gt = Params(**BASE, checklist="tag"), Params(**BASE, checklist="gate")
     c1 = mk(thu, history(thu), tg, bias_row=br, lock=lock, week={"final_hits": 1})
-    assert D3.gate(c1, tg, "AM", at(c1, "10:00"), 600) is None and D3.checklist_for(c1, tg, "AM", at(c1, "10:00"), 600) == "dow"
+    assert D3.gate(c1, tg, "AM", at(c1, "10:00"), 575) is None and D3.checklist_for(c1, tg, "AM", at(c1, "10:00"), 575) == "dow"
     c2 = mk(thu, history(thu), gt, bias_row=br, lock=lock, week={"final_hits": 1})
-    assert D3.gate(c2, gt, "AM", at(c2, "10:00"), 600) == "x_dw_checklist"
+    assert D3.gate(c2, gt, "AM", at(c2, "10:00"), 575) == "x_dw_checklist"
     c3 = mk(tue, history(tue), gt, bias_row=br, lock=lock, week={"final_hits": 0})
-    assert D3.gate(c3, gt, "AM", at(c3, "10:00"), 600) is None
+    assert D3.gate(c3, gt, "AM", at(c3, "10:00"), 575) is None
+    assert not D3.checklist(c, c.hist, tue, "SB", p, at(c, "10:30"), 630)["ipda"]                          # a window starting at 10:00 or later is outside the IPDA bulk 03:00-10:00
+    sk = []
+    c1.skips_ref, c1.symbol = sk, "ES"
+    D3.checklist_for(c1, tg, "PM", at(c1, "14:00"), 840)
+    assert c1.cl is D3._cache(c1)["cl"]
+    c4 = mk(thu, history(thu), tg, bias_row=br, lock=lock, week={"final_hits": 1})
+    c4.skips_ref, c4.symbol = sk, "ES"
+    D3.checklist_for(c4, tg, "AM", at(c4, "10:00"), 575)
+    assert (thu, "ES", "checklist", "AM:dow") in sk                                                         # the failing steps are logged as a skips row
     trs = [SimpleNamespace(session="AM", cl_fail="")]
     D3.stamp(c1, trs, tg)
     assert trs[0].cl_fail == "dow"
@@ -712,6 +746,25 @@ def test_low_mag_season():
     assert list(a.entry_time) == list(b.entry_time) and (b.shares <= a.shares).all() and (b.shares < a.shares).any()
 
 
+def test_paper_rows_feed_the_budgets(tmp_path):
+    """The paper loop reads the earlier paper days' CSVs as the backtest's rows, so the month / week budgets act there too."""
+    from mentorship import paper
+    hdr = "entry_time,exit_reason,net,gross,shares,side\n"
+    (tmp_path / "paper_ES_20260511.csv").write_text(hdr + "2026-05-11 10:00,stop,-50.0,-40.0,2,long\n2026-05-11 10:00,t1,80.0,90.0,2,long\n")     # the same trade logged twice: the last row wins
+    (tmp_path / "paper_ES_20260512.csv").write_text(hdr + "2026-05-12 10:05,t1,120.0,130.0,2,short\n")
+    (tmp_path / "paper_ES_20260513.csv").write_text(hdr + "2026-05-13 10:05,t1,10.0,12.0,1,long\n")                                          # today: not read
+    (tmp_path / "paper_NQ_20260511.csv").write_text(hdr + "2026-05-11 10:00,t1,999.0,999.0,1,long\n")                                         # another symbol
+    today = date(2026, 5, 13)
+    rows = paper.paper_rows(tmp_path, "ES", today)
+    assert [(r["date"], r["net"], r["side"]) for r in rows] == [(date(2026, 5, 11), 80.0, "long"), (date(2026, 5, 12), 120.0, "short")]
+    p = Params(**BASE, max_trades_month=2, weekly_target_pct=0.1, account_equity=100000.0)
+    wk, why = D3.week_extra({}, rows, today, p)
+    assert wk["month_n"] == 2 and why == "month_cap"
+    wk, why = D3.week_extra({}, rows, today, replace(p, max_trades_month=0))
+    assert why == "weekly_goal" and wk["week_pct"] == pytest.approx(0.2)
+    assert paper.paper_rows(tmp_path, "ES", date(2026, 5, 11)) == []
+
+
 # --- #20 HTF quality only -------------------------------------------------------------------------------------------------------------------------
 
 def test_htf_quality_only():
@@ -761,9 +814,12 @@ def test_carry_weekly_draw():
     c2 = mk(tue, h2, p, bias_row={"combo": 1, "draw": 1})
     assert c2.dplan.info.get("carry_neutral") and "carry" not in c2.dplan.info and DW.side_ok(c2, p, -1, "AM", at(c2, "10:00")) is None
     assert D3.want_override(c2, p, 1) == 0
-    # Wednesday: no carry any more
+    # Wednesday: no carry side any more, but the level traded this week: the rest of the week stays neutral (bias 0)
     c3 = mk(wed, h2 + [daily(tue, 103.0, 104.0, 100.0, 101.0)], p)
-    assert not c3.dplan.info.get("carry") and not c3.dplan.info.get("carry_neutral")
+    assert not c3.dplan.info.get("carry") and c3.dplan.info.get("carry_neutral") and D3.want_override(c3, p, 1) == 0
+    # ... but a Wednesday whose week never reached the level has neither
+    c3b = mk(wed, h + [daily(mon, 95.0, 100.0, 94.0, 99.0), daily(tue, 99.0, 101.0, 98.0, 100.0)], p)
+    assert not c3b.dplan.info.get("carry") and not c3b.dplan.info.get("carry_neutral")
     # carry_neutral_after off: Tuesday simply has no carry
     c4 = mk(tue, h2, replace(p, carry_neutral_after=False))
     assert not c4.dplan.info.get("carry_neutral") and D3.want_override(c4, replace(p, carry_neutral_after=False), 1) == 1
@@ -896,7 +952,7 @@ def _bear_hist():
 
 def test_tgif_seq_loose():
     fri, h = _bear_hist()
-    p = Params(**BASE, tgif_seq=True, tgif_consol_frac=0.25)
+    p = Params(**BASE, tgif=True, tgif_window="off", tgif_seq=True, tgif_consol_frac=0.25)
     quiet = {"09:30": (120.0, 120.2, 119.8, 120.0), "09:45": (120.0, 120.2, 118.0, 118.5)}                                # a new weekly low (118 < 119) at 09:45
     c = mk(fri, h, p, rows=_pm_rows(quiet, base=118.5, w=0.15), base=118.5)
     c.day_tags = "tgif_long"
@@ -920,7 +976,7 @@ def test_tgif_seq_loose():
     assert D3.gate(cm, replace(p, tgif_seq=False), "AM", at(cm, "09:50"), 590) is None
     # Thursday: the week low made after 10:00 with Wednesday's low taken earlier -> the TGIF side block applies on Thursday PM
     thu = date(2023, 6, 15)
-    pt = Params(**BASE, tgif_thu=True)
+    pt = Params(**BASE, tgif=True, tgif_thu=True)
     h2 = h[:-1]
     spec = {"09:30": (125.0, 125.2, 123.9, 124.2), "10:15": (124.2, 124.3, 123.0, 123.5), "11:00": (123.5, 123.6, 118.5, 119.0), "11:05": (119.0, 119.5, 118.9, 119.4)}      # under Wed low 124 at 10:15, week low 118.5 at 11:00
     ct = mk(thu, h2, pt, rows=_pm_rows(spec, base=119.4, w=0.15), base=119.4)
@@ -933,13 +989,16 @@ def test_tgif_seq_loose():
     high = mk(thu, h2, pt, rows=_pm_rows({"09:30": (125.0, 125.2, 124.8, 125.0)}, base=125.0, w=0.15), base=125.0)
     assert D3.side_ok(high, pt, -1, "PM", at(high, "13:30")) is None                                                # no new weekly low
     # tgif_no_rel: the with-trend side of a TGIF Friday does not target the relative equal lows
-    c2 = mk(fri, h, Params(**BASE, tgif_no_rel=True), base=119.0)
+    c2 = mk(fri, h, Params(**BASE, tgif=True, tgif_no_rel=True), base=119.0)
     c2.block_side = {"tgif": (-1,)}
     ss = c2.sides_map[-1]
     eq = [ss.x(117.0)]
-    r_on = S._targets(c2, ss, at(c2, "10:00"), ss.x(118.5), eq, Params(**BASE, tgif_no_rel=True))
+    r_on = S._targets(c2, ss, at(c2, "10:00"), ss.x(118.5), eq, Params(**BASE, tgif=True, tgif_no_rel=True))
     r_off = S._targets(c2, ss, at(c2, "10:00"), ss.x(118.5), eq, Params(**BASE))
     assert ss.x(117.0) in [v for v, _ in r_off] and ss.x(117.0) not in [v for v, _ in r_on]
+    r_notgif = S._targets(c2, ss, at(c2, "10:00"), ss.x(118.5), eq, Params(**BASE, tgif_no_rel=True))
+    assert ss.x(117.0) in [v for v, _ in r_notgif]                                                                   # tgif off: the switch does nothing
+    assert D3.oneway_week_so_far(h2, thu, -1) and not D3.oneway_week_so_far(h2, thu, 1) and not D3.oneway_week_so_far(h2[:-2], thu, -1)   # tgif_thu needs the large one-way week
 
 
 # --- #35 the consolidation PM: one scalp to the nearest untapped pool -------------------------------------------------------------------------
@@ -1030,6 +1089,9 @@ def test_noon_reversal():
     assert st2["kind"] == "open"                                                                                  # the MSS has not printed yet
     st3 = D3.lunch_state(c, p, i_rev)
     assert st3["kind"] == "reversal" and st3["rev_i"] == i_rev
+    # the MSS search starts at 12:00: a close before that minute is skipped, a later one still counts
+    assert D3.mss_after(c, 1, i_noon, i_rev) == i_rev == D3.mss_after(c, 1, i_noon, i_rev, 720) and D3.mss_after(c, 1, i_noon, i_rev, 740) is None
+    assert D3.mss_after(c, 1, at(c, "11:50"), at(c, "12:15"), 720) == i_rev
     # the open AM-direction position is flattened at that bar, not before
     sd = c.sides_map[1]
     for i_, exp in ((at(c, "12:10"), False), (i_rev, True)):
@@ -1056,7 +1118,7 @@ def test_noon_reversal():
     c3 = mk(D0, history(D0), p, rows=_pm_rows(spec, base=top - 2.4), lock=lock, conf=Conf(targets=[top + 50.0]))
     assert D3.lunch_state(c3, p, at(c3, "13:30"))["kind"] == "open" and D3.lunch_state(c3, p, at(c3, "13:30"))["noon_i"] is None
     # the AM draw delivered before the lunch: consolidation
-    c4 = mk(D0, history(D0), p, rows=_pm_rows(spec, base=top - 2.4), lock={"AM": {"side": 1, "target": 105.0, "delivered": True, "delivered_i": at(c, "10:30")}}, conf=Conf(targets=[]))
+    c4 = mk(D0, history(D0), p, rows=_pm_rows(spec2, base=top2 - 0.1), lock={"AM": {"side": 1, "target": 105.0, "delivered": True, "delivered_i": at(c, "10:30")}}, conf=Conf(targets=[]))
     assert D3.lunch_state(c4, p, at(c4, "13:30"))["kind"] == "consol"
 
 
@@ -1109,7 +1171,7 @@ def test_pm_mm_target():
 
 def test_tgif_branch():
     fri, h = _tgif_hist()
-    p = Params(**BASE, tgif_branch=True)
+    p = Params(**BASE, tgif=True, tgif_window="off", tgif_branch=True)
     judas = {"09:30": (131.0, 131.3, 130.6, 131.2), "09:35": (131.2, 131.6, 131.0, 131.5), "09:40": (131.5, 133.0, 131.4, 132.8), "09:45": (132.8, 132.9, 132.2, 132.3),
              "09:50": (132.3, 132.4, 131.6, 131.7), "09:55": (131.7, 131.8, 131.1, 131.2), "10:00": (131.2, 131.3, 130.8, 130.9), "10:05": (130.9, 131.0, 130.3, 130.4), "10:10": (130.4, 130.5, 130.0, 130.1)}
     c = mk(fri, h, p, rows=_pm_rows(judas, base=130.1), base=131.0)
@@ -1222,8 +1284,19 @@ def test_week_state_labels():
           daily(d0 + timedelta(days=4), 104.0, 108.0, 103.0, 107.0)]
     r = SW.week_state_labels(fill + wk)
     row = r["rows"][-1]
-    assert row["labels"][:4] == ("expansion", "reversal", "consol", "reversal") and row["low_day"] == 1 and row["high_day"] == 1 and row["template"] is True
-    assert r["summary"]["template"] == 1 and r["summary"]["low_tue"] >= 1 and r["summary"]["mon_expansion"] >= 1
+    assert row["labels"][:4] == ("expansion", "reversal", "consol", "reversal") and row["low_day"] == 1 and row["high_day"] == 1
+    assert row["template_loose"] is True and row["template"] is False                       # no expansion between the reversal and the midweek consolidation: only the loose count
+    assert r["summary"]["template_loose"] == 1 and r["summary"]["low_tue"] >= 1 and r["summary"]["mon_expansion"] >= 1
+    # the strict template: Mon expansion, Tue reversal, Wed expansion, Thu consolidation, Fri anything but a consolidation / expansion
+    wk2 = wk[:2] + [daily(d0 + timedelta(days=2), 98.0, 108.0, 96.0, 107.8), daily(d0 + timedelta(days=3), 107.8, 109.0, 105.0, 108.0), daily(d0 + timedelta(days=4), 108.0, 114.0, 106.0, 110.0)]
+    r2 = SW.week_state_labels(fill + wk2)
+    assert r2["rows"][-1]["labels"] == ("expansion", "reversal", "expansion", "consol", "other") and r2["rows"][-1]["template"] is True and r2["summary"]["template"] == 1
+    # the Mon / Tue big start with the weekly high set on Wednesday / Thursday counts as a turn (per month)
+    big = [daily(d0, 100.0, 112.0, 99.0, 110.0), daily(d0 + timedelta(days=1), 110.0, 113.0, 105.0, 111.0), daily(d0 + timedelta(days=2), 111.0, 118.0, 110.0, 117.0),
+           daily(d0 + timedelta(days=3), 117.0, 117.5, 112.0, 113.0), daily(d0 + timedelta(days=4), 113.0, 115.0, 111.0, 112.0)]
+    t = SW.midweek_turn_by_month(fill + big)
+    assert t["summary"] == dict(big_start=1, turn=1) and t["by_month"]["2026-05"] == dict(big_start=1, turn=1)
+    assert SW.midweek_turn_by_month(fill + wk[:2] + [daily(d0 + timedelta(days=2), 99.0, 100.0, 98.0, 99.0)])["summary"]["big_start"] == 0        # a short week is not a week
     flat_week = fill[:5] * 1
     assert SW.week_state_labels(fill)["summary"]["template"] == 0
     assert SW.week_state_labels([])["summary"]["weeks"] == 0
@@ -1235,18 +1308,22 @@ def test_week_state_labels():
 # (3) ES windows (skipped when the data is absent).
 
 LA_D3 = {   # name -> (window, switches)
-    "budget": ("W0", dict(max_trades_month=6, weekly_target_pct=0.5, skip_fri_if_week_up=True, journal_timing=True, checklist="tag", lunch_kind_tag=True,
-                          tgif_branch=True, tgif_seq=True, tgif_thu=True, tgif_window="am", tgif_no_rel=True, tgif_precond="loose")),
-    "week": ("W0", dict(choppy_week_tag=True, carry_weekly_draw=True, thu_targets_met_block=True, missed_week_mode="nearest", mw_extreme_need_array=True, trend_k=0.1, weekly_po3=True)),
+    "budget": ("W0", dict(max_trades_month=6, weekly_target_pct=0.5, weekly_cap_pts=40.0, skip_fri_if_week_up=True, journal_timing=True, fav_pts=1.0, checklist="tag", cl_days=(0, 1, 2, 3, 4), cl_pm_ok=False,
+                          lunch_kind_tag=True, stock_intraday=False, tgif=True, tgif_branch=True, tgif_seq=True, tgif_thu=True, tgif_window="am", tgif_no_rel=True, tgif_precond="loose",
+                          tgif_week_high_exit=True, tgif_min_adr=1.0, tgif_need_htf_array=False, tgif_pm_from=800, tgif_consol_frac=0.3)),
+    "week": ("W0", dict(choppy_week_tag=True, choppy_week_days=2, carry_weekly_draw=True, carry_neutral_after=True, thu_targets_met_block=True, missed_week_mode="nearest", mw_extreme_need_array=True,
+                        trend_k=0.1, weekly_po3=True, htf_quality_only=True)),
     "day": ("W2", dict(consol_pm_need_sweep=True, consol_day_rules="tag", consol_pm_pool_exit=True, pm_narrative=True, pm_narr_gap_pts=0.5, noon_rev_flat=True, noon_rev_pm=True, pm_mm_target=True,
                        london_ext_consol=True, london_low_guard=True, consol_pm_news_skip_am=True)),
-    "aug": ("W3", dict(aug_dd_stop_pct=0.5, skip_months=(9,), low_mag_mult=0.5, low_mag_week_cap=3)),
+    "bisi": ("W2", dict(sloppy_tests=("inside_bisi",), inside_bisi_redelivered=True, bisi_ce_band=0.3)),
+    "aug": ("W3", dict(aug_dd_stop_pct=0.5, skip_months=(9,), low_mag_mult=0.5, low_mag_week_cap=3, low_mag_months=(5, 6, 7, 8, 9, 10))),
 }
 NEED_D3 = {   # name -> groups of counters ("a|b" = either): every group must have run in the window
     "budget": ("skip_month_cap|skip_weekly_goal|skip_fri_week_up", "checklist_eval"),
     "week": ("carry_active|carry_neutral", "thu_after_targets", "missed_week_nearest", "weekly_po3_plan"),
     "day": ("pm_fizzle|pm_pool_run_am", "noon_rev_pm_side"),
     "aug": ("skip_august_dd", "low_mag_size"),
+    "bisi": (),
 }
 
 
@@ -1276,12 +1353,21 @@ def test_look_ahead_sets_fire_something():
     assert any(fired.values()) or D3.HITS, fired
 
 
+HAND_D3 = (   # (day, rows, kwargs): the hand-made-day look-ahead cases
+    (D0, dict(min_trades=0, pm_narrative=True, pm_narr_gap_pts=0.1, consol_pm_need_sweep=True, consol_pm_pool_exit=True, consol_day_rules="tag", noon_rev_flat=True, noon_rev_pm=True, pm_mm_target=True,
+              london_ext_consol=True, checklist="tag", journal_timing=True, weekly_po3=True, mw_extreme_need_array=True, trend_k=0.1)),
+    (D0, dict(min_trades=0, carry_weekly_draw=True, thu_targets_met_block=True, missed_week_mode="skip", choppy_week_tag=True, htf_quality_only=True, stock_intraday=True, lunch_kind_tag=True)),
+    (FRI, dict(min_trades=0, tgif=True, tgif_branch=True, tgif_seq=True, tgif_window="am", tgif_precond="loose", tgif_htf_array=True, skip_fri_if_week_up=True, tgif_week_high_exit=True,
+               tgif_min_adr=0.5, tgif_need_htf_array=True, tgif_pm_from=800, tgif_thu=True, tgif_no_rel=True, tgif_consol_frac=0.3)),
+)
+
+
 def test_look_ahead_hand_made_days():
     D3.HITS.clear()
-    _day_la(D0, A_ROWS, "09:50", ("10:05", "10:10", "10:30"), min_trades=0, pm_narrative=True, pm_narr_gap_pts=0.1, consol_pm_need_sweep=True, consol_pm_pool_exit=True, consol_day_rules="tag",
-            noon_rev_flat=True, noon_rev_pm=True, pm_mm_target=True, london_ext_consol=True, checklist="tag", journal_timing=True, weekly_po3=True, mw_extreme_need_array=True, trend_k=0.1)
-    _day_la(D0, A_ROWS, "09:50", ("10:05", "10:30"), min_trades=0, carry_weekly_draw=True, thu_targets_met_block=True, missed_week_mode="skip", choppy_week_tag=True, htf_quality_only=True)
-    _day_la(FRI, A_ROWS, "09:50", ("10:05", "10:30"), min_trades=0, tgif=True, tgif_branch=True, tgif_seq=True, tgif_window="am", tgif_precond="loose", tgif_htf_array=True, skip_fri_if_week_up=True)
+    for d_, kw in HAND_D3:
+        kw = dict(kw)
+        mt = kw.pop("min_trades")
+        _day_la(d_, A_ROWS, "09:50", ("10:05", "10:30") if d_ is not D0 or "pm_narrative" not in kw else ("10:05", "10:10", "10:30"), min_trades=mt, **kw)
 
 
 # --- no look-ahead per path ------------------------------------------------------------------------------------------------------------------------
@@ -1329,7 +1415,7 @@ def _c_lunch(v, mp):
 
 def _c_tgif_branch(v, mp):
     fri, h = _tgif_hist()
-    p = Params(**BASE, tgif_branch=True, tgif_seq=True)
+    p = Params(**BASE, tgif=True, tgif_branch=True, tgif_seq=True)
     judas = {"09:30": (131.0, 131.3, 130.6, 131.2), "09:35": (131.2, 131.6, 131.0, 131.5), "09:40": (131.5, 133.0, 131.4, 132.8), "09:45": (132.8, 132.9, 132.2, 132.3),
              "09:50": (132.3, 132.4, 131.6, 131.7), "09:55": (131.7, 131.8, 131.1, 131.2), "10:00": (131.2, 131.3, 130.8, 130.9), "10:05": (130.9, 131.0, 130.3, 130.4),
              "10:10": (130.4, 130.5, 130.0, 130.1), "10:15": (130.1, 220.0, 5.0, 100.0)}
@@ -1340,7 +1426,7 @@ def _c_tgif_branch(v, mp):
 
 def _c_tgif_seq(v, mp):
     fri, h = _bear_hist()
-    p = Params(**BASE, tgif_seq=True)
+    p = Params(**BASE, tgif=True, tgif_seq=True)
     spec = {"09:30": (120.0, 120.2, 119.8, 120.0), "09:45": (120.0, 120.2, 118.0, 118.5), "12:05": (118.5, 300.0, 1.0, 118.5)}
     c = mk3(fri, h, p, "11:55", v, rows=_pm_rows(spec, base=118.5, w=0.15), base=118.5)
     return (D3.tgif_seq_ok(c, p, c.hist, at(c, "09:50"), 590, "tgif_long"), D3.tgif_seq_ok(c, p, c.hist, at(c, "10:30"), 630, "tgif_long"), D3.tgif_seq_ok(c, p, c.hist, at(c, "11:55"), 715, "tgif_long"))
@@ -1349,7 +1435,7 @@ def _c_tgif_seq(v, mp):
 def _c_thu(v, mp):
     thu = date(2023, 6, 15)
     _, h = _bear_hist()
-    pt = Params(**BASE, tgif_thu=True)
+    pt = Params(**BASE, tgif=True, tgif_thu=True)
     spec = {"09:30": (125.0, 125.2, 123.9, 124.2), "10:15": (124.2, 124.3, 123.0, 123.5), "11:00": (123.5, 123.6, 118.5, 119.0), "11:05": (119.0, 119.5, 118.9, 119.4), "11:10": (119.4, 300.0, 1.0, 119.0)}
     c = mk3(thu, h[:-1], pt, "11:05", v, rows=_pm_rows(spec, base=119.4, w=0.15), base=119.4)
     return (D3.thu_extreme_held(c, c.hist, at(c, "10:30"), -1), D3.thu_extreme_held(c, c.hist, at(c, "11:05"), -1))
@@ -1417,22 +1503,23 @@ def test_dwc3_paths_are_causal(name, monkeypatch):
 
 
 def test_every_switch_is_covered():
+    """Every new switch is SET in at least one executed no-look-ahead run: the synthetic windows (LA_D3), the hand-made days (HAND_D3) or the ES windows (ES_D3) - the names are collected from
+    those runs, never typed here."""
     covered = set()
     for _, kw in LA_D3.values():
         covered |= set(kw)
-    covered |= {"htf_quality_only", "consol_pm_pool_exit", "pm_narrative", "journal_timing", "checklist", "stock_intraday", "inside_bisi_redelivered", "tgif_week_high_exit", "tgif_min_adr", "fav_pts", "bisi_ce_band",
-                "cl_days", "cl_pm_ok", "pm_narr_gap_pts", "carry_neutral_after", "tgif_consol_frac", "tgif_pm_from", "low_mag_months", "lunch_kind_tag", "choppy_week_days", "trend_k",
-                "weekly_target_pct", "weekly_cap_pts", "max_trades_month", "skip_months", "htf_quality_only", "tgif_precond", "tgif_window", "tgif_branch", "tgif_seq", "tgif_thu", "tgif_no_rel"}
-    covered |= {"consol_pm_need_sweep", "noon_rev_flat", "noon_rev_pm", "pm_mm_target", "london_ext_consol", "consol_pm_news_skip_am", "weekly_po3", "mw_extreme_need_array", "missed_week_mode",
-                "thu_targets_met_block", "carry_weekly_draw", "choppy_week_tag", "skip_fri_if_week_up", "aug_dd_stop_pct", "low_mag_mult", "low_mag_week_cap"}
-    assert set(NEW_FIELDS) <= covered, set(NEW_FIELDS) - covered
+    for _, kw in HAND_D3:
+        covered |= set(kw)
+    for kw in ES_D3.values():
+        covered |= set(kw)
+    assert set(NEW_FIELDS) <= covered, sorted(set(NEW_FIELDS) - covered)
 
 
 ES_D3 = {   # name -> switches; one 5-week ES window (2022-09-12 .. 2022-10-14)
     "A": dict(max_trades_month=8, weekly_target_pct=1.0, skip_fri_if_week_up=True, low_mag_mult=0.5, journal_timing=True, checklist="tag", choppy_week_tag=True, carry_weekly_draw=True,
               thu_targets_met_block=True, missed_week_mode="nearest", weekly_po3=True),
     "B": dict(consol_pm_need_sweep=True, consol_day_rules="tag", consol_pm_pool_exit=True, pm_narrative=True, noon_rev_flat=True, noon_rev_pm=True, pm_mm_target=True, london_ext_consol=True,
-              tgif_branch=True, tgif_seq=True, tgif_window="am", tgif_precond="loose", tgif_thu=True, mw_extreme_need_array=True, trend_k=0.3),
+              tgif=True, tgif_branch=True, tgif_seq=True, tgif_window="am", tgif_precond="loose", tgif_thu=True, mw_extreme_need_array=True, trend_k=0.3),
 }
 NEED_ES3 = {"A": ("low_mag_size", "checklist_eval"), "B": ("checklist_eval",)}
 

@@ -97,7 +97,7 @@ ES_CASES = {
     "j": (W8, ES_NB, dict(SMP, ladder_preset="096", vi_arrays=True, sd_targets=True, sd_levels=(1.0, 1.5, 2.0, 2.5, 3.0)), ("ladder_096",)),
     "i": (W2, ES_NB, dict(SMP, ladder_preset="041", sd_targets=True, htf_targets=HTW), ("ladder_041",)),
     "l": (WL, dict(ES_NB, draw_lock="session"), dict(pm_carry_draw=True, pm_carry_erase=True, skip_balanced=True), ("eval_pm_carry", "pm_carry_erased", "skip_balanced")),
-    "k": (("2023-11-20", "2024-02-27"), ES_NB, dict(SMP, tgif=True, tgif_zone=True, tgif_exits="066", tgif_reentry_pm=True, tgif_last_hour_cover=True), ("eval_tgif066",)),     # (the TGIF tag needs ~13 weeks of history)
+    "k": (("2023-11-20", "2024-02-27"), ES_NB, dict(SMP, tgif=True, tgif_window="off", tgif_min_adr=0.0, tgif_need_htf_array=False, tgif_zone=True, tgif_exits="066", tgif_reentry_pm=True, tgif_last_hour_cover=True), ("eval_tgif066",)),     # (the TGIF tag needs ~13 weeks of history)
 }
 
 

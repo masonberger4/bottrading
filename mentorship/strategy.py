@@ -3167,9 +3167,10 @@ class Params:
     choppy_week_tag: bool = False        # N8-choppy-week-no-hold (079 ~00:21:40): after choppy_week_days consecutive days that each swept the prior day's high (bearish week; low if bullish) before the bias-direction extreme: tag choppy_week; the day takes the slow ladder and no runner
     choppy_week_days: int = 2            # ... [our interpretation] "consecutive days" = 2
     tgif_week_high_exit: bool = True     # M14-tgif-invalidation-timing (075 ~01:40:30): with tgif on, a TGIF order is void (pending cancelled, stop at the level) beyond the week high (low) that preceded it
-    tgif_window: str = "off"             # M14-tgif-am-timing (085 ~00:17:32; 089 ~00:01:29): TGIF entries only in "am" (09:30-12:00) | "london_close" (10:00-12:00) | "pm" (13:30-15:00); "off" = no window (the spec default "pm" would narrow the existing tgif / tgif_timing behaviour - owner question)
-    tgif_min_adr: float = 0.0            # M14-tgif-am-timing: the Mon-Thu range must exceed this x ADR5 for a TGIF tag (0 = off; spec value 3.0)
-    inside_bisi_redelivered: bool = False  # B17-M15-madeuce-inside-bisi (091 ~00:15:17): the sloppy "inside_bisi" fires only when yesterday already traded through the daily FVG's CE and today opens within bisi_ce_band of it; Ma Deuce is exempt when the open is in the premium (discount) half and the CE was never traded through
+    tgif_window: str = "pm"              # M14-tgif-am-timing (085 ~00:17:32; 089 ~00:01:29; spec default "pm"): with tgif on, TGIF entries only in "am" (09:30-12:00) | "london_close" (10:00-12:00) | "pm" (13:30-15:00); "off" = no window. Under tgif_model the M14.3 tgif_timing windows stay in force (unless tgif_model_skip has "tgif_timing")
+    tgif_min_adr: float = 3.0            # M14-tgif-am-timing (spec default 3.0): with tgif on, the Mon-Thu range must exceed this x ADR5 for a TGIF tag (0 = off)
+    tgif_need_htf_array: bool = True     # M14-tgif-am-timing (spec default True): with tgif on, the Friday sweep must be at a same-side HTF array (tgif_htf_array behaviour); tgif_precond="loose" waives it
+    inside_bisi_redelivered: bool = False  # B17-M15-madeuce-inside-bisi (091 ~00:15:17): the sloppy "inside_bisi" fires only when yesterday already traded through the daily FVG's CE and today opens within bisi_ce_band of it (in the not-yet-re-delivered premium-half state it does not fire, so Ma Deuce is free there)
     bisi_ce_band: float = 0.15           # ... [our interpretation] the band = this share of the FVG's height around its CE
     weekly_po3: bool = False             # M17-weekly-judas-po3 (cc07_008 ~00:31:31): weekly bias set: Mon-Wed entries in its direction only while price is beyond the weekly open (above for bearish), the other side blocked; tag weekly_judas
     journal_timing: bool = False         # OT-X16-time-to-move-journal (042 ~00:51:03): Trade.min_to_fav / min_to_exit / first_exit_kind / mfe_pts / mae_pts and the day tags pre_fomc / news_day (reporting only)
@@ -4567,7 +4568,7 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
     at = lambda m: _idx_at(ctx, m)
     _LD4._c(ctx)["tgt_ext"] = (ext_i, None if leg is None else leg[0])      # caption-gap new-trendline-trap-target: the sweep this call prices
     pdk = ("pdh1", "pdh2", "pdh3") if sd.sign > 0 else ("pdl1", "pdl2", "pdl3")
-    if p.tgif_no_rel and sd.sign in getattr(ctx, "block_side", {}).get("tgif", ()):
+    if p.tgif and p.tgif_no_rel and sd.sign in getattr(ctx, "block_side", {}).get("tgif", ()):
         eq = []                             # caption-gap M14-tgif-timing-and-precondition (084 ~00:18:42): the with-trend side of a TGIF Friday does not target the remaining relative equal highs / lows
     if p.matrix_days == "ict":              # Ep08.10: today (pool_today_hl) + yesterday + the day before
         pdk = pdk[:2]
@@ -5376,7 +5377,7 @@ def day_context(hist: list[pd.DataFrame], day, p: "Params | None" = None, eth: d
     if len(d) == 3 and abs(d.sum()) == 3:
         tags.add("three_up" if d[0] > 0 else "three_down")
         block["three"] = (int(d[0]),)
-    if day.weekday() == 4 and p is not None and p.tgif_htf_array and p.tgif_precond == "strict":      # (caption-gap M14-tgif-timing-and-precondition: "loose" = the large one-way week alone, the elif branch)
+    if day.weekday() == 4 and p is not None and _DWC3.tgif_array_needed(p) and p.tgif_precond == "strict":      # (caption-gap M14-tgif-timing-and-precondition: "loose" = the large one-way week alone, the elif branch)
         tag_, blk_ = _DW.tgif_context(hist, day, p, eth, conf)        # M14.1: full-session week + the HTF array check
         if tag_:
             tags.add(tag_)
@@ -5399,7 +5400,7 @@ def day_context(hist: list[pd.DataFrame], day, p: "Params | None" = None, eth: d
                     tags.add("tgif_short"); block["tgif"] = (1,)
                 elif c <= lo + 0.25 * (hi - lo):
                     tags.add("tgif_long"); block["tgif"] = (-1,)
-    if p is not None and p.tgif_min_adr and ("tgif_short" in tags or "tgif_long" in tags) and not _DWC3.tgif_adr_ok(hist, day, p):
+    if p is not None and p.tgif and p.tgif_min_adr and ("tgif_short" in tags or "tgif_long" in tags) and not _DWC3.tgif_adr_ok(hist, day, p):
         tags -= {"tgif_short", "tgif_long"}                    # caption-gap M14-tgif-am-timing: the trending week must exceed tgif_min_adr x ADR5
         block.pop("tgif", None)
     if p is not None and p.tgif_strict and ("tgif_short" in tags or "tgif_long" in tags):
@@ -6213,14 +6214,10 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     # owner #10: sloppy days ("off" = tag only; neutral_skip above is the old alias)
     sl_day = sloppy_day(hist, day, p, ctx.opens.get("midnight")) if p.sloppy_tests else set()
     sl_all_day = {r for r in sl_day if not r.endswith(":PM")}
-    md_only = False
     if p.sloppy_mode == "stand_aside" and sl_all_day:
-        if p.ma_deuce and p.inside_bisi_redelivered and sl_all_day == {"inside_bisi"} and _DWC3.md_inside_exempt(hist, ctx.opens.get("midnight"), p):
-            md_only = True                                # caption-gap B17-M15-madeuce-inside-bisi: Ma Deuce alone may trade inside the not-yet-re-delivered range (the main loop stands aside per bar)
-        else:
-            if skips is not None:
-                skips.append((day, symbol, "sloppy", "|".join(sorted(sl_all_day))))
-            return []
+        if skips is not None:
+            skips.append((day, symbol, "sloppy", "|".join(sorted(sl_all_day))))
+        return []
     ctx.sl_day = sl_day
     if p.conflicted_mode != "off":                       # caption-gap X14-conflicted-htf-one-entry (091 ~00:10:44): both sides valid / inside a daily BISI-SIBI
         ctx.conflicted = _ME3.conflicted_day(hist, bias, p)
@@ -6981,6 +6978,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         if chop.on:
             sl_now.add("chop")
         if p.sloppy_mode == "stand_aside" and sl_now:
+            _DWC3.log_veto(ctx, day, session, "sloppy:" + "|".join(sorted(sl_now)))     # caption-gap OT-filters-before-bias: the sloppy stand-aside is a logged veto too
             continue                                  # #10: no new entries while sloppy
         ctx.cur_sloppy = "|".join(sorted(sl_now))
         if pmr:                                       # setups_models M6: after the objective
@@ -7147,11 +7145,13 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     if p.ma_deuce:
         from .pre_open import run_ma_deuce
         trades += run_ma_deuce(ctx, hist, p, day, symbol, btag, sides)
-    if p.sb_model and not md_only:
+    if p.sb_model:
         from .sb_model import run_sb
         trades += run_sb(ctx, sides, p, day, symbol, blocked, btag)
     if p.ndog_scalp and post_eve is not None and len(post_eve):
         trades += _SM4.ndog_scalp(ctx, post_eve, p, day, symbol, btag)       # caption-gap new-ndog-asian-scalp: the Asian-evening NDOG scalp (its own window, after the day's frame)
+    if p.journal_timing and len(trades) > n_main:
+        _DWC3.journal_extras(ctx, trades[n_main:], p)      # caption-gap OT-X16-time-to-move-journal: the Silver Bullet / Ma Deuce / NDOG rows
     if p.daily_loss_pct > 0 and len(trades) > n_main:
         trades = _ES3.extras_loss_gate(trades, n_main, ctx, p)      # caption-gap E11-funded-account-caps (review fix): the Ma Deuce / Silver Bullet / NDOG rows obey the day's loss limit too
     if _out is not None:
@@ -9963,6 +9963,7 @@ from . import nct2 as _NCT  # noqa: E402  (caption-gap pass, news_calendar_times
 from . import dwc1 as _DWC  # noqa: E402  (caption-gap pass, day_week_context#1/3: engine glue)
 from . import dwc2 as _DWC2  # noqa: E402  (caption-gap pass, day_week_context#2/3: engine glue)
 from . import dwc3 as _DWC3  # noqa: E402  (caption-gap pass, day_week_context#3/3: engine glue)
+INDEX_SYMBOLS = _DWC3.INDEX_SYMBOLS   # OT-stocks-swing-only: the labels that are not individual stocks (the spec lists eight; the set is wider - owner question)
 from . import setups as _SM   # noqa: E402  (setups_models package; imports this module back)
 from . import entries as _EN  # noqa: E402  (entries_stops_sizing package; imports this module back)
 from . import targets as _TP  # noqa: E402  (targets_partials package: speed bump, rung plan, partials)
