@@ -23,6 +23,7 @@ Pieces
 from __future__ import annotations
 
 import csv
+import os
 from collections import Counter
 from datetime import date, timedelta
 from functools import lru_cache
@@ -162,7 +163,7 @@ def _nwog(ctx, hist, d: date, p, eth):
 # --------------------------------------------------------------------------------------------------------------
 
 @lru_cache(maxsize=32)
-def _flags_cached(spec) -> tuple:
+def _flags_cached(spec, _mtime=None) -> tuple:
     rows = []
     if isinstance(spec, str):
         with open(spec, newline="", encoding="utf8") as f:
@@ -190,7 +191,13 @@ def macro_flags(spec) -> dict:
     """{Monday of the flagged week: direction (+1 / -1 / 0 = uncertainty only)}; `spec` is a CSV path (columns week, direction) or a tuple of "YYYY-MM-DD[:dir]"; "" / () = none."""
     if not spec:
         return {}
-    return dict(_flags_cached(spec if isinstance(spec, str) else tuple(spec)))
+    if isinstance(spec, str):
+        try:
+            mt = os.path.getmtime(spec)                 # the cache is keyed on the file's mtime: an edited CSV is re-read
+        except OSError:
+            mt = None
+        return dict(_flags_cached(spec, mt))
+    return dict(_flags_cached(tuple(spec)))
 
 
 def macro_week(p, d: date):
@@ -540,7 +547,7 @@ def wk_profile_name(ctx, hist, d: date, p, a5) -> str:
     if not bias or not wk or wk[0].index[0].date().weekday() != 0:
         return "none"
     mh = mon_how_state(ctx, hist, d, p)
-    if mh is not None and mh[0] == -bias:                       # the bearish Monday high of a bearish week / the bullish mirror
+    if mh is not None and mh[0] == bias:                       # the bearish Monday high of a bearish week / the bullish mirror
         return "mon_how"
     pre = [x for x in hist if x.index[0].date() < wk[0].index[0].date()]
     zones = _alive_zones(pre, "bull" if bias > 0 else "bear")
@@ -691,6 +698,7 @@ def plan_rules(P, ctx, d: date, p, hist, eth, a5, dt) -> None:
     if p.sd_week_detect and (p.sd_week_skip != "off"):
         flag, rel = sd_week_detected(hist, d, p, a5, getattr(ctx, "conf", None))
         P.info["sd_week_detect"] = (flag, rel)
+        P.info["sd_week"] = bool(flag and not rel)                  # the intraday seek_destroy context (sd_no_hold / sd_context_required) follows the detector, not the calendar-only _sd_week
         tg.discard("sd_week")
         P.blocks = [(s_, r_) for s_, r_ in P.blocks if r_ != "sd_week"]        # the calendar-only block of N8.6 sd_week_skip is replaced by the detector
         if flag:
@@ -719,8 +727,6 @@ def plan_rules(P, ctx, d: date, p, hist, eth, a5, dt) -> None:
         fd = fri_dir(hist, d)
         if fd:
             P.info["fri_dir"] = fd
-            if p.fri_one_sided == "raid_first":
-                P.set_scalp("fri_one_sided")                          # small targets (~5 handles, Params.fri_t1_pts)
     # BH-mixed-HTF-intraday-only (068 ~04:27)
     if p.macro_risk_dates and macro_week(p, d) is not None and weekly_fvg_fresh_inside(hist, d):
         tg.add("macro_risk_week")
@@ -945,6 +951,37 @@ def _sd_scan(ctx, p, S):
     return None
 
 
+def sd_fvg_held(ctx, fi: int, i: int, hh: float, ll: float) -> bool:
+    """N8-intraday-seek-destroy rule (b) (015 ~00:21:31): after the first close beyond the flagged range (up: > hh, down: < ll) an FVG forms in that direction (three closed bars, the middle
+    bar's displacement) and price later retraces into it with a bar that closes without a body through it (up: low <= the gap top and close >= the gap bottom). Reads bars <= i only
+    [our interpretation: the FVG is the first one whose third bar is at or after the breaking bar]."""
+    c, h, l = ctx.c, ctx.h, ctx.l
+    bk, d = None, 0
+    for k in range(fi + 1, i + 1):
+        if c[k] > hh:
+            bk, d = k, 1
+            break
+        if c[k] < ll:
+            bk, d = k, -1
+            break
+    if bk is None:
+        return False
+    for k in range(max(bk, fi + 2), i + 1):
+        if d > 0 and l[k] > h[k - 2]:
+            lo_, hi_ = float(h[k - 2]), float(l[k])
+        elif d < 0 and h[k] < l[k - 2]:
+            lo_, hi_ = float(h[k]), float(l[k - 2])
+        else:
+            continue
+        for j in range(k + 1, i + 1):
+            if d > 0 and l[j] <= hi_ and c[j] >= lo_:
+                return True
+            if d < 0 and h[j] >= lo_ and c[j] <= hi_:
+                return True
+        break                                                     # only the first FVG counts
+    return False
+
+
 def gate(ctx, p, session: str, i: int, t: int, trades=()):
     """Per-bar session gates: post_holiday_am "symmetry" (the NY AM waits for ES / NQ to break the same side of the 09:30-09:45 range) and the sd_intraday "rules" (no entry before the flagged
     range is broken by a close; none after the locked HTF level traded)."""
@@ -954,6 +991,9 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()):
     DW = _DW()
     if P.info.get("ph_symmetry") and session in DW.NY_AM:
         from . import nct2 as _N2
+        if getattr(ctx, "pside", (None, None, None))[0] is None:
+            hit("post_holiday_symmetry_nopartner")                 # no partner index (a SPY-only run): the symmetry cannot be judged, so the old post-holiday AM block stays [our interpretation]
+            return "x_dw_post_holiday_symmetry"
         if not _N2.symmetry_ok(ctx, p, i):
             hit("post_holiday_symmetry_wait")
             return "x_dw_post_holiday_symmetry"
@@ -967,6 +1007,9 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()):
             if not broke:
                 hit("sd_intraday_wait")
                 return "x_dw_sd_intraday_range"
+            if p.sd_fvg_hold and not sd_fvg_held(ctx, fi, i, hh, ll):
+                hit("sd_intraday_fvg_wait")
+                return "x_dw_sd_intraday_fvg"
             for s_, lk in (getattr(ctx, "lock", None) or {}).items():
                 di = lk.get("delivered_i")
                 if lk.get("delivered") and di is not None and di <= i and s_ not in ("PM", "LH") and di >= fi:
@@ -977,6 +1020,10 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()):
 
 def scalp_now(ctx, p, session: str, i) -> str:
     """sd_intraday "rules": a flagged session's orders are scalps (single exit, no runner / trailing to a second target)."""
+    P = getattr(ctx, "dplan", None)
+    if p.fri_one_sided == "raid_first" and P is not None and fri_overnight_ok(ctx, p, P, i):
+        hit("fri_one_sided_scalp")
+        return "fri_one_sided"                                   # small targets (~5 handles, Params.fri_t1_pts), independent of the other scalp reasons' order
     if p.sd_intraday == "rules" and i is not None and session not in ("PM", "LUNCH", "LH"):
         if sd_intraday_at(ctx, p, i) is not None:
             hit("sd_intraday_scalp")
@@ -1000,11 +1047,16 @@ def side_ok(ctx, p, sign: int, session: str, i: int):
         dh = DW._day_hl(ctx, i)
         k = tpl["kind"]
         if k == "nwog_up_bull" and sign > 0:
-            ok = dh is not None and dh[1] <= tpl["ce"]                    # the Friday close traded or the CE touched ("the CE holds")
+            lo_ = None if dh is None else dh[1]
+            ev_ = getattr(ctx, "eve", None)
+            if ev_ and lo_ is not None:
+                lo_ = min(lo_, float(ev_[2]))                              # the Sunday evening session (where the gap normally fills) counts for the Friday-close / CE test
+            ok = lo_ is not None and lo_ <= tpl["ce"]                      # the Friday close traded or the CE touched ("the CE holds")
             if not ok:
                 hit("nwog_up_bull_wait")
                 return "x_dw_nwog_up_bull"
         elif k == "nwog_below_wick_bull" and sign > 0:
+            # [our interpretation] "the first session's close": any close of the first trading day (the frame from midnight) at or above the prior low reclaims the wick
             seg = ctx.c[ctx.start:i + 1]
             if not (len(seg) and float(seg.max()) >= tpl["prior_low"]):    # reclaimed by a close
                 hit("nwog_below_wick_wait")
@@ -1038,6 +1090,25 @@ def side_ok(ctx, p, sign: int, session: str, i: int):
     return None
 
 
+def fri_overnight_ok(ctx, p, P, i) -> bool:
+    """BH-B17-friday-after-one-sided-week (045 ~00:11:00): Friday follows a one-way Tue-Thu week AND the pre-open (overnight) high is above Thursday's high (the low below Thursday's low for the
+    bearish week). Known only once the 09:30 bar has closed (i >= its index), so an order armed before it is not gated [our interpretation: a pre-open order cannot satisfy 'the sweep
+    below the 09:30 open', and the 09:30 open is not yet known]."""
+    fd = P.info.get("fri_dir") if P is not None else 0
+    if not fd or i is None:
+        return False
+    S = _S()
+    k0 = S._idx_at(ctx, 570)
+    if k0 >= len(ctx.t) or i < k0:
+        return False
+    hist = getattr(ctx, "hist", [])
+    pre = _DW().overnight_stats(ctx, p, hist)
+    if pre is None or not hist:
+        return False
+    thu = hist[-1]
+    return (pre["hi"] > float(thu.high.max())) if fd > 0 else (pre["lo"] < float(thu.low.min()))
+
+
 def order_ok(ctx, sd, o: dict, session: str, i: int, p):
     """Per-order filters: thu_strict, fri_one_sided "raid_first", mon_how "gate", objective_frac_gate."""
     P = getattr(ctx, "dplan", None)
@@ -1068,20 +1139,14 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p):
         hit("thu_strict_pass")
     # BH-B17-friday-after-one-sided-week (045 ~00:11:00): the continuation long needs the sweep below the 09:30 open
     fd = P.info.get("fri_dir")
-    if p.fri_one_sided == "raid_first" and fd and sd.sign == fd:
+    if p.fri_one_sided == "raid_first" and fd and sd.sign == fd and fri_overnight_ok(ctx, p, P, i):
         k0 = S._idx_at(ctx, 570)
-        pre = DW.overnight_stats(ctx, p, getattr(ctx, "hist", []))
-        thu_hi = None
-        hist = getattr(ctx, "hist", [])
-        if hist:
-            thu_hi = float(hist[-1].high.max()) if fd > 0 else float(hist[-1].low.min())
-        if pre is not None and thu_hi is not None and k0 < len(ctx.t) and ((pre["hi"] > thu_hi) if fd > 0 else (pre["lo"] < thu_hi)):
-            ext = sd.x(o["ext"])
-            op = float(ctx.o[k0])
-            if not ((ext < op) if fd > 0 else (ext > op)):
-                hit("fri_raid_first_reject")
-                return "x_dw_fri_raid_first"
-            hit("fri_raid_first_pass")
+        ext = sd.x(o["ext"])
+        op = float(ctx.o[k0])
+        if not ((ext < op) if fd > 0 else (ext > op)):
+            hit("fri_raid_first_reject")
+            return "x_dw_fri_raid_first"
+        hit("fri_raid_first_pass")
     # NEW-monday-high-of-week-profile (078 ~01:07:29)
     mh = P.info.get("mon_how")
     if p.mon_how == "gate" and mh is not None and sd.sign == mh[0]:
@@ -1168,4 +1233,6 @@ def entry_tags(ctx, p, P, k: int) -> set:
         t.add("sd_intraday")
     if P.info.get("one_sided"):
         t.add("one_sided_week")
+    if P.info.get("fri_dir") and p.fri_one_sided != "off" and fri_overnight_ok(ctx, p, P, k):
+        t.add("fri_one_sided")                                   # Tue-Thu one way and the overnight high above Thursday's high
     return t

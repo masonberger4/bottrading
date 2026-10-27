@@ -25,7 +25,7 @@ COLS = ["entry_time", "entry", "stop", "t1", "shares", "entry_kind", "lv_tags", 
 
 NEW_FIELDS = (
     "pre_cpi_mon", "pre_cpi_gap_adr", "landmine_min", "post_holiday_am", "holiday_nfp_override", "holiday_week_mult", "august_mode", "summer_off", "season_quality", "season_autumn_start",
-    "season_march_mult", "skip_election", "holiday_eve_cases", "objective_frac_gate", "objective_done_pm", "sd_intraday", "sd_intraday_until", "sd_intraday_frac", "sd_week_detect",
+    "season_march_mult", "skip_election", "holiday_eve_cases", "objective_frac_gate", "objective_done_pm", "sd_intraday", "sd_intraday_until", "sd_intraday_frac", "sd_fvg_hold", "sd_week_detect",
     "sd_shallow_frac", "sd_after_array", "big_day_am_resume", "nwog_templates", "thu_strict", "fri_one_sided", "fri_t1_pts", "season_windows", "season_gate", "season_move_adr",
     "season_min_rank", "macro_risk_dates", "tgif_strict", "tgif_weeks", "mo_overdue", "mon_how", "mon_how_edge", "wk_push_range", "wk_profile", "iw_reversal_watch", "iw_k", "iw_no_measured",
     "three_day_small", "day_profile", "day_profile_gate", "n8_use_overnight")
@@ -431,6 +431,8 @@ def test_post_holiday_symmetry(monkeypatch):
     assert ctx.dplan.static_reason("AM", 600) is None and ctx.dplan.info["ph_symmetry"]               # skip_post_holiday_am (default on) is lifted
     assert not any(r == "post_holiday_am" for _s, r in ctx.dplan.blocks)
     i = at(ctx, "10:00")
+    assert DW.gate(ctx, p, "AM", i, 600) == "x_dw_post_holiday_symmetry" and D1.HITS["post_holiday_symmetry_nopartner"]       # no partner: the AM stays blocked
+    ctx.pside = (object(), None, None)
     monkeypatch.setattr(N2, "symmetry_ok", lambda c, p_, i_: False)
     assert DW.gate(ctx, p, "AM", i, 600) == "x_dw_post_holiday_symmetry"                                # before both indexes break the 09:30-09:45 range
     assert DW.gate(ctx, p, "LUNCH", i, 720) is None and DW.gate(ctx, p, "PM", i, 810) is None            # only the AM waits
@@ -511,6 +513,27 @@ def _zigzag():
     return rows + [(100.4, 100.6, 100.2, 100.4)] * 24
 
 
+def test_sd_fvg_hold():
+    """Rule (b): after the close beyond the range an FVG in that direction and a retrace into it that closes without a body through it."""
+    d = D0
+    n = 40
+    def run(bars):
+        rows = [(o, h, l, c) for o, h, l, c in bars]
+        return mk(d, history(d), Params(**BASE), rows=rows, start="09:30")
+    flat = [(100.0, 100.5, 99.5, 100.0)] * 6
+    up_break = flat + [(100.0, 103.0, 100.0, 102.8), (102.8, 105.0, 102.0, 104.8), (104.8, 107.0, 104.5, 106.8)]       # the first close > range high is the 7th bar
+    ctx = run(up_break)
+    a = at(ctx, "09:30")
+    hh, ll = 100.5, 99.5
+    held = up_break + [(106.8, 106.9, 101.5, 105.0)]                                                                    # the first FVG [100.5, 102.0] (bars 6-8 of the move); a retrace to 101.5 closing 105.0 holds
+    ctx2 = run(held)
+    assert D1.sd_fvg_held(ctx2, a, a + len(held) - 1, hh, ll)
+    thru = up_break + [(106.8, 106.9, 99.0, 100.0)]                                                                    # closes through the gap: not a hold
+    ctx3 = run(thru)
+    assert not D1.sd_fvg_held(ctx3, a, a + len(thru) - 1, hh, ll)
+    assert not D1.sd_fvg_held(ctx, a, a + 5, hh, ll)                                                                    # no close beyond the range yet
+
+
 def test_sd_intraday_flag():
     p = Params(**BASE, sd_intraday="tag")
     ctx = mk(D0, history(D0), p, rows=_zigzag())
@@ -579,6 +602,20 @@ def test_n8_no_overnight():
     wide = mk(d, h, Params(**BASE, trend_recipe="tag", n8_use_overnight=False), spike=False)
     spiky = mk(d, h, Params(**BASE, trend_recipe="tag", n8_use_overnight=False), spike=True)
     assert ("trend_recipe" in wide.dplan.tags) == ("trend_recipe" in spiky.dplan.tags)
+
+
+def test_n8_day_range_rth_only_and_sd_week_info():
+    d = date(2023, 6, 14)
+    fr = history(d)[-1]
+    eth = {fr.index[0].date(): (0.0, float(fr.high.max()) + 50.0, float(fr.low.min()), 0.0)}
+    on = Params(**BASE, adr_basis="eth")
+    assert DW.day_range(fr, eth, on) == float(fr.high.max()) + 50.0 - float(fr.low.min())
+    assert DW.day_range(fr, eth, replace(on, n8_use_overnight=False)) == float(fr.high.max() - fr.low.min())      # RTH ranges for the day classifications
+    aug = date(2023, 8, 16)                                                                                       # calendar S&D week (August), no detector flag
+    base = Params(**BASE, sd_no_hold=True, sd_week_skip="tag")
+    assert mk(aug, history(aug), base).dplan.info["sd_week"] is True
+    det = mk(aug, history(aug), replace(base, sd_week_detect=True))
+    assert det.dplan.info["sd_week"] is False                                                                    # the intraday context follows the detector
 
 
 # --- week templates ------------------------------------------------------------------------------------------------------------------
@@ -667,7 +704,7 @@ def test_fri_one_sided():
     assert D1.fri_dir(h, fri) == 1 and D1.fri_dir(h[:3] + [daily(date(2023, 6, 15), 104.0, 107.0, 103.0, 103.0)], fri) == 0
     p = Params(**BASE, fri_one_sided="raid_first", fri_t1_pts=4.0)
     ctx = mk(fri, h, p, spike=True, base=107.5)                                                      # the pre-open spike makes a high above Thursday's 107
-    assert ctx.dplan.info["fri_dir"] == 1 and "fri_one_sided" in ctx.dplan.scalp
+    assert ctx.dplan.info["fri_dir"] == 1 and not ctx.dplan.scalp                                    # the scalp is dynamic (needs the overnight high): independent of the scalp-reason order
     assert DW.scalp_now(ctx, p, "AM", at(ctx, "10:00")) == "fri_one_sided"
     sd = SimpleNamespace(sign=1, x=lambda v: v)
     op = float(ctx.o[at(ctx, "09:30")])
@@ -678,6 +715,26 @@ def test_fri_one_sided():
     assert c2.dplan.info["fri_dir"] == 1 and not c2.dplan.scalp and DW.order_ok(c2, sd, dict(entry=op + 1, ext=op + 0.5), "AM", at(c2, "10:00"), t) is None
     dn = mk(fri, h[:3] + [daily(date(2023, 6, 15), 104.0, 107.0, 103.5, 101.0)], p)                  # not a one-way week
     assert "fri_dir" not in dn.dplan.info
+    # the tag needs the overnight high above Thursday's high, known only once the 09:30 bar closed
+    assert "fri_one_sided" in D1.entry_tags(c2, t, c2.dplan, at(c2, "10:00"))
+    quiet = mk(fri, h, t, spike=False, base=100.0)                                                    # no high above Thursday's 107
+    assert "fri_one_sided" not in D1.entry_tags(quiet, t, quiet.dplan, at(quiet, "10:00")) and DW.scalp_now(quiet, p, "AM", at(quiet, "10:00")) == ""
+    assert DW.order_ok(quiet, sd, dict(entry=101.0, ext=100.6), "AM", at(quiet, "10:00"), p) is None  # not gated without the overnight raid
+    # an order armed before the 09:30 bar closes reads nothing from the open (no look-ahead)
+    early = mk(fri, h, p, spike=True, base=107.5, start="08:00")
+    ie = at(early, "09:00")
+    assert DW.order_ok(early, sd, dict(entry=op + 1, ext=op + 0.5), "AM", ie, p) is None and DW.scalp_now(early, p, "AM", ie) == ""
+    assert "fri_one_sided" not in D1.entry_tags(early, t, early.dplan, ie)
+
+
+def test_thu_strict_real_order_has_the_mss_bar(monkeypatch):
+    """The engine's own order dict carries the MSS bar (broke), so the displacement check of thu_strict is live (not dead code)."""
+    from test_review_fixes import A_LOCK
+    seen = []
+    orig = D1.order_ok
+    monkeypatch.setattr(D1, "order_ok", lambda ctx, sd, o, session, i, p: (seen.append(o), orig(ctx, sd, o, session, i, p))[1])
+    S.run_day(day(A_ROWS, d=D0, start="09:30", spike=True), history(D0), "ES", Params(**BASE, thu_strict=True), 5, locks=[], log=[], skips=[], bias_by_cut=A_LOCK)
+    assert seen and all("broke" in o for o in seen)
 
 
 def test_tgif_strict():
@@ -800,6 +857,36 @@ def test_mon_how(monkeypatch=None):
     bpre = [daily(date(2023, 5, 3), 3930.0, 3940.0, 3920.0, 3935.0), daily(date(2023, 5, 4), 3935.0, 3970.0, 3934.0, 3965.0), daily(date(2023, 5, 5), 3965.0, 3980.0, 3960.0, 3970.0)]
     bmon = daily(wk, 3970.0, 3975.0, 3950.0, 3975.0)                                                       # low 3950 inside the BISI [3940, 3960], a close above its top
     assert D1.mon_how_state(SimpleNamespace(bias_row={"flip": 1}), bpre + [bmon], tue, p) == (1, 3950.0)
+
+
+def test_wk_profile_mon_how_both_directions():
+    wk = date(2023, 5, 8)
+    pre = [daily(date(2023, 5, 3), 4070.0, 4080.0, 4060.0, 4065.0), daily(date(2023, 5, 4), 4065.0, 4066.0, 4030.0, 4035.0), daily(date(2023, 5, 5), 4035.0, 4040.0, 4020.0, 4030.0)]
+    mon = daily(wk, 4030.0, 4050.0, 4025.0, 4030.0)
+    tue = date(2023, 5, 9)
+    p = Params(**BASE, wk_profile="tag", mon_how="tag")
+    bear = SimpleNamespace(bias_row={"flip": -1})
+    assert D1.mon_how_state(bear, pre + [mon], tue, p) == (-1, 4050.0)
+    assert D1.wk_profile_name(bear, pre + [mon], tue, p, 50.0) == "mon_how"                                 # the bearish week (bias -1) with a Monday high of the week
+    assert mk(tue, pre + [mon], p, base=4030.0, bias_row={"flip": -1}).dplan.info["wk_profile"] == "mon_how"
+    bpre = [daily(date(2023, 5, 3), 3930.0, 3940.0, 3920.0, 3935.0), daily(date(2023, 5, 4), 3935.0, 3970.0, 3934.0, 3965.0), daily(date(2023, 5, 5), 3965.0, 3980.0, 3960.0, 3970.0)]
+    bmon = daily(wk, 3970.0, 3975.0, 3950.0, 3975.0)
+    bull = SimpleNamespace(bias_row={"flip": 1})
+    assert D1.wk_profile_name(bull, bpre + [bmon], tue, p, 50.0) == "mon_how"                               # the bullish mirror
+    assert D1.wk_profile_name(SimpleNamespace(bias_row={"flip": 0}), pre + [mon], tue, p, 50.0) == "none"
+
+
+def test_landmine_monday_through_the_dayplan():
+    mon = date(2023, 8, 7)
+    assert mk(mon, history(mon), Params(**BASE, monday_mode="skip")).dplan.static_reason("AM", 600) == "monday"
+    q = mk(mon, history(mon), Params(**BASE, monday_mode="skip", landmine_min=2))
+    assert q.dplan.static_reason("AM", 600) is None and "monday_exempt" in q.dplan.tags
+    assert mk(mon, history(mon), Params(**BASE, monday_mode="skip", landmine_min=3)).dplan.static_reason("AM", 600) == "monday"
+
+
+def test_seasonal_months_matches_the_default_map():
+    assert tuple({1: "bull", -1: "bear", 0: "cons"}[C.SEASONAL_MONTHS["ES"][m]] for m in range(1, 13)) == tuple(
+        {"split": "cons"}.get(v, v) for v in Params().seasonal_map), (C.SEASONAL_MONTHS, Params().seasonal_map)
 
 
 def test_wk_push_range():
@@ -963,11 +1050,14 @@ LA_DW = {   # name -> (window, switches); NEED = the dwc1.HITS counters the run 
     "holiday": ("W1", dict(holiday_week_mult=0.5, post_holiday_am="symmetry", holiday_eve_cases="ab", skip_holiday_eve=True, august_mode="light", holiday_nfp_override=True)),
     "week": ("W0", dict(wk_profile="tag", wk_push_range=True, mon_how="gate", iw_reversal_watch=True, iw_no_measured=True, thu_strict=True, fri_one_sided="raid_first", three_day_small=True,
                         sd_week_detect=True, sd_week_skip="skip", tgif_strict=True)),
+    "knobs": ("W0", dict(sd_week_detect=True, sd_week_skip="tag", sd_after_array=True, sd_shallow_frac=0.1, season_windows="tag", season_move_adr=1.0, season_autumn_start=10,
+                         season_march_mult=0.5, season_quality="size", mon_how="gate", mon_how_edge="ce", tgif_strict=True, tgif_weeks=1, fri_one_sided="raid_first", fri_t1_pts=3.0,
+                         iw_reversal_watch=True, iw_k=1.0, n8_use_overnight=False, nwog_templates="gate", wk_profile="tag", day_profile="tag", day_profile_gate=True)),
     "day": ("W2", dict(sd_intraday="rules", objective_frac_gate=0.6, objective_done_skip=True, objective_done_pm="reversal_only", big_day_am_skip=True, big_day_am_resume=645,
                        day_profile="tag", day_profile_gate=True, nwog_templates="gate", pre_cpi_mon="gap", macro_risk_dates=("2026-04-06", "2026-04-13"))),
 }
 NEED_DW = {"season": ("season_intra_gate", "season_size_prime"), "holiday": ("post_holiday_symmetry_wait", "holiday_week_mult"), "week": ("three_day_small", "thu_strict_time"),
-           "day": ("objective_done_pm_block", "objective_frac_reject", "sd_intraday_wait", "sd_intraday_after_draw")}
+           "knobs": ("season_size_prime",), "day": ("objective_done_pm_block", "sd_intraday_fvg_wait", "objective_frac_reject", "sd_intraday_wait", "sd_intraday_after_draw")}
 _RUNS = {}
 
 
@@ -1033,11 +1123,37 @@ def _day_la(d, rows, start, cuts, hist=None, min_trades=1, **kw):
 
 def test_look_ahead_hand_made_days():
     D1.HITS.clear()
-    _day_la(D0, A_ROWS, "09:50", ("10:05", "10:10", "10:30"), sd_intraday="rules", objective_frac_gate=0.9, objective_done_pm="reversal_only", objective_done_skip=True,
+    _day_la(D0, A_ROWS, "09:50", ("10:05", "10:10", "10:30"), min_trades=0, sd_intraday="rules")           # sd_fvg_hold on (the default): may wait out the whole day, still causal
+    _day_la(D0, A_ROWS, "09:50", ("10:05", "10:10", "10:30"), sd_intraday="rules", sd_fvg_hold=False, objective_frac_gate=0.9, objective_done_pm="reversal_only", objective_done_skip=True,
             season_windows="tag", season_gate=True, wk_profile="tag", wk_push_range=True, nwog_templates="gate", three_day_small=True, mon_how="gate", sd_week_detect=True,
             sd_week_skip="skip", day_profile="tag", iw_reversal_watch=True)
-    _day_la(date(2023, 1, 17), A_ROWS, "09:50", ("10:05", "10:30"), post_holiday_am="symmetry", skip_post_holiday_am=True, holiday_week_mult=0.5, season_quality="size")
-    assert D1.HITS["sd_intraday_scalp"] or D1.HITS["post_holiday_symmetry_open"] or D1.HITS["holiday_week_mult"] or D1.HITS["season_size_off"]
+    _day_la(date(2023, 1, 17), A_ROWS, "09:50", ("10:05", "10:30"), min_trades=0, post_holiday_am="symmetry", skip_post_holiday_am=True, holiday_week_mult=0.5, season_quality="size")
+    assert D1.HITS["sd_intraday_scalp"] or D1.HITS["post_holiday_symmetry_nopartner"] or D1.HITS["post_holiday_symmetry_open"] or D1.HITS["holiday_week_mult"] or D1.HITS["season_size_off"]
+
+
+def test_look_ahead_friday_raid_first_and_dates():
+    """A Friday after a one-way week with the overnight spike above Thursday's high: the gate / scalp / tag read the 09:30 bar only once it has closed; full vs truncated runs agree."""
+    fri = date(2023, 6, 16)
+    h = history(fri)[:-4] + [daily(date(2023, 6, 12), 97.0, 108.0, 90.0, 97.5), daily(date(2023, 6, 13), 97.5, 108.0, 90.0, 98.5), daily(date(2023, 6, 14), 98.5, 108.0, 90.0, 99.5),
+                             daily(date(2023, 6, 15), 99.5, 101.0, 90.0, 100.5)]
+    D1.HITS.clear()
+    _day_la(fri, A_ROWS, "09:50", ("09:25", "09:45", "10:05", "10:30"), hist=h, fri_one_sided="raid_first", fri_t1_pts=3.0)
+    assert D1.HITS["fri_one_sided_scalp"] and (D1.HITS["fri_raid_first_pass"] or D1.HITS["fri_raid_first_reject"]), dict(D1.HITS)
+    assert S.blocked(date(2026, 7, 1), "AM", Params(summer_off=True)) == "summer_off" and S.blocked(date(2026, 7, 1), "AM", Params()) != "summer_off"
+    assert S.blocked(date(2024, 11, 5), "AM", Params(skip_election="narrow")) == "election"
+
+
+def test_look_ahead_seasonal_long_history():
+    """A day with ~330 sessions of daily history (a trend, a prior-year window): the window / failed-window / size paths execute and are causal (full vs truncated runs)."""
+    d = date(2023, 10, 10)
+    n = 330
+    ser = _series(d - timedelta(days=int(n * 1.45)), [70 + 30 * k / n for k in range(n)], rng=3.0)
+    ser = [x for x in ser if x.index[0].date() < d]
+    ser = ser[:-8] + history(d)
+    D1.HITS.clear()
+    _day_la(d, A_ROWS, "09:50", ("10:05", "10:30"), hist=ser, season_windows="tag", season_gate=True, season_quality="size", season_min_rank=0.5, season_move_adr=1.0, mo_overdue=True,
+            seasonal_tag=True)
+    assert D1.HITS["season_failed_gate"] and D1.HITS["season_size_prime"], dict(D1.HITS)
 
 
 @pytest.mark.skipif(not ES, reason="no ES data")

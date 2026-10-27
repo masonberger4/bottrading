@@ -65,7 +65,7 @@ def day_range(fr, eth: dict | None, p) -> float:
     """One session's range on the p.adr_basis ("rth" = the 09:30-16:00 frame; "eth" = the full session from the
     evening reopen when ctx.eth has it, else RTH)."""
     d = fr.index[0].date()
-    if p.adr_basis == "eth" and eth and d in eth:
+    if p.adr_basis == "eth" and eth and d in eth and p.n8_use_overnight:      # (caption-gap N8-overnight-not-precursor cc10_009 ~00:00:55: n8_use_overnight False = RTH ranges for the day classifications)
         return float(eth[d][1] - eth[d][2])
     return float(fr.high.max() - fr.low.min())
 
@@ -545,15 +545,17 @@ def _friday_rules(P: DayPlan, ctx, d: date, p, hist, eth, a5) -> None:
 
 # --- Monday family (N10.2, D20, B16) -----------------------------------------------------------------------------
 
-def _nfp_fomc_week(d: date) -> bool:
-    return CAL.nfp_date(d) is not None or any("fomc" in events(x) for x in CAL.week_dates(d))
+def _nfp_fomc_week(d: date, p=None) -> bool:
+    from . import dwc1 as _D1                        # (caption-gap D20-landmine-week-monday 064 ~00:10:18: landmine_min releases Tue-Fri exempt Monday too)
+    return (CAL.nfp_date(d) is not None or any("fomc" in events(x) for x in CAL.week_dates(d))
+            or (p is not None and _D1.landmine_exempt(d, p)))
 
 
 def _monday_rules(P: DayPlan, ctx, d: date, p, hist, eth, a5) -> None:
     tg = P.tags
     monday_like = CAL.is_week_start(d)                  # Monday, or Tuesday after a Monday holiday (cc09_008 ~55:24)
     if monday_like and p.monday_mode != "trade":
-        if _nfp_fomc_week(d):
+        if _nfp_fomc_week(d, p):
             tg.add("monday_exempt")                      # Monday of an NFP / FOMC week is always a trading day (100; 101)
         else:
             tg.add("monday_rule")
@@ -563,7 +565,7 @@ def _monday_rules(P: DayPlan, ctx, d: date, p, hist, eth, a5) -> None:
                 P.block(MORNING | {"LUNCH"}, "monday_pm_only")
             elif p.monday_mode == "obvious":
                 P.info["monday_obvious"] = True           # evaluated at 09:30 (the htf row): gate()
-    if monday_like and p.monday_small_range and not _nfp_fomc_week(d):
+    if monday_like and p.monday_small_range and not _nfp_fomc_week(d, p):
         P.info["monday_small"] = True
     # N10.2 / cc12_003: "let Monday go" - Tuesday off Monday's extreme, Wednesday off Tuesday's
     if (p.tue_off_monday != "off" and d.weekday() in (1, 2) and hist

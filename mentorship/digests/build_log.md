@@ -2781,7 +2781,7 @@ Specs: `digests/rulebook_gaps/bias_htf_intermarket.md` items 11, 55, 56, 60, 61,
 - day_selection_news_calendar#34 D20-landmine-week-monday | done | `landmine_min` | 0 | `blocked()` skip_monday exemption (`CAL.landmine_count`: cpi / jobs / fomc / pce / ppi on Tue-Fri); note an FOMC or NFP week was already exempt - the test uses 2023-08-07 (CPI + PPI)
 - day_selection_news_calendar#35 N7-post-holiday-am-symmetry | done | `post_holiday_am` | "off" | trigger = post_holiday OR prior session an early close OR dt big_prev; "skip" blocks the NY AM, "symmetry" lifts `skip_post_holiday_am` and gates the NY AM on `nct2.symmetry_ok` (the item-28 helper is `nct2.symmetry_ok`; with no partner it is open)
 - day_selection_news_calendar#36 N7-holiday-week | done | `holiday_nfp_override`, `holiday_week_mult` | False, 1.0 | Thursday of NFP week not blocked with a holiday on Mon-Wed; holiday-week days: risk x mult and no adds when mult != 1
-- day_selection_news_calendar#37 N7-august | done | `august_mode`, `summer_off` | "off", False | "skip" (block), "light" (risk x0.5, no adds, scalp = a single exit at the first target); `august_from_day` already defaults to 1; summer_off in `blocked()` (Jun-Aug)
+- day_selection_news_calendar#37 N7-august | done | `august_mode`, `summer_off` | "off", False | "skip" (block), "light" (risk x0.5, no adds, scalp = a single exit AT the first target T1, no +5 cap (review fix); `august_from_day` already defaults to 1; summer_off in `blocked()` (Jun-Aug)
 - day_selection_news_calendar#38 B23-seasonal-quality | done | `season_quality`, `season_autumn_start`, `season_march_mult` | "off", 9, 1.0 | tags season_prime / season_poor / season_off + season_may_overlap; "size" = risk 1.0 / 0.5 / 0.75 (x march mult in March)
 - day_selection_news_calendar#39 B23-daily-seasonal-review | done | (`seasonal_tag`) | False | season_dir_+1/-1 and season_next_+1/-1 from the existing seasonal_map; `calendar.SEASONAL_MONTHS` is the precomputed list
 - day_selection_news_calendar#40 N7-election | done | `skip_election` | "off" | `CAL.ELECTIONS` {2020, 2024, 2028}; "two_weeks" Nov 1 .. election + 9 days, "narrow" election day + next trading day (`blocked()` returns "election")
@@ -2791,6 +2791,21 @@ Specs: `digests/rulebook_gaps/bias_htf_intermarket.md` items 11, 55, 56, 60, 61,
 - day_selection_news_calendar#44 N8-seek-destroy-week | partial | `sd_week_detect`, `sd_shallow_frac`, `sd_after_array` | False, 0.25, False | detector on Wed / Thu (kept to Friday) replaces the calendar-only tag when `sd_week_skip` is "tag" / "skip"; "released" once the week's extreme touched a D / W array. NOT built: the Thursday-news raid and the post-array reversal setup text
 - day_selection_news_calendar#47 N8-large-org-day | done | `big_day_am_resume` | 0 | floor instead of block for `big_day_am_skip`'s AM (prior-range part) and the dynamic ORG part
 
+### Review fixes (caption-gap pass, day_week_context#1/3 round 2)
+
+- #55 thu_strict: the engine order dict now carries `broke` (the MSS bar), so the displacement check is live; test runs the real engine and checks the key.
+- #56 fri_one_sided: the gate / scalp / tag need `i >= the 09:30 bar` (no read of the open or the overnight stats before it); the overnight high above Thursday's high is part of the condition; the tag `fri_one_sided` is emitted in `entry_tags` (modes "tag" and "raid_first"); the scalp is dynamic (`dwc1.scalp_now`) so the fri_t1_pts cap no longer depends on the order of the scalp reasons.
+- #187 wk_profile: `mon_how` compares with `mh[0] == bias` (both directions tested).
+- #37 august "light": single exit at T1 without the +5 cap (the +5 cap stays for the other scalp-flagged rules, per the spec's "scalp").
+- #34 landmine: `_nfp_fomc_week(d, p)` honours `landmine_min`, so `monday_mode` and `monday_small_range` exempt a landmine Monday through the DayPlan.
+- #43: rule (b) built as `sd_fvg_hold` (default True, only in `sd_intraday="rules"`): after the first close beyond the range, the first FVG in that direction and a retrace into it closing without a body through it. Counter `sd_intraday_fvg_wait`.
+- #44: `P.info['sd_week']` follows the detector (flag and not released). Still NOT BUILT: the Thursday news raid and the post-array reversal setup.
+- #211: `day_range` ignores the globex part (RTH ranges) when `n8_use_overnight` is False, so the trending / big-day classifications do not read the overnight session either.
+- #35: with no partner instrument `post_holiday_am="symmetry"` keeps the AM blocked (counter `post_holiday_symmetry_nopartner`); the former owner question 6 is resolved this way.
+- #11: the touched-CE test counts the Sunday evening low (`ctx.eve`); the below-wick scope is commented. #72: the flags cache is keyed on the CSV's mtime. #39: a test pins `calendar.SEASONAL_MONTHS` to the default `seasonal_map`.
+- #159 parts (a)-(d) beyond the tag (FX leg, test trade, underlying trend outweighs) remain text only (NOT BUILT).
+- Look-ahead tests added: a Friday raid-first day, a 330-session seasonal day (season_failed_gate / size paths), a `knobs` synthetic set with the previously uncovered switches, date-only `summer_off` / `skip_election` via `blocked()`.
+
 ### Owner questions (caption-gap pass, day_week_context#1/3)
 
 1. N9-objective-before-lunch: the spec says `objective_done_skip` "must block only continuation, not the PM". The existing default (False) is untouched; `objective_done_pm="reversal_only"` is the corrected rule as a switch. Should it become the default of `objective_done_skip`?
@@ -2798,7 +2813,8 @@ Specs: `digests/rulebook_gaps/bias_htf_intermarket.md` items 11, 55, 56, 60, 61,
 3. #159 renamed the weekly-tone tags to season_win_prime / season_win_minor (the quality tags of #38 already use season_prime).
 4. #41: `skip_holiday_eve` stays a bool (old tests / presets); `holiday_eve_cases` ("a" / "ab") is the new switch. Same for #37: `august_from_day` was already 1.
 5. #72 / #162: `macro_risk_dates` is a manual input; no flagged weeks are shipped (the study variants use a small example list MACRO_RISK_EXAMPLE). Supply the real list or a CSV.
-6. #35: with no partner instrument `symmetry_ok` is open, so `post_holiday_am="symmetry"` on a SPY-only run lifts the holiday AM block altogether.
+6. #35: with no partner instrument the symmetry cannot be judged; the AM stays blocked (resolved in the review fix, confirm).
+7. #56 / #37 / #43: the +5 handle scalp cap (`sloppy_scalp_pts`) still applies to the Friday (fri_t1_pts), macro-risk, push-range, day-4 and intraday S&D scalps; only august light exits at T1. `sd_fvg_hold` is a new switch default True inside `sd_intraday="rules"` (the spec lists the FVG hold as part of the rules).
 
 ### Tests (caption-gap pass, day_week_context#1/3)
 

@@ -3104,6 +3104,7 @@ class Params:
     sd_intraday: str = "off"             # N8-intraday-seek-destroy (015 ~00:21:31; 024 ~00:19:27): "tag" or "rules" (single exit, no entry before the range breaks, none after the locked HTF level traded)
     sd_intraday_until: int = 630         # ... [our interpretation] the detector window 09:30-10:30
     sd_intraday_frac: float = 0.35       # ... [our interpretation] the session range < this x ADR5
+    sd_fvg_hold: bool = True             # N8-intraday-seek-destroy (015 ~00:21:31) rule (b), only with sd_intraday="rules": after the close beyond the flagged range wait for an FVG in the break direction and a retrace into it that closes without a body through it
     sd_week_detect: bool = False         # N8-seek-destroy-week (cc07_002 ~00:07:57): the S&D week needs the Mon-Wed/Thu shallow two-sided run (sd_shallow_frac x ADR5, no daily close beyond) on top of the FOMC / NFP / July-August calendar condition
     sd_shallow_frac: float = 0.25        # ... [our interpretation]
     sd_after_array: bool = False         # ... the week is released again once its extreme touched a D / W array (a new setup is then allowed)
@@ -9546,7 +9547,12 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         lvt.append("scalp_" + dws)
     if (sl and p.sloppy_mode == "scalp") or _NC.scalp_now(ctx, p, session) or dws:   # #10 scalp mode (N3.3: the FOMC-only AM):
                                           # one exit at min(+5, T1), no adds
-        lv, kinds, scalp, final_T = [min(entry + (p.chop_scalp_pts if (p.chop_scalp_pts > 0 and sl and p.sloppy_mode == "scalp") else (p.fri_t1_pts if dws == "fri_one_sided" else p.sloppy_scalp_pts)) * p.es_pt, lv[0])], [kinds[0]], True, False
+        _dsc = getattr(getattr(ctx, "dplan", None), "scalp", {})
+        if "august_light" in _dsc and not (sl and p.sloppy_mode == "scalp"):       # N7-august "light": a single exit AT the first target (no +5 cap)
+            _cap = lv[0]
+        else:
+            _cap = min(entry + (p.chop_scalp_pts if (p.chop_scalp_pts > 0 and sl and p.sloppy_mode == "scalp") else (p.fri_t1_pts if (dws == "fri_one_sided" or "fri_one_sided" in _dsc) else p.sloppy_scalp_pts)) * p.es_pt, lv[0])
+        lv, kinds, scalp, final_T = [_cap], [kinds[0]], True, False
     smt_n = int(sw["smt"] is True) + int(sw.get("smt2") is True)
     if smt_n < p.smt_min:
         _f("x_no_smt")
@@ -9618,7 +9624,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     order = dict(side=sd, session=session, setup=setup, swept=sw["name"],
                  smt=sw["smt"], smt2=sw.get("smt2"), smt_n=smt_n,
                  i=i, entry=entry, stop=stop, t1=lv[0],
-                 ext=sw["ext"], ext_i=sw["ext_i"],
+                 ext=sw["ext"], ext_i=sw["ext_i"], broke=sw.get("broke"),     # (caption-gap BH-N10-thursday-not-top-call: the MSS bar, read by dwc1.order_ok)
                  body_low=float(min(min(sd.o[k], c[k]) for k in range(max(0, sw["ext_i"] - 1), min(i, sw["ext_i"] + 1) + 1))),
                  t2=None if (scalp or p.t1_fixed_all) else
                  (lv[-1] if final_T and len(lv) > 1 else lv[1] if len(lv) > 1 else None),

@@ -2756,6 +2756,7 @@ _DWC1_DECISIONS = {
     "N9-objective-before-lunch_pm_reversal": dict(objective_done_skip=True, objective_done_pm="reversal_only", pm_lunch_target=True, **SM_POST),
     "N8-intraday-seek-destroy": dict(sd_intraday="tag", **SM_POST),
     "N8-intraday-seek-destroy_rules": dict(sd_intraday="rules", **SM_POST),
+    "N8-intraday-seek-destroy_rules_nohold": dict(sd_intraday="rules", sd_fvg_hold=False, **SM_POST),
     "N8-seek-destroy-week": dict(sd_week_skip="skip", sd_week_detect=True, **SM_POST),
     "N8-seek-destroy-week_array": dict(sd_week_skip="skip", sd_week_detect=True, sd_after_array=True, sd_shallow_frac=0.35, **SM_POST),
     "N8-large-org-day": dict(big_day_am_skip=True, big_day_am_resume=645, **SM_POST),
