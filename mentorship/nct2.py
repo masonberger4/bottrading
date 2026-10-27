@@ -340,7 +340,7 @@ def news_sequence(ctx, p, R: int, i: int):
     try:
         eqh = [v for v in S._eq_levels(sd, k0, tol, False, p) if v > px]
         eql = [-v for v in S._eq_levels(sd, k0, tol, True, p) if -v < px]
-    except Exception:
+    except (ValueError, IndexError):                     # (no equal-level pools could be built from these bars; a signature / data bug now raises)
         eqh, eql = [], []
     sw_h = [q.price for q in sd.ph if q.known <= k0 and q.price > px and not (ctx.h[q.i + 1:k0 + 1] >= q.price).any()]
     sw_l = [q.price for q in sd.pl if q.known <= k0 and q.price < px and not (ctx.l[q.i + 1:k0 + 1] <= q.price).any()]
@@ -599,12 +599,43 @@ def macro_fail_key(ctx, p, session: str, i: int, t: int):
         if p.macro_fail_scope == "session" and win_pm != here_pm:
             continue
         key = ("mfail", a, b)
-        if key not in cache:
-            cache[key] = DW._macro_test(ctx, p, "PM" if win_pm else "AM", a, b, i)
+        if not cache.get(key):                       # only a TRUE failure is cached: a False computed while the side was still unknown must be re-asked
+            cache[key] = DW._macro_test(ctx, p, "PM" if win_pm else "AM", a, b, i) and not _macro_displaced(ctx, p, session, a, b, i)
         if cache[key]:
             hit("macro_fail")
             return "x_macro_fail"
     return None
+
+
+def _macro_displaced(ctx, p, session: str, a: int, b: int, i: int) -> bool:
+    """The displacement half of the N9 failure proxy [our interpretation]: some bar of the window has a body in the draw direction at least 1.5 x the mean body of the reference minutes before it."""
+    lk = (getattr(ctx, "lock", None) or {}).get("PM" if session in ("PM", "LUNCH") else "AM")
+    side = int(lk["side"]) if lk and lk.get("side") else 0
+    if not side:
+        from .entries import bias_row_known
+        row = bias_row_known(ctx, i)
+        try:
+            side = int(row["draw"]) if row is not None else 0
+        except (KeyError, TypeError, ValueError):
+            side = 0
+    if not side:
+        return False
+    t, S = ctx.t, ctx.start
+    ref = np.flatnonzero((t[S:] >= a - p.macro_ref_min) & (t[S:] < a)) + S
+    win = np.flatnonzero((t[S:] >= a) & (t[S:] < b)) + S
+    if not len(ref) or not len(win):
+        return False
+    base = float(np.abs(ctx.c[ref] - ctx.o[ref]).mean())
+    mv = side * (ctx.c[win] - ctx.o[win])
+    return bool(base > 0 and (mv >= 1.5 * base).any())
+
+
+def macro_fail_close(p, session: str, done: dict) -> None:
+    """A failed macro ends the entries: the session's done keys (plain, Silver Bullet; Ma Deuce is a pre-08:00 setup that runs before any macro window, so it has no key to close), or every session's with scope "day"."""
+    ks = ["AM", "PM", "LUNCH", "PRE7", "PRE9", "NEWS", "PRE8", "LON"] if p.macro_fail_scope == "day" else [session]
+    for k in ks:
+        done[k] = True
+        done["SB_" + k] = True
 
 
 def gate2(ctx, p, day, session: str, t: int, i: int, wb: int, trades, done: dict, state: dict, pos, pending):
@@ -633,6 +664,7 @@ def gate2(ctx, p, day, session: str, t: int, i: int, wb: int, trades, done: dict
     # N9-macro-failure-any-macro
     why = macro_fail_key(ctx, p, session, i, t)
     if why:
+        macro_fail_close(p, session, done)
         return why, True
     # N1-nfp-both-sides-macro (073 ~00:13:15; ~00:26:38)
     if (p.nfp_both_sides or p.nfp_macro_only) and "jobs" in tags and session in AM_FAM + ("LUNCH",):
@@ -719,7 +751,7 @@ def _trend_side(ctx, p, session, sign, i):
         return None
     try:
         b = int(row["draw"]) or int(row["react"])
-    except Exception:
+    except (KeyError, TypeError, ValueError):
         return None
     if not b:
         return None
@@ -779,7 +811,7 @@ def _order_tags(ctx, sd, i: int, p, session: str, o_: dict):
         row = EN.bias_row_known(ctx, i)
         try:
             b = int(row["draw"]) or int(row["react"]) if row is not None else 0
-        except Exception:
+        except (KeyError, TypeError, ValueError):
             b = 0
         if kz_release_extreme(ctx, p, i, b):
             tags.append("kz_release_extreme")
@@ -914,7 +946,7 @@ def fade_order(ctx, sd, i: int, p, risk_mult: float):
 
 
 def bnb_order(ctx, sd, i: int, p, risk_mult: float):
-    """N5-soft-bias-pre-open (007 ~14:35, experienced; a long, shorts mirror) in 08:00-09:00: a sweep of a pre-market relative-low (a confirmed swing low made since 00:00) into an HTF discount
+    """N5-soft-bias-pre-open (007 ~14:35, experienced; side space; shorts run the same code on mirrored prices) in 08:00-09:00: a sweep of a pre-market relative-low (a confirmed swing low made since 00:00) into an HTF discount
     array (daily / 4h / 1h of this side), a bullish order block formed after the sweep that no close has broken: a limit at the block top, stop under its MT, target the nearest untaken short-term
     high; flat by 09:29. [our interpretation: the 1m OB is built on the base bars.]"""
     from . import levels as L
@@ -967,8 +999,6 @@ def special(ctx, sides, i: int, p, state: dict, pos, pending, risk_mult: float, 
             if (p.day_filter and S.blocked(ctx.day, ses, p, t)) or (p.skip_news and S.news(ctx.day) != "none" and key != "PNF"):
                 continue
             for sd in sides:
-                if key == "BNB" and sd.sign < 0:
-                    continue                             # the 007 example is a long (a Twitter call); no mirror is specified
                 out = fn(ctx, sd, i, p, risk_mult)
                 if out is not None:
                     break
@@ -1002,15 +1032,14 @@ def event_eve_noon(ctx, sd, pos, tr, i: int, ts, p, day, t: int, tf: int, c: flo
     from . import me2
     now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
     real = float(sd.x(c))
-    out = cf.targets(now, real, sd.sign, ("D",), far_edge=True)
-    n = len(out) // 3
-    if n < 1:
-        return False
     s = sd.sign
-    cand = [(s * out[k], s * out[2 * n + k]) for k in range(n)]
-    near_s, far_s = min(cand, key=lambda x: abs(x[0] - s * real))
-    height = far_s - near_s
-    if height <= 0 or far_s - s * real > 0.25 * height + 1e-9:
+    # arrays known at `now` (no beyond-price cut: the array price is inside or next to qualifies); near / far in real prices
+    cand = [(near, far) for near, far in cf.arrays_any(now, s, ("D",)) if abs(far - near) > 0 and s * (far - real) >= 0]
+    if not cand:
+        return False
+    near, far = min(cand, key=lambda x: abs(x[0] - real))
+    height = abs(far - near)
+    if s * (far - real) > 0.25 * height + 1e-9:
         return False
     if me2.partial_close(pos, tr, sd, ts, c, 0.5, "eve_noon", p) > 0:
         hit("eve_noon")

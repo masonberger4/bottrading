@@ -551,7 +551,7 @@ def test_macro_fail_scopes():
     assert N2.macro_fail_key(flat, allw, "AM", at(flat, "10:30"), 630) == "x_macro_fail"            # the 09:50 macro of the AM failed -> the AM ends
     dayw = Params(**BASE, macro_fail_scope="day")
     assert N2.macro_fail_key(flat, dayw, "PM", at(flat, "13:30"), 810) == "x_macro_fail"            # the AM failure closes the day
-    assert N2.macro_fail_key(flat, Params(**BASE, macro_fail_windows="all"), "PM", at(flat, "13:30"), 810) is None or True
+    assert N2.macro_fail_key(flat, Params(**BASE, macro_fail_windows="all"), "PM", at(flat, "13:30"), 810) == "x_macro_fail"   # the 13:10 PM macro itself failed
     # a macro that moves toward the draw is no failure
     run = {f"09:{50 + k:02d}": (100.0, 100.0, 100.0, 100.0) for k in range(0, 0)}
     moving = ctx_with({"09:55": (100.0, 103.0, 99.9, 102.9), "10:00": (102.9, 104.0, 102.5, 103.5), "10:05": (103.5, 104.5, 103.0, 104.0)})
@@ -661,6 +661,9 @@ class _DailyConf:
     def targets(self, now, beyond, side, tfs, far_edge=False, min_known=None):
         return [self.near, (self.near + self.far) / 2, self.far] if "D" in tfs else []
 
+    def arrays_any(self, t, side, tfs):
+        return [(self.near, self.far)] if "D" in tfs and side < 0 else []
+
     def at(self, t, price, side, known_by=None):
         return list(self.tfs)
 
@@ -691,7 +694,7 @@ def test_event_eve_noon_half_close():
     pos["k"] = 2
     assert N2.event_eve_noon(ctx, sd, pos, tr, 0, ctx.idx[0], p, thu, 700, 1, float(sd.c[0])) is False   # before 11:50
     assert N2.event_eve_noon(ctx, sd, pos, tr, 5, ctx.idx[5], p, thu, 705, 1, float(sd.c[5])) is False
-    assert not pos.get("eve_noon_done") or True
+    assert not pos.get("eve_noon_done")
 
 
 def test_event_eve_noon_once_per_position():
@@ -709,7 +712,7 @@ def test_hard_day_window_and_hold_through_the_release():
     """new-premarket-difficult-days: an 08:30 day with FOMC today or a high-impact event tomorrow gets the 07:00-08:30 window and holds through the release; other 08:30 days keep pre_flat_0830."""
     from test_news_calendar import HOLD
     hard = date(2023, 6, 13)
-    assert N2.hard_day(hard) and not N2.hard_day(NORMAL) and not N2.hard_day(NFP_ONLY.replace(day=NFP_ONLY.day)) or True
+    assert N2.hard_day(hard) and not N2.hard_day(NORMAL) and not N2.hard_day(NFP_ONLY)
     easy = find_day(lambda d: S.news(d) == "0830" and not N2.hard_day(d), date(2023, 1, 3))
     assert not N2.hard_day(easy)
     held = go(hard, rows=HOLD, start="07:30", pre_0700_hard_days=True)
@@ -799,6 +802,12 @@ def test_pre_open_bnb_order(cap):
     broken = book({**over, "08:25": (100.8, 100.95, 98.0, 98.4)})
     broken.conf = _DailyConf(("D",))
     assert N2.bnb_order(broken, broken.sides_map[1], at(broken, "08:30"), p, 1.0) is None            # a close under the MT: the block did not hold
+    mir = book({k: (200 - v[0], 200 - v[2], 200 - v[1], 200 - v[3]) for k, v in over.items()})         # the mirror image: a short off a swept pre-market HIGH
+    mir.conf = _DailyConf(("D",))
+    sm = mir.sides_map[-1]
+    cap.clear()
+    assert N2.bnb_order(mir, sm, i, p, 1.0) is not None and cap["tags"]["entry_kind"] == "pre_open_bnb"
+    assert cap["entry"] == pytest.approx(-100.0) and cap["stop"] == pytest.approx(-101.0)      # side space: the mirrored limit and stop
     fresh = book(over)
     fresh.conf = _DailyConf(("D",))
     sides = [fresh.sides_map[1], fresh.sides_map[-1]]
@@ -827,8 +836,8 @@ def test_news_trend_side():
     shallow = book({**over, "08:30": (100.0, 100.2, 99.5, 99.8), "08:35": (99.8, 100.0, 99.6, 99.9)}, d=d)
     shallow.bias_row = {"react": 1, "draw": 1, "pd": 0}
     shallow.cur_news = shallow.news_dr[510]
-    if shallow.cur_news["made"] is not None:
-        assert N2.side2(shallow, p, d, "AM", 1, max(shallow.cur_news["made"], at(shallow, "09:30")), 570) == "x_news_trend_noswept"
+    assert shallow.cur_news["made"] is not None
+    assert N2.side2(shallow, p, d, "AM", 1, max(shallow.cur_news["made"], at(shallow, "09:30")), 570) == "x_news_trend_noswept"
     assert N2.side2(ctx, Params(**BASE), d, "AM", -1, i, 570) is None
 
 
@@ -841,7 +850,7 @@ def test_pre_0900_no_news_in_the_engine():
     b = go(cpi, start="09:00", pre_0900=True, pre_0900_no_news=True, nfp_first_hour=False)
     assert not any(t.session == "PRE9" for t in b)
     c = go(cpi, start="09:00", pre_0900=True, nfp_first_hour=False)
-    assert not any(t.session == "PRE9" for t in c) or True
+    assert isinstance(c, list)
 
 
 def test_cpi_from_closes_the_morning_in_the_engine():
@@ -867,18 +876,18 @@ def test_nct_study_news_sequence_rows():
 W_NCT = {"W0": ("2026-04-20", "2026-05-01", 37), "W1": ("2026-04-27", "2026-05-13", 6), "W2": ("2026-04-27", "2026-05-13", 5), "W3": ("2026-01-26", "2026-02-06", 11)}
 LA_NCT = {   # name -> (window, switches, the nct2.HITS counters the run must bump)
     "fomc": ("W0", dict(pre_fomc_week_light=True, fomc_end=900, fomc_minutes_mode="block", post_fomc_am="symmetry", fomc_whipsaw_skip="am", london_kz=True, fomc_stage_study=True),
-             ("fomc_week_light", "fomc_end", "post_fomc_symmetry_wait")),
+             ("fomc_week_light", "fomc_end", "post_fomc_symmetry_wait", "tag_stage_B_840")),
     "am": ("W1", dict(am_search_minutes=60, macro_fail_windows="all", macro_fail_scope="day", macro_gate=True, macro_by="start", macro_trend_off=True, am_trend_end=630, am=(570, 720)),
-           ("macro_fail", "am_search", "am_trend_end")),
+           ("macro_fail", "am_search", "am_trend_end")),                       # (macro_trend_off / am_session: unit-tested; no synthetic day reaches them)
     "lunch": ("W0", dict(lunch_raid="first_of", lunch_raid_wait=True, lunch_trail_guard=True, lunch_by_speed=True, pm_array_from=810, pm_1400_disp=True),
-              ("lunch_raid_wait", "speed_fast")),
+              ("lunch_raid_wait", "speed_fast", "speed_mid", "tag_lunch_raided", "tag_pm_1400")),
     "pre": ("W0", dict(pre_0700=True, pre_0700_hard_days=True, hard_day_one_trade=True, pre_0900=True, pre_0900_no_news=True, pre_entry_guard=True, pre_draw_done_am=True),
             ("pre_guard_release",)),
     "news": ("W2", dict(nfp_both_sides=True, nfp_macro_only=True, two_driver_mode="wait2", multi_release="half", news_seq_study=True, kz_release_tag=True, news_sweep_min=60,
                         cpi_from=600, nfp_day_from=590),
-             ("multi_half", "nfp_both_wait")),
+             ("multi_half", "nfp_both_wait", "tag_news_sweep", "tag_news_seq_bsl_first", "tag_two_driver")),
     "news_b": ("W1", dict(multi_release="half", pre_news_coil=True, news_trend_side=True, event_eve_noon=True, two_driver_mode="skip"), ("multi_half",)),
-    "chop": ("W3", dict(chop_wait_bars=2, sloppy_tests=("chop",), sloppy_mode="off", am_search_minutes=90, am_search_sb="include", multi_release="tag", lunch_by_speed=True), ("tag_rel1", "speed_fast")),
+    "chop": ("W3", dict(chop_wait_bars=2, sloppy_tests=("chop",), sloppy_mode="off", am_search_minutes=90, am_search_sb="include", multi_release="tag", lunch_by_speed=True), ("tag_rel1", "speed_fast", "tag_am_speed_fast")),
 }
 _NRUNS = {}
 
@@ -940,6 +949,7 @@ def _day_la(d, rows, start, cuts, hist=None, min_trades=1, **kw):
 
 
 def test_look_ahead_hand_made_days():
+    N2.HITS.clear()
     from test_news_calendar import HOLD
     from test_review_fixes import A_ROWS
     hard = date(2023, 6, 13)
@@ -954,6 +964,10 @@ def test_look_ahead_hand_made_days():
     _day_la(NORMAL, A_ROWS, "09:50", ("10:05", "10:10", "10:30"), am=(570, 720), am_trend_end=660, macro_gate=True, macro_by="start", macro_gate_set=("1050", "0950"), macro_trend_off=True,
             fomc_whipsaw_skip="london", chop_wait_bars=2, post_fomc_am="symmetry", pre_fomc_week_light=True, pm_array_from=810)
     _day_la(date(2023, 9, 18), A_ROWS, "09:30", ("09:50", "10:00"), pre_fomc_week_light=True, pre_fomc_week_smt=True)
+    # (event_eve_noon, pre_news_coil, news_trend_side, two_driver_wait, fomc_whip_skip, trail_guard, pm_array_from, pm_1400, macro_trend_off, post_news_fade, pre_open_bnb, chop_wait,
+    #  pre_draw_done_am, hard_day_done, kz_release_extreme need a real confluence / calendar day / market data that no hand-made day here builds: they are covered by their unit tests
+    #  and, with market data present, by the ES windows below)
+    assert {"am_trend_end", "fomc_week_light", "lunch_raid_wait", "macro_fail"} <= set(N2.HITS)
 
 
 @pytest.mark.skipif(not ES, reason="no ES data")
@@ -989,3 +1003,17 @@ def test_news_pool_first_taken():
     assert len(rows) == 1 and rows.iloc[0]["first"] == 1 and rows.iloc[0]["release"] == 840
     srows = study.stage_label_rows(g, history(FOMC_ONLY), p, "TST")
     assert len(srows) == 1 and srows.iloc[0]["label"] in ("A", "B", "none")
+
+
+def test_arrays_any_on_the_real_confluence_keeps_the_array_price_is_inside():
+    """X10-pre-nfp-noon-exit: Confluence.arrays_any has no beyond-price cut (targets() drops an array the price is inside); a bullish daily FVG 3960-3970 is a short's array."""
+    from mentorship.confluence import Confluence
+    cf = object.__new__(Confluence)
+    cf.z = {"D": {"kind": np.array([1, -1]), "known": np.array([0.0, 0.0]), "dead": np.array([1e30, 1e30]), "life": np.array([1e30, 1e30]),
+                  "top": np.array([3970.0, 4100.0]), "bottom": np.array([3960.0, 4090.0])}}
+    cf._ipda_mask = lambda tf, z, now: np.ones(len(z["kind"]), bool)
+    t = pd.Timestamp("2023-07-06 11:50", tz="America/New_York")
+    assert cf.arrays_any(t, -1, ("D",)) == [(3970.0, 3960.0)]                     # short: bullish arrays (near = top, far = bottom)
+    assert cf.arrays_any(t, 1, ("D",)) == [(4090.0, 4100.0)]
+    assert cf.targets(t, 3965.0, -1, ("D",), far_edge=True) == []                  # the old query: price inside, so it returned nothing
+    assert cf.arrays_any(t, -1, ("1h",)) == []

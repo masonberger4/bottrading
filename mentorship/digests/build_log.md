@@ -2734,7 +2734,18 @@ Results: new tests 27 + 22 + 13 = 62 passed (me3a, me3b, me3c incl. 5 synthetic 
 2. N1: the rulebook now says the first ~30 minutes after 08:30 (006 ~8:18; 065B ~4:12); `nfp_first_hour` (the name stays; default on: no pre-09:30 windows / Ma Deuce on jobs days) and `nfp_day` (default True, owner decision) are unchanged. Should `nfp_first_hour` be renamed / its 09:30 floor follow `nfp_day_from`?
 3. N3-fomc-minutes: `fomc_minutes_mode="allow"` keeps today's behaviour (minutes days are normal days); cc10_008 ("block") and 082 ("pm_only") are switches. No default change.
 4. T8-lunch-raid-target: three candidate pools are kept as `lunch_raid` values; which is the default once studied (025 "most recent", 064 "low before 11/noon", 075 "first swing after the news")?
-5. N5-soft-bias-pre-open: `pre_open_bnb` (007, a Twitter-call example) is built long-only on the base bars; owner directive "pre-09:30 setups are test-only switches" keeps it off.
+5. N5-soft-bias-pre-open: `pre_open_bnb` (007, a Twitter-call example) now runs in side space (shorts mirror, test-covered), still on the base bars; owner directive "pre-09:30 setups are test-only switches" keeps it off.
+6. T7 `macro_gate_set` defaults to `()` (every window of newscal.MACROS_T7, as before) rather than the spec's four windows; `MACRO_SET["1330"]` is three tuples (13:10-13:40, 13:30-13:35, 13:39-14:00), wider than the spec's 13:30-13:35. Both kept for continuity; confirm. `macro_gate_set` entries are now validated.
+7. T8-lunch-raid-target: the trail guard is an `eq_tol` band around the pool, not "beyond the next swing"; `lunch_by_speed` moves the main engine's PM start only (Silver Bullet / Ma Deuce keep their windows). Confirm.
+8. N9: the failure proxy is "no new extreme toward the draw AND no displacement candle (body >= 1.5 x the reference mean) in the window"; a failure sets the main and Silver Bullet done keys (all sessions with scope "day"); only a TRUE failure is cached. Ma Deuce is pre-08:00 and has no key to close.
+9. N1/N2/N7: `nfp_first_hour` still the test switch (question 2); trend_day_nr (macro_trend_off) is its own "no retrace to the running 50% after 10:00" definition.
+
+### Review fixes (caption-gap pass, news_calendar_times#1/1, round 2)
+
+- X10 event_eve_noon: used `Confluence.targets` (beyond-price cut), which never returns the array price is inside; new `Confluence.arrays_any` (no cut), real-Confluence test, stub updated.
+- N9 macro failure: displacement half added, done keys closed, False results no longer cached. BNB mirrored (no long-only skip). Vacuous `or True` asserts removed. `macro_gate_set` validated. Broad excepts narrowed. Study variants for the knob parameters (lunch_fast_pm / lunch_slow_pm, am_fast_k / am_slow_k, lunch_raid_by, fomc_end_min_pts, pre_fomc_week_mult, fomc_whip_frac).
+- Look-ahead counters: all counters that the synthetic windows reach are now asserted. These paths need a real confluence / calendar day / market data that no synthetic or hand-made day builds, so they are covered only by unit tests and the ES windows (skipped without data): event_eve_noon, pre_news_coil, news_trend_side, two_driver_wait, fomc_whip_skip, trail_guard, pm_array_from, pm_1400, macro_trend_off, post_news_fade, pre_open_bnb, chop_wait, pre_draw_done_am, hard_day_done, kz_release_extreme.
+- Not changed: `post_fomc_am="skip"` stays an alias in behaviour of skip_post_fomc_am (not remapped); `_mss_displaced` without a `broke` index passes; `am_session` already keeps the caller's `am` start.
 
 ### Tests (caption-gap pass, news_calendar_times#1/1)
 

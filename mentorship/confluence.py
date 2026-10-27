@@ -314,6 +314,25 @@ def _targets_impl(self, t: pd.Timestamp, beyond: float, side: int, tfs, far_edge
 Confluence.targets = _targets_impl
 
 
+def _arrays_any_impl(self, t: pd.Timestamp, side: int, tfs) -> list[tuple[float, float]]:
+    """Caption-gap X10-pre-nfp-noon-exit: the opposing arrays valid at t on `tfs` WITHOUT the beyond-price cut (an array the price is inside or next to stays in).
+    Returns (near_edge, far_edge) in real prices: long = bearish arrays (bottom, top); short = bullish arrays (top, bottom)."""
+    now = float(t.value)
+    out = []
+    for tf in tfs:
+        z = self.z.get(tf)
+        if z is None:
+            continue
+        m = ((z["kind"] == -side) & (z["known"] <= now) & (z["dead"] > now) & (now - z["known"] <= z["life"]))
+        m &= self._ipda_mask(tf, z, now)
+        lo, hi = z["bottom"][m], z["top"][m]
+        out += list(zip(lo, hi)) if side > 0 else list(zip(hi, lo))
+    return [(float(a), float(b)) for a, b in out]
+
+
+Confluence.arrays_any = _arrays_any_impl
+
+
 def _trend_impl(self, t: pd.Timestamp, tf: str) -> int:
     """Structure state of timeframe tf from the last bar closed by time t (0 if unknown)."""
     e = self.st.get(tf)

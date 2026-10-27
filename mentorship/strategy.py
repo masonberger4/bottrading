@@ -3275,6 +3275,8 @@ class Params:
         if self.am_session == "0830_1200":                   # caption-gap T5-am-session-to-noon (044 ~00:55:47; 073 ~00:14:36): the AM from 08:30 (the Ep01.10 snapshot) to 12:00
             self.am_from_0830 = True
             self.am = (self.am[0], 720)
+        if any(k not in ("0950", "1050", "1150", "1330", "1450", "1515") for k in self.macro_gate_set):
+            raise ValueError(f"macro_gate_set {self.macro_gate_set!r}: entries must be keys of nct2.MACRO_SET")
         if self.fomc_whip_frac < 0 or self.pre_fomc_week_mult <= 0 or self.am_search_minutes < 0 or self.chop_wait_bars < 0:
             raise ValueError("news_calendar_times#1/1: fomc_whip_frac >= 0, pre_fomc_week_mult > 0, am_search_minutes >= 0, chop_wait_bars >= 0")
         if (self.fomc_eve_risk <= 0 or self.pre_fomc_risk <= 0 or self.pre_cpi_risk <= 0 or self.or_deep_pd < 0
