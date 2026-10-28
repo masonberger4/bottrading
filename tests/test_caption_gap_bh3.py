@@ -122,7 +122,14 @@ def test_cot_loader_known_date():
     nq = cot.read_zip(data, cot.market_code("E-MINI NASDAQ-100"))
     assert list(nq.net) == [-4000]
     # the tag is not usable on the Tuesday it describes or on the release Friday
-    assert cot.states(t, pd.Timestamp("2023-03-10"))[0] == 0 and cot.first_usable("2023-03-07") > cot.known_date("2023-03-07")
+    assert cot.first_usable("2023-03-07") > cot.known_date("2023-03-07")
+    # no look-ahead of the usable date, on a table with enough reports (60 weekly rows, net 100 -> 159; usable the session after the Friday release)
+    big = cot.table(pd.DataFrame({"report_date": pd.date_range("2022-01-04", periods=60, freq="7D"), "comm_long": 1, "comm_short": 1, "net": np.arange(100, 160)}))
+    u = big.index[55]
+    assert cot.states(big, u - pd.Timedelta(days=1))[0] == 1 and len(big[big.index <= u - pd.Timedelta(days=1)]) == 55
+    assert cot.states(big, big.index[3]) == (0, 0)                                           # fewer than MIN_REPORTS usable reports
+    assert cot.states(big, big.index[20]) == (1, 0)                                          # 8..51 reports: program only
+    assert cot.states(big, big.index[59])[1] == 1                                            # 60 reports, a rising net: above the 52-week midpoint
     assert cot.parse_legacy(pd.DataFrame({"a": [1]})) is None
 
 
@@ -130,6 +137,13 @@ def test_cot_loader_reads_a_folder_without_network(monkeypatch):
     # an empty / missing folder gives no table; the cache key is per (market, folder)
     from pathlib import Path
     assert cot.load_dir("E-MINI S&P 500", Path("data/mentorship/_no_such_cot_dir")) is None
+
+
+def test_cot_loader_reads_a_real_zip_from_a_folder(tmp_path):
+    rows = [("E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE", d.strftime("%Y-%m-%d"), "13874A", 300000 + k * 1000, 250000) for k, d in enumerate(pd.date_range("2023-01-03", periods=4, freq="7D"))]
+    (tmp_path / "deacot2023.zip").write_bytes(deacot_zip(rows))
+    t = cot.load_dir("E-MINI S&P 500", tmp_path)
+    assert t is not None and len(t) == 4 and list(t.net) == [50000, 51000, 52000, 53000]
 
 
 # --- item 147: program and hedging ---------------------------------------------------------------------------------------
@@ -300,6 +314,7 @@ def test_in_play_gate():
     assert BH3.in_play_column(c_nt + 0.3, c_nt - 0.3, c_nt, [a], ks, 3, np.array([0]))[0] == 0       # no touch: longs are rejected
     old = BH3.in_play_column(np.r_[h, [102] * 5], np.r_[l, [101.4] * 5], np.r_[c, [101.8] * 5], [a], np.array([14]), 3, np.array([0]))
     assert old[0] == 0                                                                # the touch is older than in_play_days
+    assert BH3.in_play_column(h, l, c, [a], np.array([7]), 3, np.array([0]))[0] == 0   # the touch session (6) is not a LATER close: no reaction yet at k = 7
     b = arr("bear", "fvg", 112.0, 110.0, 2)
     cc2 = np.array([105, 106, 107, 108, 109, 109.5, 111.0, 109.5, 109.0, 108.5], float)
     assert BH3.in_play_column(cc2 + 0.3, cc2 - 0.3, cc2, [b], np.array([9]), 3, np.array([0]))[0] == -1       # the mirror: a bear array touched from below, a close under its bottom
@@ -456,6 +471,9 @@ def test_mwd_c_to_b_and_levels():
     wlast = np.array([4, 9, 14, 19])
     assert BH3.case_c_to_b([m], [wob], wo, wc, wh, wl, wlast, 21, 110.0, 1) is True
     assert BH3.case_c_to_b([m], [wob], wo, wc, wh, wl, wlast, 21, 125.0, 1) is False   # the price is not inside the monthly array
+    wc_same = np.array([113, 111, 108.5, 111], float)
+    wob_late = arr("bull", "ob", 112.0, 108.0, 20, tf="W")                              # formed in the last week: that week's own up-close is not a later visit
+    assert BH3.case_c_to_b([m], [wob_late], wo, wc_same, wh, wl, wlast, 21, 110.0, 1) is False
     wc_dn = np.array([113, 111, 107.0, 108.0], float)
     wo_dn = np.array([115, 114, 111, 110], float)
     assert BH3.case_c_to_b([m], [wob], wo_dn, wc_dn, wh, wl, wlast, 21, 110.0, 1) is False   # no weekly up-close at the OB

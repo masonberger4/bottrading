@@ -1541,7 +1541,7 @@ class Params:
     oi_days: int = 10
     oi_pct: float = 0.125
     wpr_tag: str = "off"                 # B20.3 (cc12_002 ~12:17): "tag" / "filter" - weekly Williams %R: <= -80 long, >= -20 short
-    wpr_len: int = 14
+    wpr_len: int = 14                    # B20-williams-r (cc12_002 ~13:41; cc06_007 ~25:49): the WEEKLY Williams %R period (10 / 14 / 20; spec name wpr_period)
     # B22 quarterly shift
     qshift_tag: bool = False             # B22 (cc05_001 ~5:05; cc12_001 ~18:43): tags qs_turn / qs_cons / qs_due from the 60-session turn or consolidation
     qshift_size: float = 1.0             # risk multiplier against the 252-session trend while a shift is due (1 = off)
@@ -3993,6 +3993,10 @@ class Params:
             inert.append("pause_on_hold counts held arrays inside the flip state's run: read it with htf_bias='flip' (the table's flip column)")
         if (self.season_qualified or self.season_poised) and self.season_windows == "off":
             inert.append("season_qualified / season_poised act on the seasonal windows: set season_windows")
+        if self.pd60_only_consol and (self.pd_day_range != 60 or not self.pd_body_multiday):
+            inert.append("pd60_only_consol is the 60-session body-range rule: set pd_day_range=60 and pd_body_multiday")
+        if self.counter_range_extreme and self.counter_scalp:
+            inert.append("counter_range_extreme (kind 'ctr') is ignored while counter_scalp is on: the counter scalp is not limited to the range extreme")
         if self.ny_continue_london and self.draw_lock != "session":
             inert.append("ny_continue_london acts on the AM draw lock (draw_lock='session')")
         if self.q_dir_tag and self.q_obj_lean and self.draw_lock != "session":

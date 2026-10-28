@@ -25,6 +25,7 @@ COT_DIR = Path("data/mentorship/cot")
 MARKET_CODES = {"E-MINI S&P 500": "13874A", "E-MINI NASDAQ-100": "209742", "NASDAQ-100 STOCK INDEX (MINI)": "209742", "E-MINI NASDAQ 100": "209742"}
 NARROW = 0.10                        # a 52-week range narrower than this share of the mean |net| falls back to the 26-week range [our interpretation]
 MIN_REPORTS = 8                      # fewer reports than this: no state (as bias_htf.cot_state)
+HEDGE_MIN = 52                       # spec B20-cot-data-spec: the hedge state needs ~12 months of weekly history (8..51 reports: the program only)
 _CACHE: dict = {}
 
 
@@ -148,6 +149,8 @@ def states(tbl: pd.DataFrame | None, day, weeks: int = 52, fallback: int = 26) -
     net = t.net.iloc[-weeks:].astype(float)
     last = float(net.iloc[-1])
     program = int(np.sign(last))
+    if len(t) < min(HEDGE_MIN, weeks):
+        return program, 0
     hi, lo = float(net.max()), float(net.min())
     mean_abs = float(net.abs().mean())
     if mean_abs > 0 and (hi - lo) < NARROW * mean_abs:                       # narrow: the 6-month range instead

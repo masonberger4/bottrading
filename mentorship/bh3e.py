@@ -305,8 +305,12 @@ def side_ok(ctx, p, sign: int, session: str, i: int):
         prog, hedge = cot_states(ctx, p)
         if prog or hedge:
             sw("cot_gate")
-            if not (hedge == sign and io == sign):
+            # [our interpretation] the spec reads as a permission: hedge + iof agreeing with the side allow an order even against the program;
+            # an order that agrees with the program passes; anything else against the program is blocked
+            if prog and sign != prog and not (hedge == sign and io == sign):
                 return "x_bh3_cot_gate"
+            if not prog and not (hedge == sign and io == sign):
+                return "x_bh3_cot_gate"        # no program reading but a hedge state: the strict hedge + iof test
     if row is not None:
         if p.mo_bias_gate:
             mb = _n(row, "mo_bias")
@@ -604,8 +608,14 @@ def _touched_since_midnight(ctx, p, kl: int, sign: int) -> bool:
     import pandas as pd
     now = ctx.idx[kl - 1] + pd.Timedelta(minutes=ctx.tf)
     zs = cf.valid(now, sign, ("D", "4h"), (0, 1, 3))
-    lo, hi = float(ctx.l[a:kl].min()), float(ctx.h[a:kl].max())
-    return any(lo <= top and hi >= bot for top, bot, *_ in zs)
+    # only bars that OPEN at or after the array was complete count as a touch (the 00:00 / 04:00 candle that formed a 4h FVG is not a touch of it)
+    ts = np.asarray(ctx.idx[a:kl].asi8, dtype="float64")
+    lows, highs = ctx.l[a:kl], ctx.h[a:kl]
+    for top, bot, _tf, _src, known in zs:
+        m = ts >= known
+        if m.any() and float(lows[m].min()) <= top and float(highs[m].max()) >= bot:
+            return True
+    return False
 
 
 def lock_post(ctx, p, row, t_lock: int, session: str, kl: int, px: float, lock: dict) -> dict:

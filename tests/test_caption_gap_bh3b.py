@@ -64,7 +64,14 @@ def test_cot_gate_and_tags(monkeypatch):
     i = at(ctx, "09:50")
     assert E3.cot_states(ctx, p) == (-1, 1)
     assert E3.side_ok(ctx, p, 1, "AM", i) is None                                     # the hedge agrees with the long and so does the daily iof: allowed whatever the program says
-    assert E3.side_ok(ctx, p, -1, "AM", i) == "x_bh3_cot_gate"                        # the program is short but the hedge is not
+    assert E3.side_ok(ctx, p, -1, "AM", i) is None                                    # an order that agrees with the program (short) passes: the gate is a permission for the counter-program side
+    ctx_s = cx(p, bias=BR(iof=0))
+    assert E3.side_ok(ctx_s, p, -1, "AM", i) is None
+    put_cot(monkeypatch, [-60000 if k % 2 else -10000 for k in range(59)] + [-50000])         # program -1, hedge -1 (below the midpoint)
+    p_l = Params(**BASE, htf_bias="combo", cot_gate="hedge_iof")
+    ctx_l = cx(p_l, bias=BR(iof=1))
+    assert E3.cot_states(ctx_l, p_l) == (-1, -1) and E3.side_ok(ctx_l, p_l, 1, "AM", i) == "x_bh3_cot_gate"      # a long against the program without the hedge: blocked
+    put_cot(monkeypatch, nets)
     ctx2 = cx(p, bias=BR(iof=0))
     assert E3.side_ok(ctx2, p, 1, "AM", i) == "x_bh3_cot_gate"                        # the daily iof does not agree
     o = order()
@@ -375,6 +382,8 @@ def test_ny_continue_london():
     assert E3.lock_post(late, p, BR(iof=-1), 570, "AM", kl, 100.0, dict(lock))["side"] == 0
     ctx.conf = SimpleNamespace(valid=lambda now, side, tfs, src: [(101.0, 99.0, "D", 0, 0)] if side > 0 else [])   # a daily bull array was touched since 00:00
     assert E3.lock_post(ctx, p, BR(iof=-1), 570, "AM", kl, 100.0, dict(lock))["side"] == 0
+    ctx.conf = SimpleNamespace(valid=lambda now, side, tfs, src: [(101.0, 99.0, "D", 0, float(ctx.idx[kl - 1].value) + 1e12)] if side > 0 else [])     # the array completed after every bar of the day: nothing touched it (the forming candle is not a touch)
+    assert E3.lock_post(ctx, p, BR(iof=-1), 570, "AM", kl, 100.0, dict(lock))["side"] == -1
     lowdone = cx(p, rows=pad_to_0930([(100.0, 100.2, 99.8, 100.0)] * 5), start="00:00", bias=BR(iof=-1))
     rows2 = london_rows()
     rows2[60] = (99.0, 99.1, 85.0, 86.0)                                                                       # the ADR5 low (86) was already reached

@@ -3366,20 +3366,28 @@ the working tree (bh2.py, bh2e.py, bias_htf.py, strategy.py, rulebook, their tes
 - bias_htf_intermarket#227 B5-daily-checklist-fallback | done | `htf_bias="wd_check"` | "off" | the daily composer (iof, dsmt, flip / d_breaker, draw; COT / OI skipped; the weekly profile is context) and the fallback: weekly 0 -> the daily; weekly non-zero -> kept when the daily agrees or is 0 (tag daily_unconfirmed), 0 when the daily contradicts
 - day_selection_news_calendar#45 B17-chop-revert-middle | done | `chop_lean`, `chop_target_baseline` | False, False | on a range / chop day (B17.4 `drr_ng` or a sloppy test) baseline = (max high + min low) / 2 of the bars since 08:30; `chop_lean`: only the side of the lean trades (above the baseline = longs); `chop_target_baseline`: a counter-move gets the baseline as its first rung and is a single-target scalp
 
-### Owner questions (caption-gap pass, bias_htf#3/7)
+### Owner questions (caption-gap pass)
+
+(bias_htf#3/7; review round 1 changes: items 3, 6 and the additions at the end)
 
 1. #152: the spec's test text calls "TNX falling (notes up) with DXY rising" opposed, which contradicts its own formula (notes direction = -sign(yield slope), tandem when equal) and the rule text (notes and dollar moving the same way = tandem); the formula, the rule text and the second example agree and are built. Confirm.
 2. #154 / #202: the specs extend `season_gate` / `allow_counter_trend` (bools built in earlier chunks) with string values; both are separate bools (`season_qualified`, `counter_range_extreme`) so no earlier default or type changes.
-3. #147: `cot_gate="hedge_iof"` is read literally - an order is allowed only when the hedge and the daily iof agree; an order that only agrees with the program is blocked. The softer reading (program OR hedge+iof) would be a different switch value. #148: the loader needs the annual `deacot{year}.zip` files (owner download).
+3. #147: `cot_gate="hedge_iof"` is now a PERMISSION (review round 1): an order that agrees with `cot_program` passes; an order against the program passes only when the hedge and the daily iof both agree with its side; with no program reading but a hedge state the strict hedge + iof test applies. The old strict reading (block everything without hedge + iof) is not kept as a value - say if you want it. #148: the loader needs the annual `deacot{year}.zip` files (owner download).
 4. #184: the table draw already retires fully rebalanced FVG / VI / gaps; `retire_arrays` only tightens the weekly balance (daily wicks instead of completed weekly bars) and the two-sided VI. Say whether more is wanted (e.g. retiring OB or pool draws).
 5. #174 / #222: "trend" on monthly bars adds a half-range net-move requirement so a flat year with a late rally reads as consolidation (the spec test); the weekly profile (#174) does not use it. #174 returns "" (no profile) when none of the three applies and below 26 weeks.
-6. #200: the ADR5 target is the day's high (low) -/+ ADR5; the spec writes "day open high - ADR5" and also "open-of-day minus ADR5" for the reached test. An existing farther same-side lock target is kept.
+6. #200: the ADR5 target is the day's high (low) -/+ ADR5; the spec writes "day open high - ADR5" and also "open-of-day minus ADR5" for the reached test - say which anchor you want. "No array touched since 00:00" now counts only bars that open at or after the array was complete (review round 1). An existing farther same-side lock target is kept.
 7. #190 conflicts with B16 (2023: no bias before Sunday): `week_pre` is off; both stay available as `htf_bias` values.
 8. #221: `mo_aligned` needs ALL four components including a quarterly objective, so it is rare unless `q_dir_tag` supplies `q_obj_dir`; the held bias runs 63 sessions (84 max) from the last month-start reading.
 9. #215: the mirror (bearish windows, a 60-session low) is our addition; #216 needs the partner frame (ES + NQ) - without it the poised map is absent and the window is left alone; the Dow (three-index SMT) is not loaded.
 10. #225: `wk_struct_agree` is literal (needs `mo_bias`, so without `mo_bias_gate`-style data every order is half risk) - the switch builds `mo_bias` itself.
 11. #45: "above the baseline gives longs" (continuation toward the next pool) is built; the spec words "the pool on the far side of the baseline from price" could also be read as a reversion toward the baseline - the reversion is `chop_target_baseline`.
 12. The working tree held uncommitted bias_htf#2/7 review round 2 changes at the start of this step; they are committed with this chunk.
+13. #154: `season_gate` is not extended with "qualified" (separate bool `season_qualified`); the notes / dollar qualifier reads `opposed` as qualifying a window of EITHER direction [our interpretation] - opposed holds on roughly half of all days, so inside a window the gate blocks counter-direction trades about half the time.
+14. #202: with `counter_scalp` on, the `ctr` kind is ignored (the counter scalp is not limited to the range extreme); an inert warning says so. The str form of `allow_counter_trend` is not built.
+15. #195: the reaction is a close at a session AFTER the touch session (review round 1); the "daily clearly respecting PD arrays" part is not modelled.
+16. #225: the controlling ITL (ITH) is the latest one still unbroken as of the last completed week (round 1). #180: the reacting weekly bar must come after the OB's formation week (round 1); the mwd levels stay zero-height entry arrays in `_ts_arrays0` (not conf rows of kind dcandle).
+17. #148: the hedge state needs 52 weekly reports (8..51: program only). #189: `pd60_only_consol` warns when `pd_day_range != 60` or bodies are off. #174/#222: the extra half-range `trend` requirement stays pending your confirmation (question 5).
+18. Commit f8e921b also carried the bias_htf#2/7 review round 2 edits (bh2.py, bh2e.py, strategy.py, bias_day.py, tests), which were not reviewed with this chunk; history is frozen, so they need a separate review.
 
 ### Tests (caption-gap pass, bias_htf#3/7)
 

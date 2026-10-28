@@ -399,12 +399,13 @@ def in_play_column(h, l, c, arrs, ks, days: int, iof, ev4=None) -> np.ndarray:
             if not cand:
                 continue
             t0 = cand[0]
-            if touches is None:
-                pre = c[known:t0]
-                if (sg > 0 and pre.min(initial=np.inf) < bot) or (sg < 0 and pre.max(initial=-np.inf) > top):
-                    continue
+            pre = c[known:t0] if touches is None else c[known + 1:t0]          # a 4h array's own session is not a close-through
+            if (sg > 0 and pre.min(initial=np.inf) < bot) or (sg < 0 and pre.max(initial=-np.inf) > top):
+                continue
+            if (sg > 0 and c[t0] < bot) or (sg < 0 and c[t0] > top):
+                continue                                                     # closed through on the touch session itself
             q = None
-            for j in range(t0, k):
+            for j in range(t0 + 1, k):                                       # the reaction is a LATER daily close beyond the array's far edge
                 x = c[j]
                 if (sg > 0 and x < bot) or (sg < 0 and x > top):
                     break
@@ -582,12 +583,13 @@ def wk_control_column(d, w, ks, px) -> np.ndarray:
             continue
         lh, ll = hs[-1], ls[-1]
         h_broken = wh[lh.i + 1:m].max(initial=-np.inf) > lh.price
-        h_intact = not h_broken
         l_broken = wl_[ll.i + 1:m].min(initial=np.inf) < ll.price
-        l_intact = not l_broken
-        if l_intact and ll.price < x and h_broken:
+        # the most recent UNBROKEN ITL (ITH) as of the last completed week - an older intact one still controls
+        ul = next((q for q in reversed(ls) if not wl_[q.i + 1:m].min(initial=np.inf) < q.price), None)
+        uh = next((q for q in reversed(hs) if not wh[q.i + 1:m].max(initial=-np.inf) > q.price), None)
+        if ul is not None and ul.price < x and h_broken:
             out[r] = 1
-        elif h_intact and lh.price > x and l_broken:
+        elif uh is not None and uh.price > x and l_broken:
             out[r] = -1
     return out
 
@@ -932,7 +934,7 @@ def case_c_to_b(m_arrs, w_arrs, wo, wc, wh, wl, wlast, k: int, px: float, g: int
             if a.typ != "ob" or a.kind != kind or a.known > k or a.bottom < m.bottom - 1e-9 or a.top > m.top + 1e-9:
                 continue
             for j in range(len(wlast)):
-                if wlast[j] >= k or wlast[j] < a.known - 1:
+                if wlast[j] >= k or wlast[j] < a.known:                  # a LATER weekly bar than the one that formed the OB
                     continue
                 if wl[j] <= a.top and wh[j] >= a.bottom and ((wc[j] > wo[j]) if g > 0 else (wc[j] < wo[j])):
                     return True
