@@ -54,10 +54,10 @@ def bx_string(p) -> str:
     if hb == "ordered" or p.draw_lock_pick in ("ordered", "largest") or p.draw_ext_target or p.draw_first != "off":
         x["ord"] = 1
     from . import bh3                                      # caption-gap pass bias_htf#3/7 (bh3.py)
-    if hb in ("iof", "combo2") or p.or_needs_bias or bh3.needs_iof(p):         # (caption-gap T4-or-needs-bias-iof reads the iof column; bias_htf#3/7: cot_gate, hallmarks, bias_dh, ... read it too)
+    if hb in ("iof", "combo2") or p.or_needs_bias or bh3.needs_iof(p) or p.iof_follow or p.h4_ob_flip:         # (caption-gap T4-or-needs-bias-iof reads the iof column; bias_htf#3/7: cot_gate, hallmarks, bias_dh, ... read it too)
         x["iof"] = [p.iof_days, p.iof_min]
     pd20_on = (hb == "pd20" or p.day_pd == "20d" or p.pd_zone != "half" or "premium_chop" in p.neutral_gate
-               or p.cond_pd_tags or p.eq_first_rung or p.ob_location_cap or p.pd60_only_consol)
+               or p.cond_pd_tags or p.eq_first_rung or p.ob_location_cap or p.pd60_only_consol or p.range_rollover)
     if pd20_on:
         x["pd20"] = [p.pd_day_range, int(p.pd_body_multiday), p.pd_zone, list(p.ote_band), int(p.day_pd == "20d"), int(p.pd60_only_consol), float(p.consol_ratio)]
     if p.resist_def in ("htf", "both"):                  # caption-gap L4-resistance-definitions: the weekly state
@@ -93,7 +93,7 @@ def bx_string(p) -> str:
         x["r5050"] = p.fifty_react_ratio
     if (p.chop_mode != "off" or "premium_chop" in p.neutral_gate) and True:
         x["onr"] = 1
-    if p.matrix_tf_lower or p.react_tf_tag:
+    if p.matrix_tf_lower or p.react_tf_tag or p.target_tf != "off":
         x["rtf"] = 1
     if p.deep_run_mult != 1.0:                 # caption-gap E9-deep-discount-reduced (099 ~00:28:59): the weekly deep_run column
         x["deep"] = p.deep_run_weeks
@@ -131,6 +131,14 @@ def bx_string(p) -> str:
     b4 = bh4.bx_cfg(p)
     if b4:
         x["b4"] = b4
+    if p.wk_range:
+        x["wk"] = 1                            # caption-gap new-weekly-dealing-range (bias_htf#5/7): the weekly bias and weekly draw columns
+    from . import bh5                          # caption-gap pass bias_htf#5/7 (bh5.py): the columns / table-time configuration of its items
+    b5 = bh5.bx_cfg(p)
+    if b5:
+        x["b5"] = b5
+        if p.wk_ref_friday and "wk" not in x:
+            x["wk"] = 1                        # (new-weekly-market-price-friday-close: the weekly draw split columns it freezes)
 
     return json.dumps(x, sort_keys=True, separators=(",", ":")) if x else ""
 

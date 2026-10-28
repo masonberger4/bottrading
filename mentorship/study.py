@@ -3094,6 +3094,77 @@ _BH4_DECISIONS = {
 DECISIONS.update(_BH4_DECISIONS)
 
 
+# --- Caption-gap pass, package bias_htf#5/7 (definitions_pd_arrays_structure.md items 191, 192, 193, 199, 201, 204; levels_liquidity_targets.md items 22, 23, 29, 30, 35, 38, 55, 58, 59, 69, 75, 78, 80, 93, 102,
+# 103, 115, 133, 135, 136, 138, 142, 143, 147, 149, 164, 176, 179, 180; bh5.py / bh5e.py): one variant per switch (name prefix = the gap id). The htf bias is 'combo' (the table's react / P/D reading) so a want
+# override or fallback has something to act on; the lock stays on. ----------------------------------------------------------------------------------------------------------------------------------------
+BH5_BASE = dict(ob_entry="post_mss", htf_resist_cap=False, htf_bias="combo", bias_neutral="both")
+BH5_IOF = {**BH5_BASE, "htf_bias": "combo2"}
+
+_BH5_DECISIONS = {
+    "A5-htf-fvg-last-upclose-anchor": dict(dfvg_upclose_anchor=True, **BH5_BASE),
+    "A12-4h-ob-mt-invalidation-flip": dict(h4_ob_flip=True, **BH5_IOF),
+    "B6-broken-highs-follow-through": dict(iof_follow=True, iof_follow_days=5, **BH5_IOF),
+    "M17-swing-trade-definition": dict(swing_min_days=10, **BH5_BASE),
+    "new-monthly-structure-control": dict(monthly_ctrl=True, **BH5_BASE),
+    "new-mega-trade-definition": dict(mega_min_days=126, **BH5_BASE),
+    "L5-friday-close-location-fill": dict(nwog_fill_rule=True, nwog_eq_band=0.10, **BH5_BASE),
+    "L5-below-nwog-low": dict(nwog_below_return=True, **BH5_BASE),
+    "L5-nwog-not-standalone": dict(nwog_draw_confl=True, confl_pts=2.0, **BH5_BASE),
+    "L7-breakaway-test": dict(org_with_bias=True, org_draw="draw", **BH5_BASE),
+    "L7-org-fill-delayed-pm": dict(org_pm_draw=True, prev_am_pool=True, **BH5_BASE),
+    "L13-old-high-to-daily-ce-projection": dict(dce_proj_study=True, **BH5_BASE),
+    "L14-consolidation-alternation": dict(range_alternate=True, range_block_probed=3, sloppy_tests=("chop",), **BH5_BASE),
+    "L14-conditional-pm-draw-up": dict(pm_flip_draw=True, pm_flip_adr=0.25, pm_flip_days=5, **BH5_BASE),
+    "new-range-edge-break-retest": dict(pm_range_break=True, **BH5_BASE),
+    "B2-stacked-unrun-highs": dict(stack_draw=True, stack_n=3, **BH5_BASE),
+    "B2-buy-program-eq-draw": dict(program_gate=True, **BH5_BASE),
+    "new-gap-theory": dict(gap_theory_bias=True, **BH5_BASE),
+    "L14-consolidation-above-ssl": dict(wk_ssl_draw=True, **BH5_BASE),
+    "L14-weekly-two-sided-map": dict(wk_two_draw=True, **BH5_BASE),
+    "B7-spike-floor-1h-ob-fvg": dict(b7_spike_floor=True, **BH5_BASE),
+    "new-shift-origin-pool": dict(shift_origin_pool=True, **BH5_BASE),
+    "L14-target-timeframe": dict(target_tf="one_lower", **BH5_BASE),
+    "L14-target-timeframe_same": dict(target_tf="same", **BH5_BASE),
+    "new-weekly-market-price-friday-close": dict(wk_ref_friday=True, **BH5_BASE),
+    "B7-fast-week-htf-reversal-level": dict(fast_week_rev=True, fast_week_adr=1.5, **BH5_BASE),
+    "B1-eq-consolidation-breakout": dict(eq_breakout_draw=True, **BH5_BASE),
+    "B23-seasonal-entry-arrays": dict(seasonal_tag=True, **BH5_BASE),
+    "LLT3-weekly-dealing-range": dict(wk_range=True, **BH5_BASE),
+    "LLT3-daily-draw-multiday": dict(d_draw_carry=True, **BH5_BASE),
+    "LLT3-pdh-raid-after-multiday-run": dict(pdh_raid_rev=True, raid_run_days=3, **BH5_BASE),
+    "LLT3-or-forms-day-extreme": dict(or60_bias=True, **BH5_BASE),
+    "LLT3-stock-low-resistance-distance": dict(stock_old_high_max_pct=0.10, **BH5_BASE),
+    "LLT3-dealing-range-rollover": dict(range_rollover=True, day_pd="20d", **BH5_BASE),
+    "LLT3-weekly-open-pd-array": dict(weekly_open="either", weekly_open_array=True, **BH5_BASE),
+}
+DECISIONS.update(_BH5_DECISIONS)
+
+
+def dce_proj_hits(table, d, within: int = 10) -> dict:
+    """L13-old-high-to-daily-ce-projection (019 ~2:35), research (dce_proj_study): the share of the table's daily A-B projection levels traded to within `within` sessions, per level. See bh5.dce_proj_hits."""
+    from . import bh5
+    return bh5.dce_proj_hits(table, d, within).to_dict("records")
+
+
+def stock_lrlr(weekly, max_pct: float = 0.10, ext_atr: float = 2.0) -> dict:
+    """LLT3-stock-low-resistance-distance (cc10_016 ~12:49): the weekly-chart screen of a stock candidate (clean old high close above, no broken intermediate high, not extended). No effect on index runs. See bh5.stock_lrlr."""
+    from . import bh5
+    return bh5.stock_lrlr(weekly, max_pct, ext_atr)
+
+
+def seasonal_entry_report(table, seasonal_map, ahead: int = 20):
+    """B23-seasonal-entry-arrays (cc05_011 ~24:21), report only: the bullish seasonal window starts with the weekly-array context and the next return. See bh5.seasonal_entry_report."""
+    from . import bh5
+    return bh5.seasonal_entry_report(table, seasonal_map, ahead)
+
+
+def or60_study(days) -> dict:
+    """LLT3-or-forms-day-extreme (cc10_006 ~3:50; cc10_010 ~3:18), conditional stat: over the day frames `days` (5m bars, chronological) how often the day's low (high) lies inside the OR60 (09:30-10:30) when
+    the OR60 low (high) swept the previous day's low (high) vs not. See bh5e.or60_stat."""
+    from . import bh5e
+    return bh5e.or60_stat(days)
+
+
 def macro_runs_study(days, macro_run_pts: float = 5.0, leg_extra_min: int = 0) -> dict:
     """T7-1500-at-least-one (022 ~03:16:44): see dwc3.macro_runs_study. No engine change."""
     from . import dwc3

@@ -75,7 +75,7 @@ def weeks(d: pd.DataFrame) -> pd.DataFrame:
 
 def _arrays(o, h, l, c, tf: str, known_of, vi: bool = False, c2_dir: bool = False,
             vi_min_gap: float = 0.0, vi_wick_overlap: bool = True, vi_multi: bool = False,
-            drill=None, spr: bool = False, void_rt: bool = False, rb: bool = False, rb_level: str = "close") -> list[Arr]:
+            drill=None, spr: bool = False, void_rt: bool = False, rb: bool = False, rb_level: str = "close", upclose: bool = False) -> list[Arr]:
     """Daily / weekly arrays. levels_detectors: `c2_dir` (A5 fvg_c2_dir) keeps only FVGs whose
     middle candle closes their way; `vi_min_gap` (A9) drops narrower VIs; caption-gap A9 `vi_wick_overlap` /
     `vi_multi` (see levels.volume_imbalances).
@@ -101,7 +101,16 @@ def _arrays(o, h, l, c, tf: str, known_of, vi: bool = False, c2_dir: bool = Fals
             a.src_i = z.i                                     # its own-TF bar (A9 body death)
             out.append(a)
     for z in L.fvgs(h, l, o, c, c2_dir):
-        out.append(Arr(z.kind, "fvg", tf, z.top, z.bottom, z.mid, known_of(z.i)))
+        if upclose and tf == "D":                           # caption-gap A5-htf-fvg-last-upclose-anchor (bias_htf#5/7; cc09_008 ~12:27): the last up-close candle's low is the upper reference of a bearish gap whose first candle closed down
+            from . import bh5 as _bh5
+            t5_, b5_ = _bh5.upclose_edges(o, h, l, c, z)
+            if (t5_, b5_) != (z.top, z.bottom):
+                _bh5.sw("dfvg_upclose_anchor")
+                out.append(Arr(z.kind, "fvg", tf, t5_, b5_, (t5_ + b5_) / 2, known_of(z.i)))
+            else:
+                out.append(Arr(z.kind, "fvg", tf, z.top, z.bottom, z.mid, known_of(z.i)))
+        else:
+            out.append(Arr(z.kind, "fvg", tf, z.top, z.bottom, z.mid, known_of(z.i)))
         # order block: last opposite-close candle before the displacement candle
         kind = "bull" if z.kind == "bull" else "bear"
         ob = None
@@ -300,6 +309,8 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     X = BH.parse(bx)
     from . import bh4 as BH4                         # caption-gap pass bias_htf#4/7 (bh4.py): table-time rules (age tiers, reach tolerance, weekly / monthly life, origin OB, mitigation, OB to MT, event wicks)
     tc = BH4.table_cfg(X)
+    from . import bh5 as BH5                         # caption-gap pass bias_htf#5/7 (bh5.py): the up-close FVG anchor at table time, the columns after bh4.finish4
+    tc5 = BH5.table_cfg(X)
     d = sessions(df)
     D = len(d)
     o, h, l, c = (d[k].values.astype(float) for k in ("open", "high", "low", "close"))
@@ -311,7 +322,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     drill = _ltf_provider(df, d, 60) if htf_ob_ltf_drill else None
     lcl = _ltf_closes(df, d, 240) if balance_tf == "next_lower" else None
     arrs = _arrays(o, h, l, c, "D", lambda i: i + 1, vi, c2_dir, vi_min_gap, vi_wick_overlap, vi_multi,
-                   drill=drill, spr=single_pass_draw, void_rt=void_rt_ob, rb=rb_closes)
+                   drill=drill, spr=single_pass_draw, void_rt=void_rt_ob, rb=rb_closes, upclose=tc5["upc"])
     # weekly arrays become usable the day after the week's last session
     w = weeks(d)
     pos = {t: k for k, t in enumerate(d.index)}
@@ -618,6 +629,11 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     if b4 and len(out):
         b4["_cut"] = int(cut_min)
         out = BH4.finish4(out, b4, d, w, arrs, es_pt, df)                            # caption-gap bias_htf#4/7 (bh4.py): the columns after bh3.finish3
+    b5 = dict(X.get("b5") or {})
+    if b5 and len(out):
+        if X.get("pd20"):
+            b5["_pd20"] = X["pd20"]
+        out = BH5.finish5(out, b5, d, w, arrs, es_pt, df)                            # caption-gap bias_htf#5/7 (bh5.py): the columns after bh4.finish4
     return out
 
 
@@ -1019,3 +1035,33 @@ def gaps_for_day(g: pd.DataFrame, day, nwog_keep: int = 5, nwog_days: int = 0, s
 
 
 NY_TZ = "America/New_York"
+
+
+# --- Caption-gap pass bias_htf#5/7 helpers (no table effect) -----------------------------------------------------------------------------------------
+
+def mw_side(m: int, w: int) -> int:
+    """M17-swing-trade-definition (cc06_001 ~0:50: 'trade durations of two weeks or longer in time'): the M/W side gate of the future swing engine - +1 only when the monthly AND the weekly bias are both bullish,
+    -1 only when both are bearish, else 0 (no swing trade). The table's `bias_m` / `bias_w` columns are the inputs (`mw_side_row`)."""
+    m, w = int(m or 0), int(w or 0)
+    return 1 if (m > 0 and w > 0) else (-1 if (m < 0 and w < 0) else 0)
+
+
+def mw_side_row(row) -> int:
+    def g(k):
+        try:
+            v = row.get(k)
+            return 0 if v is None or v != v else int(v)
+        except Exception:
+            return 0
+    return mw_side(g("bias_m"), g("bias_w"))
+
+
+def mega_tag(entry_day, exit_day, symbol: str = "", min_days: int = 126, zb_handles: float | None = None) -> str:
+    """new-mega-trade-definition (cc11_003 ~0:37, cc11_004 ~43:02: 'six to nine months or more in the stock market'): "mega" when a position entered at a quarterly-shift / seasonal low was held at least
+    `min_days` trading days (Params.mega_min_days; stocks: 6-9+ months) - or, for the bonds (ZB), when the move is at least 10 handles (about $10,000 per contract; `zb_handles`, a tag only) - else "".
+    The hold counts the weekdays from entry to exit (holidays are not removed) [our interpretation]; a classifier for a future stock / position engine."""
+    if str(symbol).upper().startswith("ZB") and zb_handles is not None:
+        return "mega" if abs(float(zb_handles)) >= 10.0 else ""
+    a, b = pd.Timestamp(entry_day).normalize(), pd.Timestamp(exit_day).normalize()
+    n = int(np.busday_count(a.date(), b.date()))
+    return "mega" if n >= int(min_days) else ""

@@ -122,6 +122,9 @@ def want_at(ctx, p, session: str, i: int) -> int:
     from . import bh4e as _B4                        # caption-gap pass bias_htf#4/7: the neutral-bias fallbacks (trapped BPR, failed break, nested ranges, IFVG) and the EQ-violated neutral
     if _B4.want_on(p):
         v = _B4.want_adjust(ctx, p, session, i, v)
+    from . import bh5e as _B5                        # caption-gap pass bias_htf#5/7: the program / stack / EQ-breakout / fast-week overrides, the monthly control, the gap theory, the OR60 side, the intraday states
+    if _B5.want_on(p):
+        v = _B5.want_adjust(ctx, p, session, i, v)
     return v
 
 
