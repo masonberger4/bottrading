@@ -85,10 +85,17 @@ def htf_array_ladder(entry: float, target: float, arrays: dict, fracs=(0.3, 0.25
     return [(x, f) for (x, _), f in zip(lv, fr)] + [(float(target), 1 - sum(fr))]
 
 
-def rel_eq_rungs(h4: pd.DataFrame, side: int, entry: float, target: float, tol: float, frac: float = 0.25, max_total: float = 0.75) -> list:
+def rel_eq_rungs(h4: pd.DataFrame, side: int, entry: float, target: float, tol: float, frac: float = 0.25, max_total: float = 0.75, asof=None) -> list:
     """M17-swing-horizon (cc06_004 ~00:30:09, cc06_005 ~00:21:27): the intermediate pools of a swing - the 4h relative equal highs (lows for a short) between the entry and the target, each a partial of
     `frac` of the original size (the rest is held to the HTF array; the partials never exceed `max_total` together) [our interpretation of the sizes]. `tol` = the equality tolerance. Returns
-    [(level, fraction)] in price order, ready for the entries' `rungs`."""
+    [(level, fraction)] in price order, ready for the entries' `rungs`. `asof` (a timestamp, normally the entry time) cuts the 4h bars: only bars that CLOSED by then count (the bars' index is their
+    open, a 4h bar closes 4 hours later); without it every bar passed is used, so the caller must pass bars cut at the entry."""
+    if asof is not None:
+        ix = pd.DatetimeIndex(h4.index)
+        t = pd.Timestamp(asof)
+        if (ix.tz is None) != (t.tzinfo is None):
+            t = t.tz_localize(ix.tz) if t.tzinfo is None else t.tz_localize(None)
+        h4 = h4[ix + pd.Timedelta(hours=4) <= t]
     o, hi, lo, c = _side_bars(h4, side)
     ph, _ = L.pivots(hi, lo, 1)
     lv = sorted(x for x in L.equal_levels([q.price for q in ph], tol) if side * entry < x < side * target)
@@ -102,11 +109,63 @@ def rel_eq_rungs(h4: pd.DataFrame, side: int, entry: float, target: float, tol: 
     return out
 
 
-def opp_ob_ladder(monthly: pd.DataFrame, entry: float, side: int, mt_mode: str = "body", eq_tol: float = 0.0) -> list:
+def monthly_from_daily(df_daily: pd.DataFrame, asof=None) -> pd.DataFrame:
+    """X1-swing-opposing-ob-ladder: monthly bars resampled from the daily bars, COMPLETED months only - with `asof` the daily bars from that date on are cut and the month the asof date falls in is
+    dropped (it is still forming); without it the last month is dropped unless the frame ends on the last weekday of its month [our interpretation]."""
+    d = df_daily
+    ix = pd.DatetimeIndex(d.index)
+    if ix.tz is not None:
+        ix = ix.tz_localize(None)
+    d = d.set_axis(ix)
+    last = None
+    if asof is not None:
+        t = pd.Timestamp(asof)
+        t = t.tz_localize(None) if t.tzinfo is not None else t
+        d = d[d.index.normalize() < t.normalize()]
+        last = t.to_period("M")
+    m = d.resample("MS").agg({"open": "first", "high": "max", "low": "min", "close": "last"}).dropna()
+    if last is not None:
+        m = m[m.index.to_period("M") < last]
+    elif len(m) and len(d):
+        end = d.index[-1]
+        if (end + pd.offsets.BDay(1)).to_period("M") == end.to_period("M"):
+            m = m.iloc[:-1]
+    return m
+
+
+def h4_arrays_from(df_4h: pd.DataFrame, side: int, entry: float, asof=None, n: int = 2) -> list:
+    """B6-swing-in-trade-confirmation (cc06_007 ~00:30:35): the 4h arrays the in-trade confirmation watches, built here: the opposing 4h breakers and mitigation blocks (bearish for a long, bullish for a
+    short) from levels.breakers / levels.mitigation_blocks on the 4h bars that CLOSED by `asof` (a bar closes 4 hours after its open), lying beyond the entry. Returns [(lo, hi)] prices for the entry's
+    `h4_arrays`."""
+    b = df_4h
+    if asof is not None:
+        ix = pd.DatetimeIndex(b.index)
+        t = pd.Timestamp(asof)
+        if (ix.tz is None) != (t.tzinfo is None):
+            t = t.tz_localize(ix.tz) if t.tzinfo is None else t.tz_localize(None)
+        b = b[ix + pd.Timedelta(hours=4) <= t]
+    if len(b) < 2 * n + 3:
+        return []
+    o, h, l, c = _ohlc(b)
+    want = "bear" if side > 0 else "bull"
+    zs = list(L.breakers(o, h, l, c, n)) + list(L.mitigation_blocks(o, h, l, c, 1))
+    out = []
+    for z in zs:
+        if z.kind != want:
+            continue
+        if (side > 0 and z.bottom > entry) or (side < 0 and z.top < entry):
+            out.append((float(z.bottom), float(z.top)))
+    return sorted(set(out), key=lambda r: abs(r[0] - entry))
+
+
+def opp_ob_ladder(monthly: pd.DataFrame, entry: float, side: int, mt_mode: str = "body", eq_tol: float = 0.0, asof=None) -> list:
     """X1-swing-opposing-ob-ladder (cc06_006 ~00:26:29): a swing short at a monthly premium array aims at (T1) the MT of the nearest monthly last down-close candle BELOW the entry - even if it was
     touched once - and (T2) that candle's low. The mirror (long) uses the nearest up-close candle above, its body MT then its high. `monthly` = monthly bars (open/high/low/close). `mt_mode` "body" =
     (open + close) / 2, "range" = (high + low) / 2. A neighbouring monthly low within `eq_tol` of T2 (relative equal lows) is reported as `eq_neighbor` (T2 stays the candle's low). Returns
-    [(T1, "mt"), (T2, "low" | "high")] or []."""
+    [(T1, "mt"), (T2, "low" | "high")] or []. [our interpretation] The equal neighbouring low (high) is returned as a third level, (price, "eq_neighbor"): the relative-equal pool next to T2, a rung the
+    caller may use as T2's partner. With `asof` months not yet completed on that date (the month containing it and later ones) are ignored. See monthly_from_daily for the resample from daily bars."""
+    if asof is not None:
+        monthly = monthly[pd.DatetimeIndex(monthly.index).to_period("M") < pd.Timestamp(asof).to_period("M")]
     o, h, l, c = _ohlc(monthly)
     n = len(c)
     for j in range(n - 1, -1, -1):
@@ -251,6 +310,11 @@ def _replay(bars: pd.DataFrame, daily_pos: dict, df_daily: pd.DataFrame, e: dict
                 readd_wait += cl
                 rl = e.get("entry_open")
                 readd_lv = s * float(rl) if rl is not None else E
+                if cfg.get("readd_at") == "first_daily_array":
+                    # new-htf-partial-and-readd, second option (cc07_001): the limit sits at the first daily bullish array touched on the way back down - the nearest array top below the partial
+                    tops = [max(a_, b_) for a_, b_ in ((s * float(x[0]), s * float(x[1])) for x in (e.get("daily_arrays") or ())) if max(a_, b_) < px]
+                    if tops:
+                        readd_lv = max(tops)
                 events.append((ts[j], "partial_opp", px))
         if hi[j] >= T and size > 0:
             px = max(T, o[j])
@@ -295,7 +359,9 @@ def _replay(bars: pd.DataFrame, daily_pos: dict, df_daily: pd.DataFrame, e: dict
             prog = (c[j] - origin) / (T - origin) if T != origin else 0.0
             dl = s * df_daily["low"].values.astype(float) if s > 0 else -df_daily["high"].values.astype(float)
             kk = daily_pos.get(bdate[j])
-            if kk is not None:
+            if kk is not None and j + 1 < len(ts) and bdate[j + 1] == bdate[j]:
+                kk -= 1                                    # intraday bars: only COMPLETED sessions enter the 40 / 20-day low until the day's last bar
+            if kk is not None and kk >= 0:
                 cand = donchian_stops(dl, kk, prog, cfg["trail_switch"], cfg["pos_buffer_frac"] * R)
                 stop = max(stop, cand)
         elif trail == "4h":
@@ -326,7 +392,7 @@ def _replay(bars: pd.DataFrame, daily_pos: dict, df_daily: pd.DataFrame, e: dict
             run_hi = max(run_hi, hi[j])
         stop_path.append(stop)
         # 6. the horizon
-        if max_hold_days is not None and kd is not None and day_n >= max_hold_days:
+        if max_hold_days is not None and kd is not None and day_n >= max_hold_days and (j + 1 >= len(ts) or bdate[j + 1] != bdate[j]):       # closes on the day's LAST bar
             real += size * (c[j] - avg) / R
             size, exit_j, exit_reason = 0.0, j, "horizon"
             events.append((ts[j], "horizon", c[j]))
@@ -355,23 +421,27 @@ def swing_mgmt_study(df_daily: pd.DataFrame, entries: list, mode: str = "be_t1",
     position entries on daily bars (4h bars for the 4h trail and the 4h confirmation) with pluggable management. `entries` = dicts {i: daily position of the entry session, side, entry, stop, target
     [, origin, t1, rungs [(level, fraction)], opp_arrays [levels], entry_open, h4_arrays [(lo, hi)]]}; management starts on the session after the entry.
       mode    "be_t1"  BE as soon as the first target `t1` (default 1R) is touched | "no_be"  the initial stop until the position is `swing_be_r` (1.5R) in profit, then BE | "thirds"  a partial
-              `swing_p1` (25 %) at 0.25 D (D = |objective - entry|), the stop frozen until D/3 and then BE only if that partial was taken
+              `swing_p1` (25 %) at 0.25 D (D = |objective - entry|), the stop frozen until D/3 and then BE only if that partial was taken; the quarter is re-added at the first retrace low after 0.5 D
+              (a 4h swing low when `df_4h` is given, else a daily one)
       trail   "none" | "4h" (from `swing_trail_from` of D, one tick under the last confirmed 4h swing low, ratchet only) | "phased" (the stop stays under EQ until the first pullback to EQ, then under the
               high made near EQ until its retest, then the 4h trail) | "donchian" (below the lowest low of the last 40 sessions, the last 20 from `trail_switch` of the way; no BE)
       ladder  None | any value: use the entries' `rungs` (see htf_array_ladder / opp_ob_ladder)
-      readd   at each opposing array (`opp_arrays`) close `readd_frac`, re-add the same size at `entry_open` (default the entry); BE only from `swing_be_r`
+      readd   at each opposing array (`opp_arrays`) close `readd_frac`, re-add the same size at `entry_open` (default the entry), or - kw readd_at="first_daily_array" - at the nearest top of the entry's
+              `daily_arrays` [(lo, hi)] below the partial (falls back to entry_open); BE only from `swing_be_r`
       confirm4h  close half when a 4h array above holds (touched, not traded through) and the price retraces more than 50 % of the leg from the lowest low to the touch high
       max_hold_days  close at the close of that trading day (swing mode 22, position 63); the result's label is "short_term" below `swing_label_days` (10) days held
     Returns one row per trade: r (in initial-risk units, size weighted), reason, days_held, label, ... The 4h modes need `df_4h`."""
     cfg = dict(DEFAULT_CFG)
     cfg.update(kw)
+    if cfg.get("readd_at", "entry_open") not in ("entry_open", "first_daily_array"):
+        raise ValueError(f"readd_at {cfg['readd_at']!r}")
     if mode not in ("be_t1", "no_be", "thirds"):
         raise ValueError(f"mode {mode!r}")
     if trail not in ("none", "4h", "phased", "donchian"):
         raise ValueError(f"trail {trail!r}")
     dd = _dates(df_daily)
     daily_pos = {d_: k for k, d_ in enumerate(dd)}
-    use4 = trail in ("4h", "phased") or confirm4h
+    use4 = trail in ("4h", "phased") or confirm4h or (mode == "thirds" and df_4h is not None)       # X4-swing-stop-thirds-partial-quarter: the retrace low is a 4h low whenever 4h bars are given
     if use4 and df_4h is None:
         raise ValueError("the 4h trail / phased trail / 4h confirmation need df_4h")
     bars = df_4h if use4 else df_daily
@@ -457,10 +527,10 @@ def lo_ok(low: float, limit: float, tick: float) -> bool:
 # T11-weekly-template-hold
 # --------------------------------------------------------------------------------------------------------------
 
-def weekly_template_study(df_daily: pd.DataFrame, signals: list) -> pd.DataFrame:
+def weekly_template_study(df_daily: pd.DataFrame, signals: list, conservative: bool = False) -> pd.DataFrame:
     """T11-weekly-template-hold (cc07_003 ~00:13:14), weekly-template mode only: a Tuesday / Wednesday entry at the weekly extreme (`signals` = [{i: daily position of the entry session, side, entry,
     stop, target}]) is held across days until the target, the stop, or Friday's close [weekend flattening is our assumption]. The entry session is not managed (no intraday data); the trade is managed
-    from the next session. Reports the hold time, the outcome and the same-day flatten (the entry session's close) for comparison."""
+    from the next session; the column `entry_bar_stop_reached` flags an entry session whose range also reached the stop and `conservative=True` books that trade as stopped (-1R). Reports the hold time, the outcome and the same-day flatten (the entry session's close) for comparison."""
     o, h, l, c = _ohlc(df_daily)
     dd = _dates(df_daily)
     wk = np.asarray(pd.PeriodIndex(dd, freq="W-FRI").astype(str))
@@ -471,7 +541,10 @@ def weekly_template_study(df_daily: pd.DataFrame, signals: list) -> pd.DataFrame
         R = abs(E - S0)
         flat = s * (c[i0] - E) / R
         reason, r, jx = "friday_close", None, i0
-        for j in range(i0 + 1, len(c)):
+        eb = bool(l[i0] <= S0) if s > 0 else bool(h[i0] >= S0)
+        if eb and conservative:
+            reason, r = "stop", -1.0
+        for j in range(i0 + 1, len(c)) if r is None else ():
             if wk[j] != wk[i0]:
                 break
             jx = j
@@ -485,7 +558,7 @@ def weekly_template_study(df_daily: pd.DataFrame, signals: list) -> pd.DataFrame
                 break
         if r is None:
             r = s * (c[jx] - E) / R
-        rows.append(dict(entry_i=i0, side=s, hold_days=int(jx - i0), reason=reason, r_hold=float(r), r_flatten=float(flat)))
+        rows.append(dict(entry_i=i0, side=s, hold_days=int(jx - i0), reason=reason, r_hold=float(r), r_flatten=float(flat), entry_bar_stop_reached=eb))
     return pd.DataFrame(rows)
 
 

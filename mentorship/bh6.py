@@ -148,10 +148,12 @@ def mob_column(d, ks) -> np.ndarray:
 # --------------------------------------------------------------------------------------------------------------
 
 def persist_week(wk_bias, flip, ks, d) -> np.ndarray:
-    """The weekly bias per row with the idea kept: per week the first row's reading v0 (nonzero) holds on the later rows as long as (a) a Tuesday / Wednesday daily close (completed before the row) lay
+    """The weekly bias per row with the idea kept: per week the first nonzero reading v0 (of the rows so far; the extreme is that of the week's first session - Monday, or the first session of a
+    holiday week [our interpretation]) holds on the later rows as long as (a) a Tuesday / Wednesday daily close (completed before the row) lay
     beyond Monday's extreme AGAINST v0 - the case the plain reading would turn - and (b) the table's stateful bias `flip` has not changed since the week's first row (only a close-based flip trigger does).
     Without (a) the row keeps the table's own reading."""
     wk = np.asarray(wk_bias, int).copy()
+    wk_in = wk.copy()                                        # the plain readings (the loop below overwrites wk)
     fl = np.asarray(flip, int) if flip is not None else np.zeros(len(wk), int)
     h, l, c = (d[k].values.astype(float) for k in ("high", "low", "close"))
     wd = d.index.weekday
@@ -165,7 +167,7 @@ def persist_week(wk_bias, flip, ks, d) -> np.ndarray:
             r0 = r
         if r == r0:
             continue
-        v0 = int(wk[r0])
+        v0 = next((int(x) for x in wk_in[r0:r + 1] if x), 0)       # the week's FIRST NONZERO reading (Monday reads 0, Tuesday -1: -1 is the idea)
         if not v0:
             continue
         k0 = int(ks[r0])

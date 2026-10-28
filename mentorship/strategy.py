@@ -3463,7 +3463,7 @@ class Params:
     bp_leg_days: int = 2                 # ... [our interpretation] "that day or the leg": the day itself, or the last bp_leg_days sessions together, took both the prior high and the prior low
     scenario_check: bool = False         # new-live-vs-analysis-mismatch (cc01_003 ~00:24:16): the session scenario is (bias side, draw, raid side = the other side's previous-day pool); the draw-side pool run first with a close beyond it and a same-direction gap before the raid and before any fill cancels the pending orders and ends the session
     scenario_flip: bool = False          # ... instead of ending the session the bias of the rest of the session flips to the other side (new setups only)
-    weekly_persist: bool = False         # new-weekly-idea-persistence (cc07_008 ~00:33:56): a Tue / Wed daily close beyond Monday's extreme against the weekly bias is not a flip - the week's first reading is kept (table wk_bias) until a flip trigger changes the table's stateful bias
+    weekly_persist: bool = False         # new-weekly-idea-persistence (cc07_008 ~00:33:56): a Tue / Wed daily close beyond Monday's extreme against the weekly bias is not a flip - the week's first nonzero reading is kept (table wk_bias; the columns derived from wk_bias earlier in the table keep the plain reading) until a flip trigger changes the table's stateful bias
     factor_tag: bool = False             # new-seven-factor-context (cc02_006 ~00:54:23): orders are tagged f7_b<big>m<mid>s<short> (+ f7_high with >= 2 big-picture, >= 2 intermediate and 1 of each of the 3 short-term factors, all agreeing); context only - no order is gated by it
 
     def __post_init__(self):

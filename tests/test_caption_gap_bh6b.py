@@ -34,25 +34,33 @@ def mkd(p, rows, bias=None, hist=None, d=D1, base=100.0, start="09:30", **kw):
 # --- X8-061-continuation-after-both-pools ---------------------------------------------------------------------------------------
 
 def test_both_pools_gate():
+    """The test is on the price the order is armed at (spec: 1.0845 rejected, 1.0835 allowed with the cap at 1.0840)."""
     p = p6(both_pools_gate=True)
+    bias = BR(combo=0, both_pools=1, bp_dir=-1, cont_cap=100.5)
     flat = [(100.2, 100.4, 100.0, 100.2)] * 12
-    ctx = mkd(p, flat, BR(combo=0, both_pools=1, bp_dir=-1, cont_cap=100.5))
+    ctx = mkd(p, flat, bias)
     i = at(ctx, "09:50")
-    assert E6.side_ok(ctx, p, -1, "AM", i) is None                           # price 100.2 is still under the cap (the OB open / FVG CE): a short continuation is valid
-    assert E6.side_ok(ctx, p, 1, "AM", i) is None                            # the gate only reads the continuation side
-    above = mkd(p, [(101.0, 101.2, 100.8, 101.0)] * 12, BR(combo=0, both_pools=1, bp_dir=-1, cont_cap=100.5), base=101.0)
-    assert E6.side_ok(above, p, -1, "AM", at(above, "09:50")) == "x_bh6_both_pools"       # above the cap: no new shorts
-    assert E6.side_ok(above, p, 1, "AM", at(above, "09:50")) is None
+    sd, su = ctx.sides_map[-1], ctx.sides_map[1]
+    assert E6.side_ok(ctx, p, -1, "AM", i) is None                           # the side itself stays open; the armed price decides
+    assert E6.order_ok(ctx, sd, dict(order(), entry=100.45), "AM", i, p) is None            # a short armed under the cap: allowed
+    assert E6.order_ok(ctx, sd, dict(order(), entry=100.55), "AM", i, p) == "x_bh6_both_pools"       # armed above the cap: rejected although the market is below it
+    assert E6.order_ok(ctx, su, dict(order(), entry=100.9), "AM", i, p) is None            # the gate only reads the continuation side
+    above = mkd(p, [(101.0, 101.2, 100.8, 101.0)] * 12, bias, base=101.0)
+    ia = at(above, "09:50")
+    assert E6.order_ok(above, above.sides_map[-1], dict(order(), entry=100.4), "AM", ia, p) is None       # a retrace-into-the-OB short with the market closed above the cap: allowed
+    assert E6.order_ok(above, above.sides_map[-1], dict(order(), entry=101.0), "AM", ia, p) == "x_bh6_both_pools"
     up = mkd(p, [(99.0, 99.2, 98.8, 99.0)] * 12, BR(combo=0, both_pools=1, bp_dir=1, cont_cap=99.5), base=99.0)
-    assert E6.side_ok(up, p, 1, "AM", at(up, "09:50")) == "x_bh6_both_pools" and E6.side_ok(up, p, -1, "AM", at(up, "09:50")) is None       # the mirror
-    quiet = mkd(p, [(101.0, 101.2, 100.8, 101.0)] * 12, BR(combo=0, both_pools=0, bp_dir=0, cont_cap=100.5), base=101.0)
-    assert E6.side_ok(quiet, p, -1, "AM", at(quiet, "09:50")) is None        # not a both-pools day
-    nocap = mkd(p, [(101.0, 101.2, 100.8, 101.0)] * 12, BR(combo=0, both_pools=1, bp_dir=-1, cont_cap=float("nan")), base=101.0)
-    assert E6.side_ok(nocap, p, -1, "AM", at(nocap, "09:50")) is None        # nothing to measure against: inert
+    iu = at(up, "09:50")
+    assert E6.order_ok(up, up.sides_map[1], dict(order(), entry=99.0), "AM", iu, p) == "x_bh6_both_pools"       # the mirror: a long armed below the cap
+    assert E6.order_ok(up, up.sides_map[1], dict(order(), entry=99.6), "AM", iu, p) is None
+    quiet = mkd(p, flat, BR(combo=0, both_pools=0, bp_dir=0, cont_cap=100.5))
+    assert E6.order_ok(quiet, quiet.sides_map[-1], dict(order(), entry=101.0), "AM", at(quiet, "09:50"), p) is None        # not a both-pools day
+    nocap = mkd(p, flat, BR(combo=0, both_pools=1, bp_dir=-1, cont_cap=float("nan")))
+    assert E6.order_ok(nocap, nocap.sides_map[-1], dict(order(), entry=101.0), "AM", at(nocap, "09:50"), p) is None        # nothing to measure against: inert
     off = Params(**BASE, htf_bias="combo", bias_neutral="both")
-    assert E6.side_ok(above, off, -1, "AM", at(above, "09:50")) is None
+    assert E6.order_ok(ctx, sd, dict(order(), entry=100.55), "AM", i, off) is None
     from mentorship import daycontext as DW
-    assert DW.side_ok(above, p, -1, "AM", at(above, "09:50")) == "x_bh6_both_pools"       # wired through the side_ok chain
+    assert DW.order_ok(ctx, sd, dict(order(), entry=100.55), "AM", i, p) == "x_bh6_both_pools"       # wired through the order_ok chain
 
 
 # --- new-live-vs-analysis-mismatch -----------------------------------------------------------------------------------------------
@@ -220,18 +228,24 @@ LA_SETS = {   # name -> switches (the draw lock stays on); each leaves trades on
 }
 
 
+LA_HITS = {"gates": ("both_pools_gate", "factor_tag", "weekly_persist"), "scenario": ("scenario_check",), "scenario_flip": ("scenario_check", "scenario_flip"), "mob": ("mob",)}
+
+
 @pytest.mark.parametrize("name", list(LA_SETS))
 def test_look_ahead_synthetic_bh6(name):
     x, y = _walks()
     p = Params(**dict(LA, **LA_SETS[name]))
+    BH2.HITS.clear()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         full = B.run(x, 5, "ES", p, partner=y, intermarket=IM)
     assert len(full) >= 1, f"{name}: the switches leave no trade in the synthetic window"
+    for k in LA_HITS[name]:
+        assert BH2.HITS["sw_" + k] > 0, f"{name}: {k} never acted in the full run"
     _no_look_ahead(x, 5, "ES", p, COLS, every=max(1, len(full) // 2), partner=y, intermarket=IM, exits=True, min_trades=1)
 
 
-ES_WIN = {"gates": ("2023-03-06", "2023-03-24"), "scenario": ("2023-03-06", "2023-03-24")}
+ES_WIN = {"gates": ("2023-03-06", "2023-03-24"), "scenario": ("2023-03-06", "2023-03-24"), "scenario_flip": ("2023-03-06", "2023-03-24"), "mob": ("2023-03-06", "2023-03-24")}
 
 
 @pytest.mark.skipif(not ES, reason="no ES data")

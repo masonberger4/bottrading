@@ -592,3 +592,89 @@ def test_monthly_mt_4h_ob_entry():
     away = htf.Arr("bull", "ob", "M", 106.0, 102.0, 104.0, 0)
     assert T6.swing_entries(h4, d, [ARR_W, away, ARR_M], entry_types=("mt_4h_ob",)).reason[0] in ("skip_not_at_monthly_mt", "skip_no_discount_array")
     assert T6.swing_entries(h4, d, [ARR_W, ARR_M], entry_types=("mt_4h_ob",)).reason[0] == "skip_not_at_monthly_mt"
+
+
+# --- review fixes, bias_htf#6/7 round 1 ---------------------------------------------------------------------------------------
+
+def test_persist_week_uses_the_first_nonzero_reading():
+    d = dsess([(100, 105, 99, 101), (101, 107, 100, 106), (106, 108, 104, 105), (105, 106, 100, 101), (101, 102, 98, 99)], start=date(2026, 1, 5))
+    out = BH6.persist_week([0, -1, -1, 1, 1], [-1] * 5, [0, 1, 2, 3, 4], d)
+    assert list(out) == [0, -1, -1, -1, -1]                                # Monday reads 0, Tuesday -1: -1 is the week's idea and survives Tuesday's close beyond Monday's high
+
+
+def test_thirds_readd_uses_4h_bars_when_given():
+    dd = daily([(100, 100, 100, 100)] * 8)
+    h4 = daily([(100, 111, 100.5, 110), (110, 112, 105, 111), (111, 121, 115, 120), (120, 122, 112, 114), (114, 123, 113, 122), (122, 141, 121, 140)], start="2026-01-06", freq=pd.Timedelta(hours=4))
+    r = S6.swing_mgmt_study(dd, [_entry(target=140.0)], mode="thirds", df_4h=h4).iloc[0]
+    assert [e[1] for e in r.events] == ["partial", "readd", "target"]       # the retrace low (bar 3 of the 4h book) is found on the 4h bars, not on the flat daily book
+    assert "readd" not in [e[1] for e in S6.swing_mgmt_study(dd, [_entry(target=140.0)], mode="thirds").iloc[0].events]
+
+
+def test_readd_at_first_daily_array():
+    d = daily([(100, 100, 100, 100), (100, 111, 100.5, 110), (108, 109, 99, 105), (105, 131, 104, 130)])
+    e = _entry(opp_arrays=[110.0], entry_open=100.0, daily_arrays=[(103.0, 105.0), (90.0, 92.0)])
+    row = S6.swing_mgmt_study(d, [e], readd=True, readd_at="first_daily_array").iloc[0]
+    assert [x[1] for x in row.events][:2] == ["partial_opp", "readd"] and abs(row.events[1][2] - 105.0) < 1e-9
+    assert abs(row.r - 3.25) < 1e-9                                         # 0.5 at +1R, 0.5 re-added at the array top 105, the whole 1.0 (avg 102.5) to 130
+    plain = S6.swing_mgmt_study(d, [e], readd=True).iloc[0]
+    assert abs(plain.events[1][2] - 100.0) < 1e-9 and abs(plain.r - 3.5) < 1e-9       # the default stays the entry open
+    with pytest.raises(ValueError):
+        S6.swing_mgmt_study(d, [e], readd=True, readd_at="x")
+
+
+def test_rel_eq_rungs_asof_cuts_later_pools():
+    hi = [105, 110, 104, 110.1, 106, 120, 108, 120.05, 107, 130, 109]
+    h4 = daily([(h - 2, h, h - 4, h - 1) for h in hi], freq=pd.Timedelta(hours=4))
+    cut = S6.rel_eq_rungs(h4, 1, 100.0, 140.0, tol=0.2, asof=h4.index[4] + pd.Timedelta(hours=4))
+    assert [round(x) for x, _ in cut] == [110]                              # the 120 pair formed after the asof time
+    assert cut == S6.rel_eq_rungs(h4.iloc[:5], 1, 100.0, 140.0, tol=0.2)
+
+
+def test_monthly_from_daily_and_completed_months():
+    d = daily([(100 + k, 101 + k, 99 + k, 100.5 + k) for k in range(75)], start="2026-01-01", freq="B")
+    m = S6.monthly_from_daily(d, asof="2026-03-10")
+    assert [str(x)[:7] for x in m.index] == ["2026-01", "2026-02"]          # March is still forming at the asof date
+    assert m.high.iloc[0] == d.high[d.index < "2026-02-01"].max()
+    full = S6.monthly_from_daily(d.iloc[:50])
+    assert all(str(x)[:7] != str(d.index[49])[:7] for x in full.index)      # the last (incomplete) month is dropped
+    mm = pd.DataFrame({"open": [1.2, 1.34, 1.36, 1.40], "high": [1.35, 1.38, 1.40, 1.45], "low": [1.19, 1.2950, 1.30, 1.35], "close": [1.34, 1.30, 1.39, 1.44]},
+                      index=pd.date_range("2025-09-01", periods=4, freq="MS"))
+    full_l = S6.opp_ob_ladder(mm, 1.10, 1)
+    cut_l = S6.opp_ob_ladder(mm, 1.10, 1, asof="2025-12-20")
+    assert abs(full_l[0][0] - 1.42) < 1e-9 and abs(cut_l[0][0] - 1.375) < 1e-9       # the forming December candle is not the "last up-close candle"
+
+
+def test_h4_arrays_from_is_causal_and_beyond_the_entry():
+    rng = np.random.default_rng(7)
+    c = 100 + np.cumsum(rng.normal(0, 1.0, 220))
+    o = np.r_[c[0], c[:-1]]
+    h = np.maximum(o, c) + rng.uniform(0.1, 0.8, 220)
+    l = np.minimum(o, c) - rng.uniform(0.1, 0.8, 220)
+    h4 = pd.DataFrame(dict(open=o, high=h, low=l, close=c), index=pd.date_range("2026-01-05", periods=220, freq="4h"))
+    t = h4.index[150] + pd.Timedelta(hours=4)
+    a = S6.h4_arrays_from(h4, 1, 100.0, asof=t)
+    assert a == S6.h4_arrays_from(h4.iloc[:151], 1, 100.0)                  # bars after the asof time change nothing
+    assert all(lo > 100.0 for lo, _ in a)
+    s = S6.h4_arrays_from(h4, -1, 100.0, asof=t)
+    assert all(hi < 100.0 for _, hi in s)
+
+
+def test_horizon_closes_on_the_days_last_4h_bar():
+    dd = daily([(100, 100, 100, 100)] * 5, start="2026-01-05")
+    h4 = daily([(100, 101, 99, 100)] * 18, start="2026-01-06", freq=pd.Timedelta(hours=4))
+    r = S6.swing_mgmt_study(dd, [_entry(stop=50.0, target=200.0)], confirm4h=True, df_4h=h4, max_hold_days=1).iloc[0]
+    assert r.reason == "horizon" and r.events[-1][0] == h4.index[5]         # the 6th bar of the first day after the entry, not its first bar
+
+
+def test_conservative_entry_bar_stop():
+    d = daily([(100, 101, 94, 100), (100, 112, 99, 111)])
+    sig = [dict(i=0, side=1, entry=100.0, stop=95.0, target=110.0)]
+    a = S6.weekly_template_study(d, sig)
+    b = S6.weekly_template_study(d, sig, conservative=True)
+    assert bool(a.entry_bar_stop_reached[0]) and a.reason[0] == "target"
+    assert b.reason[0] == "stop" and b.r_hold[0] == -1.0
+
+
+def test_array_fields_read_from_dicts_and_objects():
+    assert T6._araw({"typ": "fvg"}, "typ") == "fvg" and T6._araw({"kind": "bull"}, "typ") is None
+    assert T6._araw(ARR_D, "typ") == "ob"

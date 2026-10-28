@@ -50,11 +50,23 @@ def side_ok(ctx, p, sign: int, session: str, i: int):
     if cap != cap:
         return None                                          # no order-block candle / FVG to measure against: the filter is inert
     dr = _n(row, "bp_dir")
-    px = float(ctx.c[i])
-    sw("both_pools_gate")
-    if dr < 0 and sign < 0 and px > cap:
-        return "x_bh6_both_pools"                            # a down leg took both pools: shorts only while price stays below the cap
-    if dr > 0 and sign > 0 and px < cap:
+    # The test is on the price the order is armed at (order_ok -> _cap_order): a short limit armed above the cap is rejected, one armed at / below it (a retrace into the OB) is allowed even when the market
+    # last closed above the cap. [our interpretation] "if it trades above either one, stand aside" = the armed price is the thing tested, so there is no session latch; the side stays open here.
+    return None
+
+
+def _cap_order(ctx, sd, o: dict, session: str, i: int, p):
+    """X8-061: the order-level test - a short armed ABOVE the cap (a long BELOW it for an up leg) is rejected, one armed at or inside the cap is allowed whatever the market does."""
+    row = _row(ctx, session, i)
+    if row is None or "bp_dir" not in row or not _n(row, "both_pools"):
+        return None
+    cap = _f(row, "cont_cap")
+    if cap != cap or o.get("entry") is None:
+        return None
+    dr = _n(row, "bp_dir")
+    e = float(o["entry"])
+    if (dr < 0 and sd.sign < 0 and e > cap) or (dr > 0 and sd.sign > 0 and e < cap):
+        sw("both_pools_gate")
         return "x_bh6_both_pools"
     return None
 
@@ -79,6 +91,10 @@ def factor_counts(ctx, p, row, sign: int, o: dict, i: int) -> tuple:
 
 def order_ok(ctx, sd, o: dict, session: str, i: int, p):
     """Adds the f7 tag to the armed order; never rejects (a context label, ICT: 'this is not execution')."""
+    if p.both_pools_gate and i is not None:
+        why = _cap_order(ctx, sd, o, session, i, p)
+        if why is not None:
+            return why
     if not p.factor_tag:
         return None
     row = _row(ctx, session, i)

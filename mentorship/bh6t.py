@@ -31,11 +31,19 @@ def _norm(x):
 # new-opening-price-position-model (96)
 # --------------------------------------------------------------------------------------------------------------
 
-def opening_price_model(df: pd.DataFrame, bias, draw=None, ref_min: int = 0, tick: float = 0.0) -> pd.DataFrame:
+def _araw(ra, key: str, default=None):
+    """An attribute of an array given either as an object (levels.Zone ...) or a dict; `default` when the array has no such field."""
+    if isinstance(ra, dict):
+        return ra.get(key, default)
+    return getattr(ra, key, default)
+
+
+def opening_price_model(df: pd.DataFrame, bias, draw=None, ref_min: int = 0, tick: float = 0.0, conservative: bool = False) -> pd.DataFrame:
     """new-opening-price-position-model (095 ~00:15:42), research: on each calendar day whose weekly bias (`bias`: date-indexed Series, +1 / -1) is set, take the opening price at minute `ref_min` (0 =
     the midnight open; the first bar at or after it), wait for the market to trade BELOW it first (above it for a short), then place a stop at the open: a bar trading back through it fills (at the open,
     or at that bar's open on a gap). Stop = the lowest low since the reference (the sub-open low) less `tick` [our interpretation: ICT says only a reasonable stop]; target = the weekly `draw`
-    (date-indexed level Series; None = none), held to the target, the stop or the week's last bar. One trade per day. Returns one row per trade with r in initial-risk units."""
+    (date-indexed level Series; None = none), held to the target, the stop or the week's last bar. One trade per day. Returns one row per trade with r in initial-risk units. The fill bar is not managed intrabar (the stop is checked from the next bar): the column `entry_bar_stop_reached`
+    flags a fill bar whose low also reached the stop, and `conservative=True` books that trade as stopped (-1R) [our interpretation of the unknown intrabar order]."""
     day = np.asarray([_norm(x) for x in df.index])
     mins = np.asarray([pd.Timestamp(x).hour * 60 + pd.Timestamp(x).minute for x in df.index])
     wk = np.asarray(pd.PeriodIndex(day, freq="W-FRI").astype(str))
@@ -71,7 +79,10 @@ def opening_price_model(df: pd.DataFrame, bias, draw=None, ref_min: int = 0, tic
             continue
         tgt = None if drw is None or d_ not in drw else s * drw[d_]
         r, why, qe = None, "week_end", q0
-        for q in range(q0 + 1, len(c)):
+        eb = bool(lo[q0] <= stop)
+        if eb and conservative:
+            r, why = -1.0, "stop"
+        for q in range(q0 + 1, len(c)) if r is None else ():
             if wk[q] != wk[q0]:
                 break
             qe = q
@@ -83,7 +94,7 @@ def opening_price_model(df: pd.DataFrame, bias, draw=None, ref_min: int = 0, tic
                 break
         if r is None:
             r = (s * c[qe] - px) / (px - stop)
-        rows.append(dict(date=d_, side=s, entry=s * px, stop=s * stop, r=float(r), reason=why))
+        rows.append(dict(date=d_, side=s, entry=s * px, stop=s * stop, r=float(r), reason=why, entry_bar_stop_reached=eb))
     return pd.DataFrame(rows)
 
 
@@ -611,13 +622,14 @@ def swing_entries(df_4h: pd.DataFrame, df_daily: pd.DataFrame, arrays: list, sid
                 if eq_ == eq_ and price > eq_:
                     why = "premium"
             if why is None and bounce_check and weak:
-                if not any(a[0] == "disc" and a[3] == "D" and a[1] <= price <= a[2] and getattr(ar_raw[arr.index(a)], "typ", "ob") == "ob" for a in ins):
+                if not any(a[0] == "disc" and a[3] == "D" and a[1] <= price <= a[2] and _araw(ar_raw[arr.index(a)], "typ") == "ob" for a in ins):
                     why = "weak_bounce_needs_daily_ob"
             if why is None and typ == "mt_4h_ob":
                 mt_ok = False
                 for a, ra in zip(arr, ar_raw):
-                    if a[3] == mt_ob_tf and a[0] == "disc" and a[4] <= k and getattr(ra, "typ", "ob") == "ob":
-                        ce = (a[1] + a[2]) / 2 if getattr(ra, "ce", NAN) != getattr(ra, "ce", NAN) else (side * float(ra.ce))
+                    if a[3] == mt_ob_tf and a[0] == "disc" and a[4] <= k and _araw(ra, "typ") == "ob":          # an array with no typ is not an order block
+                        ce_raw = _araw(ra, "ce", NAN)
+                        ce = (a[1] + a[2]) / 2 if ce_raw is None or ce_raw != ce_raw else (side * float(ce_raw))
                         if l[src] <= ce <= h[src]:
                             mt_ok = True
                 if not mt_ok:
