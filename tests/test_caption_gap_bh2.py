@@ -24,14 +24,14 @@ NEW_FIELDS = (
     "iof_weekly_weight", "iof_w_risk", "iof_w_weeks", "sibi_gate", "wick_ce_60m", "sibi15_ce_cancel", "allow_reversal_after_target", "soft_carry", "soft_carry_risk", "inside_bisi_release",
     "release_pts", "fast_draw_extend", "fast_draw_mult", "dxy_needs_rates", "pd3_result", "pd3_disp_adr", "pd3_first_caution", "wk_q75_confirm", "consol_dir", "consol_chase_frac",
     "htf_after_draw", "pd_two_level", "range_no_bias", "range_no_bias_pct", "eq_tiebreak", "eq_tie_frac", "tier_regime_gate", "tug_required", "raid_profile_bias", "raid_profile_n", "htf_bias_tf",
-    "htf_rank_tf", "flip_terminus", "flip_max_days", "dsmt_bias", "dsmt_days", "im_regime_tag", "oneway_n", "raid_side_gate", "raid_ratio", "ipda_draw_side", "first_clue_neutral",
+    "htf_bias_pools", "tier_stl_mode", "htf_rank_tf", "flip_terminus", "flip_max_days", "dsmt_bias", "dsmt_days", "im_regime_tag", "oneway_n", "raid_side_gate", "raid_ratio", "ipda_draw_side", "first_clue_neutral",
     "ipda_extreme_pause", "decoupled_scalp")
 KNOBS = {"scalp_week_risk", "q_window_lo", "q_window_hi", "q_obj_days", "qshift_strong_pct", "iof_w_risk", "iof_w_weeks", "soft_carry_risk", "release_pts", "fast_draw_mult", "pd3_disp_adr",
          "consol_chase_frac", "range_no_bias_pct", "eq_tie_frac", "raid_profile_n", "flip_max_days", "dsmt_days", "raid_ratio"}
 OFF = dict(q_days_tag=False, q_window_gate=False, q_window_size=1.0, shift_due_tag=False, qshift_bias=False, q_obj_lean=False, qshift_strong_consol=False, iof_weekly_weight=False, sibi_gate=False, wick_ce_60m=False,
            sibi15_ce_cancel=False, allow_reversal_after_target=False, soft_carry=False, inside_bisi_release=False, fast_draw_extend=False, dxy_needs_rates=False, pd3_result="flip",
            pd3_first_caution=False, wk_q75_confirm=False, consol_dir="off", htf_after_draw="neutral", pd_two_level=False, range_no_bias=False, eq_tiebreak=False, tier_regime_gate=False,
-           tug_required=False, raid_profile_bias=False, htf_bias_tf="D", htf_rank_tf=False, flip_terminus=False, dsmt_bias=False, im_regime_tag=False, oneway_n=0, raid_side_gate=False,
+           tug_required=False, raid_profile_bias=False, htf_bias_tf="D", htf_bias_pools=False, tier_stl_mode="last2", htf_rank_tf=False, flip_terminus=False, dsmt_bias=False, im_regime_tag=False, oneway_n=0, raid_side_gate=False,
            ipda_draw_side=False, first_clue_neutral=False, ipda_extreme_pause=False, decoupled_scalp=False)
 
 
@@ -83,7 +83,7 @@ def test_defaults_and_validation():
     assert p.bias_neutral == "skip" and p.bx == ""
     # the owner-fixed Silver Bullet switches are untouched by this chunk
     assert p.sb_model is False and "sb_use_bias" in Params.__dataclass_fields__ and p.want_all_engines is True
-    for bad in (dict(pd3_result="x"), dict(consol_dir="x"), dict(htf_after_draw="x"), dict(htf_bias_tf="X"), dict(bias_neutral="x"), dict(scalp_week_risk=0), dict(soft_carry_risk=1.5), dict(iof_w_risk=0),
+    for bad in (dict(pd3_result="x"), dict(consol_dir="x"), dict(htf_after_draw="x"), dict(htf_bias_tf="X"), dict(tier_stl_mode="x"), dict(bias_neutral="x"), dict(scalp_week_risk=0), dict(soft_carry_risk=1.5), dict(iof_w_risk=0),
                 dict(q_window_lo=50, q_window_hi=40), dict(q_window_size=0), dict(q_obj_days=0), dict(iof_w_weeks=2), dict(release_pts=-1), dict(fast_draw_mult=0), dict(pd3_disp_adr=0), dict(consol_chase_frac=0.8),
                 dict(range_no_bias_pct=0.4), dict(eq_tie_frac=0.6), dict(raid_profile_n=0), dict(flip_max_days=0), dict(dsmt_days=1), dict(oneway_n=-1), dict(raid_ratio=0), dict(qshift_strong_pct=1.0)):
         with pytest.raises(ValueError):
@@ -119,9 +119,10 @@ def test_table_configuration_names_what_the_switches_need():
     assert set(x["b2"]) >= {"qd", "sibi", "ad", "fd", "tier", "fl", "cd"} and x["b2"]["fl"] == {"pd3n": 1.5, "pd3log": 1} and x["obj"] == 1 and x["wk"] == 1 and x["pr"] == 1
     assert x["b1"]["dr"] == [5, "close"]                                             # consol_dir reads the daily range columns
     y = json.loads(Params(eq_tiebreak=True, ipda_draw_side=True, qshift_bias=True, iof_weekly_weight=True, oneway_n=4, htf_bias_tf="W").bx)
-    assert y["b2"]["brk"] == [0.1] and y["b2"]["qs2"][2] == 1 and y["b2"]["ow"] == 4 and y["b2"]["btf"] == "W" and y["b2"]["iofw"] == [10, 2]
+    assert y["b2"]["brk"] == [0.1] and y["b2"]["qs2"][2] == 1 and y["b2"]["ow"] == 4 and y["b2"]["btf"] == [0, 1, 0] and y["b2"]["iofw"] == [10, 2]
     assert json.loads(Params(raid_profile_bias=True, raid_profile_n=3).bx)["b2"]["rp"] == 3
-    assert Params(bias_neutral="scalp_week").bx == ""                                # engine-only switches add nothing to the table
+    assert Params(soft_carry=True, wick_ce_60m=True).bx == ""                       # engine-only switches add nothing to the table
+    assert json.loads(Params(bias_neutral="scalp_week").bx) == {"wk": 1}             # scalp_week reads the weekly draw columns (a week without a weekly draw)
 
 
 # --- items 84 / 134: the time since the last daily MSS ----------------------------------------------------------------------------------
@@ -150,6 +151,16 @@ def test_shift_due_is_false_without_a_one_way_move():
     j = int(np.flatnonzero(mss)[-1])
     q = BH2.q_columns(h, l, cl, np.array([j + 140]), 40, 60)
     assert q["q_days"][0] == 140 and q["shift_due"][0] == 0
+
+
+def test_shift_due_needs_a_one_way_move_not_a_choppy_one():
+    base = crash(stair(5), 3, 4.0)
+    z = [base[-1] + (6.0 if q % 2 else -6.0) for q in range(160)]                               # a choppy 160 sessions: a wide range but no net move
+    o, h, l, cl = book(base + z)
+    ev, mss, ld, lm = BH2.break_stream(h, l, cl)
+    j = int(np.flatnonzero(mss)[-1])
+    q = BH2.q_columns(h, l, cl, np.array([j + 140]), 40, 60)
+    assert q["q_days"][0] >= 126 and q["shift_due"][0] == 0
 
 
 # --- item 108: the EQ tie-break ------------------------------------------------------------------------------------------------------
@@ -402,14 +413,19 @@ def test_btf_columns():
     out = BH2.btf_columns([monthly, weekly], k, np.array([100.0]), h, l, c)               # FVGs only
     assert out["bias_m"][0] == 1 and out["bias_w"][0] == -1
     assert BH2.btf_columns([weekly], k, np.array([100.0]), h, l, c)["bias_m"][0] == 0     # no monthly array: the engine falls back to the weekly
-    # with the daily book the previous month's / week's extremes are draws too: January's high (25 away) is nearer than the monthly FVG (50 away), the weekly FVG (0.5) than the week's high
-    wk = BH2.btf_columns([monthly, weekly], k, np.array([100.0]), h, l, c, d)
+    # literal spec: the daily book alone changes nothing without htf_bias_pools
+    assert BH2.btf_columns([], k, np.array([100.0]), h, l, c, d)["bias_m"][0] == 0
+    # htf_bias_pools: the previous month's / week's extremes are draws too: January's high (25 away) is nearer than the monthly FVG (50 away), the weekly FVG (0.5) than the week's high
+    wk = BH2.btf_columns([monthly, weekly], k, np.array([100.0]), h, l, c, d, pools=True)
     assert wk["bias_m"][0] == 1 and wk["bias_w"][0] == -1
-    assert BH2.btf_columns([], k, np.array([100.0]), h, l, c, d)["bias_m"][0] == 1             # January's high 25 above vs low 40 below: up even without any array
-    assert BH2.btf_columns([], k, np.array([100.0]), h, l, c, d)["bias_w"][0] in (-1, 1)
+    assert BH2.btf_columns([], k, np.array([100.0]), h, l, c, d, pools=True)["bias_m"][0] == 1             # January's high 25 above vs low 40 below: up even without any array
+    assert BH2.btf_columns([], k, np.array([100.0]), h, l, c, d, pools=True)["bias_w"][0] in (-1, 1)
     # an FVG-only reading is one-sided in a trend: the pools add the other side
     assert BH2.btf_columns([htf.Arr("bull", "fvg", "M", 70.0, 60.0, 65.0, 10)], k, np.array([100.0]), h, l, c)["bias_m"][0] == -1
-    assert BH2.btf_columns([htf.Arr("bull", "fvg", "M", 70.0, 60.0, 65.0, 10)], k, np.array([100.0]), h, l, c, d)["bias_m"][0] == 1
+    assert BH2.btf_columns([htf.Arr("bull", "fvg", "M", 70.0, 60.0, 65.0, 10)], k, np.array([100.0]), h, l, c, d, pools=True)["bias_m"][0] == 1
+    # the per-timeframe rung levels (htf_rank_tf): the nearest unrebalanced FVG above / below per timeframe
+    rk = BH2.btf_columns([monthly, weekly], k, np.array([100.0]), h, l, c, rank=True)
+    assert rk["rk_M_up"][0] == 150.0 and rk["rk_W_dn"][0] == 99.0 and rk["rk_D_up"][0] != rk["rk_D_up"][0] and rk["rk_W_up"][0] != rk["rk_W_up"][0]
 
 
 # --- item 122: the one-way delivery ---------------------------------------------------------------------------------------------------
@@ -645,6 +661,11 @@ def test_oi_tag_own_symbol(monkeypatch):
     from pathlib import Path
     assert BX.oi_root("ES") == "ES" and BX.oi_root("NQ") == "NQ" and BX.oi_root("nq1!") == "NQ" and BX.oi_root(None) == "ES"
     assert BX.oi_path("ES").name == "ES_oi.csv" and BX.oi_path("NQ").name == "NQ_oi.csv"
+    for sym in ("MES", "SPX", "SPY", "es1!"):                                                # an index / ETF / micro stands for the futures market it follows (the SPX-signals-traded-as-SPY runs keep the tag)
+        assert BX.oi_root(sym) == "ES", sym
+    for sym in ("MNQ", "NDX", "QQQ"):
+        assert BX.oi_root(sym) == "NQ", sym
+    assert BX.oi_path("MNQ").name == "NQ_oi.csv" and BX.oi_path("SPY").name == "ES_oi.csv"
     work = Path(__file__).resolve().parent.parent / "runs" / "_bh2_oi_test"                # (inside the repo's git-ignored runs/ folder; removed at the end)
     work.mkdir(parents=True, exist_ok=True)
     try:
@@ -655,6 +676,14 @@ def test_oi_tag_own_symbol(monkeypatch):
         assert BX.load_oi_for("NQ") is not None and len(BX.load_oi_for("NQ")) == 30         # the NQ run reads the NQ file only
         pd.DataFrame({"date": idx, "open_interest": np.linspace(500, 400, 30)}).to_csv(work / "ES_oi.csv", index=False)
         assert BX.load_oi_for("ES").iloc[-1] == 400 and BX.load_oi_for("NQ").iloc[-1] == 130
+        # the own-market check is real: the files opened by one lookup are exactly the own file
+        n0 = len(BX.OI_READS)
+        BX.load_oi_for("SPY")
+        assert [Path(x).name for x in BX.OI_READS[n0:]] == ["ES_oi.csv"]
+        orig = BX.oi_path
+        monkeypatch.setattr(BX, "load_oi", lambda path=None: (BX.OI_READS.append(str(work / "NQ_oi.csv")), None)[1])       # a loader that strays to another market's file is caught
+        with pytest.raises(AssertionError):
+            BX.load_oi_for("ES")
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
@@ -671,3 +700,44 @@ def test_inert_switch_warnings():
     assert "htf_bias='flip'" in warns(flip_terminus=True, htf_bias="combo") and not warns(flip_terminus=True, htf_bias="flip")
     assert "inside_bisi" in warns(inside_bisi_release=True) and not warns(inside_bisi_release=True, sloppy_tests=("inside_bisi",))
     assert "draw lock" in warns(soft_carry=True, draw_lock="off") and not warns(soft_carry=True)
+
+
+def test_inert_warnings_round2():
+    def warns(**kw):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            Params(**kw)
+        return " ".join(str(x.message) for x in w if "inert" in str(x.message))
+    assert "tug_required" in warns(tug_required=True) and not warns(tug_required=True, tier_regime_gate=True)
+    assert "ipda_draw_side" in warns(ipda_draw_side=True) and not warns(ipda_draw_side=True, ipda_next=True)
+    assert "objective_neutral" in warns(htf_after_draw="reverse", htf_bias="combo") and not warns(htf_after_draw="reverse", htf_bias="combo", objective_neutral="both")
+    assert "htf_bias_pools" in warns(htf_bias_pools=True) and not warns(htf_bias_pools=True, htf_bias="combo", htf_bias_tf="M")
+
+
+def test_after_draw_reverse_writes_the_flip_state():
+    flip = np.array([1, 1, 1, 1, 1, 1, -1, -1, -1])
+    ad = np.array([0, 0, 0, -1, 0, 0, 0, 0, 0])               # the draw was hit at a daily array in row 3: the state becomes -1 instead of 0 / +1 ...
+    aw = np.zeros(9, int)
+    out = BH2.apply_after_draw_flip(flip, ad, aw)
+    assert list(out) == [1, 1, 1, -1, -1, -1, -1, -1, -1]       # ... and stays so; the underlying state changing to -1 (a new trigger) takes over
+    flip2 = np.array([1, 1, 1, 1, 1, 0, 0, 1, 1])
+    out2 = BH2.apply_after_draw_flip(flip2, np.array([0, 0, -1, 0, 0, 0, 0, 0, 0]), aw)
+    assert list(out2) == [1, 1, -1, -1, -1, 0, 0, 1, 1]         # the base state changing (1 -> 0) ends the override
+
+
+def test_tier_stl_mode_last2_vs_two_of_four():
+    h, l = _tier_book()
+    ks = np.arange(8, len(h))
+    a = dict(zip(ks, BH2.tier_columns(h, l, ks)["tier_regime"]))                                  # default "last2": each of the last two short-term lows was broken
+    b = dict(zip(ks, BH2.tier_columns(h, l, ks, "two_of_four")["tier_regime"]))
+    assert a[17] == 0 and b[17] == -1                                                             # the newest short-term low is not broken yet: only the looser reading has the regime
+    assert a[27] == -1 and b[27] == -1
+    assert sum(1 for k in ks if a[k] == -1) < sum(1 for k in ks if b[k] == -1)
+    assert json.loads(Params(tier_regime_gate=True, tier_stl_mode="two_of_four").bx)["b2"]["tier"] == ["two_of_four"]
+
+
+def test_btf_cfg_names_pools_and_rank():
+    c = json.loads(Params(htf_bias_tf="M", htf_bias_pools=True, htf_rank_tf=True).bx)["b2"]["btf"]
+    assert c == [1, 1, 1]
+    assert json.loads(Params(htf_rank_tf=True).bx)["b2"]["btf"] == [0, 0, 1]                      # rank only: no bias columns
+    assert "btf" not in (json.loads(Params().bx or "{}").get("b2") or {})

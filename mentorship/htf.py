@@ -323,6 +323,8 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         arrs.append(Arr("bull" if r.up else "bear", r.kind, "W" if r.kind == "nwog" else "D",
                         r.high, r.low, r.ce, k))
     b2 = X.get("b2") or {}
+    b3 = X.get("b3") or {}                           # caption-gap pass bias_htf#3/7 (bh3.py)
+    retire = bool(b3.get("ret"))                     # caption-gap B17-no-active-array: arrays traded to their far edge by any wick are expired draws
     if b2.get("ow"):                                 # caption-gap E4-daily-one-way-delivery-rebalance (bias_htf#2/7): the one-way-delivery range as a draw
         from . import bh2
         arrs += bh2.oneway_arrays(o, h, l, c, int(b2["ow"]))
@@ -381,10 +383,13 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
                 continue
             cl, hi_after, lo_after = c[s:k], h[s:k], l[s:k]
             lo_after = np.append(lo_after, ol); hi_after = np.append(hi_after, oh)
-            if balance_tf == "own" and a.tf == "W":      # A11-htf-gap-own-tf: only completed weekly bars balance a weekly gap
+            if balance_tf == "own" and a.tf == "W" and not retire:      # A11-htf-gap-own-tf: only completed weekly bars balance a weekly gap (caption-gap B17-no-active-array retire_arrays: any daily wick that traded to the far edge expires it)
                 dw_ = [j for j in range(len(wl)) if a.known < wl[j] <= k]
                 hi_after = wh_[dw_] if dw_ else np.array([-np.inf])
                 lo_after = wlow_[dw_] if dw_ else np.array([np.inf])
+            elif retire and a.tf == "W" and ((a.kind == "bull" and lo_after.min() <= a.bottom) or (a.kind == "bear" and hi_after.max() >= a.top)):
+                from . import bh3 as _bh3
+                _bh3.sw("retire_arrays")
             gap = a.typ in ("ndog", "nwog")              # gaps are never retired by a fill (039)
             if a.typ == "spr":                           # 091: a single-pass range is a draw until a later low / high trades through it
                 seen = np.append(l[s:k], ol).min() if a.kind == "bull" else np.append(h[s:k], oh).max()
@@ -426,6 +431,10 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
             # draw: the unrebalanced part of the inefficiency (FVGs and gaps only)
             if a.typ in ("fvg", "ndog", "nwog", "vi"):
                 if a.typ == "vi" and vi_two_sided:           # caption-gap A9: open until a body kills it; wicks never retire it (077)
+                    if retire and ((a.top < px and lo_after.min() <= a.bottom) or (a.bottom > px and hi_after.max() >= a.top)):
+                        from . import bh3 as _bh3
+                        _bh3.sw("retire_arrays")
+                        continue                             # caption-gap B17-no-active-array (retire_arrays): traded to its far edge = expired
                     if a.top < px:
                         draws_dn.append((px - a.top, f"{a.tf}_{a.typ}", a.top))
                     elif a.bottom > px:
@@ -524,14 +533,18 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         from . import bh2
         fl_b2 = bh2.flip_cfg(b2)                     # caption-gap bias_htf#2/7: flip_pd3 neutral result / first-array caution log
         pd3_log = fl_b2.get("pd3_log")
+    fl_b3 = {}
+    if b3:
+        from . import bh3
+        fl_b3 = bh3.flip_cfg(b3, es_pt)              # caption-gap bias_htf#3/7: the tue_fail tolerance
     defer = bool(flip_triggers and "ob_low_touch" in flip_triggers and X)          # caption-gap BH-B9-HTF-OB-low-trade-through: the objective-met columns come from add_columns
     if flip_triggers and len(out) and not defer:
-        fl = _flip(d, w, arrs, flip_triggers, dict(b1.get("fl") or {}, **fl_b2, **({"wk_joint": wk_joint} if wk_joint is not None else {})))
+        fl = _flip(d, w, arrs, flip_triggers, dict(b1.get("fl") or {}, **fl_b2, **fl_b3, **({"wk_joint": wk_joint} if wk_joint is not None else {})))
         out["flip"] = [fl.get(pd.Timestamp(x), 0) for x in out.index]
     if X and len(out):
         out = BH.add_columns(out, X, d, w, arrs, og_df, on, df, es_pt, vi)
     if defer and len(out):
-        cfg_ = dict(b1.get("fl") or {}, **fl_b2)
+        cfg_ = dict(b1.get("fl") or {}, **fl_b2, **fl_b3)
         if wk_joint is not None:
             cfg_["wk_joint"] = wk_joint
         if "obj_day" in out or "obj_week" in out:
@@ -545,11 +558,15 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     if b2 and len(out):
         from . import bh2
         out = bh2.finish(out, b2, d, w, arrs, es_pt, b1.get("dr"), pd3_log)       # caption-gap bias_htf#2/7 (bh2.py): the columns after the flip
+    if b3 and len(out):
+        from . import bh3
+        out = bh3.finish3(out, b3, d, w, arrs, es_pt, df)                           # caption-gap bias_htf#3/7 (bh3.py): the columns after bh2.finish
     return out
 
 
 FLIP_TRIGGERS = ("ob_mt", "wk_dc", "flip_pd3", "flip_close_above", "flip_thu_wopen",
-                 "wk_bisi", "inv3", "ob_low_touch", "wk_rb", "d_breaker", "inv3_lit")       # (caption-gap bias_htf#1/7, bh1.py: the last five)
+                 "wk_bisi", "inv3", "ob_low_touch", "wk_rb", "d_breaker", "inv3_lit",       # (caption-gap bias_htf#1/7, bh1.py: the five before the last)
+                 "tue_fail")                                                                 # (caption-gap bias_htf#3/7, bh3.TueFail: B8-tuesday-failure-swing-flip)
 
 
 def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple, cfg: dict | None = None) -> dict:
@@ -614,6 +631,10 @@ def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple, cfg: di
     if new_tr:
         from . import bh1
         fs = bh1.FlipState(d, w, arrs, triggers, cfg)
+    tf_obj, tf_hold = None, None                   # caption-gap B8-tuesday-failure-swing-flip
+    if "tue_fail" in triggers and cfg.get("tue_tol") is not None:
+        from . import bh3
+        tf_obj = bh3.TueFail(d, w, cfg["tue_tol"])
     pd3n = cfg.get("pd3n")                         # caption-gap B8-three-pd-array-abort: the displacement multiple (None = flip_pd3 flips as built)
     pd3_log = cfg.get("pd3_log")                   # {date: arrays closed through in the state, known before the session} (the first-array caution)
     pd3_pend, pd3_set = 0, -1
@@ -653,6 +674,8 @@ def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple, cfg: di
                 if pd3n:                           # caption-gap B8-three-pd-array-abort (bias_htf#2/7): abandon the bias (neutral); the opposite state only after a displacement day
                     pd3_pend, pd3_set = -state, k
                     state = 0
+                    from . import bh2 as _bh2
+                    _bh2.sw("pd3_result")
                 else:
                     state = -state
         if "flip_close_above" in triggers and state != 0 and k >= 1:
@@ -682,6 +705,18 @@ def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple, cfg: di
                 state = -1
             elif state < 0 and c[k] > wo > o[k]:
                 state = 1
+        if tf_obj is not None:                       # caption-gap B8-tuesday-failure-swing-flip (bias_htf#3/7): the failure swing at Tuesday's close flips the state for Wed-Fri
+            if d.index[k].weekday() == 1 and k >= 1 and d.index[k - 1].weekday() == 0 and wk_of[k - 1] == wk_of[k]:
+                v_ = tf_obj.step(k)
+                if v_ and v_ != state:
+                    tf_hold = (state, v_, wk_of[k])
+                    state = v_
+                    from . import bh3 as _bh3
+                    _bh3.sw("tue_fail")
+            if tf_hold is not None and (k + 1 >= len(d) or wk_of[k + 1] != tf_hold[2]):
+                if state == tf_hold[1]:
+                    state = tf_hold[0]               # the week is over: the state before the failure swing returns [our interpretation of 'for the rest of the week']
+                tf_hold = None
         if "wk_dc" in triggers and k in wk_last:
             r = wk_last[k]
             if last_dn_week is not None and r.close > last_dn_week:

@@ -57,6 +57,28 @@ def b19_sign(t: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).set_index("regime")
 
 
+def by_tag(t: pd.DataFrame, pattern: str, name: str = "tag") -> pd.DataFrame:
+    """Trades grouped by the first lv_tags tag matching the regex `pattern` ("none" = no such tag): trades, win rate, mean R and net. Report only."""
+    if not len(t):
+        return pd.DataFrame(columns=["trades", "win_rate", "avg_R", "net"])
+    tag = t.lv_tags.fillna("").astype(str).str.extract("(" + pattern + ")")[0].fillna("none")
+    rows = []
+    for k, g in t.assign(_k=tag).groupby("_k"):
+        rows.append({name: k, "trades": int(len(g)), "win_rate": round(float((g.net > 0).mean()), 3), "avg_R": round(float(g.R.mean()), 3), "net": round(float(g.net.sum()), 2)})
+    return pd.DataFrame(rows).set_index(name)
+
+
+def m17_hallmarks(t: pd.DataFrame) -> pd.DataFrame:
+    """Decision "M17_hallmarks" (X3-swing-checklist-pipeline; cc06_002 ~0:45, cc06_008 ~30:27): the trades by the swing-hallmark count of the order (Params.hallmarks_tag adds the tag hallmarks_<n>: the count of
+    trend_ok, daily iof, rates, the seasonal window and an opposing array in agreement with the order; COT is excluded until it is loaded). Report only - no gate."""
+    return by_tag(t, r"hallmarks_\d+", "hallmarks")
+
+
+def stack_report(t: pd.DataFrame) -> pd.DataFrame:
+    """X3-full-confluence-stack (cc05_011 ~30:51): the trades by stack count (the tag stack_<n>: season window, flip state, kill-zone timing, rates, dollar; Params.stack_tag / stack_min)."""
+    return by_tag(t, r"stack_\d+", "stack")
+
+
 def main(path="runs/mentorship/decision_trades.csv"):
     t = pd.read_csv(path)
     for tf in sorted(t.tf.unique()):
@@ -68,6 +90,16 @@ def main(path="runs/mentorship/decision_trades.csv"):
         for (tf, k), g in d.groupby(["tf", d[col].astype(str)]):
             s = B.stats(g)
             print(f"{tf}m {k:>14}  n={s['trades']:4d}  avgR={s.get('avg_R', 0):+.3f}  win={s.get('win_rate', 0):.2f}")
+    if "lv_tags" in t.columns:                                           # decision B19_sign (B19-bond-stock-dxy-sign): the orders' im_b*_d* tags (Params.im_regime_tag)
+        v = t[t.variant == "B19-bond-stock-dxy-sign"] if "B19-bond-stock-dxy-sign" in set(t.variant) else d
+        if "net" in v.columns and "R" in v.columns:
+            print("\n--- B19_sign: trades by the bond / dollar vs stock sign regime ---")
+            print(b19_sign(v).to_string())
+        for nm, fn, var in (("M17_hallmarks", m17_hallmarks, "X3-swing-checklist-pipeline"), ("stack", stack_report, "X3-full-confluence-stack")):      # caption-gap pass bias_htf#3/7: report-only counts
+            v = t[t.variant == var] if var in set(t.variant) else d
+            if "net" in v.columns and "R" in v.columns:
+                print(f"\n--- {nm}: trades by tag count ---")
+                print(fn(v).to_string())
 
 
 if __name__ == "__main__":

@@ -22,7 +22,8 @@ from . import bias_htf as BH
 
 PRE_END = 570                                           # the 09:30 open: the ordinary bias table's cut
 
-COL = {"ordered": "draw_ord", "nwog": "nwog_bias", "wk": "wk_bias", "ob_mt": "ob_mt", "draw_pd": "draw_pd"}
+COL = {"ordered": "draw_ord", "nwog": "nwog_bias", "wk": "wk_bias", "ob_mt": "ob_mt", "draw_pd": "draw_pd",
+       "week_pre": "wk_pre_bias", "week_check": "wk_chk_tail", "wd_check": "d_tail"}       # (caption-gap bias_htf#3/7: the weekly bias before the week opens; the table tails of the checklist composers)
 
 
 def bias_col(p) -> str:
@@ -41,6 +42,14 @@ def _i(v) -> int:
 
 def bias_value(row, p) -> int:
     """The htf_bias reading of a table row (0 = neutral / unknown)."""
+    v = _bias_value0(row, p)
+    if row is not None and p.htf_bias != "off" and (p.pd_needs_iof or p.pause_on_hold):
+        from . import bh3e as _B3                        # caption-gap pass bias_htf#3/7: pd_needs_iof, pause_on_hold
+        v = _B3.bias_value_adjust(row, p, v)
+    return v
+
+
+def _bias_value0(row, p) -> int:
     if row is None or p.htf_bias == "off":
         return 0
     v = _i(row.get(bias_col(p)))
@@ -107,6 +116,9 @@ def want_at(ctx, p, session: str, i: int) -> int:
     if not v and (p.qshift_bias or p.dsmt_bias or p.raid_profile_bias or p.eq_tiebreak):
         from . import bh2e as _B2                    # caption-gap bias_htf#2/7: a neutral bias takes the quarterly shift, the daily SMT, the raid profile, the EQ tie-break
         v = _B2.want_adjust(ctx, p, session, i, v)
+    from . import bh3e as _B3                        # caption-gap pass bias_htf#3/7: the weekly / daily checklist composers, fall_low_bias
+    if _B3.want_on(p):
+        v = _B3.want_override(ctx, p, session, i, v)
     return v
 
 
@@ -326,7 +338,8 @@ def row_state(ctx, p, session: str, i: int) -> State:
             S.tags.add("qs_due")
     # M0.1 / Ep02.6: no narrative -> scalp (bias_neutral="scalp" is the same reading with the htf_bias column)
     if p.bias_neutral in ("scalp", "scalp_week") and p.htf_bias != "off":      # (caption-gap B17-neutral-htf-monday-close: "scalp_week" is the same reading at scalp_week_risk x the size)
-        if want_at(ctx, p, session, i) == 0:
+        from . import bh2e as _B2e
+        if want_at(ctx, p, session, i) == 0 or (p.bias_neutral == "scalp_week" and _B2e.wk_unset(row)):      # B17-neutral-htf-monday-close (084 ~1:26): "when want == 0 (or the weekly draw is unset)"
             S.scalp = S.scalp or "bias_neutral"
     if p.no_narrative_scalp:
         col = bias_col(p) if p.htf_bias != "off" else "combo"
@@ -570,6 +583,9 @@ def size_mult(ctx, sd, i: int, p, lvt) -> float:
     from . import bh2e as _B2                        # caption-gap pass bias_htf#2/7: scalp_week_risk, soft_carry_risk, iof_w_risk
     if _B2.on(p):
         m1 *= _B2.size_mult(ctx, sd, i, p, lvt)
+    if p.wk_struct_weight:
+        from . import bh3e as _B3                    # caption-gap pass bias_htf#3/7: wk_struct_weight
+        m1 *= _B3.size_mult(ctx, sd, i, p, lvt)
     return m1 * _size_mult_q(ctx, sd, i, p, lvt)
 
 

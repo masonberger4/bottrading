@@ -337,7 +337,21 @@ def season_info(ctx, d: date, p, hist, a5) -> dict:
     tags -= drop
     prim = next((n for n, dr, _a, _b in CAL.SEASON_WINDOWS if n in tags), None)
     wdir = dirs.get(prim, 0) if prim else 0
-    info = dict(tags=tags, prim=prim, wdir=wdir, acts=False, intra=CAL.season_dir(d), failed="")
+    if prim and p.season_poised:
+        from . import bh3e as _B3                            # caption-gap B23-market-poised-first (bias_htf#3/7; cc10_016 ~1:51): a seasonal window acts only when the broad market is poised in its direction
+        if _B3.window_poised(ctx, wdir) is False:
+            tags.discard(prim)
+            tags.add("season_not_poised")
+            prim, wdir = None, 0
+            hit("season_not_poised")
+    qual = False
+    if prim and p.season_qualified:
+        from . import bh3e as _B3                            # caption-gap X3-seasonal-quarterly-qualifier (bias_htf#3/7; cc05_007 ~8:04): any ONE qualifier (the daily index SMT, the notes / dollar regime)
+        qual = _B3.season_qualified(ctx, wdir)
+        if qual:
+            tags.add("season_qualified")
+            hit("season_qualified")
+    info = dict(tags=tags, prim=prim, wdir=wdir, acts=False, intra=CAL.season_dir(d), failed="", qualified=qual)
     if prim:
         ws = weekly_state(hist, d) or 0
         if ws and ws == wdir:
@@ -679,6 +693,9 @@ def plan_rules(P, ctx, d: date, p, hist, eth, a5, dt) -> None:
         si = season_info(ctx, d, p, hist, a5)
         tg |= si["tags"]
         P.info["season"] = {k: v for k, v in si.items() if k != "tags"}
+        if p.season_qualified and si.get("qualified"):
+            P.side_block("season_qualified", (-si["wdir"],))        # caption-gap X3-seasonal-quarterly-qualifier (bias_htf#3/7): trades against a qualified window are blocked
+            hit("season_qualified_gate")
         if p.season_gate:
             if si["intra"]:
                 P.side_block("season_intramonth", (-si["intra"],))

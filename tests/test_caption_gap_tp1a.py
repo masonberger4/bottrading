@@ -423,10 +423,10 @@ def _daily(n_up=46):
 def test_post_raid_columns():
     o, h, l, c = _daily()
     ks = np.array([44, 46])
-    cl, tg, rpx, req = BH._pr_dir(h, l, c, ks)
+    cl, tg, rpx, req, _ng = BH._pr_dir(h, l, c, ks)
     assert cl[1] == 1 and rpx[1] == pytest.approx(max(h[20:40])) and req[1] == pytest.approx((max(h[20:40]) + l[20:41].min()) / 2)       # no STL broke into the raid, one breaks after it
     assert cl[0] == 0                                                                   # at k=44 no short-term low has broken yet
-    cu, tu, pu, eu = BH._pr_dir(-l, -h, -c, ks)
+    cu, tu, pu, eu, _nu = BH._pr_dir(-l, -h, -c, ks)
     assert cu[1] == 0                                                                   # the mirror reading: no bullish clue in a bearish tape
     out = pd.DataFrame(index=pd.RangeIndex(2))
     out = BH.post_raid(out, o, h, l, c, ks)
@@ -448,9 +448,9 @@ def test_post_raid_tug():
     # two short-term-high raids that closed back under the raided high, and falling intermediate-term highs
     for k, (hi_, cl_) in {40: (130.0, 119.0), 44: (125.0, 118.0), 52: (127.0, 116.0), 56: (124.0, 115.5)}.items():
         h[k], c[k] = hi_, cl_
-    _, tg, rpx, _ = BH._pr_dir(h, l, c, np.array([68]))
+    _, tg, rpx, _, _ = BH._pr_dir(h, l, c, np.array([68]))
     assert tg[0] in (0, 1)                                                              # the reading runs on arbitrary tapes
-    _, tg2, _, _ = BH._pr_dir(h * 0 + 100, l * 0 + 99, c * 0 + 99.5, np.array([68]))
+    _, tg2, _, _, _ = BH._pr_dir(h * 0 + 100, l * 0 + 99, c * 0 + 99.5, np.array([68]))
     assert tg2[0] == 0                                                                  # a flat tape has none
 
 

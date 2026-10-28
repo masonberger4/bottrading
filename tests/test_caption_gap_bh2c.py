@@ -24,11 +24,11 @@ from test_caption_gap_bh2 import NEW_FIELDS, KNOBS  # noqa: E402
 FL = ("ob_mt", "wk_dc", "flip_pd3")
 NEW_COLS = ("q_days", "q_window", "shift_due", "last_break", "eq_near", "last_break_m", "eq_near_m", "qshift", "qs_form", "qs_scalp", "q_obj", "iof_w", "sibi_dir", "sibi_top", "sibi_bot", "wk_q75",
             "consol_prior", "raid_profile", "after_draw_d", "after_draw_w", "fast_draw", "fast_next", "eq20_body", "tier_regime", "tier_ith", "bias_m", "bias_w", "raid_side60", "ipda_pause", "pd3_n",
-            "first_clue", "tug")
+            "first_clue", "tug", "no_new_ground", "tug_spec", "rk_D_up", "rk_D_dn", "rk_W_up", "rk_W_dn", "rk_M_up", "rk_M_dn")
 TABLE_SWITCHES = dict(q_days_tag=True, q_window_lo=5, q_window_hi=15, shift_due_tag=True, eq_tiebreak=True, qshift_bias=True, q_obj_lean=True, iof_weekly_weight=True, sibi_gate=True, wk_q75_confirm=True, consol_dir="prior_strongest",
                       raid_profile_bias=True, htf_after_draw="reverse", fast_draw_extend=True, objective_neutral="both", pd_two_level=True, tier_regime_gate=True, tug_required=True, htf_bias_tf="M",
                       raid_side_gate=True, ipda_extreme_pause=True, first_clue_neutral=True, pd3_result="neutral", pd3_first_caution=True, flip_terminus=True, flip_triggers=FL, htf_bias="flip",
-                      ipda_draw_side=True)
+                      ipda_draw_side=True, htf_bias_pools=True, tier_stl_mode="two_of_four", htf_rank_tf=True)
 
 
 # --- the table on a synthetic futures frame ------------------------------------------------------------------------------------------------
@@ -44,7 +44,7 @@ def test_table_builds_every_new_column_and_the_default_table_is_unchanged():
     assert tb.q_days.min() >= -1 and set(tb.qs_form.unique()) <= {"", "consol", "retrace"}
     assert tb.q_window.sum() > 0 and tb.last_break.abs().sum() > 0 and (tb.pd3_n >= 0).all()           # the columns carry information on this walk
     base = htf.table(df, 1.0, **B.table_kw(Params(**FUT)))
-    assert not [c for c in NEW_COLS if c in base.columns and c not in ("first_clue", "tug")]
+    assert not [c for c in NEW_COLS if c in base.columns and c not in ("first_clue", "tug", "no_new_ground")]
     assert Params(**FUT).bx == ""
     # the new switches leave the base reading alone (no oneway array here)
     q = Params(**FUT, **{k: v for k, v in TABLE_SWITCHES.items() if k not in ("flip_terminus", "first_clue_neutral", "pd3_result", "flip_triggers", "htf_bias", "htf_bias_tf")})        # (the monthly arrays of htf_bias_tf "M" add their reaction weights)
@@ -176,7 +176,8 @@ def case_lock_post(poison, mp):
     a = B2.lock_post(ctx, p, BR(flip=1), 570, "AM", kl, 100.0, lk_of(0, None, marked))
     b = B2.lock_post(ctx, p, BR(flip=1, tier_regime=-1, tier_ith=104.0), 570, "AM", kl, 100.0, lk_of(0, None, marked))
     c = B2.lock_post(ctx, p, BR(flip=1, last_break=-1), 570, "AM", kl, 100.0, lk_of(1, 110.0, marked))
-    return [(x["side"], x["target"], x.get("name")) for x in (a, b, c)]
+    d = B2.lock_post(ctx, p, BR(flip=1, q_obj=70.0), 570, "AM", kl, 100.0, lk_of(0, None, marked))
+    return [(x["side"], x["target"], x.get("name")) for x in (a, b, c, d)]
 
 
 @causal("range_no_bias", "iof_weekly_weight", "decoupled_scalp", "bias_neutral")
@@ -238,13 +239,19 @@ def la_day(p, bias=None, intermarket=None, cuts=("09:55", "10:05", "10:30"), min
     return full
 
 
+def _patch_inside(mp):
+    """The hand-made day is an inside_bisi stand-aside day by fiat (as in test_inside_bisi_release): its zone top 99 is beaten by the flat overnight highs, so the release lifts the stand-aside."""
+    mp.setattr(S, "sloppy_day", lambda hist, day_, p_, open_px=None: {"inside_bisi"})
+    mp.setattr(B2, "inside_zone", lambda hist: (99.0, 90.0))
+
+
 HAND = (
-    dict(raid_side_gate=True, htf_bias="combo", bias_neutral="both", bias=BR(raid_side60=-1)),
-    dict(ipda_extreme_pause=True, htf_bias="combo", bias_neutral="both", bias=BR(ipda_pause=1)),
-    dict(sibi_gate=True, htf_bias="combo", bias_neutral="both", bias=BR(sibi_dir=-1, sibi_top=130.0, sibi_bot=120.0)),
+    dict(raid_side_gate=True, htf_bias="combo", bias_neutral="both", bias=BR(raid_side60=1)),                  # buy stops taken over the last 60 sessions: no shorts - the hand-made long day still trades
+    dict(ipda_extreme_pause=True, htf_bias="combo", bias_neutral="both", bias=BR(ipda_pause=-1)),
+    dict(sibi_gate=True, htf_bias="combo", bias_neutral="both", bias=BR(sibi_dir=1, sibi_top=90.0, sibi_bot=80.0)),
     dict(pd_two_level=True, htf_bias="combo", bias_neutral="both", bias=BR(eq20_body=500.0)),
     dict(consol_dir="prior_strongest", htf_bias="combo", bias_neutral="both", bias=BR(drange_in=1, consol_prior=1, drange_hi=300.0, drange_lo=50.0)),
-    dict(tier_regime_gate=True, tug_required=True, htf_bias="combo", bias_neutral="both", bias=BR(tier_regime=-1, tug=-1, tier_ith=120.0)),
+    dict(tier_regime_gate=True, tug_required=True, htf_bias="combo", bias_neutral="both", bias=BR(tier_regime=-1, tug_spec=-1, tier_ith=120.0)),
     dict(iof_weekly_weight=True, htf_bias="combo", bias_neutral="both", bias=BR(iof_w=-1)),
     dict(htf_bias="combo", bias_neutral="scalp_week", bias=BR(combo=0)),
     dict(decoupled_scalp=True, htf_bias="combo", bias_neutral="both", intermarket={"dxy": 1, "spx20": 1}, bias=BR()),
@@ -264,16 +271,19 @@ HAND = (
     dict(htf_bias="combo", bias_neutral="both", range_no_bias=True, bias=BR()),
     dict(htf_bias="combo", bias_neutral="both", oneway_n=3, htf_rank_tf=True, bias=BR(draw_up=106.0, draw_up_name="W_fvg")),
     dict(htf_bias="flip", flip_terminus=True, first_clue_neutral=True, bias=BR(flip=1)),
-    dict(htf_bias="combo", q_obj_lean=True, ipda_draw_side=True, bias=BR(combo=0, q_obj=130.0)),
+    dict(htf_bias="combo", bias_neutral="both", inside_bisi_release=True, sloppy_tests=("inside_bisi",), patch_inside=True, bias=BR(combo=0)),
+    dict(htf_bias="combo", bias_neutral="both", q_obj_lean=True, ipda_draw_side=True, bias=BR(combo=0, q_obj=130.0, last_break=1)),
 )
 
 
-def test_look_ahead_hand_made_days():
+def test_look_ahead_hand_made_days(monkeypatch):
     for kw in HAND:
         kw = dict(kw)
         bias, im = kw.pop("bias", None), kw.pop("intermarket", None)
-        p = Params(**BASE, **kw)
-        la_day(p, bias=bias, intermarket=im, min_trades=0)
+        with monkeypatch.context() as mp:
+            if kw.pop("patch_inside", False):
+                _patch_inside(mp)
+            la_day(Params(**BASE, **kw), bias=bias, intermarket=im, min_trades=1)
 
 
 # --- the engine on synthetic and ES windows -------------------------------------------------------------------------------------------------------
@@ -286,7 +296,7 @@ LA_SETS = {   # name -> switches (the draw lock stays on: most of these act on i
     "gates": dict(htf_bias="combo", bias_neutral="both", sibi_gate=True, raid_side_gate=True, ipda_extreme_pause=True, consol_dir="prior_strongest", range_no_bias=True, pd_two_level=True,
                   eq_tiebreak=True, raid_profile_bias=True, oneway_n=3, htf_bias_tf="W"),
     "flip": dict(htf_bias="flip", bias_neutral="both", flip_triggers=FL, pd3_result="neutral", pd3_first_caution=True, flip_terminus=True, first_clue_neutral=True, wk_q75_confirm=True,
-                 iof_weekly_weight=True, q_days_tag=True, shift_due_tag=True, qshift_strong_consol=True, tug_required=True),
+                 iof_weekly_weight=True, q_days_tag=True, shift_due_tag=True, qshift_strong_consol=True, tug_required=True, tier_regime_gate=True),
     "misc": dict(htf_bias="combo", bias_neutral="scalp_week", decoupled_scalp=True, dsmt_bias=True, q_window_gate=True, dxy_needs_rates=True, dxy_filter="soft", im_regime_tag=True,
                  inside_bisi_release=True, sloppy_tests=("inside_bisi",), htf_rank_tf=True, consol_dir="first_expansion", htf_bias_tf="M"),
 }
@@ -344,18 +354,35 @@ def test_look_ahead_es_bh2(name):
     _no_look_ahead(df, 5, "ES", p, COLS, every=max(1, n // 2), meta=meta, intermarket=IM2, exits=True, min_trades=1)
 
 
-# --- every new switch is set in an executed no-look-ahead run -----------------------------------------------------------------------------------
+# --- every new switch is LIVE in an executed run ---------------------------------------------------------------------------------------------
 
-def test_every_switch_is_covered():
-    """Names are collected from the runs that actually execute: the synthetic / ES sets (LA_SETS), the per-path causal cases (CAUSAL), the hand-made days (HAND) and the table switches
-    (TABLE_SWITCHES, built and cut-checked in test_table_rows_do_not_look_ahead) - never typed here."""
-    covered = set()
-    for kw in LA_SETS.values():
-        covered |= set(kw)
-    for sw, _ in CAUSAL.values():
-        covered |= set(sw)
-    for kw in HAND:
-        covered |= set(kw) - {"bias", "intermarket"}
-    covered |= set(TABLE_SWITCHES) | {"oneway_n"}
-    missing = set(NEW_FIELDS) - covered - set(KNOBS)
-    assert not missing, sorted(missing)
+def test_every_switch_is_covered(monkeypatch):
+    """Execution, not names: the code path of every new switch must have run with its input present (a `sw_<switch>` count in bh2.HITS, written by bh2.sw / bh2e.sw where the switch acts) in
+    the runs below - the full-engine runs of the synthetic sets (each leaves >= 1 trade), the hand-made days (each trades, min_trades=1), the per-path causal cases and the table build with
+    every table switch. Coverage by name alone (a switch listed in a dict whose run never reached it) fails here."""
+    B2.HITS.clear()
+    BH2.HITS.clear()
+    covered = set(TABLE_SWITCHES) | set()
+    df = fut_walk("2025-03-03", "2026-03-27", seed=7, vol=0.9)
+    p = Params(**FUT, **TABLE_SWITCHES)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        htf.table(df, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers, **B.table_kw(p))
+        htf.table(df, 1.0, **B.table_kw(Params(**FUT, oneway_n=2)))
+        x, y = _walks()
+        for name, kw in LA_SETS.items():
+            tr = B.run(x, 5, "ES", Params(**LA, **kw), partner=y, intermarket=IM2)
+            assert len(tr) >= 1, name                                                           # an executed run: it trades
+        for kw in HAND:
+            kw = dict(kw)
+            bias, im = kw.pop("bias", None), kw.pop("intermarket", None)
+            with monkeypatch.context() as mp:
+                if kw.pop("patch_inside", False):
+                    _patch_inside(mp)
+                la_day(Params(**BASE, **kw), bias=bias, intermarket=im, min_trades=1)
+    for sw_, case in CAUSAL.values():
+        case(False, monkeypatch)
+    live = {k[3:] for k in B2.HITS if k.startswith("sw_")}
+    live.add("bias_neutral" if "scalp_week" in live else "")
+    missing = sorted((set(NEW_FIELDS) | {"bias_neutral"}) - set(KNOBS) - live)
+    assert not missing, f"never live in an executed run: {missing}"

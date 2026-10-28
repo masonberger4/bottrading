@@ -2968,9 +2968,11 @@ _BH2_DECISIONS = {
     "B3-range-trading-without-bias": dict(range_no_bias=True, range_no_bias_pct=0.62, ob_entry="post_mss", htf_resist_cap=False),
     "B3-eq-recent-structure-break": dict(eq_tiebreak=True, eq_tie_frac=0.10, **BH2_BASE),
     "B6-hrlr-lrlr-structure-regime": dict(tier_regime_gate=True, **BH2_BASE),
+    "B6-hrlr-lrlr-structure-regime_two_of_four": dict(tier_regime_gate=True, tier_stl_mode="two_of_four", **BH2_BASE),
     "B6-consolidation-raid-profile": dict(raid_profile_bias=True, raid_profile_n=2, **BH2_BASE),
     "B5-monthly-first-hierarchy_M": dict(htf_bias_tf="M", htf_rank_tf=True, **BH2_BASE),
     "B5-monthly-first-hierarchy_W": dict(htf_bias_tf="W", **BH2_BASE),
+    "B5-monthly-first-hierarchy_pools": dict(htf_bias_tf="M", htf_bias_pools=True, **BH2_BASE),
     "B17-hold-bias-most-recent-htf-setup": dict(flip_terminus=True, flip_max_days=126, bias_neutral="both", **BH2_FLIP),
     "B18-htf-daily-smt": dict(dsmt_bias=True, dsmt_days=18, **BH2_BASE),
     "B19-bond-stock-dxy-sign": dict(im_regime_tag=True, **BH2_BASE),
@@ -2987,6 +2989,58 @@ _BH2_DECISIONS = {
     "B20-oi-own-market-only": dict(oi_tag="tag", **BH2_BASE),
 }
 DECISIONS.update(_BH2_DECISIONS)
+
+
+# --- Caption-gap pass, package bias_htf#3/7 (digests/rulebook_gaps/bias_htf_intermarket.md items 147 .. 227, day_selection_news_calendar.md item 45; cot.py / bh3.py / bh3e.py): one variant per switch (name prefix = the gap id).
+# The lock stays on (draw_lock "session"); the bias reading is named where the switch needs it. -------------------------------------------------------------------------------------------------------------
+BH3_BASE = dict(ob_entry="post_mss", htf_resist_cap=False, htf_bias="combo")
+BH3_FLIP = dict(ob_entry="post_mss", htf_resist_cap=False, htf_bias="flip")
+
+
+def _v3(base, **kw):
+    return {**base, **kw}
+
+
+_BH3_DECISIONS = {
+    "B20-cot-zero-line-vs-hedging": dict(cot_two_states=True, cot_gate="hedge_iof", **BH3_BASE),
+    "B20-cot-data-spec": dict(cot_tag="tag", cot_two_states=True, **BH3_BASE),
+    "X3-notes-dollar-regime": dict(tandem_scalp=True, notes_dxy_tag=True, **BH3_BASE),
+    "X3-seasonal-quarterly-qualifier": dict(season_windows="tag", season_qualified=True, dsmt_bias=True, **BH3_BASE),
+    "X3-full-confluence-stack": dict(stack_tag=True, stack_min=3, season_windows="tag", **BH3_FLIP),
+    "X3-swing-two-group-trending-gate": dict(swing_gate_runners=True, trend_slope_min=0.5, **BH3_BASE),
+    "X3-bonds-lead-stocks": dict(bond_lt_tag=True, **BH3_BASE),
+    "B20-williams-r_daily": dict(wpr_daily_tag=True, **BH3_BASE),
+    "B20-williams-r_weekly_20": dict(wpr_tag="tag", wpr_len=20, **BH3_BASE),
+    "X3-swing-checklist-pipeline": dict(hallmarks_tag=True, **BH3_BASE),
+    "X3-htf-market-profile": dict(profile_gate=True, **BH3_BASE),
+    "X3-b10-tf-test": _v3(BH3_BASE, htf_bias="mwd", mwd_tf_test=True),
+    "X3-b10-cancel-condition": _v3(BH3_BASE, htf_bias="mwd", mwd_cancel_case=True),
+    "X3-b10-case-c-to-b-upgrade": _v3(BH3_BASE, htf_bias="mwd", mwd_upgrade=True, mwd_levels_entries=True),
+    "B17-no-active-array": dict(retire_arrays=True, no_draw=True, skip_no_draw=True, **BH3_BASE),
+    "B9-ltf-arrays-break-in-succession": dict(pause_on_hold=True, **BH3_FLIP),
+    "B5-monthly-weekly-range-bookkeeping": dict(mw_bookkeeping=True, **BH3_BASE),
+    "B8-tuesday-failure-swing-flip": dict(flip_triggers=("ob_mt", "wk_dc", "tue_fail"), **BH3_FLIP),
+    "A21-trend-vs-consolidation-first": _v3(BH3_BASE, htf_bias="pd", day_pd="20d", pd_day_range=60, pd60_only_consol=True, consol_ratio=0.25),
+    "B13-weekly-bias-from-daily-arrays": _v3(BH3_BASE, htf_bias="week_pre"),
+    "B5-htf-arrays-respected-and-in-play": dict(in_play_gate=True, in_play_days=3, **BH3_BASE),
+    "B6-iof-checklist-extended": _v3(BH3_BASE, htf_bias="iof", iof_mode="score"),
+    "B5-daily-and-4h-bias_both": dict(bias_dh="both", **BH3_BASE),
+    "B5-daily-and-4h-bias_either": dict(bias_dh="either", **BH3_BASE),
+    "N9-ny-continues-london": dict(ny_continue_london=True, **BH3_BASE),
+    "A21-discount-not-buy-signal": _v3(BH3_BASE, htf_bias="pd", pd_needs_iof=True),
+    "B3-countertrend-from-range-extreme": dict(counter_range_extreme=True, **BH3_BASE),
+    "B6-bullish-iof-at-premium-wait": dict(iof_premium_wait=True, **BH3_BASE),
+    "B23-fall-seasonal-low-setup": dict(fall_low_bias=True, season_windows="tag", **BH3_BASE),
+    "B23-market-poised-first": dict(season_poised=True, season_windows="tag", season_gate=True, **BH3_BASE),
+    "MB-monthly-bias-routine": dict(mo_bias_gate=True, season_windows="tag", dsmt_bias=True, **BH3_BASE),
+    "B22-quarterly-shift-direction": dict(q_dir_tag=True, q_obj_lean=True, **BH3_BASE),
+    "WB-weekly-checklist-order": _v3(BH3_BASE, htf_bias="week_check", dsmt_bias=True),
+    "B10-weekly-structure-control": dict(wk_struct_weight=True, mo_bias_gate=True, **BH3_BASE),
+    "B6-daily-iof-htf-relative": dict(iof_sponsor_gate="skip", **BH3_FLIP),
+    "B5-daily-checklist-fallback": _v3(BH3_BASE, htf_bias="wd_check", dsmt_bias=True),
+    "B17-chop-revert-middle": dict(chop_lean=True, chop_target_baseline=True, sloppy_tests=("chop",), sloppy_mode="scalp", **BH3_BASE),
+}
+DECISIONS.update(_BH3_DECISIONS)
 
 
 def macro_runs_study(days, macro_run_pts: float = 5.0, leg_extra_min: int = 0) -> dict:

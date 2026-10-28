@@ -39,6 +39,11 @@ def hit(k: str) -> None:
     HITS[k] += 1
 
 
+def sw(name: str) -> None:
+    """Count one LIVE use of a switch (its code path ran with its input present in an executed run; the look-ahead coverage test requires one per switch)."""
+    HITS["sw_" + name] += 1
+
+
 # --------------------------------------------------------------------------------------------------------------
 # the table configuration
 # --------------------------------------------------------------------------------------------------------------
@@ -50,8 +55,8 @@ def bx_cfg(p) -> dict:
         c["qd"] = [int(p.q_window_lo), int(p.q_window_hi)]
     if p.eq_tiebreak or p.ipda_draw_side:
         c["brk"] = [float(p.eq_tie_frac)]
-    if p.qshift_bias or p.q_obj_lean or p.qshift_strong_consol or p.ipda_draw_side:
-        c["qs2"] = [float(p.qshift_strong_pct), int(p.q_obj_days), int(bool(p.ipda_draw_side)), int(bool(p.q_obj_lean))]
+    if p.qshift_bias or p.q_obj_lean or p.qshift_strong_consol or p.ipda_draw_side or p.mo_bias_gate:
+        c["qs2"] = [float(p.qshift_strong_pct), int(p.q_obj_days), int(bool(p.ipda_draw_side)), int(bool(p.q_obj_lean or p.mo_bias_gate))]       # (caption-gap MB-monthly-bias-routine, bias_htf#3/7: the quarterly objective's side is a component of mo_aligned)
     if p.iof_weekly_weight:
         c["iofw"] = [int(p.iof_w_weeks), int(p.iof_min)]
     if p.sibi_gate:
@@ -69,9 +74,9 @@ def bx_cfg(p) -> dict:
     if p.pd_two_level:
         c["eq20"] = int(p.pd_day_range)
     if p.tier_regime_gate or p.tug_required:
-        c["tier"] = 1
-    if p.htf_bias_tf != "D":
-        c["btf"] = p.htf_bias_tf
+        c["tier"] = [p.tier_stl_mode]
+    if p.htf_bias_tf != "D" or p.htf_rank_tf:
+        c["btf"] = [int(bool(p.htf_bias_pools)), int(p.htf_bias_tf != "D"), int(bool(p.htf_rank_tf))]
     if p.flip_terminus:
         c["term"] = int(p.flip_max_days)
     if p.oneway_n:
@@ -174,9 +179,12 @@ def _row_state(arr, ks, fill=0):
 # items 84 / 134: the time since the last daily MSS
 # --------------------------------------------------------------------------------------------------------------
 
+SHIFT_ONEWAY = 0.6                         # X3-shift-due-six-months [our interpretation]: a 126-session move is one-directional when its net change is >= 60 % of the closes' high-low range
+
+
 def q_columns(h, l, c, ks, lo: int, hi: int) -> dict:
     """B22-timing-tool (cc05_001 ~35:25-37:51): q_days = sessions since the last daily MSS (-1 none), q_window = lo <= q_days <= hi [our interpretation: the last third of the 60-session cast];
-    X3-shift-due-six-months (cc05_001 ~48:36): shift_due = q_days >= 126 and the 126-session net move is one-directional (the closes of the last 126 sessions end beyond where they began)."""
+    X3-shift-due-six-months (cc05_001 ~48:36): shift_due = q_days >= 126 and the 126-session net move is one-directional (the net change of the last 126 closes is >= SHIFT_ONEWAY of their high-low range)."""
     ev, mss, ld, lm = break_stream(h, l, c)
     last = _row_state(lm, ks, -1)
     ks_ = np.asarray(ks)
@@ -184,8 +192,11 @@ def q_columns(h, l, c, ks, lo: int, hi: int) -> dict:
     out = dict(q_days=qd, q_window=((qd >= lo) & (qd <= hi)).astype(int))
     due = np.zeros(len(ks_), int)
     for r, k in enumerate(ks_):
-        if qd[r] >= 126 and k >= 127 and c[k - 1] != c[k - 127]:
-            due[r] = 1
+        if qd[r] >= 126 and k >= 127:
+            seg = c[k - 127:k]                                                 # the last 126 closes' moves (k-127 .. k-1)
+            rng = float(seg.max() - seg.min())
+            if rng > 0 and abs(float(seg[-1] - seg[0])) >= SHIFT_ONEWAY * rng:   # one-directional: the net move covers most of the range [our interpretation]
+                due[r] = 1
     out["shift_due"] = due
     return out
 
@@ -261,7 +272,7 @@ def qshift_columns(h, l, c, arrs, ks, strong_pct: float = 0.10, obj_days: int = 
         while a_l < len(stl) and stl[a_l].known <= j - 1:
             cs_l = stl[a_l].price
             a_l += 1
-        if cur != 0 and (j - at > 63 or (cur < 0 and new_hi[j]) or (cur > 0 and new_lo[j])):
+        if cur != 0 and (j - at >= 63 or (cur < 0 and new_hi[j]) or (cur > 0 and new_lo[j])):
             if qo is not None and ((cur < 0 and new_hi[j]) or (cur > 0 and new_lo[j])):
                 qo = None                                              # [our interpretation] a new 60-session extreme against the shift cancels its objective too
             cur, fm = 0, ""
@@ -583,7 +594,18 @@ def eq20_column(o, c, ks, n: int) -> np.ndarray:
     return out
 
 
-def tier_columns(h, l, ks) -> dict:
+def _stl_broken(seq, arr, k: int, mode: str, highs: bool) -> bool:
+    """B6-hrlr-lrlr-structure-regime: the short-term lows (highs) being run - 'last2' (the spec): each of the last two was broken since it formed; 'two_of_four' [our interpretation]: two of the last four
+    (the newest is rarely broken yet)."""
+    def broken(q):
+        seg = arr[q.i + 1:k]
+        return (seg.max(initial=-np.inf) > q.price) if highs else (seg.min(initial=np.inf) < q.price)
+    if mode == "last2":
+        return all(broken(q) for q in seq[-2:])
+    return sum(1 for q in seq[-4:] if broken(q)) >= 2
+
+
+def tier_columns(h, l, ks, stl_mode: str = "last2") -> dict:
     """B6-hrlr-lrlr-structure-regime (cc01_007 ~19:48): tier_regime -1 when the last long-term high is unbroken, the last intermediate-term high is below the one before it and the last two short-term
     lows were broken (two of the last four: the high-resistance-rally regime); +1 for the mirror; 0 otherwise or once a session traded above the last ITH (below the last ITL). tier_ith = that defended ITH (ITL)."""
     t = L.swing_tiers(h, l, 1)
@@ -605,13 +627,13 @@ def tier_columns(h, l, ks) -> dict:
         if lh and len(ih) >= 2 and len(sl) >= 2:
             ok = h[lh[-1].i + 1:k].max(initial=-np.inf) < lh[-1].price
             ok = ok and ih[-1].price < ih[-2].price and h[ih[-1].i + 1:k].max(initial=-np.inf) <= ih[-1].price
-            ok = ok and sum(1 for q in sl[-4:] if l[q.i + 1:k].min(initial=np.inf) < q.price) >= 2           # [our interpretation] the short-term lows are being run: two of the last four were broken (the newest is rarely broken yet)
+            ok = ok and _stl_broken(sl, l, k, stl_mode, False)
             bear = bool(ok)
         ll, il, sh = known(ltl, k), known(itl, k), known(sth, k)
         if ll and len(il) >= 2 and len(sh) >= 2:
             ok = l[ll[-1].i + 1:k].min(initial=np.inf) > ll[-1].price
             ok = ok and il[-1].price > il[-2].price and l[il[-1].i + 1:k].min(initial=np.inf) >= il[-1].price
-            ok = ok and sum(1 for q in sh[-4:] if h[q.i + 1:k].max(initial=-np.inf) > q.price) >= 2
+            ok = ok and _stl_broken(sh, h, k, stl_mode, True)
             bull = bool(ok)
         if bear and not bull:
             reg[r], lvl[r] = -1, ih[-1].price
@@ -620,10 +642,10 @@ def tier_columns(h, l, ks) -> dict:
     return dict(tier_regime=reg, tier_ith=lvl)
 
 
-def _tf_draw(arrs, tf: str, k: int, px: float, h, l):
-    """The side (+1 up / -1 down) of the nearest unrebalanced FVG of timeframe `tf` at row k, with the htf.table rule (a bull FVG below the price is a draw down to min(top, the lowest low since); above it,
-    a draw up to its bottom; bear mirrored): (distance, side) of the nearest, None when there is none."""
-    best = None
+def _tf_cands(arrs, tf: str, k: int, px: float, h, l) -> list:
+    """The unrebalanced FVGs of timeframe `tf` at row k as (distance, side, level), with the htf.table rule (a bull FVG below the price is a draw down to min(top, the lowest low since); above it, a draw
+    up to its bottom; bear mirrored)."""
+    out = []
     for a in arrs:
         if a.tf != tf or a.typ != "fvg" or a.known > k:
             continue
@@ -632,53 +654,73 @@ def _tf_draw(arrs, tf: str, k: int, px: float, h, l):
                 continue
             near = min(a.top, l[a.known:k].min(initial=np.inf))
             if near < px:
-                cand = (px - near, -1)
+                out.append((px - near, -1, float(near)))
             elif a.bottom > px:
-                cand = (a.bottom - px, 1)
-            else:
-                continue
+                out.append((a.bottom - px, 1, float(a.bottom)))
         else:
             if h[a.known:k].max(initial=-np.inf) >= a.top:
                 continue
             near = max(a.bottom, h[a.known:k].max(initial=-np.inf))
             if near > px:
-                cand = (near - px, 1)
+                out.append((near - px, 1, float(near)))
             elif a.top < px:
-                cand = (px - a.top, -1)
-            else:
-                continue
-        if best is None or cand[0] < best[0]:
-            best = cand
-    return best
+                out.append((px - a.top, -1, float(a.top)))
+    return out
 
 
-def btf_columns(arrs, ks, px, h, l, c, d=None) -> dict:
+def _tf_draw(arrs, tf: str, k: int, px: float, h, l):
+    """(distance, side) of the nearest unrebalanced FVG of timeframe `tf` at row k, None when there is none."""
+    c = _tf_cands(arrs, tf, k, px, h, l)
+    if not c:
+        return None
+    d_, s_, _ = min(c, key=lambda x: x[0])
+    return d_, s_
+
+
+def btf_columns(arrs, ks, px, h, l, c, d=None, pools: bool = False, bias: bool = True, rank: bool = False) -> dict:
     """B5-monthly-first-hierarchy (cc04_003 ~14:07; cc04_002 ~29:38): bias_m / bias_w = the side of the nearest draw of the monthly / weekly timeframe - the nearest unrebalanced FVG of that
-    timeframe and, with the daily book `d`, the previous completed month's (week's) high above / low below the price [our interpretation: the draw includes the liquidity pool like htf.table's
-    PWH / PWL; an FVG-only reading is one-sided in a trend]; htf_bias_tf 'M' takes the monthly side, else the weekly, else none."""
+    timeframe (the literal spec: bias = sign(monthly draw - price) from the monthly arrays; htf_bias_tf 'M' takes the monthly side, else the weekly, else none). With `pools` (htf_bias_pools,
+    [our interpretation], owner question) the previous completed month's (week's) high above / low below the price are draws too, like htf.table's PWH / PWL: an FVG-only reading is one-sided in a
+    trend. With `rank` (htf_rank_tf) also the columns rk_<tf>_up / rk_<tf>_dn (tf D, W, M): the level of the nearest unrebalanced FVG of that timeframe above / below the price (NaN when none)."""
     from .htf import months, weeks
-    pools = {}
-    if d is not None:
+    pl_ = {}
+    if pools and d is not None:
         pos = {t: q for q, t in enumerate(d.index)}
         for tf, bars in (("M", months(d)), ("W", weeks(d))):
             if len(bars):
-                pools[tf] = (np.array([pos[t] for t in bars["last"]]), bars.high.values.astype(float), bars.low.values.astype(float))
-    bm = np.zeros(len(ks), int)
-    bw = np.zeros(len(ks), int)
-    for r, k in enumerate(ks):
-        for tf, out in (("M", bm), ("W", bw)):
-            best = _tf_draw(arrs, tf, k, float(px[r]), h, l)
-            if tf in pools:
-                last, ph_, pl_ = pools[tf]
-                n = int(np.searchsorted(last, k, side="left"))              # completed bars before the row
-                if n >= 1:
-                    x = float(px[r])
-                    if ph_[n - 1] > x and (best is None or ph_[n - 1] - x < best[0]):
-                        best = (ph_[n - 1] - x, 1)
-                    if pl_[n - 1] < x and (best is None or x - pl_[n - 1] < best[0]):
-                        best = (x - pl_[n - 1], -1)
-            out[r] = best[1] if best else 0
-    return dict(bias_m=bm, bias_w=bw)
+                pl_[tf] = (np.array([pos[t] for t in bars["last"]]), bars.high.values.astype(float), bars.low.values.astype(float))
+    n = len(ks)
+    bm = np.zeros(n, int)
+    bw = np.zeros(n, int)
+    if bias:
+        for r, k in enumerate(ks):
+            for tf, out in (("M", bm), ("W", bw)):
+                best = _tf_draw(arrs, tf, k, float(px[r]), h, l)
+                if tf in pl_:
+                    last, ph_, pll = pl_[tf]
+                    q = int(np.searchsorted(last, k, side="left"))              # completed bars before the row
+                    if q >= 1:
+                        x = float(px[r])
+                        if ph_[q - 1] > x and (best is None or ph_[q - 1] - x < best[0]):
+                            best = (ph_[q - 1] - x, 1)
+                        if pll[q - 1] < x and (best is None or x - pll[q - 1] < best[0]):
+                            best = (x - pll[q - 1], -1)
+                out[r] = best[1] if best else 0
+    res = dict(bias_m=bm, bias_w=bw)
+    if rank:
+        for tf in ("D", "W", "M"):
+            up = np.full(n, NAN)
+            dn = np.full(n, NAN)
+            for r, k in enumerate(ks):
+                cs = _tf_cands(arrs, tf, k, float(px[r]), h, l)
+                u = [x for x in cs if x[1] > 0]
+                v = [x for x in cs if x[1] < 0]
+                if u:
+                    up[r] = min(u, key=lambda x: x[0])[2]
+                if v:
+                    dn[r] = min(v, key=lambda x: x[0])[2]
+            res[f"rk_{tf}_up"], res[f"rk_{tf}_dn"] = up, dn
+    return res
 
 
 def oneway_arrays(o, h, l, c, n: int) -> list:
@@ -691,9 +733,11 @@ def oneway_arrays(o, h, l, c, n: int) -> list:
         if c[u] > o[u]:
             if all(c[u + q] < o[u + q] for q in range(1, n + 1)):
                 out.append(Arr("bear", "oneway", "D", float(h[u]), float(l[u]), float((h[u] + l[u]) / 2), u + n + 1))
+                sw("oneway_n")
         elif c[u] < o[u]:
             if all(c[u + q] > o[u + q] for q in range(1, n + 1)):
                 out.append(Arr("bull", "oneway", "D", float(h[u]), float(l[u]), float((h[u] + l[u]) / 2), u + n + 1))
+                sw("oneway_n")
     return out
 
 
@@ -759,6 +803,24 @@ def apply_terminus(flip, draw_up, draw_dn, ks, h, l, max_days: int) -> np.ndarra
         if done:
             out[r] = 0
             hit("flip_terminus")
+            sw("flip_terminus")
+    return out
+
+
+def apply_after_draw_flip(flip, ad, aw) -> np.ndarray:
+    """B17-after-draw-retrace-or-reverse (cc01_002 ~18:49; cc07_007 ~23:55): under htf_after_draw='reverse' the flip state becomes the OPPOSITE side (instead of 0) from the session the day's / week's draw was
+    hit at an HTF array (after_draw_d, else after_draw_w) and stays so until the underlying flip state changes (a new trigger)."""
+    flip = np.asarray(flip).astype(int)
+    out = flip.copy()
+    cur, base = 0, None
+    for r in range(len(flip)):
+        if cur and flip[r] != base:
+            cur = 0
+        rev = int(ad[r]) or int(aw[r])
+        if rev:
+            cur, base = rev, int(flip[r])
+        if cur:
+            out[r] = cur
     return out
 
 
@@ -774,6 +836,7 @@ def apply_first_clue(flip, clue, tug) -> np.ndarray:
         if pend is None and clue[r] != 0 and flip[r] == -int(clue[r]):
             pend = dict(sign=int(clue[r]), under=int(flip[r]))
             hit("first_clue_neutral")
+            sw("first_clue_neutral")
         if pend is not None:
             out[r] = pend["sign"] if tug[r] == pend["sign"] else 0
     return out
@@ -823,10 +886,17 @@ def finish(out: pd.DataFrame, cfg: dict, d, w, arrs, es_pt: float, drange: tuple
     if "eq20" in cfg:
         out["eq20_body"] = eq20_column(o, c, ks, int(cfg["eq20"]))
     if "tier" in cfg:
-        for k_, v_ in tier_columns(h, l, ks).items():
+        if str(cfg["tier"][0]) != "last2":
+            sw("tier_stl_mode")
+        for k_, v_ in tier_columns(h, l, ks, str(cfg["tier"][0])).items():
             out[k_] = v_
+    if "tier" in cfg and "no_new_ground" in out:                 # X3-b6-tug-of-war-new-ground (item 135): tug = no_new_ground AND the same-side tier_regime (the spec's definition; `tug` keeps the older post-raid reading)
+        ng, rg = out.no_new_ground.values, out.tier_regime.values
+        out["tug_spec"] = np.where((ng == rg) & (rg != 0), rg, 0)
     if "btf" in cfg:
-        for k_, v_ in btf_columns(arrs, ks, px, h, l, c, d).items():
+        if cfg["btf"][0]:
+            sw("htf_bias_pools")
+        for k_, v_ in btf_columns(arrs, ks, px, h, l, c, d, bool(cfg["btf"][0]), bool(cfg["btf"][1]), bool(cfg["btf"][2])).items():
             out[k_] = v_
     if "rs" in cfg:
         out["raid_side60"] = raid_side_column(h, l, ks, cfg["rs"])
@@ -839,6 +909,8 @@ def finish(out: pd.DataFrame, cfg: dict, d, w, arrs, es_pt: float, drange: tuple
             out["flip"] = apply_terminus(out.flip.values, out.draw_up.values, out.draw_dn.values, ks, h, l, int(cfg["term"]))
         if "fcn" in cfg and "first_clue" in out:
             out["flip"] = apply_first_clue(out.flip.values, out.first_clue.values, out.tug.values)
+        if "ad" in cfg and "after_draw_d" in out:
+            out["flip"] = apply_after_draw_flip(out.flip.values, out.after_draw_d.values, out.after_draw_w.values)
     return out
 
 

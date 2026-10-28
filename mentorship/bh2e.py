@@ -16,6 +16,7 @@ Thresholds the sources never give are marked [our interpretation].
 """
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 import numpy as np
@@ -23,11 +24,16 @@ import numpy as np
 from . import bh1e as B1
 from . import levels as L
 
-HITS: Counter = Counter()
+from . import bh2 as BH2
+
+HITS: Counter = BH2.HITS                  # one counter for the table side and the engine side (the coverage test reads it)
 
 
 def hit(k: str) -> None:
     HITS[k] += 1
+
+
+sw = BH2.sw
 
 
 def _S():
@@ -50,8 +56,24 @@ def on(p) -> bool:
                 or p.ipda_extreme_pause or p.decoupled_scalp)
 
 
+def wk_unset(row) -> bool:
+    """B17-neutral-htf-monday-close: the table row has no weekly draw (both wk_draw_up / wk_draw_dn NaN); False when the columns are absent (cannot tell)."""
+    if row is None or "wk_draw_up" not in row or "wk_draw_dn" not in row:
+        return False
+    return bool(_f(row, "wk_draw_up") != _f(row, "wk_draw_up") and _f(row, "wk_draw_dn") != _f(row, "wk_draw_dn"))
+
+
 def want_on(p) -> bool:
     return bool(p.qshift_bias or p.dsmt_bias or p.raid_profile_bias or p.eq_tiebreak)
+
+
+_HTF_LOCK = re.compile(r"^(?:ext_)?htf_(?:ce|vi|4h|D|W|M)$|^htf_[DWM]_(?:fvg|ob|vi)$")
+
+
+def htf_array_name(nm: str) -> bool:
+    """B17-after-draw-retrace-or-reverse: a session lock named after a 4h / daily / weekly / monthly PD array (strategy.mark_levels names: 'htf_<D|W|M>_<fvg|ob|vi>' from the table draw, 'htf_ce' / 'htf_vi'
+    from htf_ce_draw / vi_htf_draw, 'ext_htf_<4h|D|W>' from draw_ext_target), not a pool ('htf_PDH', 'htf_D_swing_high', ...)."""
+    return bool(_HTF_LOCK.match(str(nm or "")))
 
 
 def lock_on(p) -> bool:
@@ -74,14 +96,22 @@ def bias_value_adjust(row, p, v: int, obj_day: int, obj_week: int) -> tuple:
     """(value, handled): the bias_htf#2/7 changes of the table bias reading. `handled` True = the caller returns the value as it is (the objective-met neutral already decided)."""
     if p.htf_bias_tf != "D":
         m, w_ = _n(row, "bias_m"), _n(row, "bias_w")
+        sw("htf_bias_tf")
         v = (m or w_) if p.htf_bias_tf == "M" else w_                  # B5-monthly-first-hierarchy: the monthly draw, if unclear the weekly, if both unclear none (daily moves against it are retracements)
+    if p.wk_q75_confirm and v:
+        sw("wk_q75_confirm")
     if p.wk_q75_confirm and v and _n(row, "wk_q75") != v:
         v = 0                                                          # B8-weekly-wick-quadrant-gate: the bias counts only after a daily close beyond the wick's 75 % level in its direction
     if p.objective_neutral in ("day", "both") and obj_day:
+        if p.htf_after_draw == "reverse":
+            sw("htf_after_draw")
         return (_n(row, "after_draw_d") if p.htf_after_draw == "reverse" else 0), True
     if p.objective_neutral in ("week", "both") and obj_week:
         if p.fast_draw_extend and _n(row, "fast_draw"):
+            sw("fast_draw_extend")
             return v, True                                             # NEW-speed-into-weekly-draw: a fast run into the weekly draw keeps the bias (the next weekly array is the new draw)
+        if p.htf_after_draw == "reverse":
+            sw("htf_after_draw")
         return (_n(row, "after_draw_w") if p.htf_after_draw == "reverse" else 0), True
     return v, False
 
@@ -97,23 +127,30 @@ def want_adjust(ctx, p, session: str, i: int, base: int) -> int:
         v = _n(row, "qshift")
         if v and not (p.qshift_strong_consol and row.get("qs_form") == "consol"):
             hit("want_qshift")
+            sw("qshift_bias")
             return v
     if p.dsmt_bias:
         v = int(_im(ctx).get("dsmt", 0) or 0)
+        if v and p.q_window_gate:
+            sw("q_window_gate")
         if v and (not p.q_window_gate or _n(row, "q_window")):
             hit("want_dsmt")
+            sw("dsmt_bias")
             return v
     if p.raid_profile_bias:
         v = _n(row, "raid_profile")
         if v:
             hit("want_raid_profile")
+            sw("raid_profile_bias")
             return v
     if p.eq_tiebreak:
         if _n(row, "eq_near") and _n(row, "last_break"):
             hit("want_eq_tiebreak")
+            sw("eq_tiebreak")
             return _n(row, "last_break")
         if _n(row, "eq_near_m") and _n(row, "last_break_m"):
             hit("want_eq_tiebreak_m")
+            sw("eq_tiebreak")
             return _n(row, "last_break_m")
     return base
 
@@ -195,10 +232,12 @@ def season_side(day) -> int:
     return int(CAL.season_dir(day))
 
 
-def season(day) -> str:
-    """B18-htf-daily-smt (cc03_005 ~19:41; cc10_016): 'trend' in the seasonally bullish windows (Feb-Apr, Oct-Jan), 'short' between spring and fall (May-Sep) [our interpretation of Feb-May / May-Aug]."""
-    m = day.month
-    return "short" if 5 <= m <= 9 else "trend"
+def season(day, sign: int = 1) -> str:
+    """B18-htf-daily-smt (cc03_005 ~19:41; cc10_016; cc10_017) with item 60's seasonal windows: a daily SMT of `sign` (+1 bullish: one index fails to make a lower low; -1 bearish: fails a higher high) is a 'trend'
+    change when the day's seasonal direction (season_side: calendar.SEASON_WINDOWS, else the intramonth map) agrees with it - bullish in the Feb-May / Oct-Jan windows, bearish in January and May-Jul (the
+    distribution windows) - and 'short' (short-term only) otherwise (a bullish one between spring and fall, a bearish one in a bullish window or with no seasonal direction). [our interpretation: the window
+    priority of item 60 decides the overlaps, e.g. 15 May-21 June is the bullish June-low window]"""
+    return "trend" if sign and season_side(day) == sign else "short"
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -213,28 +252,39 @@ def side_ok(ctx, p, sign: int, session: str, i: int):
     if row is not None:
         if p.raid_side_gate:
             v = _n(row, "raid_side60")
+            if v:
+                sw("raid_side_gate")
             if v and sign == -v:
                 return "x_bh2_raid_side"
         if p.ipda_extreme_pause:
             v = _n(row, "ipda_pause")
+            if v:
+                sw("ipda_extreme_pause")
             if v and sign == v:
                 return "x_bh2_ipda_pause"
         if p.sibi_gate:
             st = sibi_state(ctx, p, row, i)
+            if st is not None:
+                sw("sibi_gate")
             if st is not None and sign != st[0]:
                 return "x_bh2_sibi"
         if p.consol_dir == "first_expansion":
+            if _n(row, "drange_in") or _n(row, "drange"):
+                sw("consol_dir")
             if _n(row, "drange_in"):
                 return "x_bh2_consol_wait"
             br = _n(row, "drange")
             if br and sign != br:
                 return "x_bh2_consol_side"
         elif p.consol_dir == "prior_strongest" and _n(row, "drange_in"):
+            sw("consol_dir")
             pr = _n(row, "consol_prior")
             if pr and sign != pr:
                 return "x_bh2_consol_prior"
     if p.inside_bisi_release:
         s_ = getattr(ctx, "inside_side", 0)
+        if s_:
+            sw("inside_bisi_release")
         if s_ and sign != s_:
             return "x_bh2_inside_release"
     return None
@@ -252,14 +302,19 @@ def scalp_now(ctx, p, session: str, i, sign: int = 0) -> str:
     if p.sibi_gate and sign and row is not None:
         st = sibi_state(ctx, p, row, i)
         if st is not None and st[1] and sign == st[0]:
+            sw("sibi_gate")
             return "bh2_sibi"
     if p.pd3_first_caution and sign and row is not None and 1 <= _n(row, "pd3_n") <= 2 and _n(row, "flip") == sign:
+        sw("pd3_first_caution")
         return "bh2_pd3"
     if p.qshift_strong_consol and row is not None and _n(row, "qs_scalp"):
+        sw("qshift_strong_consol")
         return "bh2_qshift_consol"
     if p.range_no_bias and sign and unbiased(ctx, p, session, i) and swing60(ctx, i) is not None:
+        sw("range_no_bias")
         return "bh2_range"
     if p.decoupled_scalp and decoupled(ctx, p):
+        sw("decoupled_scalp")
         return "bh2_decoupled"
     return ""
 
@@ -283,19 +338,24 @@ def size_mult(ctx, sd, i: int, p, lvt: list, session: str = "") -> float:
     m = 1.0
     session = session or getattr(ctx, "cur_session", "") or ("PM" if ctx.t[i] >= 810 else "AM")
     row = _row(ctx, session, i)
-    if p.bias_neutral == "scalp_week" and p.htf_bias != "off" and _BD().want_at(ctx, p, session, i) == 0:
+    if p.bias_neutral == "scalp_week" and p.htf_bias != "off" and (_BD().want_at(ctx, p, session, i) == 0 or wk_unset(row)):
         lvt.append("size_scalp_week")
+        sw("scalp_week")
         m *= p.scalp_week_risk
     lk = (getattr(ctx, "lock", None) or {}).get("AM" if session == "LUNCH" else session)
     if p.soft_carry and lk is not None and lk.get("side") == sd.sign and "soft_carry" in (lk.get("bh2") or ()):
         lvt.append("size_soft_carry")
+        sw("soft_carry")
         m *= p.soft_carry_risk
     if p.iof_weekly_weight and row is not None:
         v = _n(row, "iof_w")
+        if v:
+            sw("iof_weekly_weight")
         if v and v == -sd.sign:
             lvt.append("size_iof_w")
             m *= p.iof_w_risk
     if p.q_window_size != 1.0 and row is not None and _n(row, "q_window"):
+        sw("q_window_size")
         bias = _BD().want_at(ctx, p, session, i) if p.htf_bias != "off" else int((lk or {}).get("side") or 0)
         if bias == sd.sign and season_side(ctx.day) == sd.sign:           # B22-timing-tool: the time window, the bias and the seasonal direction agree: a candidate mega trade
             lvt.append("size_q_window")
@@ -319,13 +379,18 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p):
         if p.pd_two_level:
             eq = _f(row, "eq20_body")
             if eq == eq:
+                sw("pd_two_level")
                 if not (entry_raw <= eq if sd.sign > 0 else entry_raw >= eq):
                     return "x_bh2_pd_two_level"
                 tags.append("htf_discount")
         # item 109 / 135: the structural regime
         if p.tier_regime_gate:
             reg = _n(row, "tier_regime")
-            if reg == -sd.sign and (not p.tug_required or _n(row, "tug") == reg):
+            if reg:
+                sw("tier_regime_gate")
+                if p.tug_required and _n(row, "tug_spec") == reg:
+                    sw("tug_required")
+            if reg == -sd.sign and (not p.tug_required or _n(row, "tug_spec") == reg):
                 ith = _f(row, "tier_ith")
                 if ith == ith and o["t1"] > sd.x(ith) + 1e-9:
                     return "x_bh2_tier_regime"
@@ -335,6 +400,7 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p):
             hi, lo = _f(row, "drange_hi"), _f(row, "drange_lo")
             if hi == hi and lo == lo and hi > lo:
                 eq = (hi + lo) / 2
+                sw("consol_dir")
                 if p.consol_dir == "first_expansion" and _n(row, "drange") and not _n(row, "drange_in"):
                     ok = entry_raw <= eq + p.consol_chase_frac * (hi - lo) if sd.sign > 0 else entry_raw >= eq - p.consol_chase_frac * (hi - lo)
                     if not ok:
@@ -348,24 +414,40 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p):
         if p.iof_weekly_weight:
             v = _n(row, "iof_w")
             if v:
+                sw("iof_weekly_weight")
                 tags.append("iof_w_agree" if v == sd.sign else "iof_w_oppose")
         if p.q_days_tag or p.q_window_gate or p.shift_due_tag:
             if _n(row, "q_window"):
                 tags.append("q_window")
+                if p.q_days_tag:
+                    sw("q_days_tag")
+                if p.q_window_gate:
+                    sw("q_window_gate")
             if p.shift_due_tag and _n(row, "shift_due"):
+                sw("shift_due_tag")
                 tags.append("shift_due")
         if p.qshift_strong_consol or p.qshift_bias or p.q_obj_lean:
             if _n(row, "qshift") and row.get("qs_form"):
                 tags.append("qshift_" + str(row.get("qs_form")))
+                if p.qshift_bias:
+                    sw("qshift_bias")
+                if p.q_obj_lean:
+                    sw("q_obj_lean")
+                if p.qshift_strong_consol:
+                    sw("qshift_strong_consol")
         if p.htf_after_draw == "reverse" or p.fast_draw_extend or p.objective_neutral != "off":
             if _n(row, "obj_day") or _n(row, "obj_week"):
                 rev = p.htf_after_draw == "reverse" and (_n(row, "after_draw_d") or _n(row, "after_draw_w"))
                 tags.append("after_draw_reverse" if rev else "after_draw_neutral")
+                if p.htf_after_draw == "reverse":
+                    sw("htf_after_draw")
             if p.fast_draw_extend and _n(row, "fast_draw"):
+                sw("fast_draw_extend")
                 tags.append("fast_draw")
         if p.sibi_gate:
             st = sibi_state(ctx, p, row, i)
             if st is not None:
+                sw("sibi_gate")
                 tags.append("sibi_" + ("short" if st[0] < 0 else "long") + ("_scalp" if st[1] else ""))
     if p.range_no_bias and unbiased(ctx, p, session, i):
         rng = swing60(ctx, i)
@@ -376,27 +458,37 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p):
             if not (entry_raw >= pos if sd.sign < 0 else entry_raw <= neg):
                 return "x_bh2_range_loc"
             tags.append("range_no_bias")
+            sw("range_no_bias")
     lk = (getattr(ctx, "lock", None) or {}).get("AM" if session == "LUNCH" else session)
     if lk is not None and lk.get("bh2") and lk.get("side") == sd.sign:
         tags += [t for t in lk["bh2"] if t != "soft_carry"]
         if "soft_carry" in lk["bh2"]:
             tags.append("soft_carry")
+            sw("soft_carry")
             o["no_adds"] = True                                            # B17-unreached-draw-soft-bias: a soft bias is not pyramided
     im = _im(ctx)
     if p.dsmt_bias:
         v = int(im.get("dsmt", 0) or 0)
         if v and v == sd.sign:
-            tags.append("dsmt_" + season(ctx.day))
+            if not p.q_window_gate or (row is not None and _n(row, "q_window")):       # B22-timing-tool: with q_window_gate the daily SMT counts (and is tagged) only inside the q_window
+                tags.append("dsmt_" + season(ctx.day, v))
+                sw("dsmt_bias")
     if p.dxy_needs_rates or p.im_regime_tag:
         ra = int(im.get("rates_dxy_agree", 0) or 0)
         if ra:
             tags.append("rates_agree" if ra > 0 else "rates_diverge")
+            if p.dxy_needs_rates:
+                sw("dxy_needs_rates")
+            if p.im_regime_tag:
+                sw("im_regime_tag")
     if p.im_regime_tag and im.get("im_regime"):
         tags.append("im_" + str(im["im_regime"]))
+        sw("im_regime_tag")
     if p.decoupled_scalp:
         d_ = decoupled(ctx, p)
         if d_:
             tags.append("decoupled")
+            sw("decoupled_scalp")
     if tags:
         o["lv_tags"] = "|".join(dict.fromkeys(x for x in (o.get("lv_tags", ""), *tags) if x))
     return None
@@ -406,34 +498,67 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p):
 # targets
 # --------------------------------------------------------------------------------------------------------------
 
+RANK = {"D": 0, "W": 1, "M": 2}
+
+
+def rung_tf(ctx) -> dict:
+    """htf_rank_tf: {side-space rung level (4 decimals): 'D' / 'W' / 'M'} of the last _targets call that ranked (the timeframe label the rung carries)."""
+    return ctx.__dict__.setdefault("_bh2e", {}).setdefault("rung_tf", {})
+
+
+def _rank_rungs(ctx, sd, p, row, above: float, lv: list) -> list:
+    """B5-monthly-first-hierarchy (cc04_003 ~14:07; cc04_002 ~29:38) htf_rank_tf: the nearest unrebalanced FVG levels of the table row per timeframe (columns rk_<tf>_up / _dn) join the rungs, a
+    weekly / monthly level as an array rung of its own (replacing the array rungs within eq_tol_pts of it); rungs at the same (equal-distance) level are labelled with the highest timeframe and
+    the ranking is M > W > D: of two table levels within the tolerance only the higher timeframe's is kept, a daily array rung that coincides with a higher one gives way."""
+    tol = p.eq_tol_pts * p.es_pt
+    cands = []
+    for tf in ("D", "W", "M"):
+        for key in (f"rk_{tf}_up", f"rk_{tf}_dn"):
+            v = _f(row, key)
+            if v == v and sd.x(v) > above:
+                cands.append((float(sd.x(v)), tf))
+    cands.sort(key=lambda t: -RANK[t[1]])                                 # M first, so a lower rank within the tolerance of a kept level is dropped
+    kept: list = []
+    for x, tf in cands:
+        if not any(abs(x - y) <= tol for y, _ in kept):
+            kept.append((x, tf))
+    labels = rung_tf(ctx)
+    labels.clear()
+    out = list(lv)
+    for x, tf in kept:
+        near = [t for t in out if t[1] == "array" and abs(t[0] - x) <= tol]
+        if tf == "D":
+            sw("htf_rank_tf")
+            if near:                                                      # the daily array rung already there: label it
+                labels[round(near[0][0], 4)] = "D"
+            continue
+        out = [t for t in out if not (t[1] == "array" and abs(t[0] - x) <= tol)] + [(x, "array")]
+        labels[round(x, 4)] = tf
+        hit("rank_tf_rung")
+        sw("htf_rank_tf")
+    return sorted(out, key=lambda t: (t[0], -RANK.get(labels.get(round(t[0], 4), "D"), 0)))
+
+
 def targets_post(ctx, sd, i: int, p, above: float, lv: list) -> list:
-    """tier_regime_gate: in the high-resistance regime no counter-side target above the defended ITH (below the ITL); htf_rank_tf: the weekly / monthly draw levels of the table row join the rungs and
-    replace a daily rung at the same level (the higher timeframe ranks first)."""
+    """tier_regime_gate: in the high-resistance regime no counter-side target above the defended ITH (below the ITL); htf_rank_tf: the per-timeframe table levels join the rungs, equal-distance rungs ranked M > W > D
+    (`_rank_rungs`)."""
     session = getattr(ctx, "cur_session", "") or ("PM" if ctx.t[i] >= 810 else "AM")
     row = _row(ctx, session, i)
     if row is None:
         return lv
     if p.tier_regime_gate:
         reg = _n(row, "tier_regime")
-        if reg == -sd.sign and (not p.tug_required or _n(row, "tug") == reg):
+        if reg == -sd.sign and (not p.tug_required or _n(row, "tug_spec") == reg):
             ith = _f(row, "tier_ith")
             if ith == ith:
+                sw("tier_regime_gate")
                 x = sd.x(ith)
                 kept = [(v, k) for v, k in lv if v <= x + 1e-9]
                 if len(kept) != len(lv):
                     hit("tier_trim")
                 lv = kept
     if p.htf_rank_tf:
-        tol = p.eq_tol_pts * p.es_pt
-        add = []
-        for key, nkey in (("draw_up", "draw_up_name"), ("draw_dn", "draw_dn_name")):
-            v, nm = _f(row, key), str(row.get(nkey) or "")
-            if v == v and nm[:2] in ("W_", "M_") and sd.x(v) > above:
-                add.append(sd.x(v))
-        for x in add:
-            lv = [(a, k) for a, k in lv if abs(a - x) > tol] + [(x, "array")]
-            hit("rank_tf_rung")
-        lv = sorted(lv, key=lambda t: t[0])
+        lv = _rank_rungs(ctx, sd, p, row, above, lv)
     return lv
 
 
@@ -486,6 +611,14 @@ def lock_post(ctx, p, row, t_lock: int, session: str, kl: int, px: float, lock: 
     mn = p.draw_lock_min_pts * p.es_pt
     if p.soft_carry:
         lock["flip"] = _n(row, "flip")
+    # item 93: a fast run into the weekly draw does not end the week - the next weekly array beyond is the NEW draw (forced as the lock target, not just a candidate)
+    if p.fast_draw_extend and row is not None and _n(row, "fast_draw"):
+        s_, fx = _n(row, "fast_draw"), _f(row, "fast_next")
+        if fx == fx and (fx - px) * s_ >= mn and lock.get("side") in (0, s_, None):
+            lock.update(side=s_, target=fx, kind="array", name="fast_draw_next")
+            lock.setdefault("bh2", []).append("fast_draw_next")
+            hit("lock_fast_draw_next")
+            sw("fast_draw_extend")
     # item 132: the next 20 / 40 / 60-day extreme on the side of the last daily MSS
     if p.ipda_draw_side and row is not None:
         s_ = _n(row, "last_break")
@@ -496,20 +629,25 @@ def lock_post(ctx, p, row, t_lock: int, session: str, kl: int, px: float, lock: 
                 lock.update(side=s_, target=v, kind=k_, name=n_)
                 lock.setdefault("bh2", []).append("ipda_draw_side")
                 hit("lock_ipda_side")
+                sw("ipda_draw_side")
     # item 105: a PM draw may reverse an AM draw hit at a 4h / daily array
     if p.htf_after_draw == "reverse" and t_lock >= 810:
         am = (getattr(ctx, "lock", None) or {}).get("AM")
         nm = str((am or {}).get("name") or "")
-        if am is not None and am.get("delivered") and am.get("side") and (nm.startswith("htf") or "htf_4h" in nm or "htf_D" in nm):
+        if am is not None and am.get("delivered") and am.get("side") and htf_array_name(nm):
             if B1._force(lock, -int(am["side"]), px, mn, "after_draw_pm", kinds=None):
                 lock.setdefault("bh2", []).append("after_draw_reverse")
+                sw("htf_after_draw")
+    if p.q_obj_lean and row is not None and _f(row, "q_obj") == _f(row, "q_obj"):
+        sw("q_obj_lean")                                              # (live: a quarterly objective exists; it leans the lock only when the lock is neutral)
     if row is not None and lock["side"] == 0:
         # item 109 / 135
         if p.tier_regime_gate:
             reg = _n(row, "tier_regime")
-            if reg and (not p.tug_required or _n(row, "tug") == reg):
+            if reg and (not p.tug_required or _n(row, "tug_spec") == reg):
                 if B1._force(lock, reg, px, mn, "tier_regime"):
                     lock.setdefault("bh2", []).append("tier_regime")
+                    sw("tier_regime_gate")
         # item 83
         if lock["side"] == 0 and p.q_obj_lean:
             q = _f(row, "q_obj")
@@ -524,6 +662,7 @@ def lock_post(ctx, p, row, t_lock: int, session: str, kl: int, px: float, lock: 
                 lock.update(side=c[0], target=c[1], kind=c[2], name="soft_carry")
                 lock.setdefault("bh2", []).append("soft_carry")
                 hit("lock_soft_carry")
+                sw("soft_carry")
     return lock
 
 
@@ -541,6 +680,7 @@ def _wick60_cancel(ctx, p, lk: dict, i: int) -> str:
         w = getattr(ctx, "wick", None)
         if w is not None:
             ce = float(w["upper"] if side < 0 else w["lower"])
+            sw("wick_ce_60m")
             b = B1.tf_complete(ctx, 60, i)
             cl = b["c"][b["last"] >= kl]
             if len(cl) and ((cl.max() > ce) if side < 0 else (cl.min() < ce)):
@@ -552,6 +692,7 @@ def _wick60_cancel(ctx, p, lk: dict, i: int) -> str:
             o, h, l, c = (b[k][keep] for k in ("o", "h", "l", "c"))
             zs = [z for z in L.fvgs(h, l, o, c) if z.kind == ("bear" if side < 0 else "bull")]
             if zs:
+                sw("sibi15_ce_cancel")
                 z = zs[-1]
                 ce = (z.top + z.bottom) / 2
                 a = int(b["last"][keep][z.i])
@@ -594,6 +735,8 @@ def lock_bar(ctx, p, s_: str, lk: dict, i: int, done: dict, spent, state=None):
     if p.allow_reversal_after_target and lk.get("delivered") and not lk.get("rev_done") and lk.get("delivered_i") is not None:
         st_day = ((state or {}).get("stops") or {}).get("day")
         blocked = bool(state is not None and (state.get("day_done") and st_day != "win"))
+        if not blocked:
+            sw("allow_reversal_after_target")
         if not blocked and _reversal_ok(ctx, p, lk, i):
             nl = B1._relock(ctx, p, s_, lk, i, spent, -side, "reversal_after_target")
             nl["rev_done"] = True
@@ -622,21 +765,8 @@ def lock_bar(ctx, p, s_: str, lk: dict, i: int, done: dict, spent, state=None):
 # --------------------------------------------------------------------------------------------------------------
 
 def inside_zone(hist):
-    """The daily FVG (top, bottom) that yesterday's whole range sat inside (the strategy._inside_daily_fvg zone), or None."""
-    S = _S()
-    if len(hist) < 4:
-        return None
-    o, h, l, c = S._daily(hist)
-    k = len(h) - 1
-    for z in L.fvgs(h[:k], l[:k]):
-        after = c[z.i + 1:k]
-        if z.kind == "bull" and len(after) and after.min() < z.bottom:
-            continue
-        if z.kind == "bear" and len(after) and after.max() > z.top:
-            continue
-        if z.bottom <= l[k] and h[k] <= z.top:
-            return float(z.top), float(z.bottom)
-    return None
+    """The daily FVG (top, bottom) that yesterday's whole range sat inside - the very zone strategy._inside_daily_fvg tested (shared: `_inside_daily_fvg_zone`), or None."""
+    return _S()._inside_daily_fvg_zone(hist)
 
 
 def sloppy_release(ctx, p, sl_now: set, i: int) -> set:
@@ -647,6 +777,7 @@ def sloppy_release(ctx, p, sl_now: set, i: int) -> set:
     if not getattr(ctx, "inside_side", 0):
         top, bot = z
         rel = p.release_pts * p.es_pt
+        sw("inside_bisi_release")
         a = ctx.start
         for j in range(a, i + 1):
             u, d_ = ctx.h[j] > top + rel, ctx.l[j] < bot - rel

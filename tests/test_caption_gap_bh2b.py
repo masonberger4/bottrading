@@ -16,6 +16,7 @@ from test_caption_gap_bh1 import BR, _run_rows  # noqa: E402
 from test_caption_gap_bh1d import blocks  # noqa: E402
 from test_caption_gap_bh1e import pad_to_0930, fake_mark, lk_of, FLAT  # noqa: E402
 from test_caption_gap_dwc3 import _bisi_hist  # noqa: E402
+NAN = float("nan")
 
 FLATROWS = [(100.0, 100.3, 99.8, 100.1)] * 8
 
@@ -352,7 +353,7 @@ def test_tier_regime_gate():
     assert B2.targets_post(ctx, sd, i, p, 100.0, [(102.0, "pool"), (106.0, "pool")]) == [(102.0, "pool")]      # no target above the ITH
     t = Params(**BASE, tier_regime_gate=True, tug_required=True)
     assert B2.order_ok(ctx, sd, order(entry=100.0, t1=106.0), "AM", i, t) is None                  # the regime needs the tug of war too
-    c2 = ctx_at(t, bias_row=BR(tier_regime=-1, tier_ith=104.0, tug=-1))
+    c2 = ctx_at(t, bias_row=BR(tier_regime=-1, tier_ith=104.0, tug_spec=-1))
     assert B2.order_ok(c2, sd, order(entry=100.0, t1=106.0), "AM", i, t) == "x_bh2_tier_regime"
     c3 = ctx_at(p, bias_row=BR(tier_regime=0))
     assert B2.order_ok(c3, sd, order(entry=100.0, t1=106.0), "AM", i, p) is None
@@ -470,9 +471,21 @@ def test_order_tags_from_the_table_and_intermarket():
     o = order()
     assert B2.order_ok(ctx, sd_of(ctx), o, "AM", i, p) is None
     tags = set(o["lv_tags"].split("|"))
-    assert {"q_window", "shift_due", "qshift_retrace", "after_draw_reverse", "dsmt_" + B2.season(D0), "rates_diverge", "im_bwith_dagainst"} <= tags
+    pg = Params(**BASE, dsmt_bias=True, q_window_gate=True, htf_bias="combo")                 # q_window_gate: the daily-SMT tag counts only inside the q_window
+    cg = ctx_at(pg, bias_row=BR(q_window=0))
+    cg.intermarket = {"dsmt": 1}
+    og = order()
+    B2.order_ok(cg, sd_of(cg), og, "AM", at(cg, "09:55"), pg)
+    assert not any(t.startswith("dsmt_") for t in (og.get("lv_tags") or "").split("|"))
+    cg2 = ctx_at(pg, bias_row=BR(q_window=1))
+    cg2.intermarket = {"dsmt": 1}
+    og2 = order()
+    B2.order_ok(cg2, sd_of(cg2), og2, "AM", at(cg2, "09:55"), pg)
+    assert any(t.startswith("dsmt_") for t in og2["lv_tags"].split("|"))
+    assert {"q_window", "shift_due", "qshift_retrace", "after_draw_reverse", "dsmt_" + B2.season(D0, 1), "rates_diverge", "im_bwith_dagainst"} <= tags
     assert any(t.startswith("sibi_") for t in tags)
-    assert B2.season(date(2026, 7, 1)) == "short" and B2.season(date(2026, 11, 3)) == "trend" and B2.season(date(2026, 2, 3)) == "trend"
+    assert B2.season(date(2026, 7, 1)) == "short" and B2.season(date(2026, 11, 3)) == "trend" and B2.season(date(2026, 2, 3)) == "trend"           # a bullish SMT: trend change in the bullish windows, short-term in summer
+    assert B2.season(date(2026, 1, 12), -1) == "trend" and B2.season(date(2026, 7, 1), -1) == "trend" and B2.season(date(2026, 11, 3), -1) == "short"   # a bearish SMT: strongest in January / May-Jul, short-term in a bullish window
     o2 = order()
     ctx.intermarket = {"rates_dxy_agree": 1}
     B2.order_ok(ctx, sd_of(ctx), o2, "AM", i, p)
@@ -505,6 +518,12 @@ def test_lock_cands_and_lock_post_adjustments():
     assert B2.lock_cands(None, p, BR(fast_draw=0, fast_next=130.0), 570, 0) == [] and B2.lock_cands(None, Params(**BASE), BR(fast_draw=1, fast_next=130.0), 570, 0) == []
     ctx = ctx_at(p, rows=pad_to_0930([(100.0, 100.1, 99.9, 100.0)] * 3), start="00:00")
     kl = S._idx_at(ctx, 570)
+    # item 93: the next weekly array is FORCED as the target when the weekly draw was reached fast (not only offered as a candidate that a nearer pool beats)
+    f1 = B2.lock_post(ctx, p, BR(fast_draw=1, fast_next=130.0), 570, "AM", kl, 100.0, lk_of(1, 110.0, marked))
+    assert f1["side"] == 1 and f1["target"] == 130.0 and f1["name"] == "fast_draw_next"
+    assert B2.lock_post(ctx, p, BR(fast_draw=1, fast_next=130.0), 570, "AM", kl, 100.0, lk_of(0, None, marked))["target"] == 130.0
+    assert B2.lock_post(ctx, p, BR(fast_draw=1, fast_next=130.0), 570, "AM", kl, 100.0, lk_of(-1, 90.0, marked))["target"] == 90.0     # an opposite lock is left alone
+    assert B2.lock_post(ctx, p, BR(fast_draw=1, fast_next=NAN), 570, "AM", kl, 100.0, lk_of(1, 110.0, marked))["target"] == 110.0       # no next array: the ordinary lock stands
     # q_obj_lean: a neutral lock leans to the weekly array
     q = Params(**BASE, q_obj_lean=True)
     out = B2.lock_post(ctx, q, BR(q_obj=70.0), 570, "AM", kl, 100.0, lk_of(0, None, marked))
@@ -531,12 +550,28 @@ def test_lock_cands_and_lock_post_adjustments():
 
 def test_htf_rank_tf_rungs():
     p = Params(**BASE, htf_rank_tf=True)
-    ctx = ctx_at(p, bias_row=BR(draw_up=106.0, draw_up_name="W_fvg", draw_dn=94.0, draw_dn_name="D_fvg"))
+    sd = None
+    ctx = ctx_at(p, bias_row=BR(rk_W_up=106.0, rk_D_dn=94.0))
     i = at(ctx, "09:55")
     sd = sd_of(ctx)
     lv = B2.targets_post(ctx, sd, i, p, 100.0, [(102.0, "array"), (106.2, "array"), (108.0, "pool")])
-    assert (106.0, "array") in lv and (106.2, "array") not in lv and [v for v, _ in lv] == sorted(v for v, _ in lv)      # the weekly rung replaces the daily one at (nearly) the same level
+    assert (106.0, "array") in lv and (106.2, "array") not in lv and [v for v, _ in lv] == sorted(v for v, _ in lv)      # the weekly rung replaces the daily array rung at (nearly) the same level
+    assert B2.rung_tf(ctx)[106.0] == "W"
     assert B2.targets_post(ctx, sd, i, Params(**BASE), 100.0, [(102.0, "array")]) == [(102.0, "array")]
+    # equal-distance rungs of D, W and M: ONE rung, labelled with the highest timeframe (M > W > D)
+    c3 = ctx_at(p, bias_row=BR(rk_D_up=106.0, rk_W_up=106.0, rk_M_up=106.0))
+    lv3 = B2.targets_post(c3, sd, i, p, 100.0, [(102.0, "array"), (106.0, "array")])
+    assert lv3 == [(102.0, "array"), (106.0, "array")] and B2.rung_tf(c3) == {106.0: "M"}
+    # W and M a hair apart: the monthly level is the one kept, the weekly one dropped
+    c4 = ctx_at(p, bias_row=BR(rk_D_up=106.2, rk_W_up=106.1, rk_M_up=105.9))
+    lv4 = B2.targets_post(c4, sd, i, p, 100.0, [])
+    assert lv4 == [(105.9, "array")] and B2.rung_tf(c4) == {105.9: "M"}
+    # a daily-only level that matches an existing daily array rung only labels it
+    c5 = ctx_at(p, bias_row=BR(rk_D_up=102.0))
+    assert B2.targets_post(c5, sd, i, p, 100.0, [(102.0, "array")]) == [(102.0, "array")] and B2.rung_tf(c5) == {102.0: "D"}
+    # a pool at the same level is not an array: it stays
+    c6 = ctx_at(p, bias_row=BR(rk_W_up=108.0))
+    assert (108.0, "pool") in B2.targets_post(c6, sd, i, p, 100.0, [(108.0, "pool")])
 
 
 # --- full run_day paths with the switches on (the hooks are wired into the engine) ---------------------------------------------------------------
@@ -572,3 +607,32 @@ def test_q_window_size_and_b19_report():
     r = RD.b19_sign(t)
     assert r.loc["im_bwith_dagainst", "trades"] == 2 and r.loc["none", "trades"] == 2 and r.loc["im_bwith_dagainst", "win_rate"] == 0.5
     assert len(RD.b19_sign(t.iloc[:0])) == 0
+
+
+# --- review round 2 ----------------------------------------------------------------------------------------------------------------------------
+
+def test_htf_array_lock_names():
+    for nm in ("htf_D_fvg", "htf_W_ob", "htf_M_vi", "htf_ce", "htf_vi", "ext_htf_4h", "ext_htf_D"):
+        assert B2.htf_array_name(nm), nm
+    for nm in ("htf_PDH", "htf_D_swing_high", "htf_PWL", "pdh1", "org", "ext_htf_15m", "", None, "htf_D_swing_low"):
+        assert not B2.htf_array_name(nm), nm
+    marked = [(110.0, "pool", "pdh1", 1), (90.0, "pool", "pdl1", -1)]
+    r = Params(**BASE, htf_after_draw="reverse")
+    ctx = ctx_at(r, rows=pad_to_0930([(100.0, 100.1, 99.9, 100.0)] * 3), start="00:00")
+    kl = S._idx_at(ctx, 570)
+    for nm, want in (("htf_D_fvg", -1), ("htf_PDH", 1)):                                    # the real names mark_levels gives: an array reverses, a pool does not
+        ctx.lock = {"AM": dict(side=1, name=nm, delivered=True)}
+        assert B2.lock_post(ctx, r, BR(), 810, "PM", kl, 100.0, lk_of(1, 110.0, marked, session="PM"))["side"] == want, nm
+
+
+def test_scalp_week_when_the_weekly_draw_is_unset():
+    p = Params(**BASE, htf_bias="combo", bias_neutral="scalp_week")
+    assert B2.wk_unset(BR(wk_draw_up=NAN, wk_draw_dn=NAN)) and not B2.wk_unset(BR(wk_draw_up=120.0, wk_draw_dn=NAN)) and not B2.wk_unset(BR()) and not B2.wk_unset(None)
+    c = ctx_at(p, bias_row=BR(combo=1, wk_draw_up=NAN, wk_draw_dn=NAN))
+    i = at(c, "09:55")
+    lvt: list = []
+    assert B2.size_mult(c, sd_of(c), i, p, lvt) == p.scalp_week_risk and "size_scalp_week" in lvt          # a daily bias but no weekly draw: a scalp week
+    assert BD.row_state(c, p, "AM", i).scalp == "bias_neutral"                                                # ... and the day's orders are scalps
+    c2 = ctx_at(p, bias_row=BR(combo=1, wk_draw_up=120.0, wk_draw_dn=NAN))
+    assert B2.size_mult(c2, sd_of(c2), i, p, []) == 1.0                                                    # a bias and a weekly draw: normal
+    assert BD.row_state(c2, p, "AM", i).scalp != "bias_neutral"

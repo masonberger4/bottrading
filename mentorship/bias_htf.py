@@ -53,15 +53,16 @@ def bx_string(p) -> str:
     hb = p.htf_bias
     if hb == "ordered" or p.draw_lock_pick in ("ordered", "largest") or p.draw_ext_target or p.draw_first != "off":
         x["ord"] = 1
-    if hb in ("iof", "combo2") or p.or_needs_bias:         # (caption-gap T4-or-needs-bias-iof reads the iof column)
+    from . import bh3                                      # caption-gap pass bias_htf#3/7 (bh3.py)
+    if hb in ("iof", "combo2") or p.or_needs_bias or bh3.needs_iof(p):         # (caption-gap T4-or-needs-bias-iof reads the iof column; bias_htf#3/7: cot_gate, hallmarks, bias_dh, ... read it too)
         x["iof"] = [p.iof_days, p.iof_min]
     pd20_on = (hb == "pd20" or p.day_pd == "20d" or p.pd_zone != "half" or "premium_chop" in p.neutral_gate
-               or p.cond_pd_tags or p.eq_first_rung or p.ob_location_cap)
+               or p.cond_pd_tags or p.eq_first_rung or p.ob_location_cap or p.pd60_only_consol)
     if pd20_on:
-        x["pd20"] = [p.pd_day_range, int(p.pd_body_multiday), p.pd_zone, list(p.ote_band), int(p.day_pd == "20d")]
+        x["pd20"] = [p.pd_day_range, int(p.pd_body_multiday), p.pd_zone, list(p.ote_band), int(p.day_pd == "20d"), int(p.pd60_only_consol), float(p.consol_ratio)]
     if p.resist_def in ("htf", "both"):                  # caption-gap L4-resistance-definitions: the weekly state
         x["wk"] = 1
-    if hb == "wk" or p.weekly_gate != "off" or p.weekly_open != "off" or p.objective_neutral in ("week", "both")             or p.objective_met_stop in ("week", "both") or "draw_delivered" in p.neutral_gate:
+    if hb == "wk" or p.weekly_gate != "off" or p.weekly_open != "off" or p.objective_neutral in ("week", "both")             or p.objective_met_stop in ("week", "both") or "draw_delivered" in p.neutral_gate or hb in ("week_check", "wd_check"):
         x["wk"] = 1
     if hb == "ob_mt" or p.how_rule != "off":
         x["obmt"] = 1
@@ -71,8 +72,10 @@ def bx_string(p) -> str:
         x["persist"] = p.bias_persist
     if p.next_array_on_fail:
         x["nof"] = p.nof_days
-    if hb == "mwd" or p.mwd_nest != "off":
+    if hb == "mwd" or p.mwd_nest != "off" or p.mwd_tf_test or p.mwd_cancel_case or p.mwd_upgrade:
         x["mwd"] = p.mwd_disp_mult
+        if p.mwd_tf_test or p.mwd_cancel_case or p.mwd_upgrade:
+            x["mwd3"] = [int(p.mwd_tf_test), int(p.mwd_cancel_case), int(p.mwd_upgrade)]       # caption-gap bias_htf#3/7: the per-timeframe test, the case-specific cancel, the case C -> B upgrade
     if p.weekly_open != "off":
         x["wo"] = p.weekly_open_early_days
         x["woa"] = p.weekly_open_array_days
@@ -114,11 +117,17 @@ def bx_string(p) -> str:
     b2 = bh2.bx_cfg(p)
     if b2:
         x["b2"] = b2
+    if p.bias_neutral == "scalp_week":
+        x["wk"] = 1                            # B17-neutral-htf-monday-close: the weekly draw columns (a week without a weekly draw is a scalp week)
     if p.htf_after_draw == "reverse" or p.fast_draw_extend:
         x["obj"] = 1                           # the B17.3 objective-met columns and the weekly draw levels (after_draw_* / fast_draw read them)
         x["wk"] = 1
     if p.tug_required or p.first_clue_neutral:
         x["pr"] = 1                            # the post-raid first_clue / tug columns (items 135 / 136)
+    b3 = bh3.bx_cfg(p)                         # caption-gap pass bias_htf#3/7 (bh3.py): the columns / flip configuration of its items
+    if b3:
+        x["b3"] = b3
+
     return json.dumps(x, sort_keys=True, separators=(",", ":")) if x else ""
 
 
@@ -406,23 +415,33 @@ def add_columns(out: pd.DataFrame, X: dict, d: pd.DataFrame, w: pd.DataFrame, ar
     nan = float("nan")
     # --- A21 P/D of the N-session range
     if "pd20" in X:
-        n, bodies, zone, ote, repl = X["pd20"]
-        st, ps, rh, rl = [], [], [], []
+        n, bodies, zone, ote, repl = X["pd20"][:5]
+        only_consol, c_ratio = (X["pd20"][5], X["pd20"][6]) if len(X["pd20"]) > 6 else (0, 0.25)
+        st, ps, rh, rl, cons = [], [], [], [], []
         for k, x in zip(ks, px):
             if k < n:
                 st.append(0)
                 ps.append(nan)
                 rh.append(nan)
                 rl.append(nan)
+                cons.append(0)
                 continue
             hh = np.maximum(o, c)[k - n:k].max() if bodies else h[k - n:k].max()
             ll = np.minimum(o, c)[k - n:k].min() if bodies else l[k - n:k].min()
             s_, p_ = pd_state(float(x), float(hh), float(ll), zone, tuple(ote))
+            cs_ = int(abs(float(c[k - 1] - c[k - n])) < c_ratio * float(hh - ll)) if hh > ll else 0      # caption-gap A21-trend-vs-consolidation-first: the net move of the n sessions is small against the body range
+            cons.append(cs_)
+            if only_consol and not cs_:
+                s_ = 0                                       # pd60_only_consol: a trending range gives no premium / discount reading
+                from . import bh3 as _bh3
+                _bh3.sw("pd60_only_consol")
             st.append(s_)
             ps.append(p_)
             rh.append(float(hh))
             rl.append(float(ll))
         out["pd20"], out["pd20_pos"] = st, ps
+        if only_consol:
+            out["pd60_consol"] = cons
         out["pd20_hi"], out["pd20_lo"] = rh, rl            # caption-gap X3-a21-rebalance-to-eq: the range (its EQ = the first draw)
         if repl:
             out["pd"] = st
@@ -543,7 +562,7 @@ def add_columns(out: pd.DataFrame, X: dict, d: pd.DataFrame, w: pd.DataFrame, ar
         out["obj_week"] = ow
     # --- B10 MWD
     if "mwd" in X:
-        out = _mwd(out, X["mwd"], d, w, arrs, ks, px)
+        out = _mwd(out, X["mwd"], d, w, arrs, ks, px, X.get("mwd3"))
     # --- B13 weekly open
     if "wo" in X:
         out = _weekly_open(out, X["wo"], d, w, arrs, ks, df, on, X.get("woa", 60))
@@ -612,7 +631,7 @@ PR_N, PR_RUN, PR_WIN = 20, 5, 40
 
 def _pr_dir(h, l, c, ks) -> tuple:
     """The BEARISH reading of the post-raid state for the rows at daily index `ks` (the sessions before each: index k-1 is the last completed one);
-    the bullish reading runs the same code on the mirrored bars. Returns (first_clue, tug, raid_px, raid_eq) arrays (the first two 0 / 1).
+    the bullish reading runs the same code on the mirrored bars. Returns (first_clue, tug, raid_px, raid_eq, no_new_ground) arrays (first_clue, tug, no_new_ground 0 / 1).
       raid       the latest completed session j (within the last 10) that took the highest high of the PR_N (20) sessions before it and closed back
                  below that high - the raid of the buy-side pool with a rejection [our interpretation of "raid and strong rejection"]
       first_clue cc05_002 ~13:28: no short-term low (3-bar pivot) broke in the PR_RUN sessions up to the raid, and one breaks after it
@@ -641,6 +660,7 @@ def _pr_dir(h, l, c, ks) -> tuple:
     ith = list(L.swing_tiers(h, l, 1)["itl"][0]) if n > 4 else []        # the intermediate-term highs (the tier dict holds (highs, lows))
     clue = np.zeros(len(ks), int)
     tug = np.zeros(len(ks), int)
+    ngr = np.zeros(len(ks), int)
     rpx = np.full(len(ks), nan)
     req = np.full(len(ks), nan)
     for r, k in enumerate(ks):
@@ -664,12 +684,14 @@ def _pr_dir(h, l, c, ks) -> tuple:
             def failed(m):
                 return c[m] < ref_hi[m] or (m + 1 <= last and c[m + 1] < ref_hi[m])
             known_ith = [q.price for q in ith if q.known <= last]
+            if failed(ev[-1]) and failed(ev[-2]):
+                ngr[r] = 1                                              # X3-b6-tug-of-war-new-ground (item 135): the last two STH raids each closed back below (no new ground), alone
             if failed(ev[-1]) and failed(ev[-2]) and len(known_ith) >= 2 and known_ith[-1] < known_ith[-2]:
                 tug[r] = 1
                 if rpx[r] != rpx[r]:
                     rpx[r] = float(ref_hi[ev[-1]])
                     req[r] = (rpx[r] + float(l[max(0, last - PR_N):last + 1].min())) / 2
-    return clue, tug, rpx, req
+    return clue, tug, rpx, req, ngr
 
 
 def post_raid(out: pd.DataFrame, o, h, l, c, ks) -> pd.DataFrame:
@@ -677,14 +699,15 @@ def post_raid(out: pd.DataFrame, o, h, l, c, ks) -> pd.DataFrame:
     for every row; a row where both readings fire is 0. Needs only completed sessions (see `_pr_dir`)."""
     nan = float("nan")
     h, l, c = np.asarray(h, float), np.asarray(l, float), np.asarray(c, float)
-    cb, tb, pb, eb = _pr_dir(h, l, c, ks)
-    cu, tu, pu, eu = _pr_dir(-l, -h, -c, ks)
+    cb, tb, pb, eb, nb = _pr_dir(h, l, c, ks)
+    cu, tu, pu, eu, nu = _pr_dir(-l, -h, -c, ks)
     cb_, cu_, tb_, tu_ = cb.astype(bool), cu.astype(bool), tb.astype(bool), tu.astype(bool)
     fc = np.where(cb_ & ~cu_, -1, np.where(cu_ & ~cb_, 1, 0))
     tg = np.where(tb_ & ~tu_, -1, np.where(tu_ & ~tb_, 1, 0))
     use_bear = (fc < 0) | (tg < 0)
     use_bull = (fc > 0) | (tg > 0)
     out["first_clue"], out["tug"] = fc, tg
+    out["no_new_ground"] = np.where(nb.astype(bool) & ~nu.astype(bool), -1, np.where(nu.astype(bool) & ~nb.astype(bool), 1, 0))      # the 'no new ground' part alone: tug of item 135 = this AND tier_regime (bh2.finish: tug_spec)
     out["raid_px"] = np.where(use_bear, pb, np.where(use_bull, -pu, nan))
     out["raid_eq"] = np.where(use_bear, eb, np.where(use_bull, -eu, nan))
     return out
@@ -715,8 +738,14 @@ def _tf_bars(d: pd.DataFrame, rule: str):
             g.close.last().values.astype(float), last)
 
 
-def _mwd(out, disp, d, w, arrs, ks, px):
+def _mwd(out, disp, d, w, arrs, ks, px, x3=None):
+    """B10 month / week / day states and cases (see tf_states / mwd_case). Caption-gap pass bias_htf#3/7 (`x3` = [tf_test, cancel, upgrade], bh3.py): X3-b10-tf-test - the timeframe states come from
+    the displacement-after-an-array-touch test and case A needs HH/HL and the timeframe's iof on every timeframe in play (else it is case B); X3-b10-cancel-condition - case B is cancelled (mwd 0) by a
+    daily bearish breaker formed after a new daily high, case C by the weekly one (mirror for a bearish sequential); X3-b10-case-c-to-b-upgrade - case C becomes B inside a monthly array holding a weekly
+    OB that reacted, and in case B the open and high of every daily down-close candle since the correction began are exported (mwd_levels)."""
     from .htf import _arrays
+    from . import bh3 as _b3
+    x3 = x3 or [0, 0, 0]
     D = tuple(d[k].values.astype(float) for k in ("open", "high", "low", "close"))
     sdh, cdh = tf_states(*D, disp)
     wo, wh, wl, wc, wlast = _tf_bars(d, "W-FRI")
@@ -726,8 +755,15 @@ def _mwd(out, disp, d, w, arrs, ks, px):
     # arrays of the weekly / monthly timeframe: usable from the session after the bar's last session
     w_arrs = [a for a in arrs if a.tf == "W" and a.typ in ("fvg", "ob")]
     m_arrs = _arrays(mo, mh, ml, mc, "M", lambda i: int(mlast[i]) + 1)
-    res_dir, res_case, res_zones, mw, ww, dw = [], [], [], [], [], []
-    for k in ks:
+    a_ok = None
+    if x3[0]:                                                       # X3-b10-tf-test: the per-timeframe test replaces the states; HH/HL and iof state for case A
+        _b3.sw("mwd_tf_test")
+        sdh = _b3.tf_state3(*D, _arrays(*D, "D", lambda i: i + 1))
+        sw_ = _b3.tf_state3(wo, wh, wl, wc, _arrays(wo, wh, wl, wc, "W", lambda i: i + 1))
+        sm_ = _b3.tf_state3(mo, mh, ml, mc, _arrays(mo, mh, ml, mc, "M", lambda i: i + 1))
+        a_ok = {tf: (_b3.hh_hl_series(b[1], b[2]), _b3.iof_state_series(*b)) for tf, b in (("D", D), ("W", (wo, wh, wl, wc)), ("M", (mo, mh, ml, mc)))}
+    res_dir, res_case, res_zones, mw, ww, dw, lv = [], [], [], [], [], [], []
+    for r_, k in enumerate(ks):
         iw = np.flatnonzero(wlast < k)
         im = np.flatnonzero(mlast < k)
         s_w = int(sw_[iw[-1]]) if len(iw) else 0
@@ -736,6 +772,27 @@ def _mwd(out, disp, d, w, arrs, ks, px):
         s_d = int(sdh[k - 1]) if k >= 1 else 0
         c_d = int(cdh[k - 1]) if k >= 1 else 0
         g, case = mwd_case(s_m, s_w, s_d, c_d, c_w)
+        if x3[0] and g and case == "A":                             # X3-b10-tf-test: case A also needs HH/HL and the timeframe's iof on the side of every timeframe in play
+            need = [("M", im[-1] if len(im) else -1, s_m), ("W", iw[-1] if len(iw) else -1, s_w), ("D", k - 1, s_d)]
+            for tf, j, s_ in need:
+                if s_ and (j < 0 or a_ok[tf][0][j] != g or a_ok[tf][1][j] != g):
+                    case = "B"
+                    _b3.hit("mwd_not_case_a")
+                    break
+        if x3[1] and g:
+            _b3.sw("mwd_cancel_case")                                # (live: a sequential exists whose case-specific breaker is tested)
+        if x3[1] and g and case in ("B", "C"):                      # X3-b10-cancel-condition: the case-specific timeframe's bearish (bullish) breaker cancels the sequential
+            if case == "B" and k >= 1 and _b3.breaker_cancel(*D, k - 1, g):
+                g, case = 0, ""
+                _b3.hit("mwd_cancel_B")
+            elif case == "C" and len(iw) and _b3.breaker_cancel(wo, wh, wl, wc, int(iw[-1]), g):
+                g, case = 0, ""
+                _b3.hit("mwd_cancel_C")
+        if x3[2] and g:
+            _b3.sw("mwd_upgrade")                                    # (live: a sequential exists whose case C may be upgraded)
+        if x3[2] and g and case == "C" and _b3.case_c_to_b(m_arrs, w_arrs, wo, wc, wh, wl, wlast, k, float(px[r_]), g):
+            case = "B"                                              # X3-b10-case-c-to-b-upgrade: the monthly array holds a weekly OB that reacted: month and week agree
+            _b3.hit("mwd_c_to_b")
         zones = []
         if g and case in ("B", "C"):
             src = w_arrs if case == "B" else m_arrs
@@ -756,8 +813,14 @@ def _mwd(out, disp, d, w, arrs, ks, px):
         mw.append(s_m)
         ww.append(s_w)
         dw.append(s_d)
+        lv.append(_b3.dcandle_levels(*D, int(k), g) if (x3[2] and g and case == "B") else ())
     out["mwd"], out["mwd_case"], out["mwd_zones"] = res_dir, res_case, res_zones
     out["mwd_m"], out["mwd_w"], out["mwd_d"] = mw, ww, dw
+    if x3[2]:
+        arr_ = np.empty(len(lv), dtype=object)
+        for i_, v_ in enumerate(lv):
+            arr_[i_] = tuple(v_)
+        out["mwd_levels"] = arr_
     return out
 
 
@@ -1044,6 +1107,13 @@ def load_cot(market: str = "E-MINI S&P 500", folder: Path | None = None) -> pd.D
                 continue
             parts.append(pd.DataFrame({"rep": pd.to_datetime(x[dt]), "net": pd.to_numeric(x[lg], errors="coerce")
                                        - pd.to_numeric(x[sh], errors="coerce")}))
+    try:                                                           # caption-gap B20-cot-data-spec (bias_htf#3/7): the CFTC legacy futures-only annual archives (deacot{year}.zip, cot.py) feed the same tag
+        from . import cot as _cot
+        z = _cot.load_reports(market, folder)
+        if z is not None:
+            parts.append(pd.DataFrame({"rep": pd.to_datetime(z.report_date), "net": z.net}))
+    except Exception:
+        pass
     if not parts:
         _COT[key] = None
         return None
@@ -1069,12 +1139,17 @@ def cot_state(day, tbl: pd.DataFrame | None, weeks: int = 52) -> int:
     return 1 if t.net.iloc[-1] > mid else (-1 if t.net.iloc[-1] < mid else 0)
 
 
+OI_ROOTS = {"ES": "ES", "MES": "ES", "SPX": "ES", "SPY": "ES", "SP": "ES", "NQ": "NQ", "MNQ": "NQ", "NDX": "NQ", "QQQ": "NQ", "NASDAQ": "NQ"}
+OI_READS: list = []                       # every open-interest file load_oi opened (the own-market check in load_oi_for reads it)
+
+
 def oi_root(symbol) -> str:
-    """B20-oi-own-market-only (cc10_003 ~39:38): the file root of the traded market's open interest (the leading letters of the symbol: ES, NQ, ...); an unknown symbol is the S&P (the original single file)."""
+    """B20-oi-own-market-only (cc10_003 ~39:38): the open-interest file root of the market a symbol trades: ES / MES / SPX / SPY -> ES, NQ / MNQ / NDX / QQQ -> NQ (an index or ETF stands for the futures
+    market it follows, so the SPX-signals-traded-as-SPY runs keep their S&P tag); any other symbol is its own root (its own file, no file = no tag); no symbol is the S&P (the original single file)."""
     if not symbol:
         return "ES"
     s = "".join(ch for ch in str(symbol).upper() if ch.isalpha())
-    return s or "ES"
+    return OI_ROOTS.get(s, s or "ES")
 
 
 def oi_path(symbol) -> Path:
@@ -1085,8 +1160,13 @@ def oi_path(symbol) -> Path:
 def load_oi_for(symbol) -> pd.Series | None:
     """The roll-summed open interest of the traded market ONLY (data/mentorship/<ROOT>_oi.csv); never another market's series (open interest 'is not something that can be shared'). None without that file."""
     path = oi_path(symbol)
-    assert path.name == ("ES_oi.csv" if oi_root(symbol) == "ES" else f"{oi_root(symbol)}_oi.csv"), "oi lookup must be keyed by the traded symbol"
-    return load_oi(path)
+    n0 = len(OI_READS)
+    out = load_oi(path)
+    opened = {Path(x).name for x in OI_READS[n0:]}
+    want = {path.name}
+    if opened - want:                                 # a real check: nothing but the own-market file was opened
+        raise AssertionError(f"oi lookup for {symbol!r} opened {sorted(opened - want)}: only {sorted(want)} is allowed")
+    return out
 
 
 def load_oi(path: Path | None = None) -> pd.Series | None:
@@ -1097,6 +1177,7 @@ def load_oi(path: Path | None = None) -> pd.Series | None:
     path = path or OI_FILE
     if not path.exists():
         return None
+    OI_READS.append(str(path))
     x = pd.read_csv(path)
     cols = {c.lower(): c for c in x.columns}
     dc = next((cols[c] for c in ("ts_event", "date", "ts_recv") if c in cols), None)

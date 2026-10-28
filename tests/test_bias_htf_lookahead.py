@@ -29,7 +29,8 @@ WIN = {
                                                        # of a scheduled release AND a full setup): 1 trade in the second, none in the common windows
 # Selective switches whose default-window run has no trade (the full-suite run after setups_models#7/7 found them): the test pins what it needs to
 # trade - PINS (extra Params the switch needs to be reachable at all; not a change of any default) and SEL_WIN (single months where the narrow switch fires).
-PINS = {"M12-setup-selection-order": dict(htf_bias="react"),                    # turtle_soup="cc_limit" needs a bias side (ctx.cur_bias); SM_POST has draw_lock off
+PINS = {"B6-iof-checklist-extended": dict(bias_neutral="both"),                  # caption-gap bias_htf#3/7: the score bias is neutral on most sessions; bias_neutral="skip" would leave no trade
+        "M12-setup-selection-order": dict(htf_bias="react"),                    # turtle_soup="cc_limit" needs a bias side (ctx.cur_bias); SM_POST has draw_lock off
         "OT-one-state-tool-pairing_expansion_ob": dict(htf_bias="react"),       # the expansion state needs the bias side
         "M13-pattern1-full-sequence-ote-fvg": dict(ote_need_s=False)}           # ote_need_s + the FVG overlap together leave no order in these windows; the overlap rule alone is checked
 SEL_WIN = {"OT-one-state-tool-pairing_expansion_ob": [("2023-09-01", "2023-10-01"), ("2024-10-01", "2024-10-16")],
