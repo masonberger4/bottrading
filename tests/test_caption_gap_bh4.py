@@ -20,14 +20,14 @@ NEW_FIELDS = (
     "range_day_mode", "range_day_n", "ipda_mid_skip", "ipda_mid_lo", "ipda_mid_hi", "htf_checklist", "bias_cadence", "dbisi_lower_half", "dbisi_upper_and_discount", "array_age_tiers", "ce_line_bias",
     "ifvg_bias", "ifvg_edge_add", "ifvg_bias_days", "salient_pd", "htf_lifetime_wm", "htf_history_months", "trapped_bpr_bias", "event_wick_ignore", "event_wick_mult", "htf_ob_mitigation", "origin_ob",
     "monthly_range", "monthly_flow_gate", "ob_ladder", "ob_ladder_px", "program_tag", "program_days", "matrix_tfs", "htf_range_arrays", "swing_extreme_block", "swing_block_long", "swing_block_short",
-    "swing_ignore_eq", "htf_ob_to_mt", "htf_reach_tol_pts", "pd_grid", "pd_grid_days", "grade_confluence", "pd_need_array", "pd_range_break", "failed_consol_break", "nested_pd_bias", "htf_eq_invalid",
+    "swing_ignore_eq", "htf_ob_to_mt", "htf_reach_tol_pts", "pd_grid", "pd_grid_days", "grade_confluence", "pd_need_array", "pd_range_break", "failed_consol_break", "failed_consol_tfs", "nested_pd_bias", "htf_eq_invalid",
     "breaker_regime")
-KNOBS = {"range_day_n", "ipda_mid_lo", "ipda_mid_hi", "ifvg_bias_days", "event_wick_mult", "program_days", "swing_block_long", "swing_block_short", "pd_grid_days", "ob_ladder_px"}
+KNOBS = {"failed_consol_tfs", "range_day_n", "ipda_mid_lo", "ipda_mid_hi", "ifvg_bias_days", "event_wick_mult", "program_days", "swing_block_long", "swing_block_short", "pd_grid_days", "ob_ladder_px"}
 OFF = {"range_day_mode": "off", "ipda_mid_skip": False, "htf_checklist": False, "bias_cadence": "daily", "dbisi_lower_half": False, "dbisi_upper_and_discount": False, "array_age_tiers": False,
        "ce_line_bias": False, "ifvg_bias": False, "ifvg_edge_add": False, "salient_pd": (), "htf_lifetime_wm": -1, "htf_history_months": 0, "trapped_bpr_bias": False, "event_wick_ignore": False,
        "htf_ob_mitigation": False, "origin_ob": False, "monthly_range": False, "monthly_flow_gate": False, "ob_ladder": False, "program_tag": False, "matrix_tfs": ("D",), "htf_range_arrays": False,
        "swing_extreme_block": False, "swing_ignore_eq": False, "htf_ob_to_mt": False, "htf_reach_tol_pts": 0.0, "pd_grid": False, "grade_confluence": False, "pd_need_array": False,
-       "pd_range_break": "off", "failed_consol_break": False, "nested_pd_bias": False, "htf_eq_invalid": False, "breaker_regime": False}
+       "pd_range_break": "off", "failed_consol_break": False, "failed_consol_tfs": ("D",), "nested_pd_bias": False, "htf_eq_invalid": False, "breaker_regime": False}
 
 
 def build(p, df, **kw):
@@ -133,8 +133,33 @@ def test_bias_cadence_freeze():
     assert weekly.wk_bias.tolist() == [1] * 5 + [0] * 5                      # Monday's value for the whole week
     assert weekly.flip.tolist() == out.flip.tolist()                         # the daily columns are not frozen
     mid = BH4.cadence_freeze(out.copy(), 2)
-    assert mid.wk_bias.tolist() == [1, 1, 1, -1, -1, 0, 0, 0, 0, 0] or mid.wk_bias.tolist()[:5] == [1, 1, 1, -1, -1]      # Wednesday's refresh happens only when the flip changed since Monday (week 1: yes)
-    assert mid.wk_bias.tolist()[5:] == [0] * 5                               # week 2: the flip did not change: Monday's value holds
+    assert mid.wk_bias.tolist() == [1] * 5 + [0] * 5                                  # the flip changed on THURSDAY only: no refresh (the one refresh is at the first row of Wednesday); week 2 holds Monday's
+    out2 = out.copy()
+    out2["flip"] = [0, 0, 1, 1, 1, 0, 0, 0, 0, 0]
+    mid2 = BH4.cadence_freeze(out2, 2)
+    assert mid2.wk_bias.tolist()[:5] == [1, 1, -1, -1, -1]                   # the daily flip changed by Wednesday: one refresh at the Wednesday open
+    assert mid2.wk_bias.tolist()[5:] == [0] * 5
+    out3 = out.copy()
+    out3["flip"] = [np.nan] * 10
+    assert BH4.cadence_freeze(out3, 2).wk_bias.tolist()[:5] == [1] * 5       # NaN against NaN is not a change
+
+
+def test_cadence_freezes_every_weekly_column():
+    """Review fix: every weekly / monthly-derived table column the bias modules build is in FROZEN (a new wk_ / mo_ / mwd weekly column must be added there or exempted here)."""
+    import re
+    from pathlib import Path
+    root = Path(BH4.__file__).parent
+    names = set()
+    for f in ("bias_htf.py", "bh1.py", "bh2.py", "bh3.py"):
+        names |= set(re.findall(r'out\["((?:wk|mo|mwd)_[a-z0-9_]+|iof_w)"\]', (root / f).read_text(encoding="utf-8")))
+    exempt = {"mwd_d", "mo_aligned", "mo_unaligned", "mo_bias_block", "mo_bias_gate"}        # the daily part of the sequential; names that are not table columns
+    missing = sorted(n for n in names - exempt if n not in BH4.FROZEN)
+    assert not missing, missing
+    out = pd.DataFrame({c_: [1, 2, 3, 4, 5, 6] for c_ in ("mwd", "mwd_m", "wk_dir", "wk_po3", "wk_q75", "iof_w", "mwd_d")}, index=[d_.date() for d_ in pd.bdate_range("2026-03-02", periods=6)])
+    fz = BH4.cadence_freeze(out, 1)
+    for c_ in ("mwd", "mwd_m", "wk_dir", "wk_po3", "wk_q75", "iof_w"):
+        assert fz[c_].tolist() == [1] * 5 + [6], c_
+    assert fz.mwd_d.tolist() == [1, 2, 3, 4, 5, 6]
 
 
 # --- items 27 / 28 / 61 / 80: the daily FVG Z, the CE line, the inversion bias -------------------------------------------------------------

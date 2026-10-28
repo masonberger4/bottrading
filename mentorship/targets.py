@@ -813,6 +813,9 @@ def extra_sources(ctx, sd, i: int, p, sw: dict, entry: float, risk: float, leg_h
             for z in rb_zones(sd, p):
                 if z.i <= i and z.bottom > above and after(z) < z.bottom:
                     out.append((float(z.bottom), "rb"))
+        if p.matrix_tfs != ("D",):                                    # caption-gap A22-matrix-range-tf (bias_htf#4/7 review fix): the weekly / monthly premium arrays
+            from . import bh4e as _b4e
+            out += _b4e.matrix_wm_levels(ctx, sd, i, p, above)
     if p.inter_swing_target:
         qs = [q for q in _ph(sd) if q.known <= i and q.i >= ctx.start - 1 and q.price > above
               and h[q.i + 1:i + 1].max(initial=-np.inf) < q.price]

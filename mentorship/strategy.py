@@ -3406,6 +3406,7 @@ class Params:
     pd_need_array: bool = False          # A21-range-position-needs-array (cc07_005 ~14:52): a long needs the entry in the discount of its grid quadrant AND inside a bullish HTF array (the confluence table / htf zones) - range position alone is no signal (mirror)
     pd_range_break: str = "off"          # A21-range-excursion-tolerance (cc07_005 ~15:37): "two_close" = the 60-session range ignores a one-day poke (a close beyond that the next day closed back inside); broken only when the next day does not close back inside
     failed_consol_break: bool = False    # new-monthly-failed-consolidation-break (cc12_001 ~45:46): a run beyond a consolidation's extreme, back inside and through its midpoint = failed_break -1 (+1): a neutral bias takes it; the target is the lowest (highest) body of the range
+    failed_consol_tfs: tuple = ("D",)    # new-monthly-failed-consolidation-break (cc12_001 ~45:46), review fix: the timeframes whose consolidations are tested - add "W" / "M" for the weekly / monthly ones (the merged failed_break takes the highest timeframe that has one)
     nested_pd_bias: bool = False         # A21-nested-ranges (cc07_007 ~16:59): the daily swing range's discount (premium) array held while the price stays in the 60-session range's premium (discount): a neutral bias takes that side
     htf_eq_invalid: bool = False         # A21-htf-eq-not-violated (cc12_002 ~26:38): a weekly close beyond the htf range's EQ against its direction (below it for a bullish range) turns that direction's bias neutral
     breaker_regime: bool = False         # A13-daily-breaker-regime (cc12_003 ~22:54): trade only in the direction of the most recent daily breaker until the opposite one forms (training wheels): the other side is rejected
@@ -3981,6 +3982,8 @@ class Params:
         for name, ok in (("range_day_mode", ("off", "pm_only", "scalp")), ("bias_cadence", ("daily", "weekly", "weekly_midweek")), ("ob_ladder_px", ("open", "high")), ("pd_range_break", ("off", "two_close"))):
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
+        if not set(self.failed_consol_tfs) <= {"D", "W", "M"} or not self.failed_consol_tfs:
+            raise ValueError("failed_consol_tfs: a non-empty subset of ('D', 'W', 'M')")
         if not set(self.matrix_tfs) <= {"D", "W", "M"} or not set(self.salient_pd) <= {15, 60, 240, 1440}:
             raise ValueError("matrix_tfs: a subset of ('D', 'W', 'M'); salient_pd: a subset of (15, 60, 240, 1440) minutes")
         if (self.range_day_n < 2 or not 0 < self.ipda_mid_lo < self.ipda_mid_hi < 1 or self.ifvg_bias_days < 1 or self.htf_lifetime_wm < -1 or self.htf_history_months < 0 or self.event_wick_mult <= 0
@@ -3994,6 +3997,10 @@ class Params:
         inert = []                                  # switches the current draw_lock / vi_arrays make inert
         if self.htf_bias == "off" and (self.trapped_bpr_bias or self.failed_consol_break or self.nested_pd_bias or self.ifvg_bias or self.htf_eq_invalid):     # the neutral-bias fallbacks read the htf_bias value
             inert.append("trapped_bpr_bias / failed_consol_break / nested_pd_bias / ifvg_bias / htf_eq_invalid reshape the htf_bias reading: inert with htf_bias='off'")
+        if self.matrix_tfs != ("D",) and not self.matrix_targets:
+            inert.append("matrix_tfs with W / M only tags the orders until matrix_targets is set (the weekly / monthly premium arrays join the matrix target list)")
+        if self.failed_consol_tfs != ("D",) and not self.failed_consol_break:
+            inert.append("failed_consol_tfs needs failed_consol_break")
         if self.range_day_mode == "pm_only" and self.draw_lock != "session":
             inert.append("range_day_mode='pm_only' carries the AM draw into the PM through the draw lock (draw_lock='session')")
 
@@ -4766,7 +4773,7 @@ def _htf_tag(ctx: DayCtx, sd: Side, i: int, price: float, tol: float) -> bool | 
     direction known by the close of bar i."""
     if not ctx.hzones:
         return None
-    tol = tol + float(getattr(ctx, "htf_reach_tol", 0.0))      # caption-gap new-layered-orders-before-level (bias_htf#4/7): a turn short of the level counts
+    reach = float(getattr(ctx, "htf_reach_tol", 0.0))          # caption-gap new-layered-orders-before-level (bias_htf#4/7): a turn short of the level counts - widened on the APPROACH side (the zone top in side space) only (review fix)
     now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
     j = ctx.full_off + i
     for z, known, m in ctx.hzones:
@@ -4777,7 +4784,7 @@ def _htf_tag(ctx: DayCtx, sd: Side, i: int, price: float, tol: float) -> bool | 
         closes = sd.sign * ctx.full_c[k:j + 1]
         if len(closes) and closes.min() < bot:
             continue                                  # closed through: no longer open
-        if bot - tol <= price <= top + tol:
+        if bot - tol <= price <= top + tol + reach:
             return True
     return False
 
@@ -9095,6 +9102,8 @@ def _ts_arrays0(ctx, sd, i, known_by, tfs=TS_TFS, src=(0, 1, 3)) -> list:
         if getattr(ctx, "bh4_obl", False):
             out += _BH4E.ladder_rows(ctx, sd, i)              # caption-gap A12-stepping-ob (bias_htf#4/7): the active ladder level as an HTF entry array
         return out
+    if getattr(ctx, "bh4_obl", False):
+        out += _BH4E.ladder_rows(ctx, sd, i)                  # (review fix, A12-stepping-ob: the no-confluence branch gets the ladder level too)
     if not getattr(ctx, "hzones", None):
         return out
     j = ctx.full_off + i
@@ -10212,7 +10221,7 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         t_pd = float(draw) if (order.get("single_exit") and draw is not None) else float(order["t1"])      # caption-gap A21-implied-range-to-target (025 ~41:59): the implied range = the sweep extreme .. the stated draw (the first ladder target; review fix: the draw when a single_exit replaces t1)
         if t_pd > leg_lo + 1e-9:
             ln_pd = _ES1.frame_line(ctx, sd, p, leg_lo + p.leg_pd * (t_pd - leg_lo))
-            if not skip_leg_pd and p.leg_pd_at == "arm" and entry > ln_pd:
+            if not skip_leg_pd and p.leg_pd_at == "arm" and entry > ln_pd and not (p.swing_ignore_eq and _BH4E.leg_pd_exempt(ctx, sd, entry, i, p)):      # (review fix, A21-swing-discount-exception: the waiver covers the anchor='target' test too)
                 _f("x_leg_premium")
                 return None
             order["pd_top"] = t_pd

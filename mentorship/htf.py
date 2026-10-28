@@ -407,7 +407,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
             s = a.known
             age_ = k - a.known + 1
             prev_age = min(age_, 60) if (a.tf in ("W", "M") and wm_ is not None) else age_      # item 113: a weekly / monthly array past the daily window keeps tier 3
-            if wm_ is not None and a.tf in ("W", "M") and a.typ == "ob" and s < k:        # A5-A10-htf-lifetime (cc03_001 ~28:41): a weekly / monthly block is valid until first traded back into (its reaction window is kept)
+            if wm_ is not None and a.tf in ("W", "M") and a.typ == "ob" and s < k and not tc["tomt"]:        # (review fix: with htf_ob_to_mt a trade through the open is not a failure - the own-timeframe MT close test decides) A5-A10-htf-lifetime (cc03_001 ~28:41): a weekly / monthly block is valid until first traded back into (its reaction window is kept)
                 tch = np.flatnonzero((l[s:k] <= a.top) if a.kind == "bull" else (h[s:k] >= a.bottom))
                 if len(tch) and k > s + int(tch[0]) + react_days:
                     BH4.sw("htf_lifetime_wm")
@@ -509,6 +509,9 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         for p in dn_sw:
             draws_dn.append((px - p.price, "D_swing_low", p.price))
             ad_.append(k - p.i)
+        if tc["tiers"]:                              # review fix (A5-pd-array-lookback-priority): only the arrays and the swing pools are tiered by their own age; PDH / PDL / PWH / PWL sit outside the tier test
+            draws_up = BH4.tier_filter(draws_up, au_)
+            draws_dn = BH4.tier_filter(draws_dn, ad_)
         if h[k - 1] > max(px, oh):
             draws_up.append((h[k - 1] - px, "PDH", h[k - 1]))
             au_.append(1)
@@ -524,9 +527,6 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
             if pwl < min(px, ol):
                 draws_dn.append((px - pwl, "PWL", pwl))
                 ad_.append(5)
-        if tc["tiers"]:
-            draws_up = BH4.tier_filter(draws_up, au_)
-            draws_dn = BH4.tier_filter(draws_dn, ad_)
         up = min(draws_up) if draws_up else None
         dn = min(draws_dn) if draws_dn else None
         vu = min((x for x in draws_up if x[1].endswith("_vi")), default=None)   # vi_news_draw

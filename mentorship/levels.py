@@ -6,6 +6,7 @@ index is <= i. Nothing here reads a bar after the one it reports as known.
 """
 from __future__ import annotations
 
+import bisect
 from dataclasses import dataclass
 
 import numpy as np
@@ -740,8 +741,10 @@ def balanced_ranges(h, l, max_gap_bars: int = 0, o=None, c=None, c2_dir: bool = 
     o / c / c2_dir (review fix): the gaps follow the same A5 c2 rule as every other FVG."""
     g = fvgs(h, l, o, c, c2_dir)
     out = []
+    gi = [z.i for z in g]
     for k, b in enumerate(g):
-        for a in g[:k]:
+        j0 = bisect.bisect_left(gi, b.i - max_gap_bars, 0, k) if max_gap_bars else 0       # (the gaps are sorted by bar: only the window is scanned; same pairs, same order)
+        for a in g[j0:k]:
             if max_gap_bars and b.i - a.i > max_gap_bars:
                 continue
             if a.kind != b.kind and a.overlaps(b):

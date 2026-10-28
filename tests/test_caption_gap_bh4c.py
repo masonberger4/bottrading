@@ -97,7 +97,7 @@ def test_event_wick_is_not_a_swing_high():
 
 TABLE_A = dict(htf_bias="combo", range_day_mode="pm_only", ipda_mid_skip=True, htf_checklist=True, dbisi_lower_half=True, ce_line_bias=True, ifvg_bias=True, trapped_bpr_bias=True, program_tag=True,
                monthly_range=True, monthly_flow_gate=True, ob_ladder=True, matrix_tfs=("D", "W", "M"), htf_range_arrays=True, htf_eq_invalid=True, pd_grid=True, pd_range_break="two_close",
-               failed_consol_break=True, nested_pd_bias=True, breaker_regime=True, htf_monthly_arrays=True, array_age_tiers=True, htf_lifetime_wm=0, event_wick_ignore=True, htf_ob_mitigation=True,
+               failed_consol_break=True, failed_consol_tfs=("D", "W", "M"), nested_pd_bias=True, breaker_regime=True, htf_monthly_arrays=True, htf_history_months=18, array_age_tiers=True, htf_lifetime_wm=0, event_wick_ignore=True, htf_ob_mitigation=True,
                origin_ob=True, htf_ob_to_mt=True, htf_reach_tol_pts=3.0, bias_cadence="weekly")
 NEW_COLS = ("rng_day", "ipda60_hi", "ipda60_lo", "ipda_pos", "chk_q", "chk_react_up", "chk_react_dn", "chk_path_up", "chk_path_dn", "dz_dir", "dz_lo", "dz_hi", "dz_ce", "cel_kind", "cel_ce", "cel_top",
             "cel_bot", "ifvg_bias", "ifvg_top", "ifvg_bot", "trapped_bpr", "program", "mx_W_lo", "mx_W_hi", "mx_W_eq", "mx_W_prem", "mx_W_disc", "mx_M_eq", "m_rng_dir", "m_rng_lo", "m_rng_hi", "m_flow",
@@ -273,11 +273,11 @@ def case_salient(poison, mp):
         "dbisi_upper_and_discount")
 def case_rows(poison, mp):
     p = _p4(ob_ladder=True, swing_ignore_eq=True, ifvg_edge_add=True, htf_eq_invalid=True, pd_grid=True, grade_confluence=True, swing_extreme_block=True, htf_range_arrays=True, monthly_range=True,
-            program_tag=True, failed_consol_break=True, matrix_tfs=("D", "W"), nested_pd_bias=True, trapped_bpr_bias=True, ifvg_bias=True, monthly_flow_gate=True, breaker_regime=True,
+            program_tag=True, failed_consol_break=True, matrix_tfs=("D", "W"), matrix_targets=("mitigation",), nested_pd_bias=True, trapped_bpr_bias=True, ifvg_bias=True, monthly_flow_gate=True, breaker_regime=True,
             htf_checklist=True, ipda_mid_skip=True, range_day_mode="scalp", dbisi_upper_and_discount=True)
     rows = [(100.0, 100.3, 99.8, 100.1)] * 3 + (JUNK if poison else [(100.0, 100.3, 99.8, 100.1)] * 3)
     row = BR(obl=(104.0, 99.0), obl_dir=1, htf_rng_dir=1, htf_rng_lo=90.0, htf_rng_hi=130.0, ifvg_bias=1, ifvg_top=99.5, ifvg_bot=97.0, grid_lo=95.0, grid_hi=135.0, program=1, failed_break=-1,
-             mx_W_eq=105.0, m_rng_dir=1, m_rng_lo=95.0, m_rng_hi=125.0, m_flow=1, brk_regime=1, chk_q=1, chk_react_up=1, chk_react_dn=0, chk_path_up=0, chk_path_dn=0, ipda_pos=0.2,
+             mx_W_eq=105.0, mx_W_prem=(108.0,), mx_W_disc=(99.0,), m_rng_dir=1, m_rng_lo=95.0, m_rng_hi=125.0, m_flow=1, brk_regime=1, chk_q=1, chk_react_up=1, chk_react_dn=0, chk_path_up=0, chk_path_dn=0, ipda_pos=0.2,
              rng_day=1, dz_dir=1, dz_ce=99.0, pd20_lo=90.0, pd20_hi=130.0, nested_bias=1, eq_invalid=0, combo=0)
     ctx = cx(p, rows, row, hist=_down_hist(date(2026, 3, 10)), lock={"AM": dict(side=1, target=110.0)})
     i = at(ctx, "09:40")
@@ -285,7 +285,7 @@ def case_rows(poison, mp):
     o = order(entry=100.0)
     why = E4.order_ok(ctx, sd, o, "AM", i, p)
     pos = dict(fill_i=i - 2, stop=95.0)
-    return (why, o["lv_tags"], E4.side_ok(ctx, p, 1, "AM", i), E4.scalp_now(ctx, p, "AM", i, 1), E4.ladder_rows(ctx, sd, i), E4.leg_pd_exempt(ctx, sd, 99.0, i, p), E4.ifvg_add_zone(ctx, sd, pos, i, p),
+    return (why, o["lv_tags"], E4.side_ok(ctx, p, 1, "AM", i), E4.scalp_now(ctx, p, "AM", i, 1), E4.ladder_rows(ctx, sd, i), E4.leg_pd_exempt(ctx, sd, 99.0, i, p), E4.ifvg_add_zone(ctx, sd, pos, i, p), E4.matrix_wm_levels(ctx, sd, i, p, 100.0),
             BD.want_at(ctx, p, "AM", i), BD.want_at(cx(p, rows, dict(row, eq_invalid=1, combo=1), lock={"AM": dict(side=1, target=110.0)}), p, "AM", i))
 
 
@@ -343,7 +343,7 @@ HAND = (
     dict(monthly_flow_gate=True, breaker_regime=True, bias=BR(m_flow=1, brk_regime=1)),
     dict(swing_extreme_block=True, htf_range_arrays=True, bias=BR(htf_rng_lo=90.0, htf_rng_hi=130.0, htf_rng_dir=1)),
     dict(pd_grid=True, grade_confluence=True, program_tag=True, matrix_tfs=("D", "W"), monthly_range=True, failed_consol_break=True,
-         bias=BR(grid_lo=95.0, grid_hi=135.0, program=1, mx_W_eq=105.0, m_rng_dir=1, m_rng_lo=95.0, m_rng_hi=125.0, failed_break=1)),
+         bias=BR(grid_lo=95.0, grid_hi=135.0, program=1, mx_W_eq=105.0, mx_W_prem=(108.0,), mx_W_disc=(99.0,), m_rng_dir=1, m_rng_lo=95.0, m_rng_hi=125.0, failed_break=1)),
     dict(ifvg_bias=True, nested_pd_bias=True, trapped_bpr_bias=True, htf_eq_invalid=True, bias=BR(combo=0, ifvg_bias=1, nested_bias=1, trapped_bpr=1, eq_invalid=0, htf_rng_dir=1)),
     dict(htf_eq_invalid=True, bias=BR(combo=1, eq_invalid=1, htf_rng_dir=-1)),
 )
@@ -364,11 +364,11 @@ LA_SETS = {   # name -> switches (the draw lock stays on); each leaves trades on
     "gates": dict(htf_bias="combo", bias_neutral="both", range_day_mode="pm_only", ipda_mid_skip=True, htf_checklist=True, dbisi_lower_half=True, dbisi_upper_and_discount=True, ce_line_bias=True,
                   monthly_flow_gate=True, breaker_regime=True),
     "orders": dict(htf_bias="combo", bias_neutral="both", salient_pd=(60, 15), swing_extreme_block=True, htf_range_arrays=True, pd_grid=True, grade_confluence=True, pd_need_array=True, program_tag=True,
-                   matrix_tfs=("D", "W", "M"), monthly_range=True, failed_consol_break=True),
+                   matrix_tfs=("D", "W", "M"), matrix_targets=("mitigation",), monthly_range=True, failed_consol_break=True),
     "bias": dict(htf_bias="combo", bias_neutral="both", trapped_bpr_bias=True, nested_pd_bias=True, ifvg_bias=True, ifvg_edge_add=True, htf_eq_invalid=True, ob_ladder=True, swing_ignore_eq=True,
                  htf_range_arrays=True, leg_pd=0.5),
     "table": dict(htf_bias="combo", bias_neutral="both", range_day_mode="scalp", array_age_tiers=True, bias_cadence="weekly_midweek", origin_ob=True, htf_ob_mitigation=True, htf_ob_to_mt=True,
-                  htf_reach_tol_pts=3.0, event_wick_ignore=True, htf_lifetime_wm=0, pd_range_break="two_close", htf_monthly_arrays=True),
+                  htf_reach_tol_pts=3.0, event_wick_ignore=True, htf_lifetime_wm=0, pd_range_break="two_close", htf_monthly_arrays=True, htf_history_months=18),
 }
 
 

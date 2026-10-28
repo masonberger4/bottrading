@@ -105,6 +105,7 @@ def bx_cfg(p) -> dict:
         c["grid"] = [int(p.pd_grid_days), 1 if p.pd_range_break == "two_close" else 0]
     if p.failed_consol_break:
         c["fb"] = int(p.pd_day_range)
+        c["fbt"] = list(p.failed_consol_tfs)
     if p.nested_pd_bias:
         c["nest"] = 1
     if p.breaker_regime:
@@ -321,7 +322,10 @@ def checklist_columns(bk: Book, out, ks, px) -> dict:
 
 FROZEN = ("wk_bias", "wk_draw_up", "wk_draw_dn", "wk_draw_up_n", "wk_draw_dn_n", "bias_w", "bias_m", "mo_bias", "wk_pre_bias", "wk_control", "react_wk", "q_dir", "q_obj_dir", "wk_chk_tail", "wk_consol",
           "mo_pd", "wk_pd", "wk_expand", "htf_rng_lo", "htf_rng_hi", "htf_rng_dir", "htf_rng_eq", "eq_invalid", "m_rng_dir", "m_rng_lo", "m_rng_hi", "m_flow", "mx_W_lo", "mx_W_hi", "mx_W_eq", "mx_W_prem",
-          "mx_W_disc", "mx_M_lo", "mx_M_hi", "mx_M_eq", "mx_M_prem", "mx_M_disc")
+          "mx_W_disc", "mx_M_lo", "mx_M_hi", "mx_M_eq", "mx_M_prem", "mx_M_disc",
+          # review fix (item 75): every other weekly / monthly-derived column of the table (the B10 weekly-first bias and its parts, the weekly direction / PO3 / q75 / IOF)
+          "mwd", "mwd_m", "mwd_w", "mwd_case", "mwd_zones", "mwd_levels", "wk_dir", "wk_po3", "wk_po3_draw", "wk_q75", "wk_q75_confirm", "iof_w", "wo_sun", "wo_mon", "wo_expired", "wpr", "obj_week",
+          "wk_bisi", "wk_dc", "wk_rb", "wk_high_in", "wk_high_in_trim", "wk_low_in", "wk_struct_agree", "wk_struct_disagree", "wk_struct_weight", "mo_aligned", "mo_unaligned", "mo_bias_block", "mo_bias_gate")
 
 
 def cadence_freeze(out: pd.DataFrame, mode: int) -> pd.DataFrame:
@@ -342,7 +346,10 @@ def cadence_freeze(out: pd.DataFrame, mode: int) -> pd.DataFrame:
             r0, rw = r, None
         src = r0
         if mode == 2:
-            if rw is None and idx[r].weekday() >= 2 and wk[r] == wk[r0] and r > r0 and flip[r] != flip[r0]:
+            # review fix: the one refresh is at the FIRST row of Wednesday (not a later day), NaN-safe comparison
+            fl_r, fl_0 = flip[r], flip[r0]
+            changed = (fl_r != fl_0) and not (fl_r != fl_r and fl_0 != fl_0)
+            if rw is None and idx[r].weekday() == 2 and wk[r] == wk[r0] and r > r0 and changed:
                 rw = r
                 hit("cadence_refresh")
             if rw is not None:
@@ -442,27 +449,16 @@ def ifvg_columns(bk: Book, ks, days: int) -> dict:
 # --------------------------------------------------------------------------------------------------------------
 
 def bpr_list(o, h, l, c, max_gap: int, large: float = 1.5, n_avg: int = 20) -> list:
-    """A11-trapped-trader-bpr (104 ~26:09): (bar index known, kind, top, bottom) of the balanced price ranges built from a LARGE-range candle's FVG and the opposite FVG of a large-range candle within
-    `max_gap` bars [our interpretation: a large range = at least `large` x the mean range of the 20 bars before it]. The pair scan is windowed (the old levels.balanced_ranges scans every pair)."""
-    g = L.fvgs(h, l, o, c)
+    """A11-trapped-trader-bpr (104 ~26:09): (bar index known, kind, top, bottom) of the balanced price ranges (levels.balanced_ranges, max_gap_bars=`max_gap`) whose BOTH gaps come from a LARGE-range candle
+    [our interpretation: a large range = at least `large` x the mean range of the 20 bars before it]."""
     rng = h - l
 
-    def big(z) -> bool:
-        m = z.i - 1
+    def big(gi: int) -> bool:
+        m = gi - 1
         if m < 5:
             return False
         return bool(rng[m] >= large * rng[max(0, m - n_avg):m].mean())
-    res = []
-    for k, b in enumerate(g):
-        if not big(b):
-            continue
-        for j in range(k - 1, -1, -1):
-            a = g[j]
-            if b.i - a.i > max_gap:
-                break
-            if a.kind != b.kind and a.overlaps(b) and big(a):
-                res.append((b.i, b.kind, min(a.top, b.top), max(a.bottom, b.bottom)))
-    return res
+    return [(z.i, z.kind, z.top, z.bottom) for z in L.balanced_ranges(h, l, int(max_gap), o, c) if big(z.i) and big(z.src)]
 
 
 def trapped_column(df, d, ks, cut_min: int, max_gap: int) -> np.ndarray:
@@ -688,8 +684,17 @@ def htf_range_columns(bk: Book, ks, px) -> dict:
     mo, mh, ml, mc, mlast = BH3.tf_bars(bk.d, "M")
     if len(mc) >= 3:
         origs += origin_arrays(mo, mh, ml, mc, "M", lambda i: int(mlast[i]) + 1)
-    htf_other = [a for a in bk.arrs_all if a.tf in ("W", "M") and a.typ in ("fvg", "ob", "vi")]
     ph, pl = L.pivots(bk.wh, bk.wlow, 1)
+    wbars = (bk.wo, bk.wh, bk.wlow, bk.wc, np.array(bk.wl) - 1)
+    mbars = (mo, mh, ml, mc, mlast)
+    mm_all = np.searchsorted(mlast, np.asarray(ks) - 1, side="right") if len(mc) else np.zeros(R, int)
+    live_cache = {}
+
+    def live_other(tf, m, bars):
+        # review fix (item 168): the range anchors only on arrays no completed bar of their OWN timeframe closed through (tf_arrays_alive)
+        if (tf, m) not in live_cache:
+            live_cache[(tf, m)] = tf_arrays_alive(bk, tf, m, bars)
+        return live_cache[(tf, m)]
     for r, k in enumerate(ks):
         k = int(k)
         cand = []
@@ -709,17 +714,18 @@ def htf_range_columns(bk: Book, ks, px) -> dict:
         a = max(cand, key=lambda x: x.known)
         done_w = [q for q in range(len(bk.wl)) if bk.wl[q] <= k]
         wm = len(done_w)
+        htf_other = live_other("W", wm, wbars) + live_other("M", int(mm_all[r]), mbars)
         if a.kind == "bull":
             base = a.top
             ups = [x.bottom for x in htf_other if x.kind == "bear" and x.known <= k and x.bottom > base]
-            ups += [p_.price for p_ in ph if p_.known < wm and p_.price > base]
+            ups += [p_.price for p_ in ph if p_.known < wm and p_.price > base and not (wm > p_.i + 1 and bk.wh[p_.i + 1:wm].max() >= p_.price)]
             if not ups:
                 continue
             lo[r], hi[r], dr[r] = base, min(ups), 1
         else:
             base = a.bottom
             dns = [x.top for x in htf_other if x.kind == "bull" and x.known <= k and x.top < base]
-            dns += [p_.price for p_ in pl if p_.known < wm and p_.price < base]
+            dns += [p_.price for p_ in pl if p_.known < wm and p_.price < base and not (wm > p_.i + 1 and bk.wlow[p_.i + 1:wm].min() <= p_.price)]
             if not dns:
                 continue
             lo[r], hi[r], dr[r] = max(dns), base, -1
@@ -806,9 +812,9 @@ def near_grid_line(price: float, lo: float, hi: float, tol_frac: float = 0.10) -
 
 
 def failed_break_columns(o, h, l, c, ks, n: int, ratio: float = 0.25, look: int = 10) -> dict:
-    """new-monthly-failed-consolidation-break (cc12_001 ~45:46): a consolidation (the net move of the reference window under `ratio` of its body range) whose extreme a session ran beyond within the last
-    `look` sessions, then closed back inside, then a session closed through the midpoint, with the last close below it: -1 (bullish mirror +1), the target the lowest (highest) body of the range - ended
-    once a later low (high) traded to it."""
+    """new-monthly-failed-consolidation-break (cc12_001 ~45:46): a consolidation (the net move of the reference window under `ratio` of its body range) whose extreme a bar ran beyond within the last
+    `look` bars, then closed back inside, then a bar closed through the midpoint, with the last close below it: -1 (bullish mirror +1), the target the lowest (highest) body of the range - ended
+    once a later low (high) traded to it. `ks` = the number of completed bars per table row (the daily book: the session index)."""
     R = len(ks)
     fb, tgt = np.zeros(R, int), np.full(R, NAN)
     bh_, bl_ = np.maximum(o, c), np.minimum(o, c)
@@ -831,6 +837,39 @@ def failed_break_columns(o, h, l, c, ks, n: int, ratio: float = 0.25, look: int 
                     fb[r], tgt[r] = 1, hi_
                 break
     return {"failed_break": fb, "fb_target": tgt}
+
+
+def failed_break_tf_columns(bk: Book, ks, n_days: int, tfs) -> dict:
+    """Review fix (item 181): the failed break on the WEEKLY / MONTHLY consolidations too (cc12_001 ~45:46 shows it on the DXY monthly). Window [our interpretation]: weekly = n_days / 5 bars (12 for the
+    60-session range), monthly = 6 bars; the break must be within the last 4 bars of that timeframe. The merged `failed_break` / `fb_target` take the highest timeframe that has one (M, then W, then D);
+    failed_break_<tf> / fb_target_<tf> keep each. Weekly / monthly bars are used only once complete (the number of weeks / months ended before the session)."""
+    o, h, l, c = bk.o, bk.h, bk.l, bk.c
+    ks = np.asarray(ks, int)
+    res = {"D": failed_break_columns(o, h, l, c, ks, int(n_days))} if "D" in tfs else {}
+    if "W" in tfs:
+        wm = np.array([sum(1 for q in bk.wl if q <= int(k)) for k in ks])
+        res["W"] = failed_break_columns(bk.wo, bk.wh, bk.wlow, bk.wc, wm, max(4, int(n_days) // 5), look=4)
+    if "M" in tfs:
+        mo, mh, ml, mc, mlast = BH3.tf_bars(bk.d, "M")
+        if len(mc):
+            mm = np.searchsorted(mlast, ks - 1, side="right")
+            res["M"] = failed_break_columns(mo, mh, ml, mc, mm, 6, look=4)
+    R = len(ks)
+    fb, tgt = np.zeros(R, int), np.full(R, NAN)
+    out = {}
+    for tf in ("D", "W", "M"):                       # lowest priority first: a higher timeframe overwrites
+        if tf not in res:
+            continue
+        f_, t_ = res[tf]["failed_break"], res[tf]["fb_target"]
+        if tf != "D":
+            out[f"failed_break_{tf}"], out[f"fb_target_{tf}"] = f_, t_
+            if f_.any():
+                sw("failed_consol_tfs")
+        m_ = f_ != 0
+        fb = np.where(m_, f_, fb)
+        tgt = np.where(m_, t_, tgt)
+    out["failed_break"], out["fb_target"] = fb, tgt
+    return out
 
 
 def nested_column(bk: Book, ks, px, big_lo, big_hi, on_h, on_l) -> np.ndarray:
@@ -961,7 +1000,7 @@ def finish4(out: pd.DataFrame, cfg: dict, d, w, arrs, es_pt: float, df=None) -> 
         if tc:
             sw("pd_range_break")
     if "fb" in cfg:
-        for k_, v_ in failed_break_columns(o, h, l, c, ks, int(cfg["fb"])).items():
+        for k_, v_ in failed_break_tf_columns(bk, ks, int(cfg["fb"]), tuple(cfg.get("fbt", ("D",)))).items():
             out[k_] = v_
         sw("failed_consol_break")
     if "nest" in cfg and big is not None:
@@ -977,11 +1016,19 @@ def finish4(out: pd.DataFrame, cfg: dict, d, w, arrs, es_pt: float, df=None) -> 
 
 
 def _ladder_dirs(out) -> list:
-    """The side of the B10 sequential (the `mwd` column), else the monthly / weekly bias, else the flip state: the side the ladder is kept for (0 = none)."""
-    for col in ("mwd", "bias_m", "wk_bias", "flip"):
-        if col in out:
-            return [int(np.sign(v)) if v == v else 0 for v in out[col].values]
-    return [0] * len(out)
+    """The side of the B10 sequential (the `mwd` column), else the monthly / weekly bias, else the flip state: the side the ladder is kept for (0 = none). Review fix: per row, the first of these columns
+    that is non-zero (a 0 falls through to the next column)."""
+    cols = [out[c_].values for c_ in ("mwd", "bias_m", "wk_bias", "flip") if c_ in out]
+    res = []
+    for r in range(len(out)):
+        v_ = 0
+        for col in cols:
+            v = col[r]
+            if v == v and v != 0:
+                v_ = int(np.sign(v))
+                break
+        res.append(v_)
+    return res
 
 
 def _overnight_extremes(df, d, ks, cut_min: int) -> tuple:

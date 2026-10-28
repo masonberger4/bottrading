@@ -97,7 +97,9 @@ def cel_state(ctx, row, i: int) -> int:
         return 0
     ce = _f(row, "cel_ce")
     b = B1.tf_complete(ctx, 15, i)
-    cl = b["c"][b["first"] >= ctx.start] if len(b["c"]) else np.array([])
+    t_ = np.asarray(ctx.t)
+    s930 = int(np.argmax(t_[:i + 1] >= 570)) if bool((t_[:i + 1] >= 570).any()) else i + 1            # (review fix: counted from 09:30 as documented, not from the day frame's start)
+    cl = b["c"][b["first"] >= max(ctx.start, s930)] if len(b["c"]) else np.array([])
     st, cnt = -kind, 0
     for x in cl:
         back = x > ce if kind > 0 else x < ce
@@ -397,3 +399,23 @@ def ifvg_add_zone(ctx, sd, pos: dict, i: int, p):
         sw("ifvg_edge_add")
         return zt, zb
     return None
+
+
+def matrix_wm_levels(ctx, sd, i: int, p, above: float) -> list:
+    """A22-matrix-range-tf (cc05_014 ~6:31, ~17:49), review fix: with matrix_targets set, the weekly / monthly premium arrays (the live W / M CEs beyond the timeframe's EQ on the target side, mx_<tf>_prem for
+    a long, mx_<tf>_disc for a short) join the matrix target list - side-space levels above `above`, as ('array') rungs."""
+    tfs = [t for t in ("W", "M") if t in p.matrix_tfs]
+    if not tfs or not p.matrix_targets:
+        return []
+    row = _sess_row(ctx, i)
+    if row is None:
+        return []
+    out = []
+    for tf in tfs:
+        for v in row.get(f"mx_{tf}_prem" if sd.sign > 0 else f"mx_{tf}_disc") or ():
+            x = float(sd.x(v))
+            if x > above:
+                out.append((x, "array"))
+    if out:
+        sw("matrix_tfs")
+    return out

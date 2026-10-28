@@ -222,6 +222,8 @@ def hist_days(p: Params) -> int:
     n = max(n, getattr(p, "dw1_hist", 0))           # caption-gap pass day_week_context#1/3: the seasonal windows / 252-session trend / monthly closes
     if getattr(p, "htf_history_months", 0):
         n = max(n, int(p.htf_history_months) * 21 + 1)      # caption-gap B5-htf-lookback-9-18-months (bias_htf#4/7): the months of daily history the weekly / monthly arrays need
+    if getattr(p, "pd_grid", False) or getattr(p, "grade_confluence", False) or getattr(p, "pd_need_array", False) or getattr(p, "nested_pd_bias", False):
+        n = max(n, int(getattr(p, "pd_grid_days", 60)) + 1)            # caption-gap A21-60day-body-range (bias_htf#4/7): the body range's sessions
     return max(n, getattr(p, "org_days", 0) + 1)
 
 

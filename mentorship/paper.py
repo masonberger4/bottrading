@@ -70,10 +70,11 @@ def watch_open_trades(watches: dict, trades, now, p: Params, acked=None, last_cl
     return acts
 
 
-def history_days(minutes: int) -> int:
+def history_days(minutes: int, p: Params | None = None) -> int:
     """Calendar days to fetch (review fix): at least backtest.HIST_DAYS + 1 sessions, like the
     backtest (IPDA 40/60, ipda_eq_day, org_days > 5); 1-minute bars are capped by Schwab."""
-    need = (B.HIST_DAYS + 1) * 7 // 5 + 10              # sessions -> calendar days, with holidays
+    n_s = B.hist_days(p) if p is not None else B.HIST_DAYS      # (caption-gap B5-htf-lookback-9-18-months, bias_htf#4/7 review fix: the paper path asks for the switch-dependent history too)
+    need = (n_s + 1) * 7 // 5 + 10              # sessions -> calendar days, with holidays
     return min(need, SCHWAB_1M_DAYS) if minutes == 1 else need
 
 
@@ -94,6 +95,10 @@ def short_history(n_prior: int, p: Params) -> str | None:
         need = max(need, int(p.tf_lookback["D"]) + 1)
     if p.ipda_beyond_days:
         need = max(need, p.ipda_beyond_days + 1)
+    if p.htf_history_months:
+        need = max(need, int(p.htf_history_months) * 21 + 1)       # caption-gap B5-htf-lookback-9-18-months (bias_htf#4/7 review fix)
+    if p.pd_grid or p.grade_confluence or p.pd_need_array or p.nested_pd_bias:
+        need = max(need, int(p.pd_grid_days) + 1)
     if n_prior < min(need, B.hist_days(p)):
         return f"paper history has {n_prior} prior sessions; the ipda / org_days switches need {need}"
     return None
@@ -181,7 +186,7 @@ def snapshot(c, symbol: str, partner: str | None, minutes: int, p: Params, risk_
     """Today's trades and armed setups from the bars closed so far (Schwab). `risk_state` (E10) is
     advanced in place by the simulated day - pass a copy of the day's starting state."""
     from silver_bullet.data import schwab_history
-    days = history_days(minutes)
+    days = history_days(minutes, p)
     now = pd.Timestamp.now(tz=B.NY)
     df = schwab_history(c, symbol, days=days, minutes=minutes)
     q = schwab_history(c, partner, days=days, minutes=minutes) if partner else None

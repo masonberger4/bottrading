@@ -402,6 +402,9 @@ def matrix_price(ctx, sd, i: int, p, entry: float, above: float) -> list:
         for z in TP.rb_zones(sd, p):
             if z.i <= i and z.bottom > lo and after(z) < z.bottom:
                 out.append((float(z.bottom), "rb"))
+    if p.matrix_tfs != ("D",):                                        # caption-gap A22-matrix-range-tf (bias_htf#4/7 review fix): the weekly / monthly premium arrays
+        from . import bh4e as _b4e
+        out += _b4e.matrix_wm_levels(ctx, sd, i, p, lo)
     if p.fvg_targets:                                                 # the rest of the premium list (review): untraded opposing FVGs / order blocks / old highs between price and the leg high,
         for z in sd.opposing():                                       # read with the target switches that already list them
             if z.i <= i and z.bottom > lo and after(z) < z.bottom:
