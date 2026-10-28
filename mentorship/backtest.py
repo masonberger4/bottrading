@@ -159,6 +159,35 @@ def load_meta(symbol: str, minutes: int, source: str = "databento") -> pd.DataFr
     return m
 
 
+def load_raw(symbol: str, minutes: int) -> pd.DataFrame | None:
+    """Caption-gap OT-htf-array-data-series (bias_htf#7/7): the UNADJUSTED front-month series (`<S>_1min_dbraw.csv`, roll gaps left in) at `minutes`-minute bars (the 1-minute file resampled), or None
+    when the file is missing."""
+    f = DATA / f"{symbol}_1min_dbraw.csv"
+    if not f.exists():
+        return None
+    r = _read(f)
+    if minutes != 1:
+        g = r.groupby(r.index.floor(f"{minutes}min"))
+        r = pd.DataFrame({"open": g.open.first(), "high": g.high.max(), "low": g.low.min(), "close": g.close.last(), "volume": g.volume.sum() if "volume" in r else 0.0})
+    return r
+
+
+def raw_series(p: Params, symbol: str, minutes: int, meta: pd.DataFrame | None) -> tuple:
+    """(raw frame, adj Series) for htf.table when a bias_htf#7/7 series switch asks for the raw front-month series (htf_series 'raw' / htf_monthly_series 'raw'); (None, None) otherwise. Without the
+    databento meta (CFD / ETF sources have no roll data) every non-"adjusted" value warns and falls back to the adjusted frame."""
+    want = p.htf_series == "raw" or (p.htf_monthly_series == "raw" and (p.htf_monthly or p.htf_monthly_arrays))
+    if not want:
+        return None, None
+    if meta is None or "adj" not in meta:
+        warnings.warn(f"htf_series={p.htf_series!r} / htf_monthly_series={p.htf_monthly_series!r}: no front-month roll meta for {symbol} (CFD / ETF source): the adjusted frame is used", stacklevel=3)
+        return None, None
+    raw = load_raw(symbol, minutes)
+    if raw is None:
+        warnings.warn(f"htf_series raw: {symbol}_1min_dbraw.csv is missing: the adjusted frame is used", stacklevel=3)
+        return None, None
+    return raw, meta["adj"]
+
+
 def lock_cuts(p: Params) -> set:
     """#9: the draw-lock minutes in use (one htf table each): the AM / PM session starts, the
     09:45 / 10:00 release locks, 07:00 / 09:00 pre-open windows, Ma Deuce 08:00 and the London
@@ -183,7 +212,7 @@ def lock_cuts(p: Params) -> set:
     return cuts
 
 
-def lock_tables(df: pd.DataFrame, p: Params, bias_table: pd.DataFrame | None = None, wk_joint: dict | None = None) -> dict:
+def lock_tables(df: pd.DataFrame, p: Params, bias_table: pd.DataFrame | None = None, wk_joint: dict | None = None, raw: pd.DataFrame | None = None, adj: pd.Series | None = None) -> dict:
     """#9: one htf table per draw-lock minute in use (bars closed by that minute), cut 570 being
     the ordinary bias table. {cut: table}; empty without overnight bars or with draw_lock off."""
     if p.draw_lock == "off" or not htf.has_overnight(df):
@@ -194,7 +223,7 @@ def lock_tables(df: pd.DataFrame, p: Params, bias_table: pd.DataFrame | None = N
             out[m] = bias_table
         else:
             out[m] = htf.table(df, p.es_pt, cut_min=m, vi=p.vi_arrays, flip_triggers=p.flip_triggers, wk_joint=wk_joint,
-                               **table_kw(p))
+                               **table_kw(p, raw, adj))
     return out
 
 
@@ -257,7 +286,7 @@ def htf_kw(p: Params) -> dict:
     return kw
 
 
-def table_kw(p: Params) -> dict:
+def table_kw(p: Params, raw: pd.DataFrame | None = None, adj: pd.Series | None = None) -> dict:
     """htf.table keywords: htf_kw plus the bias_htf column configuration `bx` (Params.bx; absent when empty, so the old table
     and its cache keys are unchanged). The Confluence arrays take htf_kw only."""
     kw = htf_kw(p)
@@ -279,6 +308,8 @@ def table_kw(p: Params) -> dict:
         kw["ipda_window"] = p.ipda_anchor     # B21 ipda_arrays: the table's daily arrays / swing draws only from the IPDA window of the anchor
     if p.ob_reach == "body":
         kw["ob_reach"] = "body"         # caption-gap A12-ob-reached-body: htf.table only
+    if raw is not None and adj is not None:
+        kw["raw"], kw["adj"] = raw, adj   # caption-gap OT-htf-array-data-series (bias_htf#7/7): the unadjusted front-month series and its adj
     kw["balance_tf"] = p.balance_tf     # always explicit (review fix #75: the default is now "own", so the cache file of the old default must not be reused)
     return kw
 
@@ -319,9 +350,10 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
                       stacklevel=3)
     if p.wk_dc_joint and wk_joint is None and "wk_dc" in p.flip_triggers:
         warnings.warn("wk_dc_joint is on but no partner-index flag map was given (backtest.run builds it from the partner frame): the wk_dc -1 flip runs unrestricted", stacklevel=3)     # caption-gap BH-B8-weekly-ith-both-indices-close (review round 1)
+    raw_, adj_ = raw_series(p, symbol, tf, meta) if ov else (None, None)          # caption-gap OT-htf-array-data-series (bias_htf#7/7)
     bt = bias_table if bias_table is not None else (
-        htf.table(df, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers, wk_joint=wk_joint, **table_kw(p)) if ov else None)
-    cuts = lock_cuts if lock_cuts is not None else lock_tables(df, p, bt, wk_joint)
+        htf.table(df, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers, wk_joint=wk_joint, **table_kw(p, raw_, adj_)) if ov else None)
+    cuts = lock_cuts if lock_cuts is not None else lock_tables(df, p, bt, wk_joint, raw_, adj_)
     og = htf.opening_gaps(df, p.es_pt, 1.0, p.nwog_cfd_src, p.gap_views, p.org_close or p.session_close or 960) if ov else None   # (gap_views "both": + the RTH weekend gap)
     reb = htf.nwog_rebalanced(df, og, p.tick) if (ov and p.nwog_rebalanced) else None       # caption-gap L5 nwog_rebalanced
     tt = df.index.hour * 60 + df.index.minute

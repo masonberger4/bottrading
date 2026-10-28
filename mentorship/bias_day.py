@@ -23,7 +23,8 @@ from . import bias_htf as BH
 PRE_END = 570                                           # the 09:30 open: the ordinary bias table's cut
 
 COL = {"ordered": "draw_ord", "nwog": "nwog_bias", "wk": "wk_bias", "ob_mt": "ob_mt", "draw_pd": "draw_pd",
-       "week_pre": "wk_pre_bias", "week_check": "wk_chk_tail", "wd_check": "d_tail"}       # (caption-gap bias_htf#3/7: the weekly bias before the week opens; the table tails of the checklist composers)
+       "week_pre": "wk_pre_bias", "week_check": "wk_chk_tail", "wd_check": "d_tail",
+       "breaker": "brk_react"}       # (caption-gap bias_htf#3/7: the weekly bias before the week opens; the table tails of the checklist composers)
 
 
 def bias_col(p) -> str:
@@ -125,6 +126,9 @@ def want_at(ctx, p, session: str, i: int) -> int:
     from . import bh5e as _B5                        # caption-gap pass bias_htf#5/7: the program / stack / EQ-breakout / fast-week overrides, the monthly control, the gap theory, the OR60 side, the intraday states
     if _B5.want_on(p):
         v = _B5.want_adjust(ctx, p, session, i, v)
+    from . import bh7e as _B7                        # caption-gap pass bias_htf#7/7: the array-lost flip, the London breaker side
+    if _B7.want_on(p):
+        v = _B7.want_adjust(ctx, p, session, i, v)
     return v
 
 
@@ -592,6 +596,9 @@ def size_mult(ctx, sd, i: int, p, lvt) -> float:
     if p.wk_struct_weight:
         from . import bh3e as _B3                    # caption-gap pass bias_htf#3/7: wk_struct_weight
         m1 *= _B3.size_mult(ctx, sd, i, p, lvt)
+    if p.london_confirm == "half":
+        from . import bh7e as _B7                    # caption-gap pass bias_htf#7/7: london_confirm "half"
+        m1 *= _B7.size_mult(ctx, sd, i, p, lvt)
     return m1 * _size_mult_q(ctx, sd, i, p, lvt)
 
 

@@ -123,7 +123,7 @@ def prefer_hits(ctx, sd, i: int, p, hits: list) -> list:
 
 
 def any_sweep_switch(p) -> bool:
-    return bool(p.wick_sweep_depth or p.shallow_sweep_wait or p.sweep_max_linger or p.ts_linger_bars or p.allow_htf_array_premise)
+    return bool(p.wick_sweep_depth or p.shallow_sweep_wait or p.sweep_max_linger or p.ts_linger_bars or p.allow_htf_array_premise or p.weekly_flip_follow)
 
 
 def sweep_init(ctx, sd, sw, i: int, p, session: str):
@@ -188,7 +188,12 @@ def premise_sweep(ctx, sd, i: int, p, session: str):
     """M1M2-htf-array-replaces-sweep (011 ~8:49; 082 ~4:45): with no pool taken, a bar whose extreme reaches (the near edge of) a same-side 15m / 60m array of the Confluence object
     (FVG / OB / VI) while its close stays inside / above it is a pseudo-sweep (key "htf_array"). Once per array per day. A new sweep dict or None."""
     S = _S()
-    names = tuple(_arr_tf(m) for m in p.premise_tfs)
+    names = tuple(_arr_tf(m) for m in p.premise_tfs) if p.allow_htf_array_premise else ()
+    if p.weekly_flip_follow:                                  # caption-gap new-after-of-shift-sell-any-premium-array (bias_htf#7/7): after a mid-week flip the 4h arrays of the flipped side are accepted
+        from . import bh7e as _B7
+        names += tuple(n_ for n_ in _B7.premise_extra(ctx, p, sd, i, session) if n_ not in names)
+    if not names:
+        return None
     kb = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
     try:
         arrs = S._ts_arrays(ctx, sd, i, kb, names)

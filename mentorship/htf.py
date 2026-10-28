@@ -276,7 +276,8 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
           vi_dead_rule: str = "full_span", vi_two_sided: bool = False, ipda_first20: bool = False,
           nwog_cfd_src: str = "auto", single_pass_draw: bool = False, void_rt_ob: bool = False, htf_ob_ltf_drill: bool = False,
           balance_tf: str = "own", tf_lookback: dict | None = None, monthly_arrays: bool = False, rb_closes: bool = False,
-          ipda_window: str | None = None, ob_reach: str = "wick", wk_joint: dict | None = None) -> pd.DataFrame:
+          ipda_window: str | None = None, ob_reach: str = "wick", wk_joint: dict | None = None,
+          raw: pd.DataFrame | None = None, adj: pd.Series | None = None) -> pd.DataFrame:
     """One row per trading day: react / draw / pd / combo bias and the draw levels.
     Caption-gap A12-ob-reached-body (cc03_002 ~8:33; `ob_reach`): "body" = an order block counts as reached only when a BODY of the last `react_days` COMPLETED sessions enters it
     (min(open, close) <= its top; max(open, close) >= its bottom for a bearish block) - a wick through the whole block does not; "wick" (built) uses the lows / highs and tonight's range.
@@ -305,13 +306,25 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     "current_month" / "swing" - whose 60-session window limits the daily arrays and swing draws of each row to those formed inside the 60 sessions
     ending at the anchor, `levels.ipda_end_index`; None = the lookback alone).
     Caption-gap pass (bias_htf#1/7): `wk_joint` (B8-weekly-ith-both-indices-close; bh1.wk_joint_map) = {date of a week's last session: the joint ES + NQ weekly-ITH state}: the wk_dc -1 flip applies only while it is True."""
+    _kw7 = {k_: v_ for k_, v_ in locals().items() if k_ not in ("df", "bx", "raw", "adj")}          # (caption-gap bias_htf#7/7: the call's own keywords, for the raw-series table)
     from . import bias_htf as BH
     X = BH.parse(bx)
+    b7 = X.get("b7") or {}
+    if b7.get("hs") == "contract":
+        raise NotImplementedError("htf_series='contract' (056 exact: the delivery month's own prints) needs per-contract raw data")
+    if b7.get("hs") == "raw" and raw is not None and adj is not None:
+        from . import bh7
+        return bh7.raw_table(table, df, raw, adj, _kw7, bx, X)                # caption-gap OT-htf-array-data-series (bias_htf#7/7): the table on the unadjusted front-month series, mapped back per day
     from . import bh4 as BH4                         # caption-gap pass bias_htf#4/7 (bh4.py): table-time rules (age tiers, reach tolerance, weekly / monthly life, origin OB, mitigation, OB to MT, event wicks)
     tc = BH4.table_cfg(X)
     from . import bh5 as BH5                         # caption-gap pass bias_htf#5/7 (bh5.py): the up-close FVG anchor at table time, the columns after bh4.finish4
     tc5 = BH5.table_cfg(X)
-    d = sessions(df)
+    if b7.get("td"):
+        from . import bh7 as _bh7
+        d = _bh7.sessions_true_day(df)                # caption-gap new-ipda-true-day (bias_htf#7/7): the daily candle is the 00:00-15:00 bars
+        _bh7.sw("true_day")
+    else:
+        d = sessions(df)
     D = len(d)
     o, h, l, c = (d[k].values.astype(float) for k in ("open", "high", "low", "close"))
     h_pv, l_pv = BH4.event_wick_adjust(o, h, l, c, float(tc["ew"])) if tc["ew"] else (h, l)       # A4-event-wick-ignore: the swing pivots (and 'untaken' tests) use the body extreme of an event candle
@@ -331,7 +344,15 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     wh_, wlow_ = w.high.values.astype(float), w.low.values.astype(float)
     arrs += _arrays(*(w[k].values.astype(float) for k in ("open", "high", "low", "close")), "W",
                     lambda i: wl[i], vi, c2_dir, vi_min_gap, vi_wick_overlap, vi_multi, void_rt=void_rt_ob)
-    if monthly_arrays:
+    raw_m = False
+    if monthly_arrays and b7.get("ms") == "raw" and raw is not None and adj is not None:
+        from . import bh7 as _bh7
+        mth_arrs = _bh7.monthly_raw_arrays(raw, d, pos, lambda *a_: _arrays(*a_, vi, c2_dir, vi_min_gap, vi_wick_overlap, vi_multi, void_rt=void_rt_ob), ())
+        if mth_arrs:                                  # caption-gap OT-htf-array-data-series (htf_monthly_series 'raw', 078 ~35:43): the monthly arrays on the continuous unadjusted series
+            arrs += mth_arrs
+            raw_m = True
+            _bh7.sw("htf_monthly_series_raw")
+    if monthly_arrays and not raw_m:
         mth = months(d)
         ml_ = [pos[t] + 1 for t in mth["last"]]
         arrs += _arrays(*(mth[k].values.astype(float) for k in ("open", "high", "low", "close")), "M",
@@ -398,6 +419,10 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         # NDOGs live through the week they form in (Mon-Fri)
         wk = day.to_period("W-FRI")
         live = [a for a in live if a.typ != "ndog" or d.index[a.known].to_period("W-FRI") == wk]
+        if raw_m:                                    # the raw monthly arrays are mapped into the engine frame by the adj before this session (no look-ahead)
+            from . import bh7 as _bh7
+            adk_ = _bh7.adj_before(adj, day, df.index.tz, cut_min, bar_minutes(df))
+            live = [_bh7.shifted(a, adk_) if getattr(a, "rawk", False) else a for a in live]
         rb_live = [a for a in live if a.typ == "rb"]             # A17 rejection-block closes: levels only (columns rb_up / rb_dn), never the bias
         live = [a for a in live if a.typ != "rb"]
         react = 0.0
@@ -638,6 +663,9 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     if b6 and len(out):
         from . import bh6
         out = bh6.finish6(out, b6, d, w, arrs, es_pt, df)                            # caption-gap bias_htf#6/7 (bh6.py): the columns after bh5.finish5
+    if b7 and len(out):
+        from . import bh7
+        out = bh7.finish7(out, b7, d, w, arrs, es_pt, df)                            # caption-gap bias_htf#7/7 (bh7.py): the columns after bh6.finish6
     return out
 
 
@@ -1069,3 +1097,35 @@ def mega_tag(entry_day, exit_day, symbol: str = "", min_days: int = 126, zb_hand
     a, b = pd.Timestamp(entry_day).normalize(), pd.Timestamp(exit_day).normalize()
     n = int(np.busday_count(a.date(), b.date()))
     return "mega" if n >= int(min_days) else ""
+
+
+def swing_stop(daily: pd.DataFrame, i: int, side: int, mode: str = "daily_swing", h4: pd.DataFrame | None = None, entry: float | None = None, pad: float = 0.0, asof=None) -> float:
+    """E6-swing-stops (cc05_016 ~00:10:14; cc06_004 ~00:21:17), research helper: the stop of a swing trade entered on daily bar `i` (only the bars BEFORE i are read). A long's stop sits under
+      "daily_swing"  the latest 3-bar daily pivot low confirmed by bar i-1 (the swing low most recently created on the daily chart), less `pad`;
+      "ssl_behind"   the nearest 4h swing low under `entry` (the short-term sell-side liquidity behind the entry level; 3-bar 4h pivots of the bars that ended by `asof`, default the start of daily bar i),
+                     less `pad`.
+    A short mirrors it (the pivot high, plus pad). NaN when no pivot exists. [our interpretation: the swing-low definition is the 3-candle pivot.]"""
+    from . import levels as _L
+    s = 1 if side >= 0 else -1
+    if mode == "daily_swing":
+        h = daily.high.values[:i].astype(float)
+        l = daily.low.values[:i].astype(float)
+        ph, pl = _L.pivots(h, l, 1)
+        if s > 0:
+            return float(pl[-1].price) - pad if pl else float("nan")
+        return float(ph[-1].price) + pad if ph else float("nan")
+    if mode == "ssl_behind":
+        if h4 is None or entry is None:
+            return float("nan")
+        t0 = pd.Timestamp(asof if asof is not None else daily.index[i])
+        t0 = t0.tz_localize(None) if t0.tzinfo is not None else t0
+        idx = pd.DatetimeIndex(h4.index)
+        end = (idx.tz_localize(None) if idx.tz is not None else idx) + pd.Timedelta(hours=4)
+        x = h4[end <= t0]
+        ph, pl = _L.pivots(x.high.values.astype(float), x.low.values.astype(float), 1)
+        if s > 0:
+            c = [q.price for q in pl if q.price < entry]
+            return float(max(c)) - pad if c else float("nan")
+        c = [q.price for q in ph if q.price > entry]
+        return float(min(c)) + pad if c else float("nan")
+    raise ValueError(f"swing_stop mode {mode!r}: expected 'daily_swing' or 'ssl_behind'")

@@ -147,6 +147,12 @@ def bx_string(p) -> str:
             x["wk"] = 1                        # (new-weekly-idea-persistence / new-seven-factor-context: the weekly bias column)
         if p.factor_tag and "iof" not in x:
             x["iof"] = [p.iof_days, p.iof_min]   # (the intermediate factors: the daily IOF)
+    from . import bh7                          # caption-gap pass bias_htf#7/7 (bh7.py): the columns / table-time configuration of its items
+    b7 = bh7.bx_cfg(p)
+    if b7:
+        x["b7"] = b7
+        if p.weekly_flip_follow and "flip" not in x:
+            pass                               # (the table's flip column exists whenever flip_triggers is non-empty)
 
     return json.dumps(x, sort_keys=True, separators=(",", ":")) if x else ""
 

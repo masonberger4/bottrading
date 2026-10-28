@@ -1328,6 +1328,10 @@ def side_ok(ctx, p, sign: int, session: str, i: int) -> str | None:
     why_ = _B6.side_ok(ctx, p, sign, session, i)
     if why_ is not None:
         return why_
+    from . import bh7e as _B7                        # caption-gap pass bias_htf#7/7
+    why_ = _B7.side_ok(ctx, p, sign, session, i)
+    if why_ is not None:
+        return why_
     from . import bias_day as _BD                    # bias_htf: the bias side (all engines), weekly open, judas, filters ...
     return _BD.side_ok(ctx, p, sign, session, i)
 
@@ -1387,6 +1391,10 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p) -> str | None:
         return why_
     from . import bh6e as _B6                        # caption-gap pass bias_htf#6/7
     why_ = _B6.order_ok(ctx, sd, o, session, i, p)
+    if why_ is not None:
+        return why_
+    from . import bh7e as _B7                        # caption-gap pass bias_htf#7/7
+    why_ = _B7.order_ok(ctx, sd, o, session, i, p)
     if why_ is not None:
         return why_
     from . import bias_day as _BD                    # bias_htf: mwd_nest, mmbm_zone, 50/50 and the order tags

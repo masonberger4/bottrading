@@ -381,8 +381,16 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p):
             if eq == eq:
                 sw("pd_two_level")
                 if not (entry_raw <= eq if sd.sign > 0 else entry_raw >= eq):
-                    return "x_bh2_pd_two_level"
-                tags.append("htf_discount")
+                    if p.pd_subrange:
+                        from . import bh7e as _B7e               # caption-gap A21-longs-above-eq-subrange-discount (bias_htf#7/7): the sub-range discount exception
+                        if _B7e.subrange_ok(ctx, sd, o, row, entry_raw, p):
+                            _B7e.sw("pd_subrange")
+                            tags.append("pd_subrange")
+                            eq = None
+                    if eq is not None:
+                        return "x_bh2_pd_two_level"
+                else:
+                    tags.append("htf_discount")
         # item 109 / 135: the structural regime
         if p.tier_regime_gate:
             reg = _n(row, "tier_regime")

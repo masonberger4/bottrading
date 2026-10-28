@@ -2653,9 +2653,15 @@ def _bias_cache(tf: int, cut: int = 570, vi: bool = False, flip: tuple = ("ob_mt
         "".join(f"_{k}{v}" if k != "bx" else "_bx" + hashlib.md5(str(v).encode()).hexdigest()[:8]
                 for k, v in sorted(kw.items()))
     if "bx" in kw:        # bias_htf columns hold lists / strings a CSV would flatten: built once per process instead
-        key = (tf, cut, vi, tuple(flip), tuple(sorted(kw.items())))
+        key = (tf, cut, vi, tuple(flip), tuple(sorted(kw.items(), key=lambda kv: kv[0])) if "raw" not in kw else tuple(sorted((k_, v_) for k_, v_ in kw.items() if k_ not in ("raw", "adj"))))
         if key not in _BX_TABLES:
-            _BX_TABLES[key] = htf.table(B.load(SYMS[0], tf, source=SRC), cut_min=cut, vi=vi, flip_triggers=tuple(flip), **kw)
+            kw_ = dict(kw)
+            if ('"hs":"raw"' in str(kw.get("bx", "")) or '"ms":"raw"' in str(kw.get("bx", ""))) and SRC == "databento" and "raw" not in kw_:     # caption-gap OT-htf-array-data-series (bias_htf#7/7)
+                m_ = B.load_meta(SYMS[0], tf, SRC)
+                r_ = B.load_raw(SYMS[0], tf)
+                if m_ is not None and r_ is not None and "adj" in m_:
+                    kw_["raw"], kw_["adj"] = r_, m_["adj"]
+            _BX_TABLES[key] = htf.table(B.load(SYMS[0], tf, source=SRC), cut_min=cut, vi=vi, flip_triggers=tuple(flip), **kw_)
         t = _BX_TABLES[key].copy()
         t.index = pd.to_datetime(t.index).date
         return t
@@ -3272,3 +3278,106 @@ def wed_news_reversal(weeks) -> dict:
     """new-wednesday-news-weekly-reversal (cc07_003 ~00:36:11): see dwc3.wed_news_reversal. Report only."""
     from . import dwc3
     return dwc3.wed_news_reversal(weeks)
+
+
+# --- Caption-gap pass, package bias_htf#7/7 (models_setups_entries.md items 177-179, 190, 205, 215; other.md item 5; times_sessions_macros.md items 32, 42, 53, 65; bh7.py / bh7e.py): one variant per switch
+# (name prefix = gap id). The study-only items (OSOK, the swing / position studies, the stock watch lists) are the research functions below (bh7s.py / stocks.py / stocks_watch.py), not Params switches. ---
+BH7_BASE = dict(ob_entry="post_mss", htf_resist_cap=False, htf_bias="combo", bias_neutral="both")
+
+_BH7_DECISIONS = {
+    "new-after-of-shift-sell-any-premium-array": dict(weekly_flip_follow=True, **BH7_BASE),
+    "A21-longs-above-eq-subrange-discount": dict(pd_two_level=True, pd_subrange=True, pd_top_skip=True, **BH7_BASE),
+    "B6-intraweek-reversal-1h-confirmation": dict(**{**BH7_BASE, "htf_bias": "h1_sponsor"}),
+    "B20-15m-williams-r-entry": dict(wr15_tag=True, **BH7_BASE),
+    "new-stopout-at-planned-array-next-day-flip": dict(array_lost_flip=True, **BH7_BASE),
+    "new-london-breaker-precursor": dict(london_breaker_bias=True, **BH7_BASE),
+    "OT-htf-array-data-series": dict(htf_series="raw", **BH7_BASE),
+    "OT-htf-array-data-series-monthly": dict(htf_monthly=True, htf_monthly_series="raw", **BH7_BASE),
+    "new-london-confirm-after-daily-signal": dict(london_confirm="block", **BH7_BASE),
+    "new-london-confirm-after-daily-signal-half": dict(london_confirm="half", **BH7_BASE),
+    "new-ipda-true-day": dict(true_day="ipda", late_obj_k=0.5, **BH7_BASE),
+    "new-ipda-true-day-cc-daytrade": dict(cc_daytrade=True, **BH7_BASE),
+    "new-ny-continues-london": dict(london_dir_gate=True, london_dir_tag=True, **BH7_BASE),
+    "T13-po3-breaker-regime": dict(**{**BH7_BASE, "htf_bias": "breaker"}),
+}
+DECISIONS.update(_BH7_DECISIONS)
+
+
+def osok_study(df, direction=None, **kw):
+    """M17-osok-short-term-trade-definition / M17-osok-execution-chain-1h-minimum / new-missed-monthly-array-use-lower-tf / M17-osok-weekly-to-daily (research, bh7s.osok): One Shot One Kill on a minute
+    frame - weekly holding, 1h execution at 1h arrays inside weekly / daily / 4h arrays, Mon-Wed entries, the nearest untouched daily opposing array as the target. Rows are trades with origin_tf / leg / seq."""
+    from . import bh7s
+    return bh7s.osok(df, direction, **kw)
+
+
+def osok_origin_report(trades, origin_tfs=("M", "W", "D", "4h")):
+    """new-frequency-by-origin-tf (cc07_001 ~00:18:29), report only: the signals per leg by origin timeframe. See bh7s.origin_report."""
+    from . import bh7s
+    return bh7s.origin_report(trades, origin_tfs)
+
+
+def swing_reentry_study(h4, arrays, **kw):
+    """X13-swing-reentry-next-htf-array (cc06_003 ~00:23:43), research: the re-entry cascade (next lower untested 4h array, else D / W / M; half size per failure). See bh7s.swing_reentry_study."""
+    from . import bh7s
+    return bh7s.swing_reentry_study(h4, arrays, **kw)
+
+
+def trend_tired_study(signals, **kw):
+    """X13-two-failed-trend-signals (cc06_001 ~00:09:01), research: the trend-tired flag after two stopped with-trend swing signals. See bh7s.trend_tired."""
+    from . import bh7s
+    return bh7s.trend_tired(signals, **kw)
+
+
+def position_freq_study(signals, pos_max_per_quarter=1, pos_flag_per_year=4):
+    """X15-position-trade-frequency (cc05_013 ~00:24:19), report only: one per quarter, the over-firing flag at > 4 a year. See bh7s.position_freq."""
+    from . import bh7s
+    return bh7s.position_freq(signals, pos_max_per_quarter, pos_flag_per_year)
+
+
+def swing_frequency_study(signals, swing_one_open=True, swing_flag_per_year=12):
+    """X15-swing-frequency (cc06_006 ~00:14:25), report only: one open swing, the > 12 a year flag. See bh7s.swing_frequency."""
+    from . import bh7s
+    return bh7s.swing_frequency(signals, swing_one_open, swing_flag_per_year)
+
+
+def osok_scale_in(daily, arrays, bias, **kw):
+    """E12-start-small-build (cc07_008 ~00:29:33), research: the weekly OSOK built small-first (a quarter on Monday, the rest on a Tue / Wed higher high). See bh7s.osok_scale_in."""
+    from . import bh7s
+    return bh7s.osok_scale_in(daily, arrays, bias, **kw)
+
+
+def swing_readd(h4, entries, **kw):
+    """E12-readd-after-partials-swing (098 ~00:25:13), research: the partial re-added at the first new same-side 4h FVG / OB. See bh7s.swing_readd."""
+    from . import bh7s
+    return bh7s.swing_readd(h4, entries, **kw)
+
+
+def daily_stop_model(daily, arrays, **kw):
+    """E12-daily-downclose-add-stops (cc05_016 ~00:03:14), research: the daily buy stop at the latest down-close candle's open (the `daily_stop_half` variant: first_frac=0.5). See bh7s.daily_stop_model."""
+    from . import bh7s
+    return bh7s.daily_stop_model(daily, arrays, **kw)
+
+
+def stock_watchlist(asof, universe, index_d, p, **kw):
+    """OT-stocks-smt-weekly-screen / OT-stocks-exclusions-selection / OT-stocks-rs-leadership (parked, M17; needs Params.stocks_mode): the buy watch list. See stocks.watchlist."""
+    from . import stocks
+    return stocks.watchlist(asof, universe, index_d, p, **kw)
+
+
+def stock_sell_list(asof, stocks_d, dia, p, **kw):
+    """M17-stock-sell-watchlist-smt / new-stock-short-prefer-rally-into-premium (parked; needs Params.stocks_mode): the sell watch list. See stocks_watch.sell_list."""
+    from . import stocks_watch
+    return stocks_watch.sell_list(asof, stocks_d, dia, p, **kw)
+
+
+def stock_jan_study(year, stocks_d, dia, p):
+    """M17-stock-jan-fvg-refill-entry (parked; needs Params.stocks_mode): the January stock-vs-Dow SMT and the February refill of the January gaps, with forward returns. See stocks_watch.jan_smt / gap_refill."""
+    from . import stocks_watch
+    names = stocks_watch.jan_smt(year, stocks_d, dia, p)
+    return {s: stocks_watch.gap_refill(stocks_d[s], year, p) for s in names}
+
+
+def stock_mega(asof, stocks_d, indices, p, **kw):
+    """new-stock-mega-trade-process-and-filters / new-stock-no-gapped-away-or-overextended (parked; needs Params.stocks_mode). See stocks_watch.mega."""
+    from . import stocks_watch
+    return stocks_watch.mega(asof, stocks_d, indices, p, **kw)

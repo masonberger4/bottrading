@@ -3466,6 +3466,33 @@ class Params:
     weekly_persist: bool = False         # new-weekly-idea-persistence (cc07_008 ~00:33:56): a Tue / Wed daily close beyond Monday's extreme against the weekly bias is not a flip - the week's first nonzero reading is kept (table wk_bias; the columns derived from wk_bias earlier in the table keep the plain reading) until a flip trigger changes the table's stateful bias
     factor_tag: bool = False             # new-seven-factor-context (cc02_006 ~00:54:23): orders are tagged f7_b<big>m<mid>s<short> (+ f7_high with >= 2 big-picture, >= 2 intermediate and 1 of each of the 3 short-term factors, all agreeing); context only - no order is gated by it
 
+    # --- Caption-gap pass, package bias_htf#7/7 (digests/rulebook_gaps/models_setups_entries.md items 177-179, 190, 205, 215; other.md item 5; times_sessions_macros.md items 32, 42, 53, 64, 65; bh7.py table side,
+    # bh7e.py engine side; the study-only items - OSOK, swing / position studies, the stock watch lists - live in bh7s.py / stocks.py / stocks_watch.py, not in Params except stocks_mode and its stock_* knobs).
+    # Everything defaults off; thresholds the sources never give are [our interpretation]. -----
+    weekly_flip_follow: bool = False     # new-after-of-shift-sell-any-premium-array (cc07_004 ~00:12:50): once the table's stateful bias (flip) turned to a side this week, the 4h arrays of that side are accepted as the sweep array (premise_sweep, 240 added to premise_tfs for that side) although they sit below the week high; needs flip_triggers (table `flip`) and the premise path
+    pd_subrange: bool = False            # A21-longs-above-eq-subrange-discount (cc07_005 ~00:11:58): a long above the 60-day body-range EQ (quadrants 3-4) is allowed when the entry sits in the lower half of its quadrant at an HTF array with a target left (relaxes pd_two_level); the short mirror (quadrants 2-1, upper half)
+    pd_top_skip: bool = True             # ... with pd_subrange: the upper half of quadrant 4 (a short: the lower half of quadrant 1) is skipped ("buy setups fall off sharply" near the top of the overall range)
+    wr15_tag: bool = False               # B20-15m-williams-r-entry (cc09_001 ~00:05:55): tag wr15_extreme when the 15m Williams %R(10) is the lowest (a short: highest) of its last wr_lookback 15m readings at the order; report only
+    wr_lookback: int = 20
+    array_lost_flip: bool = False        # new-stopout-at-planned-array-next-day-flip (cc09_008 ~00:54:35): the table day after a close through the planned daily support (resistance) array flips the day's side against the daily bias, the next lower (higher) daily array is the target; longs (shorts) again once that array traded
+    london_breaker_bias: bool = False    # new-london-breaker-precursor (cc10_011 ~00:06:34): a bullish (bearish) breaker formed 02:00-05:00 after a London sweep sets the AM side when the daily bias is neutral (it never overrides an opposing bias)
+    london_confirm: str = "off"          # new-london-confirm-after-daily-signal (081 ~00:09:24): after a down-close outside day into a daily BISI, London must trade below the BISI low and a 5m close must come back under it after a retrace into it: not confirmed = AM shorts "block" / "half" size; the outside day's high traded = shorts blocked
+    true_day: str = "session"            # new-ipda-true-day (cc08_002 ~00:05:19): "ipda" = the table's daily candle is built from the 00:00-15:00 bars (open = first bar at / after 00:00, close = last bar ending at / before 15:00)
+    late_obj_k: float = 1.0              # new-ipda-true-day (cc12_004 ~00:07:25): < 1 keeps, for an entry after 09:30, only the rungs within late_obj_k x ADR5 of the entry (1.0 = off)
+    cc_daytrade: bool = False            # new-ipda-true-day (cc08_001 ~00:16:11): the CC day-trade preset - AM leftovers out at 12:00 (am_exit), the PM session off, FOMC days PM 14:00-15:00 only
+    london_dir_gate: bool = False        # new-ny-continues-london (cc09_005 ~00:30:13; taught on FX): NY continues London - with no unmet HTF array at the 07:00-09:30 high / low an AM setup against London's direction is blocked; at an array both sides are allowed
+    london_dir_tag: bool = False         # ... the tag nyl_cont / nyl_rev on AM orders (the spec writes it always; kept a switch so default trade files stay unchanged)
+    htf_series: str = "adjusted"         # OT-htf-array-data-series (056 ~00:01:13; 078 ~00:35:43): the series the table's daily / weekly arrays are drawn on: "adjusted" (the back-adjusted engine frame), "raw" (the unadjusted front-month series, mapped back per day by the adj before the session), "contract" (056 exact - needs per-contract raw data: NotImplementedError)
+    htf_monthly_series: str = "adjusted"  # ... with htf_monthly: the series of the monthly arrays: "adjusted" (as built) / "raw" (078: the continuous unadjusted chart; the spec's default - kept off here so the built htf_monthly behaviour does not change)
+    stocks_mode: bool = False            # M17 (parked): the stock watch-list modules (stocks.py / stocks_watch.py) raise unless this is on
+    stock_piv_n: int = 2                 # OT-stocks-smt-weekly-screen (cc10_016 ~00:02:01): the daily pivot size of the Dow-vs-stock screen
+    stock_match_days: int = 5            # ... the +/- window (days) matching the stock's low to the index's pivot low [our interpretation]
+    stock_excl_2017: bool = False        # OT-stocks-exclusions-selection (cc10_016 ~00:03:01): also drop MSFT and INTC
+    stock_near_high_pct: float = 0.05    # ... a pick sits within this fraction under the highest weekly high of the last 52 weeks [our interpretation]
+    stock_ext_atr: float = 3.0           # ... extended = the close more than this x the 20-day ATR above the last weekly pivot low [our interpretation]
+    stock_rs_min: float = 80.0           # OT-stocks-rs-leadership (cc11_003 ~00:14:23): the relative-strength percentile a leader needs [our interpretation]
+    stock_top_sectors: int = 2           # ... the sectors kept when sector_of() answers [our interpretation]
+
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
         _sb_check(self)
@@ -3948,7 +3975,7 @@ class Params:
                 self.tgif_timing = ((600, 720), (810, 900))     # 10:00-12:00 (London close) and 13:30-15:00 (PM)
         # package bias_htf: validation and the umbrellas (replace() re-runs this)
         for name, ok in (("htf_bias", ("off", "react", "draw", "pd", "combo", "flip", "ordered", "iof", "combo2", "ob_mt", "mwd",
-                                       "nwog", "candle", "draw_pd", "wk", "pd20", "week_pre", "week_check", "wd_check", "mob")),
+                                       "nwog", "candle", "draw_pd", "wk", "pd20", "week_pre", "week_check", "wd_check", "mob", "h1_sponsor", "breaker")),
                          ("bias_neutral", ("skip", "both", "scalp", "scalp_week")), ("judas_required", ("off", "tag", "filter")),
                          ("draw_first", ("off", "session")), ("day_pd", ("swing", "20d")),
                          ("pd_zone", ("half", "third", "deep", "ote")), ("weekly_gate", ("off", "tag", "filter")),
@@ -4059,6 +4086,13 @@ class Params:
         # caption-gap pass bias_htf#6/7 (bh6.py / bh6e.py)
         if self.bp_leg_days < 1 or self.bp_leg_days > 5:
             raise ValueError("bias_htf#6/7: bp_leg_days in 1..5")
+        # caption-gap pass bias_htf#7/7 (bh7.py / bh7e.py)
+        for name, ok in (("london_confirm", ("off", "block", "half")), ("true_day", ("session", "ipda")), ("htf_series", ("adjusted", "raw", "contract")),
+                         ("htf_monthly_series", ("adjusted", "raw"))):
+            if getattr(self, name) not in ok:
+                raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
+        if not 0 < self.late_obj_k <= 1.0 or self.wr_lookback < 2 or self.stock_piv_n < 1 or self.stock_match_days < 0 or self.stock_near_high_pct < 0 or self.stock_ext_atr <= 0 or not 0 <= self.stock_rs_min <= 100 or self.stock_top_sectors < 1:
+            raise ValueError("bias_htf#7/7: 0 < late_obj_k <= 1, wr_lookback >= 2, stock_piv_n >= 1, stock_match_days >= 0, stock_near_high_pct >= 0, stock_ext_atr > 0, 0 <= stock_rs_min <= 100, stock_top_sectors >= 1")
         inert = []                                  # switches the current draw_lock / vi_arrays make inert
         if self.htf_bias == "off" and (self.monthly_ctrl or self.monthly_ctrl_smt or self.shift_origin_pool or self.stack_draw or self.program_gate or self.fast_week_rev or self.eq_breakout_draw or self.d_draw_carry or self.wk_ssl_draw
                                        or self.gap_theory_bias or self.nwog_below_return or self.org_pm_draw or self.pm_flip_draw or self.pm_range_break or self.or60_bias or self.b7_spike_floor
@@ -4067,6 +4101,14 @@ class Params:
                          "pm_range_break / or60_bias / b7_spike_floor / range_alternate / org_with_bias / pdh_raid_rev set or gate the htf_bias side: inert with htf_bias='off'")
         if self.htf_bias == "off" and (self.both_pools_gate or self.weekly_persist or self.factor_tag):
             inert.append("both_pools_gate / weekly_persist / factor_tag read the htf table: inert with htf_bias='off'")
+        if self.htf_bias == "off" and (self.pd_subrange or self.array_lost_flip or self.london_breaker_bias or self.london_dir_gate or self.weekly_flip_follow):
+            inert.append("pd_subrange / array_lost_flip / london_breaker_bias / london_dir_gate / weekly_flip_follow read the htf table or its bias side: inert with htf_bias='off'")
+        if self.pd_subrange and not self.pd_two_level:
+            inert.append("pd_subrange relaxes the pd_two_level gate; without it only pd_top_skip acts")
+        if self.weekly_flip_follow and not self.flip_triggers:
+            inert.append("weekly_flip_follow needs the table's stateful bias: flip_triggers is empty")
+        if self.htf_monthly_series == "raw" and not (self.htf_monthly or self.htf_monthly_arrays):
+            inert.append("htf_monthly_series='raw' draws the monthly arrays on the raw series: it needs htf_monthly (the monthly arrays)")
         if self.scenario_check and self.draw_lock != "session":
             inert.append("scenario_check re-locks the session draw: it acts only in the #9 lock (draw_lock='session')")
         if self.scenario_flip and not self.scenario_check:
@@ -5095,6 +5137,8 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
         lv = _BH3E.targets_post(ctx, sd, i, p, above, lv)              # caption-gap bias_htf#3/7: the chop-day baseline rung
     if _BH5E.targets_on(p):
         lv = _BH5E.targets_post(ctx, sd, i, p, above, lv)              # caption-gap bias_htf#5/7: the dropped NWOG far edge, the weekly range's draw, the PM ORG ladder, the shift-origin pool
+    if _BH7E.targets_on(p):
+        lv = _BH7E.targets_post(ctx, sd, i, p, above, lv)              # caption-gap bias_htf#7/7: late_obj_k (entries after the NY open get the nearer rungs)
     out = []
     for v, kind in sorted(x for x in set(lv) if x[0] > above):   # merge levels within ~1 ES point
         if not out or v - out[-1][0] > p.es_pt:
@@ -6271,6 +6315,8 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
     if _BH5E.prefs_on(p):                          # caption-gap pass bias_htf#5/7: the program / stack / EQ-breakout / fast-week / carried / shift-origin / SSL / PM draws as preferred candidates, then the NWOG / ORG filters
         prefs += _BH5E.lock_prefs(ctx, p, row, t_lock, session, S, px, kl)
         cands, prefs = _BH5E.lock_filter(ctx, p, row, cands, prefs, t_lock, session, kl, px)
+    if _BH7E.prefs_on(p):                          # caption-gap new-stopout-at-planned-array-next-day-flip (bias_htf#7/7): the next lower / higher daily array as the preferred draw of the flipped day
+        prefs += _BH7E.lock_prefs(ctx, p, row, t_lock, session, S, px, kl)
     if p.round_pool_mode != "pool":                # caption-gap A2-round-number-pool: a round handle is a lock candidate only with a pool at it
         keep_ = set(_LD3.round_filter([c_[0] for c_ in cands if c_[2] == "round"], [c_[0] for c_ in cands if c_[2] != "round" and c_[1] == "pool"], p))
         cands = [c_ for c_ in cands if c_[2] != "round" or c_[0] in keep_]
@@ -6665,6 +6711,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     p = _DWC.day_params(p, dw)                            # caption-gap pass day_week_context#1/3: iw_no_measured
     p = _DWC2.day_params(p, dw)                           # caption-gap pass day_week_context#2/3: expansion_mode "full", the Friday single exit, the consolidation scalp outs
     p = _DWC3.day_params(p, dw)                           # caption-gap pass day_week_context#3/3: choppy week - slow ladder, no runner
+    p = _BH7E.day_params(p, tags)                         # caption-gap new-ipda-true-day (bias_htf#7/7): the CC day-trade preset
     _BD.plan(dw, ctx, hist, p, dt)                        # bias_htf: day tags, range_market reading, ctx.bh_on
     wl = dw.info.get("week_left")                         # D19 / X15: trades left in the week's budget (None = no cap)
     why_dw = next((r_ for ss_, r_ in dw.blocks if ss_ is None), None)
@@ -8263,7 +8310,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
             if _SM3.sweep_init(ctx, sd, sw, i, p, session) == "drop":      # caption-gap setups_models #3/7: A23 wick CE, M3 shallow run, eq_hunt / age tags
                 sd.sweep = None
                 return None
-    if sw is None and p.allow_htf_array_premise and not hit and not _LD4.td_masked(ctx, p, i):
+    if sw is None and (p.allow_htf_array_premise or p.weekly_flip_follow) and not hit and not _LD4.td_masked(ctx, p, i):
         sw = sd.sweep = _SM3.premise_sweep(ctx, sd, i, p, session)      # caption-gap M1M2-htf-array-replaces-sweep: an HTF array reached with the bodies holding is the premise
         if sw is not None:
             _f("1_sweep")
@@ -10492,3 +10539,4 @@ from . import bh3e as _BH3E  # noqa: E402  (caption-gap pass, bias_htf#3/7: engi
 from . import bh4e as _BH4E  # noqa: E402  (caption-gap pass, bias_htf#4/7: engine glue)
 from . import bh5e as _BH5E  # noqa: E402  (caption-gap pass, bias_htf#5/7: engine glue)
 from . import bh6e as _BH6E  # noqa: E402  (caption-gap pass, bias_htf#6/7: engine glue)
+from . import bh7e as _BH7E  # noqa: E402  (caption-gap pass, bias_htf#7/7: engine glue)
