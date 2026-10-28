@@ -3141,6 +3141,84 @@ _BH5_DECISIONS = {
 DECISIONS.update(_BH5_DECISIONS)
 
 
+# --- Caption-gap pass, package bias_htf#6/7 (management_partials_trailing_exits.md items 97, 133, 134 and models_setups_entries.md items 129, 133; bh6.py / bh6e.py): one variant per switch (name prefix = the
+# gap id). The study-only items (13, 15, 31-33, 135-142 and 96, 100, 155-162, 164-170) are the research functions below (bh6s.py / bh6t.py), not Params switches. ------------------------------------------
+BH6_BASE = dict(ob_entry="post_mss", htf_resist_cap=False, htf_bias="combo", bias_neutral="both")
+
+_BH6_DECISIONS = {
+    "X8-061-continuation-after-both-pools": dict(both_pools_gate=True, bp_leg_days=2, **BH6_BASE),
+    "new-live-vs-analysis-mismatch": dict(scenario_check=True, **BH6_BASE),
+    "new-live-vs-analysis-mismatch-flip": dict(scenario_check=True, scenario_flip=True, **BH6_BASE),
+    "new-weekly-idea-persistence": dict(weekly_persist=True, **{**BH6_BASE, "htf_bias": "wk"}),
+    "new-seven-factor-context": dict(factor_tag=True, **BH6_BASE),
+    "new-htf-regime-trigger-and-entry": dict(**{**BH6_BASE, "htf_bias": "mob"}),
+}
+DECISIONS.update(_BH6_DECISIONS)
+
+
+def swing_mgmt_study(df_daily, entries, mode="be_t1", trail="none", ladder=None, readd=False, confirm4h=False, max_hold_days=None, df_4h=None, **cfg):
+    """X4-be-by-timeframe / X4-swing-stop-thirds-partial-quarter / X5-swing-final-exit-4h-trail / X5-swing-eq-stop-runs / new-position-40-20-day-trail / new-htf-partial-and-readd /
+    new-position-hold-horizon / M17-swing-horizon / B6-swing-in-trade-confirmation / X3-swing-htf-array-scaleout / X1-swing-opposing-ob-ladder (research, bh6s.swing_mgmt_study): replays daily swing /
+    position entries with pluggable management; one row per trade. See bh6s.swing_mgmt_study for the modes."""
+    from . import bh6s
+    return bh6s.swing_mgmt_study(df_daily, entries, mode, trail, ladder, readd, confirm4h, max_hold_days, df_4h, **cfg)
+
+
+def daily_limit_model(df_daily, weekly_arrays, bias=None, quick_bars=2, tick=0.0, side=1):
+    """M17-daily-limit-repeat-to-weekly (cc05_017 ~00:09:16), research: a limit at each down-close daily candle's close until the weekly array is touched. See bh6s.daily_limit_model."""
+    from . import bh6s
+    return bh6s.daily_limit_model(df_daily, weekly_arrays, bias, quick_bars, tick, side)
+
+
+def weekly_template_study(df_daily, signals):
+    """T11-weekly-template-hold (cc07_003 ~00:13:14), research: Tuesday / Wednesday entries held to the weekly target or Friday's close vs the same-day flatten. See bh6s.weekly_template_study."""
+    from . import bh6s
+    return bh6s.weekly_template_study(df_daily, signals)
+
+
+def opening_price_model(df, bias, draw=None, ref_min=0, tick=0.0):
+    """new-opening-price-position-model (095 ~00:15:42), research: the buy stop at the midnight open after a trade below it. See bh6t.opening_price_model."""
+    from . import bh6t
+    return bh6t.opening_price_model(df, bias, draw, ref_min, tick)
+
+
+def daily_fvg_sellstop(df_daily, bias, tbl=None, **kw):
+    """M17-daily-swing-sellstop-midnight (098 ~00:22:11), research: the sell stop at the open after the prior day traded up into a daily bearish FVG. See bh6t.daily_fvg_sellstop."""
+    from . import bh6t
+    return bh6t.daily_fvg_sellstop(df_daily, bias, tbl, **kw)
+
+
+def monthly_ob_study(df_daily, **kw):
+    """new-htf-regime-trigger-and-entry (cc03_002 ~00:14:23), research: the monthly OB activation -> return -> target statistics. See bh6t.monthly_ob_study."""
+    from . import bh6t
+    return bh6t.monthly_ob_study(df_daily, **kw)
+
+
+def daily_candle_entries(df_daily, target, **kw):
+    """M17-daily-stop-entry-at-open-with-roll / M17-daily-limit-at-close / M17-daily-candle-entry-needs-daily-pd-array / M17-daily-limit-after-mss / E1-stop-vs-limit-ob-tradeoff (research). See bh6t."""
+    from . import bh6t
+    return bh6t.daily_candle_entries(df_daily, target, **kw)
+
+
+def position_checklist(day, side, df_daily, **kw):
+    """M17-position-trade-checklist (cc05_018 ~00:02:49), report only. See bh6t.position_checklist."""
+    from . import bh6t
+    return bh6t.position_checklist(day, side, df_daily, **kw)
+
+
+def hallmarks(day, side, df_daily, **kw):
+    """new-eight-hallmark-swing-checklist (cc06_007 ~00:20:56), report only. See bh6t.hallmarks."""
+    from . import bh6t
+    return bh6t.hallmarks(day, side, df_daily, **kw)
+
+
+def swing_entries(df_4h, df_daily, arrays, **kw):
+    """B10-swing-entry-location-mwd-discount / M12-no-turtle-soup-inside-consolidation-swing / M17-swing-sequence-condition-impulse-retrace / new-4h-bounce-must-make-higher-high / B10-swing-requires-
+    sequential / M17-swing-framework-mw-map-4h-execution / A21-swing-short-premium-of-major-range / new-htf-ob-mt-entry-4h-ob-confirm (research). See bh6t.swing_entries."""
+    from . import bh6t
+    return bh6t.swing_entries(df_4h, df_daily, arrays, **kw)
+
+
 def dce_proj_hits(table, d, within: int = 10) -> dict:
     """L13-old-high-to-daily-ce-projection (019 ~2:35), research (dce_proj_study): the share of the table's daily A-B projection levels traded to within `within` sessions, per level. See bh5.dce_proj_hits."""
     from . import bh5

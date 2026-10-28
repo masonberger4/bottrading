@@ -3457,6 +3457,15 @@ class Params:
     range_rollover: bool = False         # LLT3-dealing-range-rollover (cc12_002 ~22:26): price trading beyond the range high retires the range: the new high is the next unmitigated premium array / pool above, the old high and EQ stay as discount levels, the EQ is recomputed for the pd_zone gates (mirror below)
     weekly_open_array: bool = False      # LLT3-weekly-open-pd-array (cc12_003 ~20:57): with the weekly_open filter on, the entry must also sit in a premium (shorts) / discount (longs) array; the order is tagged wo_both beyond both opens
 
+    # --- Caption-gap pass, package bias_htf#6/7 (digests/rulebook_gaps/management_partials_trailing_exits.md items 97, 133, 134 and models_setups_entries.md items 129, 133; bh6.py table side, bh6e.py engine side; the study-only
+    # items 13, 15, 31-33, 135-142 and 96, 100, 155-162, 164-170 live in bh6s.py with their study configuration, not in Params). Everything defaults off; thresholds the sources never give are [our interpretation]. -----
+    both_pools_gate: bool = False        # X8-061-continuation-after-both-pools (061 ~01:46:40): after a leg that took both the prior high and the prior low, a short is valid only while price stays below the last up-close daily OB's open AND below the CE of the daily FVG containing it (table cont_cap; longs mirror); above it = no new shorts (a filter, not a trigger)
+    bp_leg_days: int = 2                 # ... [our interpretation] "that day or the leg": the day itself, or the last bp_leg_days sessions together, took both the prior high and the prior low
+    scenario_check: bool = False         # new-live-vs-analysis-mismatch (cc01_003 ~00:24:16): the session scenario is (bias side, draw, raid side = the other side's previous-day pool); the draw-side pool run first with a close beyond it and a same-direction gap before the raid and before any fill cancels the pending orders and ends the session
+    scenario_flip: bool = False          # ... instead of ending the session the bias of the rest of the session flips to the other side (new setups only)
+    weekly_persist: bool = False         # new-weekly-idea-persistence (cc07_008 ~00:33:56): a Tue / Wed daily close beyond Monday's extreme against the weekly bias is not a flip - the week's first reading is kept (table wk_bias) until a flip trigger changes the table's stateful bias
+    factor_tag: bool = False             # new-seven-factor-context (cc02_006 ~00:54:23): orders are tagged f7_b<big>m<mid>s<short> (+ f7_high with >= 2 big-picture, >= 2 intermediate and 1 of each of the 3 short-term factors, all agreeing); context only - no order is gated by it
+
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
         _sb_check(self)
@@ -3939,7 +3948,7 @@ class Params:
                 self.tgif_timing = ((600, 720), (810, 900))     # 10:00-12:00 (London close) and 13:30-15:00 (PM)
         # package bias_htf: validation and the umbrellas (replace() re-runs this)
         for name, ok in (("htf_bias", ("off", "react", "draw", "pd", "combo", "flip", "ordered", "iof", "combo2", "ob_mt", "mwd",
-                                       "nwog", "candle", "draw_pd", "wk", "pd20", "week_pre", "week_check", "wd_check")),
+                                       "nwog", "candle", "draw_pd", "wk", "pd20", "week_pre", "week_check", "wd_check", "mob")),
                          ("bias_neutral", ("skip", "both", "scalp", "scalp_week")), ("judas_required", ("off", "tag", "filter")),
                          ("draw_first", ("off", "session")), ("day_pd", ("swing", "20d")),
                          ("pd_zone", ("half", "third", "deep", "ote")), ("weekly_gate", ("off", "tag", "filter")),
@@ -4047,12 +4056,21 @@ class Params:
                 or self.pm_flip_days < 1 or self.stack_n < 1 or self.fast_week_adr <= 0 or self.raid_run_days < 2 or self.stock_old_high_max_pct <= 0):
             raise ValueError("bias_htf#5/7: iof_follow_days / swing_min_days / mega_min_days >= 1, 0 < nwog_eq_band < 0.5, confl_pts >= 0, range_block_probed >= 0, pm_flip_adr >= 0, pm_flip_days >= 1, stack_n >= 1, "
                              "fast_week_adr > 0, raid_run_days >= 2, stock_old_high_max_pct > 0")
+        # caption-gap pass bias_htf#6/7 (bh6.py / bh6e.py)
+        if self.bp_leg_days < 1 or self.bp_leg_days > 5:
+            raise ValueError("bias_htf#6/7: bp_leg_days in 1..5")
         inert = []                                  # switches the current draw_lock / vi_arrays make inert
         if self.htf_bias == "off" and (self.monthly_ctrl or self.monthly_ctrl_smt or self.shift_origin_pool or self.stack_draw or self.program_gate or self.fast_week_rev or self.eq_breakout_draw or self.d_draw_carry or self.wk_ssl_draw
                                        or self.gap_theory_bias or self.nwog_below_return or self.org_pm_draw or self.pm_flip_draw or self.pm_range_break or self.or60_bias or self.b7_spike_floor
                                        or self.range_alternate or self.org_with_bias or self.pdh_raid_rev):
             inert.append("monthly_ctrl / shift_origin_pool / stack_draw / program_gate / fast_week_rev / eq_breakout_draw / d_draw_carry / wk_ssl_draw / gap_theory_bias / nwog_below_return / org_pm_draw / pm_flip_draw / "
                          "pm_range_break / or60_bias / b7_spike_floor / range_alternate / org_with_bias / pdh_raid_rev set or gate the htf_bias side: inert with htf_bias='off'")
+        if self.htf_bias == "off" and (self.both_pools_gate or self.weekly_persist or self.factor_tag):
+            inert.append("both_pools_gate / weekly_persist / factor_tag read the htf table: inert with htf_bias='off'")
+        if self.scenario_check and self.draw_lock != "session":
+            inert.append("scenario_check re-locks the session draw: it acts only in the #9 lock (draw_lock='session')")
+        if self.scenario_flip and not self.scenario_check:
+            inert.append("scenario_flip changes what scenario_check does: it needs scenario_check")
         if self.monthly_ctrl_smt and not self.monthly_ctrl:
             inert.append("monthly_ctrl_smt confirms the monthly_ctrl fallback: it needs monthly_ctrl")
         if (self.range_alternate or self.range_block_probed) and "chop" not in self.sloppy_tests:
@@ -7739,12 +7757,14 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
             if lk["side"] == 0 and p.draw_lock_neutral == "skip":
                 done[s_] = True
     for s_, lk in list(ctx.lock.items()):
-        if _BH1E.lock_on(p) or _BH2E.lock_on(p) or _BH5E.lock_on(p):       # caption-gap pass bias_htf#1/7: invalidation touch, 60m BISI hold, raid gap guard, 50/50 and low-in re-locks, the counter-trend reopen; bias_htf#2/7: the wick CE 60m cancel, the reversal after the target
+        if _BH1E.lock_on(p) or _BH2E.lock_on(p) or _BH5E.lock_on(p) or _BH6E.lock_on(p):       # caption-gap pass bias_htf#1/7: invalidation touch, 60m BISI hold, raid gap guard, 50/50 and low-in re-locks, the counter-trend reopen; bias_htf#2/7: the wick CE 60m cancel, the reversal after the target
             r_ = _BH1E.lock_bar(ctx, p, s_, lk, i, done, spent, state) if _BH1E.lock_on(p) else None
             if r_ is None and _BH2E.lock_on(p):
                 r_ = _BH2E.lock_bar(ctx, p, s_, lk, i, done, spent, state)
             if r_ is None and _BH5E.lock_on(p):
                 r_ = _BH5E.lock_bar(ctx, p, s_, lk, i, done, spent, state)       # caption-gap L5-below-nwog-low (bias_htf#5/7): the return into the NWOG
+            if r_ is None and _BH6E.lock_on(p):
+                r_ = _BH6E.lock_bar(ctx, p, s_, lk, i, done, spent, state)       # caption-gap new-live-vs-analysis-mismatch (bias_htf#6/7): the draw-side pool run before the raid
             if r_ is not None:
                 nl_, cancel_ = r_
                 all_locks.append(dict(lk, failed=True))
@@ -10471,3 +10491,4 @@ from . import bh2e as _BH2E  # noqa: E402  (caption-gap pass, bias_htf#2/7: engi
 from . import bh3e as _BH3E  # noqa: E402  (caption-gap pass, bias_htf#3/7: engine glue)
 from . import bh4e as _BH4E  # noqa: E402  (caption-gap pass, bias_htf#4/7: engine glue)
 from . import bh5e as _BH5E  # noqa: E402  (caption-gap pass, bias_htf#5/7: engine glue)
+from . import bh6e as _BH6E  # noqa: E402  (caption-gap pass, bias_htf#6/7: engine glue)

@@ -139,6 +139,14 @@ def bx_string(p) -> str:
         x["b5"] = b5
         if p.wk_ref_friday and "wk" not in x:
             x["wk"] = 1                        # (new-weekly-market-price-friday-close: the weekly draw split columns it freezes)
+    from . import bh6                          # caption-gap pass bias_htf#6/7 (bh6.py): the columns / table-time configuration of its items
+    b6 = bh6.bx_cfg(p)
+    if b6:
+        x["b6"] = b6
+        if p.weekly_persist or p.factor_tag:
+            x["wk"] = 1                        # (new-weekly-idea-persistence / new-seven-factor-context: the weekly bias column)
+        if p.factor_tag and "iof" not in x:
+            x["iof"] = [p.iof_days, p.iof_min]   # (the intermediate factors: the daily IOF)
 
     return json.dumps(x, sort_keys=True, separators=(",", ":")) if x else ""
 

@@ -634,6 +634,10 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         if X.get("pd20"):
             b5["_pd20"] = X["pd20"]
         out = BH5.finish5(out, b5, d, w, arrs, es_pt, df)                            # caption-gap bias_htf#5/7 (bh5.py): the columns after bh4.finish4
+    b6 = dict(X.get("b6") or {})
+    if b6 and len(out):
+        from . import bh6
+        out = bh6.finish6(out, b6, d, w, arrs, es_pt, df)                            # caption-gap bias_htf#6/7 (bh6.py): the columns after bh5.finish5
     return out
 
 
