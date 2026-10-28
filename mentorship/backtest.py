@@ -313,6 +313,8 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
         warnings.warn(f"#13: round_pools is on but inert for {symbol} (price_frame={p.price_frame!r}, "
                       f"meta {'missing' if meta is None else 'given'}): no front-month mapping",
                       stacklevel=3)
+    if p.wk_dc_joint and wk_joint is None and "wk_dc" in p.flip_triggers:
+        warnings.warn("wk_dc_joint is on but no partner-index flag map was given (backtest.run builds it from the partner frame): the wk_dc -1 flip runs unrestricted", stacklevel=3)     # caption-gap BH-B8-weekly-ith-both-indices-close (review round 1)
     bt = bias_table if bias_table is not None else (
         htf.table(df, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers, wk_joint=wk_joint, **table_kw(p)) if ov else None)
     cuts = lock_cuts if lock_cuts is not None else lock_tables(df, p, bt, wk_joint)

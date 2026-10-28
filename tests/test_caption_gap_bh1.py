@@ -23,11 +23,11 @@ NAN = float("nan")
 
 NEW_FIELDS = (
     "drange_scalp", "drange_n", "drange_break", "drange_t1_pts", "drange_day_pts", "b7_mode", "wk_high_in_gate", "bisi60_draw", "neutral_lean", "lean_n", "lean_tol_pts", "wk_bisi_ce_neutral",
-    "ceiling_ladder", "bpr_lean", "nwog_ref", "nwog_bias_basis", "raid_gap_guard", "inval_src", "bellwether_tf", "org_gap_filter", "org_tell_seq", "org_attempt_frac", "org_tell_skip_min",
+    "ceiling_ladder", "bpr_lean", "nwog_ref", "nwog_bias_basis", "nwog_flip_edge", "raid_gap_guard", "inval_src", "bellwether_tf", "org_gap_filter", "org_tell_seq", "org_attempt_frac", "org_tell_skip_min",
     "org_tell_end", "org_consol_case", "dxy_filter", "dxy_soft_risk", "low_in_relock", "low_in_min_highs", "low_in_ratio", "fifty_rel", "iof_tf", "allow_counter_trend", "draw_order",
-    "wick_ce_draw", "stack_far", "no_htf_top_pick", "min_criteria", "wk_po3", "run_extreme_lean", "pwh_giveback_draw", "giveback_frac", "htf_monthly", "bisi60_hold", "wk_dc_joint", "b9_persist")
+    "wick_ce_draw", "stack_far", "no_htf_top_pick", "min_criteria", "wk_po3", "run_extreme_lean", "pwh_giveback_draw", "giveback_frac", "htf_monthly", "bisi60_hold", "wk_dc_joint", "b9_persist", "b7_fresh_break")
 KNOBS = {"drange_n", "drange_break", "drange_t1_pts", "drange_day_pts", "lean_n", "lean_tol_pts", "org_attempt_frac", "org_tell_skip_min", "org_tell_end", "dxy_soft_risk", "low_in_min_highs",
-         "low_in_ratio", "giveback_frac", "nwog_ref", "nwog_bias_basis"}
+         "low_in_ratio", "giveback_frac", "nwog_ref", "nwog_bias_basis", "nwog_flip_edge"}
 OFF = {"drange_scalp": False, "b7_mode": "mt_close", "wk_high_in_gate": False, "bisi60_draw": False, "neutral_lean": False, "wk_bisi_ce_neutral": False, "ceiling_ladder": False, "bpr_lean": False,
        "raid_gap_guard": False, "inval_src": "off", "bellwether_tf": 0, "org_gap_filter": False, "org_tell_seq": False, "org_consol_case": False, "dxy_filter": "off", "low_in_relock": False,
        "fifty_rel": False, "iof_tf": 0, "allow_counter_trend": False, "draw_order": "nearest", "wick_ce_draw": False, "stack_far": False, "no_htf_top_pick": False, "min_criteria": False,
@@ -62,11 +62,11 @@ def test_defaults_and_validation():
         assert getattr(p, k) == v, k
     assert (p.drange_n, p.drange_break, p.drange_t1_pts, p.drange_day_pts, p.lean_n, p.lean_tol_pts) == (5, "close", 5.0, 10.0, 2, 5.0)
     assert (p.org_attempt_frac, p.org_tell_skip_min, p.org_tell_end, p.dxy_soft_risk, p.low_in_min_highs, p.low_in_ratio, p.giveback_frac) == (0.25, 3, 600, 0.5, 3, 2.0, 0.5)
-    assert p.nwog_ref == "current" and p.nwog_bias_basis == "px" and p.nwog_bias_reclaim == "low"          # the built edge default stays (owner question: the spec says 'high')
+    assert p.nwog_ref == "current" and p.nwog_bias_basis == "close" and p.nwog_flip_edge == "high" and p.nwog_bias_reclaim == ""          # the spec defaults (review round 1)
     assert p.bx == "" and not BE.on(p)
     # the owner-fixed switches are untouched by this chunk
     assert p.sb_model is False and "sb_use_bias" in Params.__dataclass_fields__ and p.want_all_engines is True
-    for bad in (dict(drange_break="x"), dict(b7_mode="x"), dict(nwog_ref="x"), dict(nwog_bias_basis="x"), dict(inval_src="x"), dict(dxy_filter="x"), dict(draw_order="x"), dict(bisi60_hold="x"),
+    for bad in (dict(drange_break="x"), dict(b7_mode="x"), dict(nwog_ref="x"), dict(nwog_bias_basis="x"), dict(nwog_flip_edge="x"), dict(inval_src="x"), dict(dxy_filter="x"), dict(draw_order="x"), dict(bisi60_hold="x"),
                 dict(bellwether_tf=30), dict(iof_tf=7), dict(drange_n=2), dict(drange_t1_pts=0), dict(lean_n=0), dict(org_attempt_frac=0), dict(org_tell_end=900), dict(dxy_soft_risk=0),
                 dict(low_in_min_highs=0), dict(low_in_ratio=0), dict(giveback_frac=1.0), dict(flip_triggers=("x",))):
         with pytest.raises(ValueError):
@@ -102,7 +102,7 @@ def test_table_configuration_names_what_the_switches_need():
     assert set(x["b1"]) >= {"dr", "lean", "wpo3", "fl", "wick"} and x["b1"]["fl"] == {"persist": 1} and x["obj"] == 1 and x["ord"] == 1
     y = json.loads(Params(nwog_bias="tag", nwog_ref="previous", nwog_bias_basis="close").bx)
     assert y["nwog"][5:] == ["previous", "close"]
-    assert json.loads(Params(nwog_bias="tag").bx)["nwog"][5:] == []                 # the default configuration is unchanged
+    assert json.loads(Params(nwog_bias="tag").bx)["nwog"][3:] == ["high", "near", "current", "close"]
 
 
 # --- item 1: the daily consolidation regime ---------------------------------------------------------------------------------
@@ -125,6 +125,13 @@ def test_drange_scalp_regime():
     inn_w, st_w, *_ = BH.drange_states(h3, l, np.array([4020, 4025, 4015, 4030, 4020, 4035, 4048], float), 5, "wick")
     assert st_w[5] == 1                                                                             # a wick beyond (close still inside) breaks it under 'wick'
     assert BH.drange_states(h3, l, np.array([4020, 4025, 4015, 4030, 4020, 4035, 4048], float), 5, "close")[1][5] == 0
+    # review round 1: a wide earlier session must not swallow the breakout close at once - the n sessions of a NEW range start after the breakout session
+    hw = np.array([4100, 4120, 4090, 4095, 4092, 4110, 4112, 4115, 4110], float)
+    lw = np.array([4000, 4000, 4020, 4030, 4025, 4070, 4090, 4095, 4092], float)
+    cw = np.array([4050, 4060, 4055, 4060, 4058, 4105, 4108, 4106, 4107], float)
+    inw, stw, *_ = BH.drange_states(hw, lw, cw, 5, "close")
+    assert list(inw[4:6]) == [1, 0] and list(stw[4:6]) == [0, 1]                                    # in range after the 5th close, the breakout close 4105 above 4100 is NOT re-absorbed
+    assert list(stw[6:9]) == [1, 1, 1] and list(inw[6:9]) == [0, 0, 0]                              # sessions 6-8 are only three sessions after the breakout day: the breakout stands
     # the table rows: the row of session k reads the state after session k-1
     d = dsess(list(zip(c - 5, h, l, c)))
     out = pd.DataFrame(index=[t.date() for t in d.index[5:]])
@@ -205,6 +212,13 @@ def test_b7_guard_modes():
         g = r("mt_close", [8, 10])
         assert g["ob_guard" if up else "ob_guard_sh"] == [4010.0 if up else K - 4010.0] * 2           # carried into the next week: not reset on Monday
         assert r("mt_close", [10])[hi] == [0]                           # cleared at the next weekly open
+    # review round 1: the spec sets wk_high_in after ANY daily close below the guard MT; "+fresh" (b7_fresh_break) keeps the first-pass fresh-break reading
+    low_book = [(4000, 4010, 3990, 4005), (4005, 4008, 3998, 4000), (4000, 4006, 3996, 4004), (4004, 4008, 3998, 4003), (4003, 4007, 3997, 4002),
+                (4002, 4006, 3996, 4001), (4001, 4005, 3995, 4000), (4000, 4004, 3994, 4002)]            # week 2 starts below the guard 4010 and stays there
+    d2 = dsess(low_book)
+    assert BH.b7_columns([6, 7], d2, [ob], "mt_close")["wk_high_in"] == [1, 1]
+    assert BH.b7_columns([6, 7], d2, [ob], "mt_close+fresh")["wk_high_in"] == [0, 0]
+    assert Params(**BASE, wk_high_in_gate=True, b7_fresh_break=True).bx and "+fresh" in Params(**BASE, wk_high_in_gate=True, b7_fresh_break=True).bx
     # the ob_mt flip trigger takes the level from b7_mode
     d = dsess(book)
     w = htf.weeks(d)

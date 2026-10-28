@@ -266,6 +266,28 @@ def test_nwog_flip_edge():
     assert list(r.nwog_bias) == [-1, -1, -1]
 
 
+def test_nwog_flip_edge_params():
+    import json
+    # review round 1: the spec parameters - nwog_flip_edge (default "high") and the daily-close basis (default "close"); the first-pass nwog_bias_reclaim stays as an override
+    p = Params(nwog_bias="tag")
+    assert (p.nwog_flip_edge, p.nwog_ref, p.nwog_bias_basis, p.nwog_bias_reclaim) == ("high", "current", "close", "")
+    assert json.loads(p.bx)["nwog"][3] == "high" and json.loads(p.bx)["nwog"][5:] == ["current", "close"]
+    assert json.loads(Params(nwog_bias="tag", nwog_flip_edge="low", nwog_bias_basis="px").bx)["nwog"][3] == "low"
+    assert json.loads(Params(nwog_bias="tag", nwog_flip_edge="low", nwog_bias_reclaim="ce").bx)["nwog"][3] == "ce"          # the explicit override wins
+    with pytest.raises(ValueError):
+        Params(nwog_flip_edge="ce")
+    # the spec test: NWOG 4100-4110, a bearish state; a close at 4105 flips under "low" but not "high"; a close at 4112 flips under both
+    d = dsess([(4100, 4110, 4090, 4095), (4095, 4100, 4085, 4090), (4090, 4108, 4085, 4105), (4105, 4120, 4100, 4112), (4112, 4115, 4105, 4110)])
+    wk = d.index.to_period("W-FRI")
+    og = pd.DataFrame(dict(kind=["nwog"], high=[4110.0], low=[4100.0], ce=[4105.0], up=[True], known=[0], week=[wk[0]]))
+    ks = np.array([2, 3, 4])                                                # the table rows read the previous session's close: 4090 (bearish), 4105, 4112
+    px = np.array([9999.0] * 3)
+    for edge, want in (("high", [-1, -1, 1]), ("low", [-1, 0, 1])):
+        cfg = json.loads(Params(nwog_bias="tag", nwog_flip_edge=edge).bx)["nwog"]
+        out = pd.DataFrame(index=[d.index[k].date() for k in ks], data=dict(px=px))
+        assert list(BX._nwog(out, cfg, d, og, ks, px, 1.0).nwog_bias) == want, edge
+
+
 # --- item 77: the joint weekly ITH ------------------------------------------------------------------------------------------------------
 
 def test_wk_dc_joint():

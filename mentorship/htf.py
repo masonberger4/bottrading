@@ -453,6 +453,11 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         vd = min((x for x in draws_dn if x[1].endswith("_vi")), default=None)
         if up and dn:
             draw = 1 if up[0] < dn[0] else -1
+            if "tb" in X and abs(up[0] - dn[0]) <= X["tb"] * es_pt:       # caption-gap BH-B2-draw-by-proximity (draw_order 'nearest_tb'): a near-tie goes to the draw with fewer opposing arrays in its path
+                nu = sum(1 for a in live if a.typ in ("fvg", "ob", "vi") and a.kind == "bear" and px < a.bottom < up[2])
+                nd = sum(1 for a in live if a.typ in ("fvg", "ob", "vi") and a.kind == "bull" and dn[2] < a.top < px)
+                if nu != nd:
+                    draw = 1 if nu < nd else -1
         else:
             draw = 1 if up else (-1 if dn else 0)
         # premium / discount of the dealing range between the nearest untaken swings
@@ -517,7 +522,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
 
 
 FLIP_TRIGGERS = ("ob_mt", "wk_dc", "flip_pd3", "flip_close_above", "flip_thu_wopen",
-                 "wk_bisi", "inv3", "ob_low_touch", "wk_rb", "d_breaker")       # (caption-gap bias_htf#1/7, bh1.py: the last five)
+                 "wk_bisi", "inv3", "ob_low_touch", "wk_rb", "d_breaker", "inv3_lit")       # (caption-gap bias_htf#1/7, bh1.py: the last five)
 
 
 def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple, cfg: dict | None = None) -> dict:
@@ -540,6 +545,7 @@ def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple, cfg: di
     Caption-gap pass (bias_htf#1/7, bh1.FlipState; `cfg` = the "fl" block of Params.bx plus an optional "obj" array of the B17.3 objective-met flags per session):
       wk_bisi       (BH-weekly-BISI-CE-and-full-close, 011 ~5:06; 047 ~2:05) a weekly close below the low of the nearest weekly bull FVG under the previous weekly close -> -1 (above the
                     top of the nearest weekly bear FVG above it -> +1); with cfg "ce" a weekly close below its CE (above, for the bear one) turns a bullish (bearish) state neutral
+      inv3_lit      the same sequence with the spec's literal inefficiency: the nearest daily BEAR FVG below a bullish state (BULL FVG above a bearish one) instead of the supporting FVG
       inv3          (BH-B8-draw-flip-via-inversion, 011 ~0:49; 063 ~2:57) bias -> neutral when the guarding daily swing low is taken and price trades into the nearest daily bull FVG under it
                     (the opposing inefficiency) -> the opposite bias after a daily close through that FVG and a later day that trades back into it and closes below it again
       ob_low_touch  (BH-B9-HTF-OB-low-trade-through, 062 ~22:39) objective met: a daily trade (no close needed) below the last bullish daily OB candle's low -> neutral (not bearish)
@@ -576,7 +582,7 @@ def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple, cfg: di
     cfg = cfg or {}
     joint = cfg.get("wk_joint")
     b7 = cfg.get("b7", "mt_close")
-    new_tr = bool(set(triggers) & {"wk_bisi", "inv3", "ob_low_touch", "wk_rb", "d_breaker"}) or bool(cfg.get("persist"))
+    new_tr = bool(set(triggers) & {"wk_bisi", "inv3", "inv3_lit", "ob_low_touch", "wk_rb", "d_breaker"}) or bool(cfg.get("persist"))
     fs = None
     if new_tr:
         from . import bh1

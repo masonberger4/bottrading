@@ -42,7 +42,7 @@ def bx_cfg(p) -> dict:
     if p.drange_scalp or p.org_consol_case or p.raid_gap_guard:
         c["dr"] = [int(p.drange_n), p.drange_break]       # (the ORG consolidation case and the raid gap guard read drange_in as their regime)
     if p.wk_high_in_gate or p.b7_mode != "mt_close":
-        c["b7"] = p.b7_mode
+        c["b7"] = p.b7_mode + ("+fresh" if p.b7_fresh_break else "")
     if p.neutral_lean:
         c["lean"] = [int(p.lean_n), float(p.lean_tol_pts)]
     if p.ceiling_ladder:
@@ -131,6 +131,7 @@ def drange_states(h, l, c, n: int, brk: str = "close") -> tuple:
     rlo = np.full(D, NAN)
     rng = None
     state = 0
+    brk_day = -1                                      # review round 1: the n sessions of a NEW range start after the breakout session (a wide earlier day cannot swallow the breakout close at once)
     for j in range(D):
         if rng is not None and state == 0:
             hi, lo = rng
@@ -140,9 +141,11 @@ def drange_states(h, l, c, n: int, brk: str = "close") -> tuple:
                 up, dn = (c[j] >= (hi + lo) / 2), (c[j] < (hi + lo) / 2)
             if up:
                 state = 1
+                brk_day = j
             elif dn:
                 state = -1
-        if (rng is None or state != 0) and j >= n - 1:
+                brk_day = j
+        if (rng is None or state != 0) and j >= n - 1 and j - n + 1 > brk_day:
             a = j - n + 1
             seg = c[a:j + 1]
             if (seg <= h[a]).all() and (seg >= l[a]).all():
@@ -164,6 +167,8 @@ def b7_columns(ks, d, arrs, mode: str = "mt_close") -> dict:
       ob_guard    the mean threshold of the last daily BULLISH OB known at k (kept across the week boundary - the level is NOT reset on Monday: 'my last line of defense'); ob_guard_sh the bearish mirror
       wk_high_in  1 when, in the current week's sessions before k, the guard of that day was broken FRESHLY (the previous close was still on the guard's side): mode "mt_close" a daily close below the MT (wicks
                   below it are allowed), "mt_trade" any trade below the MT, "ob_close" a close below the OB's low. It is 'the weekly high is likely in', for that week only (cleared at the next weekly open) - not a short signal. wk_low_in is the mirror."""
+    fresh = mode.endswith("+fresh")                   # b7_fresh_break (review round 1): only a break whose previous close was still on the guard's side counts; the spec default (False) sets the flag after ANY close below the MT
+    mode = mode.split("+")[0]
     o, h, l, c = (d[k].values.astype(float) for k in ("open", "high", "low", "close"))
     bulls = [a for a in arrs if a.typ == "ob" and a.tf == "D" and a.kind == "bull"]
     bears = [a for a in arrs if a.typ == "ob" and a.tf == "D" and a.kind == "bear"]
@@ -184,12 +189,14 @@ def b7_columns(ks, d, arrs, mode: str = "mt_close") -> dict:
         hh = ll = 0
         for j in range(int(first[k]), k):
             ga, gb = last(bulls, j), last(bears, j)
-            pc_ = c[j - 1] if j >= 1 else None          # a FRESH break: the previous close was still on the guard's side (a market that is long below the OB has no guard to break)
-            if ga is not None and pc_ is not None:
-                if (mode == "mt_close" and c[j] < ga.ce <= pc_) or (mode == "mt_trade" and l[j] < ga.ce <= pc_) or (mode == "ob_close" and c[j] < ga.bottom <= pc_):
+            pc_ = c[j - 1] if j >= 1 else None          # fresh: the previous close was still on the guard's side (a market that is long below the OB has no guard to break)
+            if ga is not None and (pc_ is not None or not fresh):
+                pa_ = pc_ if fresh else float("inf")
+                if (mode == "mt_close" and c[j] < ga.ce <= pa_) or (mode == "mt_trade" and l[j] < ga.ce <= pa_) or (mode == "ob_close" and c[j] < ga.bottom <= pa_):
                     hh = 1
-            if gb is not None and pc_ is not None:
-                if (mode == "mt_close" and c[j] > gb.ce >= pc_) or (mode == "mt_trade" and h[j] > gb.ce >= pc_) or (mode == "ob_close" and c[j] > gb.top >= pc_):
+            if gb is not None and (pc_ is not None or not fresh):
+                pb_ = pc_ if fresh else float("-inf")
+                if (mode == "mt_close" and c[j] > gb.ce >= pb_) or (mode == "mt_trade" and h[j] > gb.ce >= pb_) or (mode == "ob_close" and c[j] > gb.top >= pb_):
                     ll = 1
         hi_in.append(hh)
         lo_in.append(ll)
@@ -576,6 +583,7 @@ class FlipState:
             for z in L.breakers(self.o, self.h, self.l, self.c, 1, "range"):
                 self.brk.setdefault(z.i, []).append(z)
         self.inv = None
+        self.pend = None                                           # item 78: the flip kept pending while the retracement persists
         self.rb = None
         self.db = None
         self.obj = self.cfg.get("obj")
@@ -593,6 +601,16 @@ class FlipState:
         if a.kind == "bull":
             return all(x >= a.bottom for x in cl)
         return all(x <= a.top for x in cl)
+
+    def _persists(self, sign: int, F, k: int) -> bool:
+        """B9 persistence at session k: the last daily swing low (high) known before k still holds and the breakaway FVG `F` is still partly open."""
+        if F is None:
+            return False
+        if sign > 0:
+            pl_ = [q for q in self.piv_l if q.known <= k - 1]
+            return bool(pl_ and self.l[k] > pl_[-1].price and self.l[k] > F.bottom and _alive_d(F, k, self.o, self.c))
+        ph_ = [q for q in self.piv_h if q.known <= k - 1]
+        return bool(ph_ and self.h[k] < ph_[-1].price and self.h[k] < F.top and _alive_d(F, k, self.o, self.c))
 
     def step(self, k: int, state: int, prev_week, prev_state=None) -> int:
         """Apply the new triggers at the close of session k; returns the new state. `prev_week` = the last COMPLETED week's row before k (or None); `prev_state` = the state known before session k
@@ -625,7 +643,8 @@ class FlipState:
                     state = 0
                     hit("flip_wk_bisi_ce")
         # --- item 8: bias -> neutral (L taken and the opposing inefficiency F entered) -> opposite (a close through F, a held retest)
-        if "inv3" in tr and k >= 1:
+        if ("inv3" in tr or "inv3_lit" in tr) and k >= 1:
+            lit = "inv3_lit" in tr                      # the spec's literal reading (review round 1): the opposing inefficiency F is the nearest daily BEAR FVG below a bullish state (BULL FVG above a bearish one); the default reads the supporting FVG
             if self.inv is not None and state != 0:
                 self.inv = None
             if self.inv is None and state != 0:
@@ -634,7 +653,7 @@ class FlipState:
                     pl_ = [q for q in self.piv_l if q.known <= k - 1]
                     L_ = pl_[-1].price if pl_ else None
                     if L_ is not None and l[k] < L_:
-                        cs = [a for a in self.fv_d if a.kind == "bull" and a.known <= k and a.top < c[k - 1] and _alive_d(a, k, o, c)]
+                        cs = [a for a in self.fv_d if a.kind == ("bear" if lit else "bull") and a.known <= k and a.top < c[k - 1] and _alive_d(a, k, o, c)]
                         F = max(cs, key=lambda a: a.top) if cs else None
                         if F is not None and l[k] <= F.top:
                             state = 0
@@ -644,7 +663,7 @@ class FlipState:
                     ph_ = [q for q in self.piv_h if q.known <= k - 1]
                     L_ = ph_[-1].price if ph_ else None
                     if L_ is not None and h[k] > L_:
-                        cs = [a for a in self.fv_d if a.kind == "bear" and a.known <= k and a.bottom > c[k - 1] and _alive_d(a, k, o, c)]
+                        cs = [a for a in self.fv_d if a.kind == ("bull" if lit else "bear") and a.known <= k and a.bottom > c[k - 1] and _alive_d(a, k, o, c)]
                         F = min(cs, key=lambda a: a.bottom) if cs else None
                         if F is not None and h[k] >= F.bottom:
                             state = 0
@@ -725,22 +744,31 @@ class FlipState:
                     elif c[k] < z.bottom:
                         state = 0
                         self.db = None
-        # --- item 78: a retracement inside a bullish (bearish) HTF is not a flip while the last daily swing low (high) holds and the lower (upper) breakaway FVG is still partly open
-        if self.cfg.get("persist") and pst != 0 and state == -pst and k >= 1:
-            if pst > 0:
-                pl_ = [q for q in self.piv_l if q.known <= k - 1]
-                cs = [a for a in self.fv_d if a.kind == "bull" and a.known <= k and a.top < c[k - 1]]
-                F = max(cs, key=lambda a: a.top) if cs else None
-                if pl_ and l[k] > pl_[-1].price and F is not None and l[k] > F.bottom and _alive_d(F, k, o, c):
+        # --- item 78: a retracement inside a bullish (bearish) HTF is not a flip while the last daily swing low (high) holds and the lower (upper) breakaway FVG is still partly open.
+        # The suppressed flip is kept pending (review round 1): it applies at the first later session where the persistence conditions fail - the swing low breaks or the FVG is traded through ("after the swing low breaks, the flip applies")
+        if self.cfg.get("persist") and pst != 0 and k >= 1:
+            if state == -pst:
+                if pst > 0:
+                    cs = [a for a in self.fv_d if a.kind == "bull" and a.known <= k and a.top < c[k - 1]]
+                    F = max(cs, key=lambda a: a.top) if cs else None
+                else:
+                    cs = [a for a in self.fv_d if a.kind == "bear" and a.known <= k and a.bottom > c[k - 1]]
+                    F = min(cs, key=lambda a: a.bottom) if cs else None
+                if self._persists(pst, F, k):
                     state = pst
+                    self.pend = dict(sign=pst, F=F)
                     hit("b9_persist")
-            else:
-                ph_ = [q for q in self.piv_h if q.known <= k - 1]
-                cs = [a for a in self.fv_d if a.kind == "bear" and a.known <= k and a.bottom > c[k - 1]]
-                F = min(cs, key=lambda a: a.bottom) if cs else None
-                if ph_ and h[k] < ph_[-1].price and F is not None and h[k] < F.top and _alive_d(F, k, o, c):
-                    state = pst
-                    hit("b9_persist")
+                else:
+                    self.pend = None
+            elif self.pend is not None:
+                if state == pst == self.pend["sign"] and not self._persists(pst, self.pend["F"], k):
+                    state = -pst
+                    hit("b9_persist_release")
+                    self.pend = None
+                elif state != pst or self.pend["sign"] != pst:
+                    self.pend = None
+        elif self.cfg.get("persist"):
+            self.pend = None
         return state
 
 

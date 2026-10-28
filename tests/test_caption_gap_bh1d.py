@@ -171,7 +171,6 @@ def test_org_tell():
     k = at(ctx, "10:05")
     assert BE.org_tell_dir(ctx, p, k) == -1
     assert BE.side_ok(ctx, p, 1, "AM", k) == "x_bh1_org_tell" and BE.side_ok(ctx, p, -1, "AM", k) is None
-    assert BE.side_ok(ctx, p, 1, "PM", k) is None or True                               # (the PM is not part of the AM-rest rule: the bar index is AM here, see below)
     # a retrace of 6 pts in the window: no tell
     rows2 = flat[:2] + [(90.0, 96.0, 89.8, 90.2)] + flat[3:] + seq + [(85.3, 85.5, 85.0, 85.2)] * 3
     ctx2 = mk(D0, hist, p, rows=rows2, bias_row=BR())
@@ -276,3 +275,51 @@ def test_no_htf_top_pick():
     ctx4 = mk(D0, history(D0), p, rows=[(100.0, 100.3, 99.8, 100.1)] * 6, bias_row=BR(flip=0))
     assert BE.order_ok(ctx4, short, dict(ts), "AM", i, p) is None                                         # no state: nothing to top-pick against
     assert BE.order_ok(ctx, short, dict(ts), "AM", i, Params(**BASE)) is None                              # off
+
+
+class ExtConf:
+    """A confluence stand-in with real opposing_ext over fixed zones {tf: [(kind, bottom, top)]} (known at the epoch, never dead)."""
+    tol = 0.0
+
+    def __init__(self, zones, known=0.0):
+        from mentorship.confluence import Confluence
+        self.z = {}
+        for tf, zs in zones.items():
+            n = len(zs)
+            self.z[tf] = {"known": np.full(n, float(known)), "dead": np.full(n, 1e30), "life": np.full(n, 1e30), "bottom": np.array([z[1] for z in zs], float), "top": np.array([z[2] for z in zs], float),
+                          "kind": np.array([z[0] for z in zs]), "src": np.zeros(n, int)}
+        self.opposing_ext = lambda *a, **k: Confluence.opposing_ext(self, *a, **k)
+
+    def _ipda_mask(self, tf, z, now):
+        return np.ones(len(z["kind"]), bool)
+
+    def opposing(self, *a, **k):
+        return []
+
+    def at(self, *a, **k):
+        return []
+
+    def targets(self, *a, **k):
+        return []
+
+
+def test_org_tell_target_ladder():
+    # review round 1: after the confirmed tell the discount arrays are the targets in timeframe order 15m, 1h, daily (a nearer higher-timeframe array is out of the order)
+    p = Params(**BASE, org_tell_seq=True)
+    hist = history(D0)
+    hist[-1] = _prior_day_with_bear_fvg(hist[-1].index[0].date())
+    flat = [(90.0, 90.6, 89.8, 90.2)] * 6
+    rows = flat + [(90.2, 90.4, 87.0, 87.3), (87.3, 87.4, 85.0, 85.3)] + [(85.3, 85.5, 85.0, 85.2)] * 3
+    zones = {"15m": [(1, 82.0, 82.6)], "1h": [(1, 80.0, 81.0)], "D": [(1, 83.0, 83.4), (1, 77.0, 78.0)]}
+    ctx = mk(D0, hist, p, rows=rows, bias_row=BR())
+    ctx.conf = ExtConf(zones, known=ctx.idx[0].value)                            # the arrays formed at the day's first bar (the first-touch hygiene reads the lows since then)
+    k = at(ctx, "10:05")
+    sd = ctx.sides_map[-1]
+    above = sd.x(float(ctx.c[k]))
+    vals = lambda pp: [round(-v, 2) for v, kind in S._targets(ctx, sd, k, above, [], pp) if kind == "array"]
+    on = vals(p)
+    assert 82.3 in on and 80.5 in on and 77.5 in on and 83.2 not in on          # 15m CE 82.3, 1h 80.5, daily 77.5; the daily array at 83.2 is nearer than the 15m one
+    off = vals(Params(**BASE))
+    assert 82.3 not in off and 80.5 not in off
+    long_ = ctx.sides_map[1]
+    assert BE.org_tell_ladder(ctx, long_, k, p, float(ctx.c[k]), []) == []          # the tell is bearish: no ladder for a long

@@ -49,6 +49,18 @@ def test_flip_inv3():
     assert st_m[:8] == [-1] * 8 and st_m[8] == 0 and st_m[10] == 1
 
 
+def test_flip_inv3_literal_bear_fvg():
+    # review round 1: the spec's literal reading - the opposing inefficiency is the nearest daily BEAR FVG below a bullish state (a bull FVG above a bearish one)
+    F = arr("bear", "fvg", 3990, 3960, 8)                       # (a stand-in known from the sweep session: the book itself closes above 3990 earlier)
+    st = step_states(INV3_BOOK, [F], ("inv3_lit",))
+    assert st[:8] == [1] * 8 and st[8] == 0 and st[9] == 0 and st[10] == -1
+    assert step_states(INV3_BOOK, [F], ("inv3",)) == [1] * 12                      # the default reading finds no supporting bull FVG there: no trigger
+    Fb = arr("bull", "fvg", 3976, 3960, 3)
+    assert step_states(INV3_BOOK, [Fb], ("inv3_lit",)) == [1] * 12
+    st_m = step_states(mirror_book(INV3_BOOK), [mirror_arr(F)], ("inv3_lit",), start_state=-1)
+    assert st_m[:8] == [-1] * 8 and st_m[8] == 0 and st_m[10] == 1
+
+
 # --- item 9: the ceiling ladder ---------------------------------------------------------------------------------------------------
 
 def test_ceiling_ladder():
@@ -150,3 +162,24 @@ def test_b9_persist():
     dm = dsess(mirror_book(base + [(4060, 4062, 4015, 4025), (4025, 4030, 4020, 4026)]))
     ar = [mirror_arr(bear), mirror_arr(bull), mirror_arr(fvg)]
     assert htf._flip(dm, htf.weeks(dm), ar, ("ob_mt",), None)[list(dm.index)[9]] == 1 and htf._flip(dm, htf.weeks(dm), ar, ("ob_mt",), {"persist": 1})[list(dm.index)[9]] == -1
+
+
+def test_b9_persist_later_break():
+    # review round 1: the flip suppressed on the cross day applies at the first LATER session where the swing low breaks (ob_mt is edge-triggered and would never re-fire)
+    base = [(3975, 3985, 3970, 3980), (3980, 3992, 3975, 3985), (3985, 4000, 3984, 3995), (3995, 4030, 3994, 4025), (4025, 4040, 4015, 4035), (4035, 4045, 4005, 4040),
+            (4040, 4060, 4025, 4055), (4055, 4065, 4045, 4060)]
+    bear = arr("bear", "ob", 4000, 3980, 0, ce=3990)
+    bull = arr("bull", "ob", 4040, 4020, 0, ce=4030)
+    fvg = arr("bull", "fvg", 4010, 3995, 3)
+    tail = [(4060, 4062, 4015, 4025), (4025, 4030, 4012, 4026), (4026, 4030, 4000, 4010), (4010, 4012, 3990, 3995)]     # cross (low 4015), a quiet session, the swing-low break (4000), more selling
+
+    def states(cfg, rows=tail, ars=(bear, bull, fvg), mirror=False):
+        d = dsess(mirror_book(base + rows) if mirror else base + rows)
+        out = htf._flip(d, htf.weeks(d), list(ars), ("ob_mt",), cfg)
+        return [out[t] for t in list(d.index)[9:]]
+    assert states(None) == [-1, -1, -1]
+    assert states({"persist": 1}) == [1, 1, -1]                       # held through the quiet session, flips on the break session
+    # the FVG fully traded through (3995 low) without breaking the swing low first
+    thru = [(4060, 4062, 4015, 4025), (4025, 4030, 4012, 4026), (4026, 4030, 4008, 4010), (4010, 4012, 4006, 4007)]
+    assert states({"persist": 1}, thru) == [1, 1, 1]                   # inside both: still held
+    assert states({"persist": 1}, mirror=True, ars=[mirror_arr(bear), mirror_arr(bull), mirror_arr(fvg)]) == [-1, -1, 1]

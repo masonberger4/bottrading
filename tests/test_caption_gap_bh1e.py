@@ -87,6 +87,25 @@ def test_bpr_lean():
     assert BE._bpr_dir(ctx2, S._idx_at(ctx2, 570)) == 1
 
 
+def test_bpr_lean_up_down_up_clean():
+    # review round 1: a clean up-down-up 60m sequence (bull FVG 101-102, the overlapping bear FVG 100.8-101.5, a close at 101.8 above the overlap top 101.5) and no third FVG
+    hours = [(100.0, 101.0, 99.0, 100.5), (100.5, 103.0, 100.5, 102.8), (102.8, 104.0, 102.0, 103.5), (103.5, 103.6, 101.5, 101.8), (101.8, 102.1, 99.5, 100.0),
+             (100.0, 100.8, 99.8, 100.6), (100.6, 102.0, 100.5, 101.8), (101.8, 102.0, 100.7, 101.9), (101.9, 102.0, 100.9, 101.5)]
+    b = np.array(hours, float)
+    assert [(z.kind, z.bottom, z.top) for z in L.fvgs(b[:, 1], b[:, 2], b[:, 0], b[:, 3])] == [("bull", 101.0, 102.0), ("bear", 100.8, 101.5)]
+    p = Params(**BASE, bpr_lean=True)
+    ctx = mk(D0, history(D0), p, rows=blocks(hours, 12), start="00:00")
+    kl = S._idx_at(ctx, 570)
+    assert BE._bpr_dir(ctx, kl) == 1
+    marked = [(110.0, "pool", "pdh1", 1), (99.0, "pool", "pdl1", -1)]
+    out = BE.lock_post(ctx, p, BR(flip=1), 570, "AM", kl, 100.0, lk_of(-1, 99.0, marked), [])
+    assert out["side"] == 1 and out["target"] == 110.0 and "bpr_lean" in out["bh1"]
+    # the wrong order (bear FVG first, then the bull FVG) is not an up-down-up
+    mirrored = [(200 - o, 200 - l, 200 - h, 200 - c) for o, h, l, c in hours]
+    ctx2 = mk(D0, history(D0), p, rows=blocks(mirrored, 12), start="00:00")
+    assert BE._bpr_dir(ctx2, S._idx_at(ctx2, 570)) == -1
+
+
 # --- item 15: the raid gap guard -----------------------------------------------------------------------------------------------------
 
 RAID_POST = [(91.8, 96.6, 91.7, 96.5), (96.4, 97.0, 96.2, 96.9), (96.9, 96.95, 94.5, 94.8), (94.8, 95.0, 94.0, 94.4), (94.4, 94.5, 92.0, 92.2), (92.2, 92.3, 88.8, 89.0)]
@@ -164,7 +183,7 @@ def test_inval_touch_flip(monkeypatch, tmp_path):
     ctx2 = mk(D0, hist, p, rows=rows, start="00:00", bias_row=BR())
     assert BE._inval_level(ctx2, p, "AM", -1, 100.0) == 106.0
     assert BE._inval_level(ctx2, p, "AM", 1, 100.0) is None                              # no bull array under the price
-    lk = BE.lock_post(ctx2, p, BR(), 570, "AM", S._idx_at(ctx2, 570), 100.0, lk_of(-1, 90.0, marked), [])
+    lk = BE.lock_post(ctx2, p, BR(), 570, "AM", S._idx_at(ctx2, 570), 100.0, lk_of(-1, 99.0, marked), [])
     assert lk["inval"] == 106.0
     # the manual source
     f = tmp_path / "inval_levels.csv"
@@ -357,6 +376,14 @@ def test_allow_counter_trend():
     short, long_ = SimpleNamespace(sign=-1), SimpleNamespace(sign=1)
     assert BE.counter_kind(ctx, short, i, p, 1, "AM") == "ct" and BE.counter_kind(ctx, long_, i, p, 1, "AM") == ""
     assert BE.counter_kind(ctx, short, i, Params(**BASE), 1, "AM") == ""
+    # review round 1: a session / day closed by a stop or target switch is not reopened
+    for st_ in ({"day_done": True}, {"stops": {"day": True}}, {"stops": {"AM": True}}):
+        lk3 = lk_of(1, 104.0, [(104.0, "pool", "pdh1", 1)], delivered=True, delivered_i=at(ctx, "09:50"))
+        done3 = {"AM": True}
+        assert BE.lock_bar(ctx, p, "AM", lk3, i, done3, [], st_) is None and not lk3.get("ct_open") and done3["AM"] is True, st_
+    lk4 = lk_of(1, 104.0, [(104.0, "pool", "pdh1", 1)], delivered=True, delivered_i=at(ctx, "09:50"))
+    BE.lock_bar(ctx, p, "AM", lk4, i, {"AM": True}, [], {})
+    assert lk4["ct_open"]
     lk2 = lk_of(1, 104.0, [], delivered=False)
     BE.lock_bar(ctx, p, "AM", lk2, i, {"AM": False}, [])
     assert not lk2.get("ct_open")                                                                      # the draw has not been delivered
@@ -375,20 +402,37 @@ def test_allow_counter_trend():
 
 def test_draw_order_nearest_tiebreak():
     # items are (distance, level, kind, name, dir), nearest first
-    up = [(4.0, 104.0, "array", "a1", 0), (10.0, 110.0, "pool", "pdh1", 1)]
+    up = [(10.0, 110.0, "pool", "pdh1", 1)]
     dn = [(10.2, 89.8, "pool", "pdl1", -1)]
     mk_ = sorted(up + dn)
-    cands = [(110.0, "pool", "pdh1", 1, 5), (104.0, "array", "a1", 0, 5), (89.8, "pool", "pdl1", -1, 9)]
-    # the upper candidate (110) has the array 104 in the way: the lower one has none
-    assert BE.tiebreak([up[1]] + [up[0]], dn, mk_, cands) == -1 or True
-    a = [(10.0, 110.0, "pool", "pdh1", 1), (4.0, 104.0, "array", "a1", 0)]             # (the candidate list as the caller passes it: the picked one first)
-    assert BE.tiebreak(a, dn, mk_, cands) == -1
-    clear = [(10.0, 110.0, "pool", "pdh1", 1)]
-    assert BE.tiebreak(clear, dn, mk_, cands) == -1                                      # equal arrays in the way (none): the newer (created 9) wins
-    cands2 = [(110.0, "pool", "pdh1", 1, 12), (89.8, "pool", "pdl1", -1, 9)]
-    assert BE.tiebreak(clear, dn, mk_, cands2) == 1
-    cands3 = [(110.0, "pool", "pdh1", 1, 9), (89.8, "pool", "pdl1", -1, 9)]
-    assert BE.tiebreak(clear, dn, mk_, cands3) == 1                                       # all equal: the nearer
-    # the engine: mark_levels uses it only with draw_order 'nearest_tb' (the default pick is unchanged)
+    cands = [(110.0, "pool", "pdh1", 1, 5), (89.8, "pool", "pdl1", -1, 9)]
+    # fewer opposing arrays in the path first: the upper candidate has one in the way
+    assert BE.tiebreak(up, dn, mk_, cands, lambda sg, it: 1 if sg > 0 else 0) == -1
+    assert BE.tiebreak(up, dn, mk_, cands, lambda sg, it: 0 if sg > 0 else 2) == 1
+    # equal arrays: the newer wins (created 9), then the nearer
+    assert BE.tiebreak(up, dn, mk_, cands) == -1
+    assert BE.tiebreak(up, dn, mk_, [(110.0, "pool", "pdh1", 1, 12), (89.8, "pool", "pdl1", -1, 9)]) == 1
+    assert BE.tiebreak(up, dn, mk_, [(110.0, "pool", "pdh1", 1, 9), (89.8, "pool", "pdl1", -1, 9)]) == 1
+
+
+def test_draw_order_tiebreak_through_mark_levels():
+    from dataclasses import replace
+    from test_caption_gap_bh1d import ExtConf
     p = Params(**BASE, draw_order="nearest_tb")
+    hist = history(D0, hi=110.0, lo=90.2)                                           # PDH1 110.0 is 10.0 away, PDL1 90.2 is 9.8 away: a near-tie within eq_tol_pts
+    ctx = mk(D0, hist, p, rows=[(100.0, 100.1, 99.9, 100.0)] * 6, start="09:30")
+    assert S.mark_levels(ctx, None, 570, "AM", replace(p, draw_order="nearest"))["side"] == -1       # the default: the nearer, 90.2
+    assert S.mark_levels(ctx, None, 570, "AM", p)["side"] == -1                      # no array in either path: the formed-later / nearer decides
+    ctx.conf = ExtConf({"1h": [(1, 95.0, 96.0)]}, known=ctx.idx[0].value - 10 ** 12)        # a bull 1h array between the price and the pool below
+    lk = S.mark_levels(ctx, None, 570, "AM", p)
+    assert lk["side"] == 1 and lk["target"] == 110.0 and lk["name"] == "pdh1"
+    assert S.mark_levels(ctx, None, 570, "AM", replace(p, draw_order="nearest"))["side"] == -1
+    ctx.conf = ExtConf({"1h": [(-1, 104.0, 105.0)]}, known=ctx.idx[0].value - 10 ** 12)     # a bear array in the upper path: the lower pool keeps it
+    assert S.mark_levels(ctx, None, 570, "AM", p)["side"] == -1
+    # a pool raided at 09:40 is skipped at the PM lock: PDH1 traded at 09:40 is not marked at 13:30, the lower pool is the draw
+    rows = [(100.0, 100.1, 99.9, 100.0)] * 2 + [(100.0, 110.5, 99.9, 100.0)] + [(100.0, 100.1, 99.9, 100.0)] * 3
+    ctx2 = mk(D0, hist, p, rows=rows, start="09:30")
+    names = [m[2] for m in S.mark_levels(ctx2, None, 810, "PM", p)["marked"]]
+    assert "pdh1" not in names and "pdl1" in names
+    assert "pdh1" in [m[2] for m in S.mark_levels(ctx2, None, 570, "AM", p)["marked"]]
     assert p.draw_order == "nearest_tb" and Params(**BASE).draw_order == "nearest"

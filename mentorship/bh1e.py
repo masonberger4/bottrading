@@ -500,7 +500,33 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p):
 # --------------------------------------------------------------------------------------------------------------
 
 def targets_on(p) -> bool:
-    return bool(p.wk_high_in_gate or p.stack_far)
+    return bool(p.wk_high_in_gate or p.stack_far or p.org_tell_seq)
+
+
+def org_tell_ladder(ctx, sd, i: int, p, above: float, lv: list) -> list:
+    """BH-B15-ORG-tell-details (030 ~01:29:44): after a confirmed ORG tell in the trade's direction the targets are the discount arrays in timeframe order - the nearest untraded 15m array, then the 1h, then the
+    daily one - as rungs (their CE). [our interpretation: each timeframe contributes its nearest array beyond the previous rung, so a higher-timeframe array lying NEARER than the lower one's is out of the order and is skipped]."""
+    cf = getattr(ctx, "conf", None)
+    if cf is None or org_tell_dir(ctx, p, i) != sd.sign:
+        return lv
+    import pandas as pd
+    from . import bias_day as BD
+    now = pd.Timestamp(ctx.day, tz=ctx.idx.tz) + pd.Timedelta(minutes=int(ctx.t[i] + ctx.tf))
+    px = float(ctx.c[i])
+    last = above
+    add = []
+    for tf in ("15m", "1h", "D"):
+        rows = BD.untraded_arrays(ctx, i, now, px, sd.sign, (tf,), (0,), p.array_reuse != "first_touch")
+        ces = sorted(sd.x(r[1]) for r in rows if sd.x(r[1]) > above)
+        nxt = next((v for v in ces if v > last), None)        # the nearest array of this timeframe beyond the previous rung
+        if nxt is not None:
+            add.append((nxt, "array"))
+            last = nxt
+    if add:
+        hit("org_tell_ladder")
+    return list(lv) + add
+
+
 
 
 def _week_extreme(ctx, sign: int, i: int):
@@ -515,6 +541,8 @@ def _week_extreme(ctx, sign: int, i: int):
 
 def targets_post(ctx, sd, i: int, p, above: float, lv: list) -> list:
     """BH-B7-last-daily-OB-guard (wk_high_in_gate): the week's high is in - no long target above it (mirror: the week's low); BH-B2-two-HTF-FVGs-farther: the nearer stacked gap's near edge is a partial rung."""
+    if p.org_tell_seq:
+        lv = org_tell_ladder(ctx, sd, i, p, above, lv)
     session = getattr(ctx, "cur_session", "") or ("PM" if ctx.t[i] >= 810 else "AM")
     row = _row(ctx, session, i)
     if row is None:
@@ -557,22 +585,34 @@ def lock_cands(ctx, p, row, t_lock: int, start: int) -> list:
     return out
 
 
-def tiebreak(up: list, dn: list, mk: list, cands: list) -> int:
-    """BH-B2-draw-by-proximity (draw_order 'nearest_tb'): two candidates within eq_tol of the same distance - the one with fewer arrays between the price and it wins, then the one that formed later.
-    Items are (distance, level, kind, name, dir); `mk` = all marked items, `cands` = (v, kind, name, dir, created)."""
-    cr = {(round(v, 9), k): c_ for v, k, n, d_, c_ in cands}
+def arrays_between(ctx, p, now, px: float, sgn: int, v: float) -> int:
+    """BH-B2-draw-by-proximity: the opposing HTF arrays (bear FVG / OB above the price for sgn > 0, bull below for sgn < 0; 15m, 1h, 4h, D) known at `now` whose near edge lies strictly between the price
+    and the level `v` - the resistance in the path of the draw [our interpretation: "least resistance in the path" = fewest opposing arrays in between]."""
+    cf = getattr(ctx, "conf", None)
+    if cf is None:
+        return 0
+    n = 0
+    for r in cf.opposing_ext(now, px, sgn, ("15m", "1h", "4h", "D"), (0, 1)):
+        near = r["bottom"] if sgn > 0 else r["top"]
+        if (px < near < v) if sgn > 0 else (v < near < px):
+            n += 1
+    return n
 
-    def n_between(x, lst):                      # arrays strictly nearer to the price on the same side
-        return sum(1 for y in lst if y is not x and y[2] == "array" and y[0] < x[0])
+
+def tiebreak(up: list, dn: list, mk: list, cands: list, between=None) -> int:
+    """BH-B2-draw-by-proximity (draw_order 'nearest_tb'): two candidates within eq_tol of the same distance - the one with fewer opposing arrays between the price and it wins, then the one that formed later.
+    Items are (distance, level, kind, name, dir); `mk` = all marked items, `cands` = (v, kind, name, dir, created); `between(sgn, item)` = the number of opposing arrays in the path (default: none counted)."""
+    cr = {(round(v, 9), k): c_ for v, k, n, d_, c_ in cands}
     a, b = up[0], dn[0]
-    na, nb = n_between(a, up), n_between(b, dn)
+    na = between(1, a) if between else 0
+    nb = between(-1, b) if between else 0
     if na != nb:
         return 1 if na < nb else -1
     ca, cb = cr.get((round(a[1], 9), a[2]), 0), cr.get((round(b[1], 9), b[2]), 0)
     if ca != cb:
         return 1 if ca > cb else -1
     hit("tiebreak_tie")
-    return 1 if a[0] < b[0] else -1
+    return 1 if a[0] <= b[0] else -1
 
 
 def _nearest(lock: dict, px: float, side: int, mn: float, kinds=("pool",)):
@@ -614,16 +654,19 @@ def _bisi60_lost(ctx, kl: int) -> int:
     lo, hi = float(l[-24:].min()), float(h[-24:].max())
     eq = (lo + hi) / 2
     got = []
-    for z in L.fvgs(h, l, o, c):
-        later = c[z.i + 1:]
-        if z.kind == "bull" and z.top < eq:
-            j = next((q for q in range(z.i + 1, len(c)) if c[q] < z.bottom), None)
-            if j is not None:
-                got.append((j, -1, z.top))
-        elif z.kind == "bear" and z.bottom > eq:
-            j = next((q for q in range(z.i + 1, len(c)) if c[q] > z.top), None)
-            if j is not None:
-                got.append((j, 1, -z.bottom))
+    zs = L.fvgs(h, l, o, c)
+    bulls = [z for z in zs if z.kind == "bull" and z.top < eq]
+    bears = [z for z in zs if z.kind == "bear" and z.bottom > eq]
+    if bulls:                                       # the NEAREST discount BISI under the 50 % (the highest one), its loss only (review round 1)
+        z = max(bulls, key=lambda x: x.top)
+        j = next((q for q in range(z.i + 1, len(c)) if c[q] < z.bottom), None)
+        if j is not None:
+            got.append((j, -1, z.top))
+    if bears:
+        z = min(bears, key=lambda x: x.bottom)
+        j = next((q for q in range(z.i + 1, len(c)) if c[q] > z.top), None)
+        if j is not None:
+            got.append((j, 1, -z.bottom))
     if not got:
         return 0
     sides = {g[1] for g in got}
@@ -647,9 +690,9 @@ def _bpr_dir(ctx, kl: int) -> int:
                 j = next((q for q in range(zu.i + 1, len(c)) if c[q] < ov_b), None)
                 if j is not None and (j, -1) > last:
                     last = (j, -1)
-            if zu.kind == "bear" and zb.kind == "bull" and zb.i > zu.i and zb.bottom < zu.top and zb.top > zu.bottom:
+            if zb.kind == "bull" and zu.kind == "bear" and zu.i > zb.i and zu.bottom < zb.top and zu.top > zb.bottom:      # the mirror: up (bull FVG), down (bear FVG overlapping it), up (a close above the overlap)
                 ov_t = min(zb.top, zu.top)
-                j = next((q for q in range(zb.i + 1, len(c)) if c[q] > ov_t), None)
+                j = next((q for q in range(zu.i + 1, len(c)) if c[q] > ov_t), None)
                 if j is not None and (j, 1) > last:
                     last = (j, 1)
     return last[1]
@@ -727,6 +770,10 @@ def _inval_level(ctx, p, session: str, side: int, px: float):
     """The pre-stated invalidation price of a lock (item 16): 'array' = the far edge of the nearest daily array beyond the lock price on the lock's side (bearish lock: a bear array above, top;
     bullish: a bull array below, bottom) [our interpretation]; 'manual' = data/mentorship/inval_levels.csv (date, session, price)."""
     if p.inval_src == "manual":
+        if not INVAL_FILE.exists() and "inval_missing" not in HITS:
+            import warnings
+            warnings.warn(f"inval_src='manual': {INVAL_FILE} is missing (header: date,session,price; one row per pre-stated invalidation price) - no manual invalidation is applied", stacklevel=2)
+            hit("inval_missing")
         try:
             import csv
             if INVAL_FILE.exists():
@@ -909,18 +956,22 @@ def _new_extremes(ctx, a: int, i: int, low: bool = True) -> int:
     return n
 
 
-def lock_bar(ctx, p, s_: str, lk: dict, i: int, done: dict, spent):
+def lock_bar(ctx, p, s_: str, lk: dict, i: int, done: dict, spent, state=None):
     """_lock_step hook, once per bar and session lock: returns (new_lock, cancel_pending) when the lock changes, else None."""
     st = _state(ctx)
     side = lk.get("side", 0)
+    closed_ = False                                   # review round 1: a session or day ended by a stop / target switch (eve_bnb, day_target_pts, drange, loss stops) is not reopened
+    if state is not None:
+        from . import manage as _M
+        closed_ = bool(state.get("day_done")) or _M.blocked_now(state, s_)
     # item 44: the delivered draw reopens the session for one counter-bias trade
-    if p.allow_counter_trend and lk.get("delivered") and side and not lk.get("ct_open") and not lk.get("ct_done"):
+    if p.allow_counter_trend and lk.get("delivered") and side and not closed_ and not lk.get("ct_open") and not lk.get("ct_done"):
         lk["ct_open"] = True
         done[s_] = False
         st.setdefault("only_side", {})[s_] = -side
         hit("ct_open")
     # item 40: the morning low is in
-    if p.low_in_relock and lk.get("delivered") and side and not lk.get("low_in_done") and lk.get("delivered_i") is not None and i > lk["delivered_i"]:
+    if p.low_in_relock and lk.get("delivered") and side and not closed_ and not lk.get("low_in_done") and lk.get("delivered_i") is not None and i > lk["delivered_i"]:
         a = lk["delivered_i"]
         hi_n = _pivot_highs_taken(ctx, a, i, high=(side < 0))
         lo_n = _new_extremes(ctx, a, i, low=(side < 0))

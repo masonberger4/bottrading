@@ -18,7 +18,7 @@ from test_caption_gap_bh1c import fut_walk, fut_frame  # noqa: E402
 
 FLIPS = ("ob_mt", "wk_dc", "wk_bisi", "inv3", "ob_low_touch", "wk_rb", "d_breaker")
 TABLE_SWITCHES = dict(drange_scalp=True, neutral_lean=True, wk_po3=True, run_extreme_lean=True, pwh_giveback_draw=True, ceiling_ladder=True, wk_high_in_gate=True, b7_mode="mt_trade", wick_ce_draw=True,
-                      stack_far=True, draw_order="inefficiency_first", b9_persist=True, wk_bisi_ce_neutral=True, htf_bias="ordered", vi_arrays=True, flip_triggers=FLIPS, nwog_bias="tag",
+                      stack_far=True, draw_order="inefficiency_first", b9_persist=True, b7_fresh_break=True, wk_bisi_ce_neutral=True, htf_bias="ordered", vi_arrays=True, flip_triggers=FLIPS, nwog_bias="tag",
                       nwog_ref="previous", nwog_bias_basis="close", htf_monthly=True, no_htf_top_pick=True, org_consol_case=True)
 NEW_COLS = ("drange_in", "drange", "drange_hi", "drange_lo", "ob_guard", "ob_guard_sh", "wk_high_in", "wk_low_in", "lean", "ceiling", "ladder_dn", "floor", "ladder_up", "wk_po3", "run_hi_draw",
             "run_lo_draw", "pwh_giveback", "pwh_cand", "draw_mid_lvl")
@@ -103,7 +103,7 @@ LA_SETS = {   # name -> switches (the draw lock stays on: most of these act on i
     "lock": dict(bisi60_draw=True, bpr_lean=True, raid_gap_guard=True, drange_scalp=True, inval_src="array", low_in_relock=True, fifty_rel=True, allow_counter_trend=True, draw_order="nearest_tb",
                  run_extreme_lean=True, pwh_giveback_draw=True, bisi60_hold="trade", ceiling_ladder=True, wk_po3=True, htf_monthly=True),
     "gates": dict(org_gap_filter=True, org_tell_seq=True, dxy_filter="soft", bellwether_tf=15, org_consol_case=True, drange_scalp=True),
-    "flip": dict(htf_bias="flip", bias_neutral="both", flip_triggers=FLIPS, b9_persist=True, wk_bisi_ce_neutral=True, b7_mode="mt_trade", wk_high_in_gate=True, no_htf_top_pick=True,
+    "flip": dict(htf_bias="flip", bias_neutral="both", flip_triggers=FLIPS + ("inv3_lit",), b9_persist=True, b7_fresh_break=True, wk_bisi_ce_neutral=True, b7_mode="mt_trade", wk_high_in_gate=True, no_htf_top_pick=True,
                  neutral_lean=True, nwog_bias="tag", nwog_ref="previous", nwog_bias_basis="close", objective_neutral="week"),
     "ordered": dict(htf_bias="ordered", bias_neutral="both", draw_lock_pick="ordered", wick_ce_draw=True, stack_far=True, iof_tf=60, draw_order="inefficiency_first"),
 }

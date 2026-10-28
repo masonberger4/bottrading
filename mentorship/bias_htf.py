@@ -77,9 +77,7 @@ def bx_string(p) -> str:
         x["wo"] = p.weekly_open_early_days
         x["woa"] = p.weekly_open_array_days
     if hb == "nwog" or p.nwog_regime != "off" or p.nwog_bias != "off" or p.nwog_sr_entries or p.nwog_revert_targets:     # (caption-gap L5-nwog-sr-levels: the regime column is read by nwog_sr_entries)
-        x["nwog"] = [p.nwog_leave_adr, p.nwog_returns_cons, p.nwog_converge_pts, p.nwog_bias_reclaim, p.nwog_converge_mode]
-        if p.nwog_ref != "current" or p.nwog_bias_basis != "px":
-            x["nwog"] += [p.nwog_ref, p.nwog_bias_basis]       # caption-gap BH-B14-NWOG-flip-edge: which week's NWOG and the daily-close reclaim basis
+        x["nwog"] = [p.nwog_leave_adr, p.nwog_returns_cons, p.nwog_converge_pts, p.nwog_bias_reclaim or p.nwog_flip_edge, p.nwog_converge_mode, p.nwog_ref, p.nwog_bias_basis]       # caption-gap BH-B14-NWOG-flip-edge: the reclaim edge, which week's NWOG and the daily-close reclaim basis
     if hb == "candle" or p.bias_candle_tag:
         x["bc"] = "midnight" if p.bias_candle_open == "midnight" else 1
     if hb == "draw_pd":
@@ -105,9 +103,11 @@ def bx_string(p) -> str:
     if bh1.needs_objective(p) or p.org_consol_case or p.no_htf_top_pick:
         x["obj"] = 1                           # the B17.3 objective-met columns (ob_low_touch, the ORG consolidation case, the top-picking ban read them)
     if p.org_consol_case and "nwog" not in x:
-        x["nwog"] = [p.nwog_leave_adr, p.nwog_returns_cons, p.nwog_converge_pts, p.nwog_bias_reclaim, p.nwog_converge_mode]      # (the consolidation regime tag)
+        x["nwog"] = [p.nwog_leave_adr, p.nwog_returns_cons, p.nwog_converge_pts, p.nwog_bias_reclaim or p.nwog_flip_edge, p.nwog_converge_mode, p.nwog_ref, p.nwog_bias_basis]      # (the consolidation regime tag)
     if p.wk_po3 and "wk" not in x:
         x["wk"] = 1                            # the weekly draw levels (wk_draw_up / wk_draw_dn) the weekly-PO3 lock aims at
+    if p.draw_order == "nearest_tb":
+        x["tb"] = p.eq_tol_pts                   # caption-gap BH-B2-draw-by-proximity: the table's draw column breaks near-ties by the opposing arrays in the path
     if p.wick_ce_draw or p.stack_far or p.draw_order == "inefficiency_first":
         x["ord"] = 1                           # (the ordered draw columns the wick CE / stacked gaps / inefficiency-first order rewrite)
     return json.dumps(x, sort_keys=True, separators=(",", ":")) if x else ""
