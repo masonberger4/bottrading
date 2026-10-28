@@ -132,28 +132,31 @@ def _dir_at(direction, t) -> tuple:
 
 
 def osok_core(h1: pd.DataFrame, arrays: list, direction, target_tf: str = "D", min_rr: float = 1.0, pad: float = 0.0, days: tuple = (0, 1, 2), h1_alone: bool = False,
-              kill_zones: tuple = KILL_ZONES, flat_week_end: bool = True, max_wait_bars: int = 24) -> list:
+              kill_zones: tuple = KILL_ZONES, flat_week_end: bool = True, max_wait_bars: int = 24, h1_types: tuple = ("fvg",), inside: str = "overlap") -> list:
     """One Shot One Kill on 1h bars (cc07_001 ~00:16:17 / ~00:22:41; cc07_006 ~00:20:04). `h1` = the 1h bars (tz-aware start index; open / high / low / close), `arrays` = array records of the weekly, daily,
     4h (and monthly) frames, `direction` = +1 / -1 or a callable t -> (dir, missed_monthly) (see `monthly_direction`).
     A bearish frame (a bullish one mirrors it): a 1h bearish FVG completes INSIDE a live premium array of the weekly / daily / 4h (/ monthly unless the monthly array was missed - then it only sets the
     direction) -> a sell limit at the 1h FVG's CE, stop above the 1h FVG and the HTF array's top (+pad), target = the nearest UNTOUCHED opposing array of `target_tf` ("D": the daily discount array of item
     174; "W": the weekly one of item 172). Orders are armed only on Mon-Wed sessions (`days`), fill only on Mon-Wed, are cancelled at the week's end and never use bars below 1h. `h1_alone`: a 1h FVG with no
     HTF array may be executed inside a kill zone (origin tf "1h"). Positions are flat by the week's last 1h bar. Returns trade dicts: side, entry/exit time and price, stop, target, exit_reason, origin_tf,
-    htf (the container's edges), leg_id and seq (the number of the signal inside the leg of the same origin array: a leg ends when a trade reaches its target)."""
+    htf (the container's edges), leg_id and seq (the number of the signal inside the leg of the same origin array: a leg ends when a trade reaches its target).
+    Review fix (items 172 / 174): `h1_types` are the 1h array kinds the refinement may use, tried in this order at the bar that completes them ("fvg" the default; "ob" the 1h order block, "breaker" and
+    "mitigation" the blocks 'not visible on the 4h'; the entry is the zone's CE / body mean); `inside` = "overlap" (the 1h zone overlaps the HTF array; the built reading) or "within" (the whole 1h zone lies
+    inside the HTF array's edges). A pending order that lapses unfilled at a 4h array makes the NEXT setup of that week a `second_entry` ('a second entry if the 4h array was missed'). The array / bar
+    lookups are indexed once (searchsorted), not rescanned per setup."""
     n = len(h1)
     if n < 6:
         return []
     ts = list(h1.index)
     ends = [t + pd.Timedelta(minutes=60) for t in ts]
     wk = [_wk(t) for t in ts]
-    fv = {}
-    for d in (1, -1):
-        O, H, Lw, C = side_bars(h1, d)
-        fv[d] = [z for z in L.fvgs(H, Lw) if z.kind == "bull"]
+    fv = {d: h1_zones(h1, d, h1_types) for d in (1, -1)}
+    ix = _ArrIndex(arrays, ends)
     trades = []
     pend = None
     pos = None
     legs: dict = {}
+    missed4: set = set()                                                   # weeks in which an order at a 4h array lapsed unfilled
     for j in range(n):
         d_here, missed = _dir_at(direction, ends[j])
         # ---- the open position / the pending order, on bar j (they were created at an earlier bar)
@@ -175,6 +178,8 @@ def osok_core(h1: pd.DataFrame, arrays: list, direction, target_tf: str = "D", m
             d = pend["d"]
             O, H, Lw, C = (x[j] for x in side_bars(h1, d))
             if wk[j] != pend["wk"] or _label_wd(ts[j]) not in days or j - pend["armed"] > max_wait_bars or C < pend["stop"]:
+                if pend["origin_tf"] == "4h":
+                    missed4.add(pend["wk"])
                 pend = None
             elif Lw <= pend["entry"]:
                 fill = min(pend["entry"], O)
@@ -185,9 +190,9 @@ def osok_core(h1: pd.DataFrame, arrays: list, direction, target_tf: str = "D", m
                     pos = None
         # ---- a new setup completing at bar j
         if pos is None and pend is None and d_here and _label_wd(ts[j]) in days and wk[j] == _wk(ends[j] - pd.Timedelta(minutes=1)):
-            s = _setup(h1, j, d_here, missed, arrays, fv[d_here], target_tf, min_rr, pad, ends, h1_alone, kill_zones, ts)
+            s = _setup(h1, j, d_here, missed, ix, fv[d_here], target_tf, min_rr, pad, ends, h1_alone, kill_zones, ts, inside)
             if s is not None:
-                s.update(d=d_here, armed=j, wk=wk[j], t_armed=ends[j])
+                s.update(d=d_here, armed=j, wk=wk[j], t_armed=ends[j], second_entry=wk[j] in missed4)
                 pend = s
     return trades
 
@@ -198,25 +203,85 @@ def _close_trade(pos: dict, t_out, ex: tuple, legs: dict) -> dict:
     seq = legs.get(key, 0) + 1
     legs[key] = 0 if ex[1] == "target" else seq
     return dict(side=d, t_in=pos["t_in"], t_out=pd.Timestamp(t_out), entry=d * pos["fill"], exit=d * ex[0], stop=d * pos["stop"], target=d * pos["target"], exit_reason=ex[1],
-                r=(ex[0] - pos["fill"]) / (pos["fill"] - pos["stop"]), origin_tf=pos["origin_tf"], htf=pos["htf"], seq=seq, leg=key)
+                r=(ex[0] - pos["fill"]) / (pos["fill"] - pos["stop"]), origin_tf=pos["origin_tf"], htf=pos["htf"], seq=seq, leg=key, h1_type=pos.get("h1_type", "fvg"), second_entry=bool(pos.get("second_entry", False)))
 
 
-def _setup(h1, j, d, missed, arrays, fvs, target_tf, min_rr, pad, ends, h1_alone, kill_zones, ts):
-    zs = [z for z in fvs if z.i == j]
+class _H1Z:
+    """A 1h refinement zone in side space (a bullish one): the bar that completes it, its edges, the entry price (CE / body mean) and its kind."""
+    __slots__ = ("i", "top", "bottom", "ce", "typ")
+
+    def __init__(self, i, top, bottom, ce, typ):
+        self.i, self.top, self.bottom, self.ce, self.typ = int(i), float(top), float(bottom), float(ce), typ
+
+
+def h1_zones(h1: pd.DataFrame, d: int, types: tuple = ("fvg",)) -> list:
+    """The bullish (side space `d`) 1h refinement zones of the requested kinds, in preference order fvg > ob > breaker > mitigation: `L.fvgs`, the order block that goes with each gap (htf._arrays), the
+    breakers and the mitigation blocks (levels.breakers / mitigation_blocks; known at the closing break). Each is usable from the bar `i` that completes it."""
+    O, H, Lw, C = side_bars(h1, d)
+    out = []
+    for typ in ("fvg", "ob", "breaker", "mitigation"):
+        if typ not in types:
+            continue
+        if typ == "fvg":
+            out += [_H1Z(z.i, z.top, z.bottom, (z.top + z.bottom) / 2.0, "fvg") for z in L.fvgs(H, Lw) if z.kind == "bull"]
+        elif typ == "ob":
+            out += [_H1Z(a.known - 1, a.top, a.bottom, a.ce, "ob") for a in htf._arrays(O, H, Lw, C, "1h", lambda i: i + 1) if a.kind == "bull" and a.typ == "ob"]
+        elif typ == "breaker":
+            out += [_H1Z(z.i, z.top, z.bottom, (z.top + z.bottom) / 2.0, "breaker") for z in L.breakers(O, H, Lw, C) if z.kind == "bull"]
+        else:
+            out += [_H1Z(z.i, z.top, z.bottom, (z.top + z.bottom) / 2.0, "mitigation") for z in L.mitigation_blocks(O, H, Lw, C) if z.kind == "bull"]
+    return out
+
+
+def _naive64(t) -> np.datetime64:
+    t = pd.Timestamp(t)
+    t = t.tz_localize(None) if t.tzinfo is not None else t
+    return np.datetime64(t.to_datetime64(), "ns")
+
+
+class _ArrIndex:
+    """The array records indexed once for osok_core: wall-clock `t_known` as datetime64, the bar (searchsorted over the bar ends) that completes each array, and the side-space copies."""
+
+    def __init__(self, arrays: list, ends: list):
+        self.arrays = arrays
+        self.ends_n = np.array([_naive64(e) for e in ends])
+        self.known = np.array([_naive64(a["t_known"]) for a in arrays]) if arrays else np.array([], dtype="datetime64[ns]")
+        self.q0 = np.searchsorted(self.ends_n, self.known, side="left") if len(arrays) else np.array([], int)       # first bar whose end >= t_known (the array is known from that bar's close)
+        self._side = {1: list(arrays), -1: [side_arr(a, -1) for a in arrays]}
+
+    def known_at(self, te, d: int) -> list:
+        """[(array index, side-space array)] known at time te (t_known <= te)."""
+        if not len(self.known):
+            return []
+        return [(int(k), self._side[d][int(k)]) for k in np.nonzero(self.known <= _naive64(te))[0]]
+
+
+def _setup(h1, j, d, missed, ix, zones, target_tf, min_rr, pad, ends, h1_alone, kill_zones, ts, inside="overlap"):
+    zs = [z for z in zones if z.i == j]
     if not zs:
         return None
-    O, H, Lw, C = side_bars(h1, d)
-    te = ends[j]
-    z = zs[-1]
-    sarr = [side_arr(a, d) for a in arrays if _cmp_ts(a["t_known"], te)]
+    bars = side_bars(h1, d)
+    known = ix.known_at(ends[j], d)
+    for z in zs:                                                         # preference order: the first zone that makes a valid setup
+        s = _setup_zone(h1, j, d, missed, ix, known, z, target_tf, min_rr, pad, h1_alone, kill_zones, ts, inside, bars)
+        if s is not None:
+            return s
+    return None
+
+
+def _setup_zone(h1, j, d, missed, ix, known, z, target_tf, min_rr, pad, h1_alone, kill_zones, ts, inside, bars):
+    O, H, Lw, C = bars
     cont = []
-    for a in sarr:
+    for k, a in known:
         if a["kind"] != "bull" or a["tf"] not in HTF_ORDER or (a["tf"] == "M" and missed):
             continue
-        if not (z.top >= a["bottom"] - 1e-9 and z.bottom <= a["top"] + 1e-9):
+        if inside == "within":
+            if not (z.top <= a["top"] + 1e-9 and z.bottom >= a["bottom"] - 1e-9):
+                continue
+        elif not (z.top >= a["bottom"] - 1e-9 and z.bottom <= a["top"] + 1e-9):
             continue
-        since = [q for q in range(j + 1) if _cmp_ts(a["t_known"], ends[q])]
-        if since and C[since[0]:j + 1].min() < a["bottom"]:                # closed through its far edge: dead
+        q0 = int(ix.q0[k])
+        if q0 <= j and C[q0:j + 1].min() < a["bottom"]:                      # closed through its far edge: dead
             continue
         cont.append(a)
     origin = None
@@ -235,12 +300,12 @@ def _setup(h1, j, d, missed, arrays, fvs, target_tf, min_rr, pad, ends, h1_alone
         stop = z.bottom - pad
     else:
         return None
-    entry = float((z.top + z.bottom) / 2.0)
+    entry = float(z.ce)
     tg = []
-    for a in sarr:
+    for k, a in known:
         if a["kind"] == "bear" and a["tf"] == target_tf and a["bottom"] > entry:
-            q0 = next((q for q in range(j + 1) if _cmp_ts(a["t_known"], ends[q])), None)
-            if q0 is not None and H[q0:j + 1].max() < a["bottom"]:        # untouched
+            q0 = int(ix.q0[k])
+            if q0 <= j and H[q0:j + 1].max() < a["bottom"]:                  # untouched
                 tg.append(a["bottom"])
     if not tg or entry <= stop:
         return None
@@ -248,7 +313,7 @@ def _setup(h1, j, d, missed, arrays, fvs, target_tf, min_rr, pad, ends, h1_alone
     if (target - entry) / (entry - stop) < min_rr:
         return None
     key = (origin_tf, round(htf_edges[0], 6), round(htf_edges[1], 6)) if htf_edges else ("1h", round(float(z.bottom) * d, 6), round(float(z.top) * d, 6))
-    return dict(entry=entry, stop=stop, target=target, origin_tf=origin_tf, htf=htf_edges, leg_key=key)
+    return dict(entry=entry, stop=stop, target=target, origin_tf=origin_tf, htf=htf_edges, leg_key=key, h1_type=z.typ)
 
 
 def osok(df: pd.DataFrame, direction=None, **kw) -> list:
@@ -306,19 +371,35 @@ def swing_reentry_study(h4: pd.DataFrame, arrays: list, bias: int = 1, reentry_m
                         side: int = 1) -> list:
     """A swing long at a 4h discount array under a bullish M / W bias, with the re-entry cascade of cc06_003 / cc06_008 (a bearish bias / short mirrors it; `side`). The entry limit sits at the array's CE,
     the stop under its bottom (-pad), the target is the nearest opposing array above (any timeframe, known, not closed through) with at least `min_rr`. On a stop the original reasons are re-checked
-    (the void test below), the failed array is never reused and the next order sits at `pick_reentry`'s array with HALF the previous size (size 0.5 ** failures). `reentry_max` (1 / 2 / 3 / None)
+    (the void test below), the failed array is never reused and the next order sits at `pick_reentry`'s next lower UNTESTED 4h array (no bar since it formed, through the stop-out bar, traded into it) with HALF the previous size (size 0.5 ** failures). `reentry_max` (1 / 2 / 3 / None)
     caps the failures a sequence may take; `void="mw_far_edge"` ends a sequence when a 4h body closes beyond the far edge of the monthly / weekly array under the entry [our interpretation of the
     invalidation threshold]. Rows: seq, attempt, size, entry / exit, exit_reason, r (per unit risk), pnl_r (= size * r)."""
     O, H, Lw, C = side_bars(h4, side)
     n = len(C)
     ends = [t + pd.Timedelta(hours=4) for t in h4.index]
-    sarr = [side_arr(a, side) for a in arrays]
+    ix = _ArrIndex(arrays, ends)                                           # the array / bar lookups are indexed once (review fix: the study was quadratic in bars x arrays)
+    sarr = ix._side[1 if side > 0 else -1]
+    b4 = [k for k, a in enumerate(sarr) if a["tf"] == "4h" and a["kind"] == "bull"]
+    b4_top = np.array([sarr[k]["top"] for k in b4])
+    b4_q0 = ix.q0[b4] if b4 else np.array([], int)
+    cummin: dict = {}                                                      # array index -> running minimum of the lows after the bar that completed it
+
+    def untested(k: int, q0: int, j_: int) -> bool:
+        if q0 + 1 > j_:
+            return True
+        if k not in cummin:
+            cummin[k] = np.minimum.accumulate(Lw[q0 + 1:])
+        return float(cummin[k][j_ - q0 - 1]) > sarr[k]["top"]
     rows = []
     seq = 0
     j = 0
     while j < n - 2:
         # ---- start a sequence: the nearest untested 4h bullish array under the close
-        cand = [a for a in sarr if a["tf"] == "4h" and a["kind"] == "bull" and _cmp_ts(a["t_known"], ends[j]) and a["top"] < C[j] and _untested(a, Lw, ends, j)]
+        cand = []
+        if bias > 0 and b4:
+            for m in np.nonzero((b4_q0 <= j) & (b4_top < C[j]))[0]:
+                if untested(b4[int(m)], int(b4_q0[m]), j):
+                    cand.append(sarr[b4[int(m)]])
         if bias <= 0 or not cand:
             j += 1
             continue
@@ -328,7 +409,7 @@ def swing_reentry_study(h4: pd.DataFrame, arrays: list, bias: int = 1, reentry_m
         attempt = 0
         j0 = j
         while cur is not None:
-            r = _swing_attempt(O, H, Lw, C, ends, sarr, cur, j0, min_rr, pad, max_wait_bars, void)
+            r = _swing_attempt(O, H, Lw, C, ends, ix.known_at(ends[min(j0, n - 1)], 1 if side > 0 else -1), cur, j0, min_rr, pad, max_wait_bars, void)
             if r is None:
                 break
             r.update(seq=seq, attempt=attempt, size=0.5 ** attempt)
@@ -341,29 +422,32 @@ def swing_reentry_study(h4: pd.DataFrame, arrays: list, bias: int = 1, reentry_m
             attempt += 1
             if reentry_max is not None and attempt > reentry_max:
                 break
-            cur = pick_reentry(sarr, failed, cur["bottom"], ends[j0])
+            cur = pick_reentry(sarr, failed, cur["bottom"], ends[j0], closes_since=lambda a_, j_=j0: _lowest_since(a_, Lw, ends, j_))      # review fix (X13): 'untested' = no 4h bar through the stop-out bar traded into the lower array
             if cur is None:
                 break
         j = max(j0 + 1, j + 1)
     return rows
 
 
-def _untested(a: dict, Lw, ends, j: int) -> bool:
-    """No bar since the array became known has traded into it (the lowest low since is above its top)."""
+def _lowest_since(a: dict, Lw, ends, j: int):
+    """The lowest low of the 4h bars after the one that completed array `a`, through bar j (closed); None when the array was not yet known (or no bar followed it) - i.e. untested so far."""
     q0 = next((q for q in range(j + 1) if _cmp_ts(a["t_known"], ends[q])), None)
-    return q0 is None or q0 + 1 > j or float(Lw[q0 + 1:j + 1].min()) > a["top"]
+    if q0 is None or q0 + 1 > j:
+        return None
+    return float(Lw[q0 + 1:j + 1].min())
 
 
-def _swing_attempt(O, H, Lw, C, ends, sarr, a, j0, min_rr, pad, max_wait, void):
+def _swing_attempt(O, H, Lw, C, ends, known, a, j0, min_rr, pad, max_wait, void):
+    """One attempt at the array `a` from bar j0; `known` = [(index, side-space array)] of the arrays known at bar j0's close (`_ArrIndex.known_at`)."""
     n = len(C)
     entry, stop = a["ce"], a["bottom"] - pad
-    opp = [b["bottom"] for b in sarr if b["kind"] == "bear" and _cmp_ts(b["t_known"], ends[min(j0, n - 1)]) and b["bottom"] > entry]
+    opp = [b["bottom"] for _, b in known if b["kind"] == "bear" and b["bottom"] > entry]
     if not opp or entry <= stop:
         return None
     target = min(opp)
     if (target - entry) / (entry - stop) < min_rr:
         return None
-    mw = [b for b in sarr if b["tf"] in ("M", "W") and b["kind"] == "bull" and b["top"] < entry and _cmp_ts(b["t_known"], ends[min(j0, n - 1)])]
+    mw = [b for _, b in known if b["tf"] in ("M", "W") and b["kind"] == "bull" and b["top"] < entry]
     layer = max(mw, key=lambda b: b["top"]) if mw else None
     fill = None
     for j in range(j0 + 1, n):
@@ -506,8 +590,9 @@ def swing_frequency(signals: list, swing_one_open: bool = True, swing_flag_per_y
 # E12-start-small-build: the weekly OSOK scale-in
 # --------------------------------------------------------------------------------------------------------------
 
-def osok_scale_in(daily: pd.DataFrame, arrays: list, bias, first_frac: float = 0.25, pad: float = 0.0, target_tf: str = "D", stop_mode: str = "daily_swing", side: int = -1) -> list:
-    """Weekly OSOK built small-first (cc07_008 ~00:29:33; `side=-1` is the bearish week that sells into premium, `side=+1` the bullish mirror), on daily bars. `bias` = {Monday date: -1 / +1}, a callable
+def osok_scale_in(daily: pd.DataFrame, arrays: list, bias, first_frac: float = 1.0, pad: float = 0.0, target_tf: str = "D", stop_mode: str = "daily_swing", side: int = -1) -> list:
+    """Weekly OSOK built small-first (cc07_008; the DEFAULT here is the experienced version, full size at the Monday fill (`first_frac=1.0`) - the beginner version, a quarter on Monday, is the `osok_scale_in_small`
+    study wrapper (owner rule: the experienced version is the default); the rows carry pts_build and pts_full for the comparison; ~00:29:33; `side=-1` is the bearish week that sells into premium, `side=+1` the bullish mirror), on daily bars. `bias` = {Monday date: -1 / +1}, a callable
     Monday -> bias or an int (the weekly bias of the table): a week trades only when it equals `side`. Monday: when its range trades into a known, live array of the week's origin type in `arrays` (a premium
     array for a sell; the daily approximation of 'price trades into it' = the high reaches the array's bottom), `first_frac` of the planned size is filled at max(open, the array's bottom) (a sell). The rest is
     added at the first of Tuesday / Wednesday that makes a HIGHER HIGH than Monday's (at max(open, Monday's high), a stop order through it); when neither does, at the open of the first of them that opens
@@ -561,7 +646,7 @@ def osok_scale_in(daily: pd.DataFrame, arrays: list, bias, first_frac: float = 0
         fills = [(first_frac, first)]
         exit_px, why = float(sc[wk[-1]]), "week_end"
         for q in wk:
-            if add is not None and q == add[0]:
+            if add is not None and q == add[0] and 1.0 - first_frac > 1e-9:
                 fills.append((1.0 - first_frac, add[1]))
             if sl[q] <= stop:
                 exit_px, why = float(min(stop, so[q])) if q != mon else float(stop), "stop"

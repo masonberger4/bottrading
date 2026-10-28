@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import os
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -172,7 +172,16 @@ def load_raw(symbol: str, minutes: int) -> pd.DataFrame | None:
     return r
 
 
-def raw_series(p: Params, symbol: str, minutes: int, meta: pd.DataFrame | None) -> tuple:
+def series_fallback(p: Params, symbol: str, meta: pd.DataFrame | None) -> Params:
+    """htf_series='contract' (056 exact) needs per-contract raw prints; a source without the databento roll meta (CFD / ETF) warns and falls back to the adjusted series (review fix: only databento data may
+    reach htf.table's NotImplementedError)."""
+    if p.htf_series == "contract" and (meta is None or "adj" not in meta):
+        warnings.warn(f"htf_series='contract': no front-month roll meta for {symbol} (CFD / ETF source): the adjusted frame is used", stacklevel=3)
+        return replace(p, htf_series="adjusted")
+    return p
+
+
+def raw_series(p: Params, symbol: str, minutes: int, meta: pd.DataFrame | None, df: pd.DataFrame | None = None) -> tuple:
     """(raw frame, adj Series) for htf.table when a bias_htf#7/7 series switch asks for the raw front-month series (htf_series 'raw' / htf_monthly_series 'raw'); (None, None) otherwise. Without the
     databento meta (CFD / ETF sources have no roll data) every non-"adjusted" value warns and falls back to the adjusted frame."""
     want = p.htf_series == "raw" or (p.htf_monthly_series == "raw" and (p.htf_monthly or p.htf_monthly_arrays))
@@ -185,6 +194,8 @@ def raw_series(p: Params, symbol: str, minutes: int, meta: pd.DataFrame | None) 
     if raw is None:
         warnings.warn(f"htf_series raw: {symbol}_1min_dbraw.csv is missing: the adjusted frame is used", stacklevel=3)
         return None, None
+    if df is not None and len(df):
+        raw = raw.loc[df.index[0]:df.index[-1]]          # review fix (cost + look-ahead): only the engine frame's own span, not the 2019-2026 history (a truncated run never sees raw bars after its cut)
     return raw, meta["adj"]
 
 
@@ -343,6 +354,7 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
             lock_cuts: dict | None = None, ref_df: pd.DataFrame | None = None, wk_joint: dict | None = None) -> Prepared:
     p = resolve_session_close(p or Params(), df, symbol)        # owner #1: 16:15 futures, 16:00 SPY
     ov = htf.has_overnight(df)
+    p = series_fallback(p, symbol, meta)
     inert = meta is None or p.price_frame == "back_adjusted"
     if p.round_pools and symbol.upper() in ROUND_STEP and inert and p.price_frame != "raw":
         warnings.warn(f"#13: round_pools is on but inert for {symbol} (price_frame={p.price_frame!r}, "
@@ -350,7 +362,7 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
                       stacklevel=3)
     if p.wk_dc_joint and wk_joint is None and "wk_dc" in p.flip_triggers:
         warnings.warn("wk_dc_joint is on but no partner-index flag map was given (backtest.run builds it from the partner frame): the wk_dc -1 flip runs unrestricted", stacklevel=3)     # caption-gap BH-B8-weekly-ith-both-indices-close (review round 1)
-    raw_, adj_ = raw_series(p, symbol, tf, meta) if ov else (None, None)          # caption-gap OT-htf-array-data-series (bias_htf#7/7)
+    raw_, adj_ = raw_series(p, symbol, tf, meta, df) if ov else (None, None)          # caption-gap OT-htf-array-data-series (bias_htf#7/7)
     bt = bias_table if bias_table is not None else (
         htf.table(df, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers, wk_joint=wk_joint, **table_kw(p, raw_, adj_)) if ov else None)
     cuts = lock_cuts if lock_cuts is not None else lock_tables(df, p, bt, wk_joint, raw_, adj_)

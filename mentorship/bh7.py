@@ -98,20 +98,55 @@ def adj_before(adj: pd.Series, day, tz, cut_min: int = 570, bm: int = 1) -> floa
     return float(adj.iloc[k]) if k >= 0 and adj.iloc[k] == adj.iloc[k] else 0.0
 
 
+PRICE_SCHEMA = ("px", "draw_up", "draw_dn", "rb_up", "rb_dn", "vi_up", "vi_dn", "range_lo", "range_hi", "array_lost_tgt", "eq20_body", "fb_target", "drange_hi", "drange_lo", "pd20_hi", "pd20_lo",
+                "pd20_old_hi", "pd20_old_lo", "m_rng_hi", "m_rng_lo", "wk_q75")      # the price columns the builders declare (shifted whenever present); the row-wise detector below adds the rest
+
+
+def _is_num(v) -> bool:
+    return isinstance(v, (int, float, np.integer, np.floating)) and not isinstance(v, bool)
+
+
 def price_like_columns(tbl: pd.DataFrame) -> list:
-    """The float columns of an htf table that hold PRICES (the ones that move with the frame): the column median within 25 % of the median `px` [our interpretation: the table has no schema of its price
-    columns]."""
+    """The columns of an htf table that hold PRICES (the ones that move with the frame): the declared PRICE_SCHEMA names, plus every column whose finite values sit, ROW BY ROW, within a factor of two of
+    that row's `px` (>= 90 % of them; so a sparse column or one far from the median px is still found, and flag / count columns never are) [our interpretation: the table has no full schema]. A column
+    held as object dtype (floats or None) counts too; list-valued columns are shifted element-wise by `shift_prices`."""
     if "px" not in tbl or not len(tbl):
         return []
-    ref = float(np.nanmedian(tbl["px"].values.astype(float)))
-    out = []
+    px = tbl["px"].values.astype(float)
+    out = ["px"]
     for c in tbl.columns:
-        if c in ("px",) or tbl[c].dtype.kind != "f":
+        if c == "px":
             continue
-        v = tbl[c].values.astype(float)
-        if np.isfinite(v).any() and ref > 0 and abs(float(np.nanmedian(v)) / ref - 1.0) < 0.25:
+        col = tbl[c]
+        if c in PRICE_SCHEMA:
             out.append(c)
-    return ["px"] + out
+            continue
+        if col.dtype.kind == "f":
+            v = col.values.astype(float)
+        elif col.dtype == object:
+            vals = [x for x in col.values if x is not None]
+            if not vals or not all(_is_num(x) or (isinstance(x, (list, tuple)) and x and all(_is_num(y) for y in x)) for x in vals):
+                continue
+            v = np.array([np.nan if x is None else (float(np.nanmedian(x)) if isinstance(x, (list, tuple)) else float(x)) for x in col.values])
+        else:
+            continue
+        ok = np.isfinite(v) & (px > 0)
+        if ok.sum() and (((v[ok] > 0.5 * px[ok]) & (v[ok] < 2.0 * px[ok])).mean() >= 0.9):
+            out.append(c)
+    return out
+
+
+def shift_prices(col: pd.Series, shift: np.ndarray) -> list:
+    """A price column mapped into the engine frame: the per-row `shift` added to every number (scalars, floats in object columns, and the elements of list-valued cells)."""
+    res = []
+    for x, s_ in zip(col.values, shift):
+        if x is None or (isinstance(x, float) and x != x):
+            res.append(x)
+        elif isinstance(x, (list, tuple)):
+            res.append([float(y) + float(s_) for y in x])
+        else:
+            res.append(float(x) + float(s_))
+    return res
 
 
 def raw_table(table_fn, df: pd.DataFrame, raw: pd.DataFrame, adj: pd.Series, kw: dict, bx: str, X: dict) -> pd.DataFrame:
@@ -136,7 +171,7 @@ def raw_table(table_fn, df: pd.DataFrame, raw: pd.DataFrame, adj: pd.Series, kw:
     cut, bm = int(kw.get("cut_min", 570)), bar_minutes(raw)
     shift = np.array([adj_before(adj, pd.Timestamp(i), tz, cut, bm) for i in tbl.index])
     for c in cols:
-        tbl[c] = tbl[c].values.astype(float) + shift
+        tbl[c] = tbl[c].values.astype(float) + shift if tbl[c].dtype.kind == "f" else shift_prices(tbl[c], shift)
     sw("htf_series_raw")
     tbl["adj_map"] = shift
     return tbl

@@ -3346,6 +3346,12 @@ def osok_scale_in(daily, arrays, bias, **kw):
     return bh7s.osok_scale_in(daily, arrays, bias, **kw)
 
 
+def osok_scale_in_small(daily, arrays, bias, **kw):
+    """E12-start-small-build, the beginner version (cc07_008): a quarter of the size on Monday, the rest on the Tue / Wed higher high. `osok_scale_in` itself defaults to the experienced full-size fill."""
+    kw.setdefault("first_frac", 0.25)
+    return osok_scale_in(daily, arrays, bias, **kw)
+
+
 def swing_readd(h4, entries, **kw):
     """E12-readd-after-partials-swing (098 ~00:25:13), research: the partial re-added at the first new same-side 4h FVG / OB. See bh7s.swing_readd."""
     from . import bh7s
@@ -3353,9 +3359,16 @@ def swing_readd(h4, entries, **kw):
 
 
 def daily_stop_model(daily, arrays, **kw):
-    """E12-daily-downclose-add-stops (cc05_016 ~00:03:14), research: the daily buy stop at the latest down-close candle's open (the `daily_stop_half` variant: first_frac=0.5). See bh7s.daily_stop_model."""
+    """E12-daily-downclose-add-stops (cc05_016 ~00:03:14), research: the daily buy stop at the latest down-close candle's open (`first_frac` 1.0 = the experienced full-size start; the `daily_stop_half` variant: 0.5). See bh7s.daily_stop_model."""
     from . import bh7s
     return bh7s.daily_stop_model(daily, arrays, **kw)
+
+
+def daily_stop_half(daily, arrays, **kw):
+    """E12-start-small-build / E12-daily-downclose-add-stops, the beginner version (cc05_016): the daily stop-entry model starting at HALF size and adding at the prior trigger-candle opens (`daily_stop_model`
+    itself defaults to the experienced full-size start)."""
+    kw.setdefault("first_frac", 0.5)
+    return daily_stop_model(daily, arrays, **kw)
 
 
 def stock_watchlist(asof, universe, index_d, p, **kw):

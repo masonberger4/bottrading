@@ -113,7 +113,13 @@ def smt_screen(stock_d: pd.DataFrame, index_d: pd.DataFrame, asof, p, lookback: 
     return "keep"
 
 
-def weekly_up(stock_d: pd.DataFrame, asof) -> bool:
+def weekly_up(stock_d: pd.DataFrame, asof, p=None) -> bool:
+    """Public screen: raises (need_mode) with Params.stocks_mode off; see _weekly_up."""
+    need_mode(p)
+    return _weekly_up(stock_d, asof)
+
+
+def _weekly_up(stock_d: pd.DataFrame, asof) -> bool:
     """On the closed weekly bars: the last two weekly pivot highs and the last two weekly pivot lows rise, and the low of the last down-close week has not been closed below (cc10_016 ~10:03-11:00) [our
     interpretation: 'trending up on the weekly' = two rising weekly pivots; 'down-close weeks holding as support' = no later weekly close under the last down-close week's low]."""
     w = weekly_closed(stock_d, asof)
@@ -190,8 +196,9 @@ def select(kept, universe: dict, asof, p, n_max: int = 4, opt_cost=None, fund_ok
 # OT-stocks-rs-leadership
 # --------------------------------------------------------------------------------------------------------------
 
-def rs_rank(stocks: dict, index_d: pd.DataFrame, asof, n: int = 63) -> dict:
+def rs_rank(stocks: dict, index_d: pd.DataFrame, asof, n: int = 63, p=None) -> dict:
     """Each stock's n-day % change minus the index's, ranked to a 0-100 percentile across the universe (best = 100; closed bars to asof). Stocks with fewer than n+1 bars are left out."""
+    need_mode(p)                                       # review fix: the public screens raise with stocks_mode off like the rest of the module
     ix = _closed(index_d, asof).close.values.astype(float)
     if len(ix) <= n:
         return {}
@@ -209,14 +216,15 @@ def rs_rank(stocks: dict, index_d: pd.DataFrame, asof, n: int = 63) -> dict:
 
 
 def leaders(stocks: dict, index_d: pd.DataFrame, asof, p, index_flip=None, sector_of=None, group_of=None, n: int = 63) -> list:
-    """The price-only leadership filter (L of CAN SLIM, cc11_003 ~14:03; cc10_018 ~16:02): runs only when the market precondition is bullish (the index's table `flip` > 0, else `weekly_up(index_d)`);
+    """The price-only leadership filter (L of CAN SLIM, cc11_003 ~14:03; cc10_018 ~16:02): runs only when the market precondition is bullish (the index's table `flip` > 0 or `weekly_up(index_d)`; a bearish flip vetoes);
     keeps the stocks with rs_rank >= p.stock_rs_min whose close is above the midpoint of their last 60-day range (leaving a discount). Hooks sector_of(sym) / group_of(sym) return None (the sector and
     group legs need IBD data); when they answer, the sectors (then the groups of the kept sectors) are ranked by the mean member rs_rank and only the top p.stock_top_sectors of each are kept first."""
     need_mode(p)
-    bull = (index_flip > 0) if index_flip is not None else weekly_up(index_d, asof)
+    # review fix (item 24 'the index's table flip > 0, or weekly_up(index_d)'): either bullish reading qualifies; an explicit bearish flip (< 0) vetoes the weekly reading [our interpretation]
+    bull = (index_flip is not None and index_flip > 0) or ((index_flip is None or index_flip == 0) and _weekly_up(index_d, asof))
     if not bull:
         return []
-    rk = rs_rank(stocks, index_d, asof, n)
+    rk = rs_rank(stocks, index_d, asof, n, p)
     pool = [s for s in rk]
     if sector_of is not None and any(sector_of(s) is not None for s in pool):
         pool = _top_groups(pool, rk, sector_of, p.stock_top_sectors)
@@ -259,5 +267,34 @@ def watchlist(asof, universe: dict, index_d: pd.DataFrame, p, n_max: int = 4, in
         lead = leaders(pool, index_d, asof, p, index_flip, sector_of, group_of)
         pool = {s: pool[s] for s in lead}
     kept = [s for s, d in pool.items() if smt_screen(d, index_d, asof, p) == "keep"]
-    kept.sort(key=lambda s: (not weekly_up(pool[s], asof), s))
+    kept.sort(key=lambda s: (not _weekly_up(pool[s], asof), s))
     return dict(kept=kept, picks=select(kept, pool, asof, p, n_max, opt_cost, fund_ok))
+
+
+# --------------------------------------------------------------------------------------------------------------
+# data loader (review fix, item 220: the Alpaca daily bars of the Dow 30 and DIA)
+# --------------------------------------------------------------------------------------------------------------
+
+def load_universe(p, start: str, end: str | None = None, symbols=DOW30, index_symbol: str = "DIA", loader=None) -> tuple:
+    """(stocks {symbol: daily frame}, index daily frame): the Alpaca daily bars (`alpaca_data.bars(sym, 1440, start, end)`; `loader(sym, start, end)` replaces it, e.g. for a cached copy or a test) of the
+    Dow 30 and of DIA, the inputs of watchlist / sell_list / jan_smt / mega. A symbol whose download fails or comes back empty is left out (reported by a warning). Raises with stocks_mode off."""
+    need_mode(p)
+    import warnings
+    if loader is None:
+        from . import alpaca_data
+
+        def loader(sym, s, e):
+            return alpaca_data.bars(sym, 1440, s, e)
+    out = {}
+    for sym in symbols:
+        try:
+            d = loader(sym, start, end)
+        except Exception as exc:                          # a missing symbol must not stop the study
+            warnings.warn(f"stocks.load_universe: {sym}: {exc}", stacklevel=2)
+            continue
+        if d is not None and len(d):
+            out[sym] = d
+    idx = loader(index_symbol, start, end)
+    if idx is None or not len(idx):
+        raise ValueError(f"stocks.load_universe: no daily bars for the index {index_symbol}")
+    return out, idx

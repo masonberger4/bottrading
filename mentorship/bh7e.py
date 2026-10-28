@@ -238,9 +238,20 @@ def side_frac(sd, entry_raw: float, lo: float, hi: float) -> float:
     return (entry_raw - lo) / (hi - lo) if sd.sign > 0 else (hi - entry_raw) / (hi - lo)
 
 
-def subrange_ok(ctx, sd, o: dict, row, entry_raw: float, p) -> bool:
-    """pd_subrange: the order a pd_two_level rejection would block is allowed when its entry sits in the LOWER half of its quadrant of the 60-session body range, in quadrant 3 or 4 (side terms), at an HTF
-    array (o['htf']) with a target left beyond the entry (o['t1']). The quadrant is the entry's, not the prior close's (table range_q)."""
+def at_daily_array(ctx, sd, entry_raw: float, i) -> bool:
+    """True when the entry price sits inside a live DAILY / WEEKLY array of the trade's colour (Confluence.at over D and W: known before the session, dead once a bar closed through it; an OB counts
+    through its whole body, so its MT is inside it). [our interpretation of 'at a daily array (e.g. a daily OB MT)'.] False without the Confluence arrays."""
+    cf = getattr(ctx, "conf", None)
+    if cf is None or i is None or not hasattr(cf, "at"):
+        return False
+    now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)               # bar i is closed
+    return any(tf in ("D", "W") for tf in cf.at(now, float(entry_raw), int(sd.sign)))
+
+
+def subrange_ok(ctx, sd, o: dict, row, entry_raw: float, p, i=None) -> bool:
+    """pd_subrange: the order a pd_two_level rejection would block is allowed when its entry sits in the LOWER half of its quadrant of the 60-session body range, in quadrant 3 or 4 (side terms), at a live
+    DAILY / WEEKLY array of its colour (at_daily_array; review fix: not the intraday 15m / 60m FVG tag) with a target left beyond the entry (o['t1']). The quadrant is the entry's, not the prior close's
+    (table range_q). The range is the 60-session body range while the gate relaxed is pd_two_level's 20-session EQ: an entry above the 20-day EQ but in quadrant 1-2 of the 60-day range stays blocked."""
     if not p.pd_subrange or row is None:
         return False
     lo, hi = _f(row, "range_lo"), _f(row, "range_hi")
@@ -249,7 +260,7 @@ def subrange_ok(ctx, sd, o: dict, row, entry_raw: float, p) -> bool:
         return False
     q = min(4, max(1, int(fr * 4) + 1)) if fr >= 0 else 1
     lower_half = (fr * 4 - int(fr * 4)) < 0.5 if fr < 1 else False
-    return bool(q >= 3 and lower_half and o.get("htf") and o.get("t1") is not None and o.get("entry") is not None and float(o["t1"]) > float(o["entry"]))
+    return bool(q >= 3 and lower_half and at_daily_array(ctx, sd, entry_raw, i) and o.get("t1") is not None and o.get("entry") is not None and float(o["t1"]) > float(o["entry"]))
 
 
 def top_skip(ctx, sd, o: dict, row, entry_raw: float, p):

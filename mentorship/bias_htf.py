@@ -151,8 +151,6 @@ def bx_string(p) -> str:
     b7 = bh7.bx_cfg(p)
     if b7:
         x["b7"] = b7
-        if p.weekly_flip_follow and "flip" not in x:
-            pass                               # (the table's flip column exists whenever flip_triggers is non-empty)
 
     return json.dumps(x, sort_keys=True, separators=(",", ":")) if x else ""
 

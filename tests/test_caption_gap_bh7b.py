@@ -241,12 +241,18 @@ def test_long_above_eq_in_subrange_discount():
     sd = ctx.sides_map[1]
 
     def ok(entry, htf_=True, t1=None, p_=p, ctx_=ctx, sd_=sd):
-        o = dict(order(entry=entry, t1=entry + 4.0 if t1 is None else t1), htf=htf_)
+        o = dict(order(entry=entry, t1=entry + 4.0 if t1 is None else t1), htf=True)     # the intraday 15m / 60m tag is set either way: it must not matter
+        ctx_.conf = Conf(["D"] if htf_ else ["15m", "4h"])                              # review fix: a live DAILY array at the entry, not the intraday tag
         return bh2e.order_ok(ctx_, sd_, o, "AM", i, p_), o
     assert ok(102.0)[0] is None and "pd_subrange" in ok(102.0)[1]["lv_tags"].split("|")           # quadrant 3, lower half, at a daily array
     assert ok(107.0)[0] is None                                                                      # quadrant 4, lower half
     assert ok(103.0)[0] == "x_bh2_pd_two_level"                                                      # quadrant 3, upper half
-    assert ok(102.0, htf_=False)[0] == "x_bh2_pd_two_level"                                          # not at an HTF array
+    assert ok(102.0, htf_=False)[0] == "x_bh2_pd_two_level"                                          # no DAILY array (a 4h / 15m one does not count)
+    ctx.conf = None
+    assert bh2e.order_ok(ctx, sd, dict(order(entry=102.0, t1=106.0), htf=True), "AM", i, p) == "x_bh2_pd_two_level"   # no Confluence arrays: no exception
+    assert E7.at_daily_array(ctx, sd, 102.0, i) is False
+    ctx.conf = Conf(["W"])
+    assert E7.at_daily_array(ctx, sd, 102.0, i) is True
     assert ok(102.0, t1=101.0)[0] == "x_bh2_pd_two_level"                                            # no premium target left
     assert ok(98.0)[0] is None                                                                       # below the EQ: the gate never blocks it
     assert ok(102.0, p_=p7(pd_two_level=True))[0] == "x_bh2_pd_two_level"                            # switch off: the built gate
@@ -258,6 +264,7 @@ def test_long_above_eq_in_subrange_discount():
     ds = ctx.sides_map[-1]
     sh_row = BR(combo=-1, eq20_body=100.0, range_lo=90.0, range_hi=110.0)
     c2 = mkd(p, [(100.0, 100.3, 99.7, 100.0)] * 40, sh_row)
+    c2.conf = Conf(["D"])
     o = dict(order(entry=ds.x(98.0), t1=ds.x(90.0)), htf=True)
     assert bh2e.order_ok(c2, ds, o, "AM", i, p) is None
     assert E7.order_ok(c2, ds, dict(order(entry=ds.x(91.0), t1=ds.x(85.0)), htf=True), "AM", i, p) == "x_bh7_pd_top"
@@ -411,6 +418,77 @@ def test_table_rows_do_not_look_ahead():
                 bad = [c for c in cols if not _same(a[c], b[c])]
                 assert not bad, (str(x), bad, [(a[c], b[c]) for c in bad])
                 assert fb.loc[x, "brk_react"] == pbt.loc[x, "brk_react"], str(x)
+
+
+def _raw_pair(df, roll):
+    """(raw frame, adj Series, meta) for a synthetic series with a +10 roll at `roll`: engine = raw + adj."""
+    adj = pd.Series(np.where(df.index < roll, 10.0, 0.0), index=df.index)
+    raw = df.copy()
+    for k in ("open", "high", "low", "close"):
+        raw[k] = df[k] - adj
+    return raw, adj, pd.DataFrame({"adj": adj})
+
+
+def test_raw_table_rows_do_not_look_ahead():
+    """review fix (other#5): the raw-series table (htf_series 'raw' + the raw monthly arrays) row by row: a table built on the data cut at a session's open equals the full table's rows up to it."""
+    from test_caption_gap_bh1c import fut_walk
+    from test_caption_gap_bh1f import _same
+    df = fut_walk("2025-03-03", "2026-03-27", seed=11, vol=0.9)
+    raw, adj, _ = _raw_pair(df, pd.Timestamp("2025-11-03", tz=B.NY))
+    p = Params(**FUT, htf_bias="combo", htf_series="raw", htf_monthly=True, htf_monthly_series="raw")
+
+    def build(d_, r_):
+        return htf.table(d_, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers, **B.table_kw(p, r_, adj))
+    BH2.HITS.clear()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        full = build(df, raw)
+        assert BH2.HITS["sw_htf_series_raw"] > 0 and "adj_map" in full
+        cols = [c for c in ("px", "draw_up", "draw_dn", "adj_map", "draw", "pd", "flip") if c in full]
+        dates = list(full.index)
+        for pos in (len(dates) - 3, len(dates) // 2 + 4):
+            d = dates[pos]
+            cut = pd.Timestamp(d, tz=B.NY) + pd.Timedelta(hours=9, minutes=30)
+            part = build(df[df.index < cut], raw[raw.index < cut])
+            assert d in part.index
+            for x in dates[:pos + 1]:
+                a, b = full.loc[x, cols], part.loc[x, cols]
+                bad = [c for c in cols if not _same(a[c], b[c])]
+                assert not bad, (str(x), bad, [(a[c], b[c]) for c in bad])
+
+
+@pytest.mark.parametrize("name", ["raw", "monthly_raw"])
+def test_look_ahead_synthetic_raw_series(name, monkeypatch):
+    """review fix (other#5): the engine with the raw-series switches, full vs truncated runs (the raw frame is clipped to the engine frame's span, so a truncated run never sees raw bars after its cut)."""
+    x, y = _walks()
+    raw, adj, meta = _raw_pair(x, x.index[len(x) // 2].normalize())
+    monkeypatch.setattr(B, "load_raw", lambda sym, minutes: raw)
+    kw = dict(htf_series="raw") if name == "raw" else dict(htf_monthly=True, htf_monthly_series="raw")
+    p = Params(**dict(LA, htf_bias="combo", bias_neutral="both", **kw))
+    BH2.HITS.clear()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        full = B.run(x, 5, "ES", p, partner=y, intermarket=IM, meta=meta)
+    assert len(full) >= 1, f"{name}: no trade in the synthetic window"
+    if name == "raw":
+        assert BH2.HITS["sw_htf_series_raw"] > 0
+    _no_look_ahead(x, 5, "ES", p, COLS, every=max(1, len(full) // 2), meta=meta, partner=y, intermarket=IM, exits=True, min_trades=1)
+
+
+def test_raw_series_clips_to_the_engine_span_and_contract_falls_back(monkeypatch):
+    from test_caption_gap_bh1c import fut_walk
+    df = fut_walk("2026-02-02", "2026-03-06", seed=2, vol=0.7)
+    long_ = fut_walk("2025-06-02", "2026-06-05", seed=2, vol=0.7)
+    raw, adj, meta = _raw_pair(long_, pd.Timestamp("2026-02-20", tz=B.NY))
+    monkeypatch.setattr(B, "load_raw", lambda sym, minutes: raw)
+    r, a = B.raw_series(Params(**FUT, htf_series="raw"), "ES", 5, meta, df)
+    assert r.index[0] >= df.index[0] and r.index[-1] <= df.index[-1] and len(r) < len(raw) / 3
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        q = B.series_fallback(Params(**FUT, htf_series="contract"), "SPX", None)
+    assert q.htf_series == "adjusted" and any("adjusted frame" in str(m.message) for m in w)
+    assert B.series_fallback(Params(**FUT, htf_series="contract"), "ES", meta).htf_series == "contract"      # databento data keeps the NotImplementedError of htf.table
+    assert B.series_fallback(Params(**FUT), "SPX", None).htf_series == "adjusted"
 
 
 # --- the engine on synthetic and ES windows -------------------------------------------------------------------------------------------------

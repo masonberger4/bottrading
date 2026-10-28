@@ -615,6 +615,9 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     if X:
         cols += [k_ for k_ in (rows[0] if rows else {}) if k_ not in cols]
     out = pd.DataFrame(rows, columns=cols or None).set_index("date")
+    if raw_m:                                        # review fix (other#5): the flip / column finish functions compare array levels with engine-scale prices, so the raw monthly arrays enter them mapped by the adj
+        from . import bh7 as _bh7m                   # of the array's first usable session [our interpretation: one fixed mapping per array; the per-day mapping above stays exact for the draw / react rows]
+        arrs = [_bh7m.shifted(a, _bh7m.adj_before(adj, d.index[min(int(a.known), D - 1)], df.index.tz, cut_min, bar_minutes(df))) if getattr(a, "rawk", False) else a for a in arrs]
     b1 = X.get("b1") or {}
     pd3_log = None
     fl_b2 = {}

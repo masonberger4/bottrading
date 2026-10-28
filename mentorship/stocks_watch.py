@@ -108,32 +108,59 @@ def weekly_flow(w: pd.DataFrame) -> int:
     return 0
 
 
+def _premium_arrays(w: pd.DataFrame) -> list:
+    o, h, l, c = (w[k].values.astype(float) for k in ("open", "high", "low", "close"))
+    return [a for a in htf._arrays(o, h, l, c, "W", lambda i: i + 1) if a.kind == "bear" and a.typ in ("fvg", "ob")]
+
+
+def _bar_in_premium(w: pd.DataFrame, arrs: list, k: int) -> bool:
+    """The weekly bar k's high traded into a live weekly bearish array (FVG / OB drawn on the weekly bars known by bar k; not closed through its far edge / MT)."""
+    c, h = w.close.values.astype(float), w.high.values.astype(float)
+    return any(a.known <= k and h[k] >= a.bottom and not (c[a.known:k].size and c[a.known:k].max() > (a.ce if a.typ == "ob" else a.top)) for a in arrs)
+
+
 def rally_into_premium(w: pd.DataFrame, weeks: int = 13) -> bool:
     """An up-close weekly bar within the last `weeks` weeks traded into a live weekly bearish array (FVG / OB drawn on the weekly bars known before that week; not closed through): the counter-trend 'Judas'
     rally into premium of item 222."""
     if len(w) < 8:
         return False
-    o, h, l, c = (w[k].values.astype(float) for k in ("open", "high", "low", "close"))
-    arrs = [a for a in htf._arrays(o, h, l, c, "W", lambda i: i + 1) if a.kind == "bear" and a.typ in ("fvg", "ob")]
-    for k in range(max(1, len(c) - weeks), len(c)):
-        if c[k] <= o[k]:
-            continue
-        for a in arrs:
-            if a.known <= k and h[k] >= a.bottom and not (c[a.known:k].size and c[a.known:k].max() > (a.ce if a.typ == "ob" else a.top)):
-                return True
-    return False
+    o, c = w.open.values.astype(float), w.close.values.astype(float)
+    arrs = _premium_arrays(w)
+    return any(c[k] > o[k] and _bar_in_premium(w, arrs, k) for k in range(max(1, len(c) - weeks), len(c)))
 
 
-def sell_list(asof, stocks: dict, dia: pd.DataFrame, p, need_rally: bool = True, match_weeks: int = 4, window_weeks: int = 26) -> list:
+def lower_high_at_premium(w: pd.DataFrame) -> bool:
+    """Item 221 'a lower high at a premium array': the stock's last weekly pivot high is lower than the one before AND its bar traded into a live weekly bearish array (review fix: the premium array is part of
+    the base rule, not only of the item-222 rally test)."""
+    if len(w) < 8:
+        return False
+    ph, _ = L.pivots(w.high.values.astype(float), w.low.values.astype(float), 1)
+    return bool(len(ph) >= 2 and ph[-1].price < ph[-2].price and _bar_in_premium(w, _premium_arrays(w), ph[-1].i))
+
+
+def index_poised(dia: pd.DataFrame, asof, window_weeks: int = 26) -> bool:
+    """Item 221 'the index must be poised to decline (index SMT at a premium, weekly bearish)': the index sits at a PREMIUM (its last close above the midpoint of the window's range) and the last completed
+    weekly bar is a down-close (the weekly turn) [our interpretation; the SMT leg - the other index making the higher high - is the Dow's own higher weekly pivot high that sell_list already requires]."""
+    wd = weekly_closed(dia, asof).iloc[-window_weeks:]
+    if len(wd) < 8:
+        return False
+    h, l, c, o = (wd[k].values.astype(float) for k in ("high", "low", "close", "open"))
+    return bool(c[-1] > (h.max() + l.min()) / 2.0 and c[-1] < o[-1])
+
+
+def sell_list(asof, stocks: dict, dia: pd.DataFrame, p, need_rally: bool = True, match_weeks: int = 4, window_weeks: int = 26, need_poised: bool = True) -> list:
     """The sell watch list at `asof` (cc10_017 ~1:40): in the sell window only; the Dow's last weekly pivot high is HIGHER than the one before; a stock qualifies when its last weekly pivot high (within
     `match_weeks` of the Dow's) is LOWER than its previous one, its weekly flow is bearish, defensives (VZ, GE, KO) are excluded and (item 222, need_rally) an up-close weekly bar in the last 13 weeks
     traded into a weekly premium array. One row per stock: symbol, forward 1 / 2 / 3 month returns (reported; a short profits from negative numbers). The signal holds only while the Dow keeps making higher
-    highs, so a Dow lower high returns []."""
+    highs, so a Dow lower high returns []. Review fixes (item 221): `need_poised` (default on) adds the 'index poised to decline' precondition (`index_poised`); the stock's lower high must sit at a weekly
+    premium array whether or not the rally test (`need_rally`) is on (`lower_high_at_premium`); the weekly flow is this module's `weekly_flow`, not a library weekly_bias (there is none on bar frames)."""
     need_mode(p)
     if not sell_window(asof):
         return []
     wd = weekly_closed(dia, asof).iloc[-window_weeks:]
     if len(wd) < 8:
+        return []
+    if need_poised and not index_poised(dia, asof, window_weeks):
         return []
     phd, _ = L.pivots(wd.high.values.astype(float), wd.low.values.astype(float), 1)
     if len(phd) < 2 or not phd[-1].price > phd[-2].price:
@@ -151,7 +178,7 @@ def sell_list(asof, stocks: dict, dia: pd.DataFrame, p, need_rally: bool = True,
         # the stock's lower high sits at the Dow's higher high (within match_weeks)
         if abs((w.index[ph[-1].i] - wd.index[phd[-1].i]).days) > 7 * match_weeks:
             continue
-        if weekly_flow(w) >= 0:
+        if weekly_flow(w) >= 0 or not lower_high_at_premium(w):
             continue
         if need_rally and not rally_into_premium(w):
             continue

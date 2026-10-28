@@ -267,6 +267,13 @@ def test_htf_monthly_known_next_day():
 def test_price_like_columns():
     t = pd.DataFrame({"px": [4000.0, 4010.0], "draw_up": [4050.0, 4060.0], "react_score": [1.5, 0.5], "n": [1, 2], "adr": [50.0, 52.0]})
     assert BH7.price_like_columns(t) == ["px", "draw_up"]
+    # review fix: a sparse column, one far from the median px, an object column and a list-valued one are found; flags and counts never are
+    t = pd.DataFrame({"px": [4000.0, 6000.0, 4010.0], "far": [np.nan, 7500.0, np.nan], "obj": pd.Series([4001.0, None, 4002.0], dtype=object), "lst": [[4100.0, 4200.0], None, [4100.0]], "flag": [0.0, 1.0, 1.0],
+                      "draw_dn": [np.nan, np.nan, np.nan]})
+    cols = BH7.price_like_columns(t)
+    assert cols == ["px", "far", "obj", "lst", "draw_dn"]
+    assert BH7.shift_prices(t["lst"], np.array([10.0, 10.0, 5.0])) == [[4110.0, 4210.0], None, [4105.0]]
+    assert BH7.shift_prices(pd.Series([4001.0, None, 4002.0], dtype=object), np.array([1.0, 1.0, 1.0])) == [4002.0, None, 4003.0]
 
 
 # --- B6-intraweek-reversal-1h-confirmation ---------------------------------------------------------------------------------------------
@@ -357,6 +364,51 @@ def test_osok_1h_execution():
     arrm = [S7.arr(a["tf"], "bull" if a["kind"] == "bear" else "bear", 200 - a["bottom"], 200 - a["top"], a["t_known"]) for a in ARR_OK]
     tm = S7.osok_core(mir, arrm, 1)
     assert len(tm) == 1 and tm[0]["side"] == 1 and tm[0]["entry"] == pytest.approx(93.5) and tm[0]["target"] == pytest.approx(108.0) and tm[0]["exit_reason"] == "target"
+
+
+def test_osok_h1_types_within_and_second_entry(monkeypatch):
+    """review fix (172 / 174): 1h order blocks / breakers / mitigation blocks can be the refinement array, 'within' needs the whole 1h zone inside the HTF array, and an order at a 4h array that lapsed
+    unfilled makes the next setup of the week a second entry."""
+    # 'within': the 1h bearish FVG is [106, 107]; a weekly array 106.5-110 overlaps it but does not contain it
+    part = [S7.arr("W", "bear", 110.0, 106.5, T("2026-02-27 17:00"))] + ARR_OK[1:]
+    assert S7.osok_core(h1(SHORT_ROWS), part, -1) and S7.osok_core(h1(SHORT_ROWS), part, -1, inside="overlap")
+    assert S7.osok_core(h1(SHORT_ROWS), part, -1, inside="within") == []
+    assert S7.osok_core(h1(SHORT_ROWS), ARR_OK, -1, inside="within")                       # [106, 107] lies inside [105, 110]
+    t0 = S7.osok_core(h1(SHORT_ROWS), ARR_OK, -1)[0]
+    assert t0["h1_type"] == "fvg" and t0["second_entry"] is False
+    # the zone kinds: asking for more kinds never loses the FVG trade (the FVG is tried first) and every extra kind is a bullish side-space zone completing at a bar
+    allk = S7.osok_core(h1(SHORT_ROWS), ARR_OK, -1, h1_types=("fvg", "ob", "breaker", "mitigation"))
+    assert allk and allk[0]["entry"] == pytest.approx(106.5) and allk[0]["h1_type"] == "fvg"
+    zs = S7.h1_zones(h1(SHORT_ROWS), -1, ("fvg", "ob", "breaker", "mitigation"))
+    assert zs and zs[0].typ == "fvg" and all(z.top >= z.bottom and 0 <= z.i < len(SHORT_ROWS) for z in zs)
+    assert [z.typ for z in S7.h1_zones(h1(SHORT_ROWS), -1, ("ob",))] == [z.typ for z in zs if z.typ == "ob"]
+    # a breaker as the only refinement zone (the detector is replaced by a hand-made zone completing at bar 5)
+    monkeypatch.setattr(S7, "h1_zones", lambda h1_, d, types: [S7._H1Z(5, -106.0, -107.0, -106.5, "breaker")] if d == -1 else [])
+    br = S7.osok_core(h1(SHORT_ROWS), ARR_OK, -1, h1_types=("breaker",))
+    assert br and br[0]["h1_type"] == "breaker" and br[0]["entry"] == pytest.approx(106.5)
+    # second entry: the order at the 4h array lapses (max_wait_bars=1; no fill in two bars) and the zone completing on that bar is armed
+    rows = [(100, 101, 99.5, 100.5)] * 5 + [(100.5, 101, 100, 100.5), (106.0, 106.3, 105.8, 106.1), (106.0, 107.0, 100.0, 101.0), (101.0, 107.0, 100.5, 101.0), (101.0, 101.5, 91.0, 91.5), (91.5, 92, 91, 91.5)]
+    arr4 = [S7.arr("4h", "bear", 110.0, 105.0, T("2026-02-27 17:00")), S7.arr("D", "bull", 92.0, 90.0, T("2026-02-27 17:00"))]
+    monkeypatch.setattr(S7, "h1_zones", lambda h1_, d, types: [S7._H1Z(5, -106.0, -107.0, -106.5, "fvg"), S7._H1Z(7, -106.2, -107.2, -106.7, "fvg")] if d == -1 else [])
+    a = S7.osok_core(h1(rows), arr4, -1)
+    assert a and a[0]["entry"] == pytest.approx(106.5) and a[0]["second_entry"] is False and a[0]["origin_tf"] == "4h"
+    b = S7.osok_core(h1(rows), arr4, -1, max_wait_bars=1)
+    assert b and b[0]["entry"] == pytest.approx(106.7) and b[0]["second_entry"] is True
+
+
+def test_osok_indexed_lookups_scale():
+    """review fix: the array lookups are indexed once (no per-setup rescans of every bar): a 1h frame of ~6000 bars with a few hundred arrays runs in a couple of seconds."""
+    import time
+    rng = np.random.default_rng(1)
+    n = 6000
+    c = 100.0 + np.cumsum(rng.normal(0, 0.6, n))
+    o = np.r_[c[0], c[:-1]]
+    hi_, lo_ = np.maximum(o, c) + rng.uniform(0, 0.5, n), np.minimum(o, c) - rng.uniform(0, 0.5, n)
+    h1b = pd.DataFrame({"open": o, "high": hi_, "low": lo_, "close": c}, index=pd.date_range(T("2025-01-06 00:00"), periods=n, freq="60min"))
+    arrays = [S7.arr(tf, kind, float(c[k]) + 1.0, float(c[k]) - 1.0, h1b.index[k] + pd.Timedelta(hours=1)) for k, (tf, kind) in zip(range(100, n - 100, 25), (("W", "bear"), ("D", "bull"), ("4h", "bear"), ("D", "bear")) * 80)]
+    t0 = time.time()
+    tr = S7.osok_core(h1b, arrays, lambda t: (-1, False), min_rr=0.1)
+    assert time.time() - t0 < 30.0 and isinstance(tr, list)
 
 
 def test_osok_weekly_to_daily_target():
@@ -461,6 +513,14 @@ def test_swing_reentry_cascade():
     kept = S7.swing_reentry_study(h4(rows_v), ARR_RE + [S7.arr("W", "bull", 96.5, 95.0, K0)], min_rr=3.0, void="none")
     assert len(kept) >= 1
     assert study.swing_reentry_study(h4(rows), ARR_RE, min_rr=3.0)[0]["attempt"] == 0
+    # review fix (X13): the next lower 4h array must be UNTESTED - the stop-out bar (low 97.0) already traded into the 98 / 96 array, so the cascade skips it and re-enters at the daily array
+    rows_t = [(106, 107, 105, 106)] * 3 + [(106, 106.5, 100.8, 101.2), (101.2, 103, 100.4, 102), (102, 102.5, 97.0, 97.5), (97.5, 97.8, 90.5, 91.5), (91.5, 110, 91.2, 109), (109, 121, 108, 120)]
+    tested = S7.swing_reentry_study(h4(rows_t), ARR_RE, min_rr=3.0)
+    assert [r["attempt"] for r in tested] == [0, 1] and tested[0]["exit_reason"] == "stop" and tested[1]["array"]["tf"] == "D" and tested[1]["exit_reason"] == "target"
+    lo = lambda a_: S7._lowest_since(a_, h4(rows_t).low.values.astype(float), [t + pd.Timedelta(hours=4) for t in h4(rows_t).index], 5)
+    assert lo(ARR_RE[1]) == 97.0 and lo(S7.arr("4h", "bull", 98.0, 96.0, T("2026-03-05 00:00"))) is None
+    assert S7.pick_reentry(ARR_RE, [ARR_RE[0]], 100.0, T("2026-03-03 00:00"), closes_since=lo)["tf"] == "D"
+    assert S7.pick_reentry(ARR_RE, [ARR_RE[0]], 100.0, T("2026-03-03 00:00"), closes_since=lambda a_: 200.0) is ARR_RE[1]
 
 
 def test_trend_tired_flag():
@@ -554,18 +614,20 @@ def test_osok_scale_in_study():
     assert r["pts_build"] == pytest.approx(r["avg_entry"] - 97.0) and r["pts_full"] == pytest.approx(105.0 - 97.0) and r["pts_build"] > r["pts_full"]
     assert S7.osok_scale_in(d, arrays, {mon: 1}, first_frac=0.25) == []                  # the week is not bearish
     assert S7.osok_scale_in(d, [S7.arr("W", "bear", 120.0, 115.0, k0)], {mon: -1}) == []     # Monday never traded into the array
-    assert study.osok_scale_in(d, arrays, lambda t: -1)[0]["n_fills"] == 2
+    assert study.osok_scale_in_small(d, arrays, lambda t: -1)[0]["n_fills"] == 2 and study.osok_scale_in_small(d, arrays, lambda t: -1)[0]["first_frac"] == 0.25
+    full = study.osok_scale_in(d, arrays, lambda t: -1)                                  # the experienced default: full size at the Monday fill, no add
+    assert full[0]["n_fills"] == 1 and full[0]["size"] == pytest.approx(1.0) and full[0]["first_frac"] == 1.0
     # no higher high Tue / Wed: the add is the open above Monday's close
     d2 = d.copy()
     d2.loc[d2.index[11], ["open", "high"]] = [106.2, 105.9]
     d2.loc[d2.index[12], ["high"]] = 105.5
-    r2 = S7.osok_scale_in(d2, arrays, {mon: -1})
+    r2 = S7.osok_scale_in(d2, arrays, {mon: -1}, first_frac=0.25)
     assert r2 and r2[0]["n_fills"] == 2 and r2[0]["avg_entry"] > 105.0
     # the small piece stays alone when neither day makes a higher high nor opens above Monday's close
     d3 = d.copy()
     d3.loc[d3.index[11], ["open", "high", "low", "close"]] = [103.0, 105.5, 100.0, 101.0]
     d3.loc[d3.index[12], ["open", "high", "low", "close"]] = [101.0, 104.0, 99.0, 100.0]
-    r3 = S7.osok_scale_in(d3, arrays, {mon: -1})
+    r3 = S7.osok_scale_in(d3, arrays, {mon: -1}, first_frac=0.25)
     assert r3 and r3[0]["n_fills"] == 1 and r3[0]["size"] == pytest.approx(0.25)
 
 
@@ -621,6 +683,7 @@ def test_daily_stop_model():
     assert t["stop"] == pytest.approx(90.0)                                                # htf.swing_stop: the daily pivot low
     half = S7.daily_stop_model(d, arrays, first_frac=0.5, max_units=1)
     assert half[0]["fills"][0][1] == 0.5
+    assert study.daily_stop_half(d, arrays, max_units=1)[0]["fills"][0][1] == 0.5 and out[0]["fills"][0][1] == 1.0          # the named beginner variant; the default is the experienced full-size start
     assert S7.daily_stop_model(d, [S7.arr("W", "bear", 130.0, 125.0, T("2026-03-01 17:00"))]) == []        # the draw is not known yet
     # the EQ gate: a close above the HTF EQ blocks the entry
     near = [S7.arr("W", "bear", 105.0, 103.0, k0)]
@@ -666,10 +729,10 @@ def test_stock_smt_screen():
 
 def test_stock_weekly_up():
     up = zz([(0, 50), (10, 56), (14, 53), (24, 62), (28, 58), (40, 70), (44, 66), (60, 78)], spread=0.3)
-    assert ST.weekly_up(up, up.index[-1])
+    assert ST.weekly_up(up, up.index[-1], P_ON)
     down = zz([(0, 80), (10, 70), (14, 74), (24, 64), (28, 68), (40, 55), (44, 58), (60, 48)], spread=0.3)
-    assert not ST.weekly_up(down, down.index[-1])
-    assert not ST.weekly_up(up.iloc[:10], up.index[9])
+    assert not ST.weekly_up(down, down.index[-1], P_ON)
+    assert not ST.weekly_up(up.iloc[:10], up.index[9], P_ON)
     assert len(ST.weekly_closed(up, up.index[12])) <= len(ST.weekly_closed(up, up.index[40]))             # closed weeks only
 
 
@@ -723,7 +786,7 @@ def test_stock_rs_leaders():
         return pd.DataFrame({"open": c, "high": c + 0.5, "low": c - 0.5, "close": c}, index=idx)
     stocks = {"UP": ser(0.20), "MID": ser(0.05), "DN": ser(-0.05)}
     index = ser(0.03)
-    rk = ST.rs_rank(stocks, index, asof, n=63)
+    rk = ST.rs_rank(stocks, index, asof, n=63, p=P_ON)
     assert rk["UP"] == 100.0 and rk["MID"] == 50.0 and rk["DN"] == 0.0
     lead = ST.leaders(stocks, index, asof, P_ON, index_flip=1)
     assert lead == ["UP"]
@@ -738,7 +801,18 @@ def test_stock_rs_leaders():
     c = np.interp(np.arange(80), [0, 16, 60, 79], [100.0, 100.0, 160.0, 120.0])
     spike = pd.DataFrame({"open": c, "high": c + 0.5, "low": c - 0.5, "close": c}, index=idx)         # the same +20 % but far under the midpoint of its 60-day range
     assert ST.leaders({"A": ser(0.20), "B": spike}, index, asof, Params(stocks_mode=True, stock_rs_min=0.0), index_flip=1) == ["A"]
-    assert ST.rs_rank({}, index, asof) == {}
+    # review fix (item 24): the bullish precondition is the index flip > 0 OR a weekly-up index; a bearish flip vetoes
+    up = zz([(0, 50), (10, 56), (14, 53), (24, 62), (28, 58), (40, 70), (44, 66), (60, 78)], spread=0.3)
+    hot = zz([(0, 50), (10, 60), (14, 56), (24, 70), (28, 64), (40, 90), (44, 84), (60, 110)], spread=0.3)
+    pz = Params(stocks_mode=True, stock_rs_min=0.0)
+    a2 = up.index[-1]
+    assert ST.leaders({"X": hot}, up, a2, pz, n=20) == ["X"] and ST.leaders({"X": hot}, up, a2, pz, index_flip=0, n=20) == ["X"]      # weekly-up index, no / neutral flip
+    assert ST.leaders({"X": hot}, up, a2, pz, index_flip=1, n=20) == ["X"] and ST.leaders({"X": hot}, up, a2, pz, index_flip=-1, n=20) == []
+    assert ST.rs_rank({}, index, asof, p=P_ON) == {}
+    with pytest.raises(RuntimeError):
+        ST.rs_rank(stocks, index, asof)                                                   # review fix: the public screens are parked too
+    with pytest.raises(RuntimeError):
+        ST.weekly_up(stocks["UP"], asof)
 
 
 def test_stock_watchlist_order_and_ranking():
@@ -815,6 +889,13 @@ def test_stock_sell_smt_synthetic():
     assert SW.sell_list(asof, {"WEAK": weak}, path([(0, 100), (120, 130), (140, 120), (170, 118), (199, 110)]), P_ON, need_rally=False) == []      # the Dow made a lower high: the signal is gone
     nm = [r["symbol"] for r in SW.sell_list(asof, {"DRIFT": drift, "WEAK": weak}, dia, P_ON, need_rally=True)]
     assert "DRIFT" not in nm                                                             # the steady drift has no up-close weekly bar into a premium array
+    # review fix (item 221): the index must be poised to decline (at a premium, the last completed week a down-close); an index still lifting off its lows is not
+    up_end = path([(0, 100), (120, 120), (140, 112), (170, 126), (185, 119), (199, 126.2)])
+    assert SW.index_poised(dia, asof) is True and SW.index_poised(up_end, asof) is False
+    assert SW.sell_list(asof, {"WEAK": weak}, up_end, P_ON, need_rally=False) == [] and [r["symbol"] for r in SW.sell_list(asof, {"WEAK": weak}, up_end, P_ON, need_rally=False, need_poised=False)] == ["WEAK"]
+    # ... and the lower high must sit at a weekly premium array in the base rule too
+    flat = path([(0, 100), (199, 100.0)])
+    assert SW.lower_high_at_premium(flat.resample("W-FRI").agg({"open": "first", "high": "max", "low": "min", "close": "last"}).dropna()) is False
 
 
 def test_stock_short_needs_rally():
@@ -887,3 +968,21 @@ def test_new_modules_are_platform_neutral():
         for bad in ("C:\\", "os.getcwd", "tempfile", "/tmp", "subprocess"):
             assert bad not in src, (m.__name__, bad)
     assert date(2026, 1, 1)
+
+
+def test_stock_load_universe_uses_the_loader():
+    """review fix (item 220): the Dow 30 + DIA daily bars come through one loader (Alpaca by default); a failing symbol is skipped; stocks_mode off raises. No network is touched."""
+    calls = []
+
+    def fake(sym, s, e):
+        calls.append(sym)
+        if sym == "BAD":
+            raise RuntimeError("no such symbol")
+        return zz([(0, 50), (30, 60)])
+    st, ix = ST.load_universe(P_ON, "2026-01-01", symbols=("AAA", "BAD", "CCC"), loader=fake)
+    assert sorted(st) == ["AAA", "CCC"] and len(ix) == 31 and calls == ["AAA", "BAD", "CCC", "DIA"]
+    assert len(ST.DOW30) == 30 and "DIA" not in ST.DOW30
+    with pytest.raises(RuntimeError):
+        ST.load_universe(Params(), "2026-01-01", loader=fake)
+    with pytest.raises(ValueError):
+        ST.load_universe(P_ON, "2026-01-01", symbols=("AAA",), loader=lambda sym, s, e: None)
