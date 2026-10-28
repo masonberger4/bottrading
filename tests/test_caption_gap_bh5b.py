@@ -49,6 +49,9 @@ def test_org_with_bias_blocks_fill_trades():
     assert E5.side_ok(ctx, p, -1, "AM", i) == "x_bh5_org_with_bias" and E5.side_ok(ctx, p, 1, "AM", i) is None
     c, pr = E5.lock_filter(ctx, p, ctx.bias_row, [(120.0, "array", "org", 0, 0), (110.0, "array", "org_ce", 0, 0), (130.0, "pool", "pdh1", 1, 0)], [], 570, "AM", i + 1, 120.2)
     assert [x[2] for x in c] == ["pdh1"]                                     # the ORG levels leave the AM lock
+    sd = ctx.sides_map[1]
+    rungs = E5.targets_post(ctx, sd, i, p, 119.0, [(120.0, "array"), (110.0, "array"), (125.0, "array"), (130.0, "pool")])
+    assert [v for v, k in rungs] == [125.0, 130.0]                            # review fix: the ORG edges / CE are no AM rungs either
     bare = mkd(p, rows, BR(combo=1), base=120.0)                              # no untaken level beyond the open: the rule does not apply
     bare.pd.clear()
     bare.pw = None
@@ -77,6 +80,9 @@ def test_below_nwog_low_return_draw():
     i2 = at(ctx2, "10:10")
     assert E5.nwog_below_state(ctx2, p, i2)[0] == 0                          # a 3-bar displacement break keeps the bias
     lk = dict(side=-1, target=90.0, kind="pool", name="x", delivered=False, delivered_t=None, delivered_i=None, marked=[], session="AM", t_lock=570, px=102.0, traded=False, day=D1)
+    opened = mkd(p, [(95.0, 95.1, 94.8, 95.0)] * 12, BR(combo=0), base=95.0)
+    opened.gaps = [("nwog", 110.0, 100.0, 105.0)]
+    assert E5.nwog_below_state(opened, p, at(opened, "10:20"))[0] == 0       # review fix: a day that OPENS under the NWOG low has no crossing to read
     ctx.lock = {"AM": lk}
     r = E5.lock_bar(ctx, p, "AM", lk, i, {}, [], None)
     assert r is not None and r[0]["side"] == 1 and r[0]["target"] == 105.0 and r[0]["name"] == "nwog_ce"      # the CE first
@@ -179,6 +185,17 @@ def test_gap_theory_state():
     assert BD.want_at(bias, p, "AM", at(bias, "09:30") + 5) == 1             # only a neutral bias takes it
 
 
+def test_gap_theory_reads_untraded_15m_fvgs(monkeypatch):
+    """Review fix (80): the untraded 15m FVGs are gaps too."""
+    p = p5(gap_theory_bias=True)
+    monkeypatch.setattr(E5, "_resampled_zones", lambda ctx, p_, i, m, days: [("bull", 105.0, 103.0, True), ("bear", 99.0, 97.0, False)])
+    ctx = mkd(p, [(100.0, 104.0, 99.9, 100.1)] * 3 + [(100.1, 106.5, 100.0, 106.2)] * 3, BR(combo=0), base=100.0)
+    i = at(ctx, "09:30") + 5
+    assert [g[3] for g in E5.eth_gaps(ctx, p, i) if g[3] == "fvg15"] == ["fvg15"]
+    assert E5.gap_theory_state(ctx, p, i) == 1                                # traded into the 15m gap, then closed above its high
+    assert not [g for g in E5.eth_gaps(ctx, p5(), i) if g[3] == "fvg15"]
+
+
 # --- item 164: the OR60 ------------------------------------------------------------------------------------------------------------------
 
 def test_or60_extreme_by_stop_run():
@@ -190,6 +207,8 @@ def test_or60_extreme_by_stop_run():
     assert E5.or60_side(ctx, p, at(ctx, "10:20")) == 0                       # not before the OR60 ends
     agree = mkd(p, rows, BR(combo=-1))
     assert BD.want_at(agree, p, "AM", at(agree, "10:30")) == -1                # a bias that disagrees stays
+    taken = mkd(p, [(99.7, 99.8, 89.5, 99.6)] + [(99.6, 99.8, 99.5, 99.7)] * 11 + rows, BR(combo=0), start="08:30")
+    assert taken.pd and E5.or60_side(taken, p, at(taken, "10:30")) == 0     # review fix: the pool was already taken before 09:30
     open_ = mkd(p, [(100.0, 100.2, 99.9, 100.0)] * 18, BR(combo=0))
     assert E5.or60_side(open_, p, at(open_, "10:30")) == 0
     st = E5.or60_stat([rth_day(date(2026, 3, 2), 108.0, 90.0), rth_day(date(2026, 3, 3), 108.0, 90.0)])
@@ -218,6 +237,29 @@ def test_b7_spike_floor_keeps_bias():
     assert E5.b7_floor(dead, p, dead.bias_row, j)[2] is True
     assert BD.want_at(dead, p, "AM", j) == 0                                 # a trade below the floor: want 0
     assert E5.entry_rows(dead, dead.sides_map[1], j, p) == []
+
+
+def _mirror(rows):
+    return [(200 - o, 200 - l, 200 - h, 200 - c) for o, h, l, c in rows]
+
+
+def test_b7_spike_floor_bearish_mirror():
+    """Review fix: the bearish mirror of the 1h spike floor (guard b7sf_guard_sh, 1h bearish OB + bearish FVG above the MT, floor = the OB high)."""
+    p = p5(b7_spike_floor=True)
+    row = BR(combo=-1, b7sf_guard_sh=100.0)
+    ctx = mkd(p, _mirror(_b7_rows()), row, start="00:00")
+    i = at(ctx, "09:55")
+    fl = E5.b7_floor(ctx, p, ctx.bias_row, i, -1)
+    assert fl is not None and abs(fl[0] - 102.1) < 1e-9 and not fl[2]
+    assert BD.want_at(ctx, p, "AM", i) == -1                                 # below the floor: want stays -1
+    rows = E5.entry_rows(ctx, ctx.sides_map[-1], i, p)
+    assert len(rows) == 1 and rows[0][0] == rows[0][1]
+    assert E5.entry_rows(ctx, ctx.sides_map[1], i, p) == []
+    dead = mkd(p, _mirror(_b7_rows(low_end=97.5)), row, start="00:00")
+    j = at(dead, "09:55")
+    assert E5.b7_floor(dead, p, dead.bias_row, j, -1)[2] is True
+    assert BD.want_at(dead, p, "AM", j) == 0                                 # a trade above the floor: want 0
+    assert E5.entry_rows(dead, dead.sides_map[-1], j, p) == []
 
 
 # --- item 192: the 4h flip -----------------------------------------------------------------------------------------------------------------
@@ -257,7 +299,10 @@ def test_table_overrides_and_fallbacks():
     assert BD.want_at(ctx, p, "AM", i) == 1 and E5.side_ok(ctx, p, -1, "AM", i) == "x_bh5_program"                   # the program overrides and blocks the shorts
     assert [x[2] for x in E5.lock_prefs(ctx, p, ctx.bias_row, 570, "AM", ctx.start, 100.1, i + 1)] == ["program_tgt"]
     p = p5(stack_draw=True)
-    st = mkd(p, flat, BR(combo=-1, stack_side=1, stack_hi=104.0))
+    st = mkd(p, flat, BR(combo=-1, stack_side=1, stack_hi=104.0, stack_rungs=(104.0, 106.0)))
+    assert [x for x in E5.targets_post(st, st.sides_map[1], i, p, 100.0, [])] == [(104.0, "pool"), (106.0, "pool")]
+    shs = mkd(p, flat, BR(combo=1, stack_side=-1, stack_hi=96.0, stack_rungs=(96.0, 94.0)))
+    assert [v for v, k in E5.targets_post(shs, shs.sides_map[-1], i, p, -100.0, [])] == [-96.0, -94.0]
     assert BD.want_at(st, p, "AM", i) == 1 and E5.lock_prefs(st, p, st.bias_row, 570, "AM", st.start, 100.1, i + 1)[0][:3] == (104.0, "pool", "stack_hi")
     p = p5(eq_breakout_draw=True)
     assert BD.want_at(mkd(p, flat, BR(combo=1, eqb_dir=-1, eqb_tgt=90.0)), p, "AM", i) == -1
@@ -274,6 +319,36 @@ def test_table_overrides_and_fallbacks():
     so = mkd(p, flat, BR(combo=0, shift_last=1, shift_origin_hi=112.0))
     assert BD.want_at(so, p, "AM", i) == 1 and any(x[2] == "shift_origin" for x in E5.lock_prefs(so, p, so.bias_row, 570, "AM", so.start, 100.1, i + 1))
     assert E5.targets_post(so, so.sides_map[1], i, p, 100.0, [])[-1] == (112.0, "pool")
+    sh = mkd(p, flat, BR(combo=0, shift_last=-1, shift_origin_lo=90.0))
+    pr = [x for x in E5.lock_prefs(sh, p, sh.bias_row, 570, "AM", sh.start, 100.1, i + 1) if x[2] == "shift_origin"]
+    assert pr and pr[0][3] == -1 and BD.want_at(sh, p, "AM", i) == -1          # review fix: the low pool is tagged -1
+    assert E5.targets_post(sh, sh.sides_map[-1], i, p, -100.0, []) == [(-90.0, "pool")]
+
+
+def test_monthly_ctrl_smt_confirmation(monkeypatch):
+    """Review fix (201): the monthly SMT of the two index frames confirms the monthly control (a fallback only)."""
+    from test_caption_gap_bh1 import dsess
+    p = p5(monthly_ctrl=True, monthly_ctrl_smt=True)
+    flat = [(100.0, 100.3, 99.8, 100.1)] * 6
+    i = at(mkd(p, flat, BR(combo=0, m_ctrl=-1)), "09:40")
+    c = mkd(p, flat, BR(combo=0, m_ctrl=-1))
+    c.intermarket = {"msmt": -1}
+    assert BD.want_at(c, p, "AM", i) == -1                                    # confirmed
+    c = mkd(p, flat, BR(combo=0, m_ctrl=-1))
+    c.intermarket = {"msmt": 0}
+    assert BD.want_at(c, p, "AM", i) == 0                                     # no SMT: the fallback does not fire
+    c = mkd(p, flat, BR(combo=0, m_ctrl=-1))
+    assert BD.want_at(c, p, "AM", i) == -1                                    # no partner frame (no key): inert gate
+    # the map: month 2 makes a higher high on A only -> -1 from the month after
+    n = 22
+    a = [(100 + k * 0.0, 110 + (5 if k >= n else 0), 90, 100) for k in range(3 * n)]
+    b = [(100, 110, 90, 100)] * (3 * n)
+    da, db = dsess(a, date(2026, 1, 5)), dsess(b, date(2026, 1, 5))
+    with monkeypatch.context() as mp:
+        mp.setattr(htf, "sessions", lambda x: x)                              # the frames are daily books already
+        m = BH5.monthly_smt_map(da, db)
+        assert m[da.index[0].date()] == 0 and set(m.values()) <= {-1, 0, 1} and -1 in m.values()
+        assert BH5.monthly_smt_map(da, da) == {k: 0 for k in m}
 
 
 def ctx_p(ctx):
@@ -289,6 +364,12 @@ def test_wk_ssl_waits_for_acceptance():
     assert BD.want_at(tue, p, "AM", i) == -1 and E5.lock_prefs(tue, p, tue.bias_row, 570, "AM", tue.start, 100.1, i + 1)[0][:3] == (90.0, "pool", "wk_ssl_lvl")
     mon = mkd(p, flat, row, d=date(2026, 3, 9), hist=history(date(2026, 3, 9)))
     assert BD.want_at(mon, p, "AM", at(mon, "09:40")) == 0                   # Monday: tag only
+    o = order(entry=-100.0, t1=-95.0)
+    assert E5.order_ok(mon, mon.sides_map[-1], o, "AM", at(mon, "09:40"), p) is None and "wk_ssl_monday" in o["lv_tags"]       # review fix: the Monday tag
+    o2 = order(entry=-100.0, t1=-95.0)
+    assert E5.order_ok(tue, tue.sides_map[-1], o2, "AM", i, p) is None and "wk_ssl_monday" not in o2.get("lv_tags", "")
+    fv = mkd(p, flat, BR(combo=0, wk_ssl=-1, wk_ssl_lvl=90.0, wk_ssl_hi=101.0, wk_ssl_fri=105.0, wk_ssl_fvg=87.0), d=D1)
+    assert E5.targets_post(fv, fv.sides_map[-1], i, p, -100.0, [(-90.0, "pool")]) == [(-90.0, "pool"), (-87.0, "array")]       # the FVG beyond the cluster is part of the draw
     acc = mkd(p, [(100.0, 102.0, 99.8, 101.8)] * 6, row, d=D1)
     assert BD.want_at(acc, p, "AM", at(acc, "09:55")) == 0                   # two 15m closes above the latest 15m high: the read ends
 
@@ -320,6 +401,9 @@ def test_nwog_fill_drops_the_far_edge():
     assert len(E5.lock_filter(keep, p, keep.bias_row, [(110.0, "array", "nwog_high", 0, 0)], [], 570, "AM", i + 1, 100.0)[0]) == 1
     lv = E5.targets_post(ctx, ctx.sides_map[1], i, p, 90.0, [(110.0, "array"), (95.0, "pool")])
     assert lv == [(95.0, "pool")]
+    pr = E5.lock_prefs(keep, p, keep.bias_row, 570, "AM", keep.start, 100.0, i + 1)
+    assert [(x[0], x[2]) for x in pr] == [(110.0, "nwog_far_fill")]            # review fix: nwog_fill == +1 ranks Friday's close as the draw
+    assert not [x for x in E5.lock_prefs(ctx, p, ctx.bias_row, 570, "AM", ctx.start, 100.0, i + 1) if x[2] == "nwog_far_fill"]
 
 
 def test_weekly_two_draw_filter():
@@ -333,7 +417,7 @@ def test_weekly_two_draw_filter():
     assert E5.order_ok(tue, tue.sides_map[1], order(entry=4100.0, t1=4130.0), "AM", i, p) is None      # before Wednesday
 
 
-def test_weekly_range_premium_shorts():
+def test_weekly_range_premium_shorts(monkeypatch):
     from test_caption_gap_sm3a import StubConf  # noqa: F401
     p = p5(wk_range=True)
 
@@ -349,7 +433,15 @@ def test_weekly_range_premium_shorts():
     assert E5.order_ok(ctx, sd, order(entry=-4040.0, t1=-4010.0), "AM", i, p) == "x_bh5_wk_range"          # top 4100 (the week's high), draw 4000: EQ 4050
     o = order(entry=-4060.0, t1=-4010.0)
     assert E5.order_ok(ctx, sd, o, "AM", i, p) is None and "wk_range_prem" in o["lv_tags"]
-    assert (4000.0, "array") in [(sd.x(v), k) for v, k in E5.targets_post(ctx, sd, i, p, -4100.0, [])] or True
+    assert E5.targets_post(ctx, sd, i, p, -4045.0, [(-4020.0, "pool"), (-3900.0, "pool")]) == [(-4020.0, "pool"), (-4000.0, "array")]      # review fix: the weekly draw is the final target, nothing beyond it
+    mon_d = date(2026, 3, 9)
+    mon = mkd(p5(wk_range=True, wk_high_proj=True), [(4040.0, 4041.0, 4039.0, 4040.0)] * 6, BR(combo=0, wk_bias=-1), d=mon_d, hist=history(mon_d), base=4040.0, conf=Conf())
+    import mentorship.sm3 as SM3
+    monkeypatch.setattr(SM3, "wk_proj_levels", lambda c, s_, p_: [(1.27, 4120.0)])
+    j = at(mon, "09:40")
+    wh, wl = E5._week_hl(mon, j)
+    assert E5.week_top(mon, p5(wk_range=True, wk_high_proj=True), -1, wh, wl, j) == 4120.0       # Monday: the item 137 projection
+    assert E5.week_top(mon, p5(wk_range=True), -1, wh, wl, j) == wh                                                                   # without wk_high_proj: the week's high so far
 
 
 def test_weekly_open_needs_array():
@@ -484,8 +576,8 @@ def test_bh5_paths_are_causal(name):
 TABLE_A = dict(htf_bias="combo2", dfvg_upclose_anchor=True, iof_follow=True, monthly_ctrl=True, nwog_fill_rule=True, dce_proj_study=True, stack_draw=True, program_gate=True, shift_origin_pool=True,
                fast_week_rev=True, eq_breakout_draw=True, d_draw_carry=True, pdh_raid_rev=True, wk_ssl_draw=True, wk_two_draw=True, b7_spike_floor=True, seasonal_tag=True, range_rollover=True,
                day_pd="20d", wk_ref_friday=True, htf_monthly_arrays=True)
-NEW_COLS = ("iof_ft_up", "iof_ft_dn", "m_ctrl", "nwog_gap", "nwog_fill", "dce_proj", "dce_proj_dn", "stack_side", "stack_hi", "bprog", "bprog_tgt", "shift_origin_hi", "shift_origin_lo", "shift_last",
-            "fast_week", "fw_level", "fw_tgt", "eqb_dir", "eqb_in_eq", "eqb_tgt", "d_draw", "d_draw_dir", "run_arr", "wk_ssl", "wk_ssl_lvl", "wk_ssl_hi", "wk_ssl_fri", "wk_prem_draw", "wk_disc_draw",
+NEW_COLS = ("iof_ft_up", "iof_ft_dn", "m_ctrl", "nwog_gap", "nwog_fill", "dce_proj", "dce_proj_dn", "stack_side", "stack_hi", "stack_rungs", "bprog", "bprog_tgt", "shift_origin_hi", "shift_origin_lo", "shift_last",
+            "fast_week", "fw_level", "fw_tgt", "eqb_dir", "eqb_in_eq", "eqb_tgt", "d_draw", "d_draw_dir", "run_arr", "wk_ssl", "wk_ssl_lvl", "wk_ssl_hi", "wk_ssl_fri", "wk_ssl_fvg", "wk_prem_draw", "wk_disc_draw",
             "b7sf_guard", "b7sf_guard_sh", "sea_w_ob", "sea_w_brk", "pd20_old_hi", "pd20_old_lo", "pd20_roll")
 
 
@@ -637,10 +729,11 @@ def test_every_switch_is_covered(walk, monkeypatch):
         test_b7_spike_floor_keeps_bias()
         test_table_overrides_and_fallbacks()
         test_wk_ssl_waits_for_acceptance()
+        test_monthly_ctrl_smt_confirmation(monkeypatch)
         test_nwog_not_standalone_draw()
         test_nwog_fill_drops_the_far_edge()
         test_weekly_two_draw_filter()
-        test_weekly_range_premium_shorts()
+        test_weekly_range_premium_shorts(monkeypatch)
         test_weekly_open_needs_array()
         test_pdh_raid_after_three_up_days()
         test_target_tf_mapping()

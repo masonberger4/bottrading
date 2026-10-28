@@ -13,7 +13,7 @@ Columns (row of session k = the state after the completed session k-1)
   dce_proj / dce_proj_dn     (55)    the daily A-B projection levels (tuples), upward from an untaken pivot high / downward from an untaken pivot low
   stack_side / stack_hi      (75)    +1 / -1 and the nearest stacked untaken daily high (low)
   bprog / bprog_tgt          (78)    the buy (+1) / sell (-1) program state and its target array edge
-  wk_ssl / wk_ssl_lvl / wk_ssl_hi / wk_ssl_fri   (93)  -1 / +1, the cluster level, the latest 15m short-term high (low) and Friday's high (low) - the same for every row of the week
+  wk_ssl / wk_ssl_lvl / wk_ssl_hi / wk_ssl_fri / wk_ssl_fvg   (93)  -1 / +1, the cluster level, the latest 15m short-term high (low) and Friday's high (low) - the same for every row of the week
   wk_prem_draw / wk_disc_draw   (102)  the nearest unfilled W / D inefficiency above / below Tuesday's close (rows from Wednesday)
   b7sf_guard / b7sf_guard_sh (103)   the MT of the last daily bullish (bearish) OB known at the row
   shift_origin_hi / shift_origin_lo / shift_last   (115)   the untaken swing high (low) the last bearish (bullish) daily MSS started from, and the side of the most recent MSS
@@ -197,6 +197,38 @@ def monthly_ctrl_state(mh, ml, m: int) -> int:
     return -1 if lh else (1 if hl else 0)
 
 
+def monthly_smt_map(df_a, df_b, months: int = 3) -> dict:
+    """new-monthly-structure-control (cc12_001 ~23:53, 'confirm with SMT'; FX: DXY, indices: SPX / NDX / DJI - here the two index frames): {session date: +1 / -1 / 0} known before that session, from the COMPLETED
+    monthly bars of both frames. For a completed month j (j >= 1): exactly one index makes a higher monthly high than month j-1 while the other does not = -1 (a long-term high); exactly one makes a lower
+    monthly low = +1 (a long-term low); both or neither = no event. The latest event inside the last `months` completed months counts [our interpretation of the window]."""
+    from .htf import sessions
+    a, b = sessions(df_a), sessions(df_b)
+    idx = a.index.intersection(b.index)
+    a, b = a.loc[idx], b.loc[idx]
+    if not len(idx):
+        return {}
+    pa = a.groupby(a.index.to_period("M")).agg(h=("high", "max"), l=("low", "min"))
+    pb = b.groupby(b.index.to_period("M")).agg(h=("high", "max"), l=("low", "min"))
+    ev = {}
+    for j in range(1, len(pa)):
+        ua, ub = pa.h.iloc[j] > pa.h.iloc[j - 1], pb.h.iloc[j] > pb.h.iloc[j - 1]
+        da, db = pa.l.iloc[j] < pa.l.iloc[j - 1], pb.l.iloc[j] < pb.l.iloc[j - 1]
+        e = (-1 if ua != ub else 0) + (1 if da != db else 0)
+        ev[pa.index[j]] = e if e in (-1, 1) else 0                           # both kinds in one month cancel
+    per = list(pa.index)
+    out = {}
+    for t in idx:
+        m = t.to_period("M")
+        done = [q for q in per if q < m]                                      # completed months only
+        val = 0
+        for q in reversed(done[-months:]):
+            if ev.get(q, 0):
+                val = ev[q]
+                break
+        out[t.date()] = val
+    return out
+
+
 def monthly_ctrl_column(d, ks) -> np.ndarray:
     mo, mh, ml, mc, mlast = BH3.tf_bars(d, "M")
     out = np.zeros(len(ks), int)
@@ -324,6 +356,7 @@ def stack_columns(bk, ks, px, n: int, look: int = 20) -> dict:
     ph, pl = L.pivots(h, l, 1)
     R = len(ks)
     side, lvl = np.zeros(R, int), np.full(R, NAN)
+    rungs = [()] * R
     for r, k in enumerate(ks):
         k = int(k)
         x = float(px[r])
@@ -345,9 +378,28 @@ def stack_columns(bk, ks, px, n: int, look: int = 20) -> dict:
         t = -1 if (len(lo_) >= n and dn_ok) else 0
         if s and not t:
             side[r], lvl[r] = 1, min(hi_)
+            rungs[r] = tuple(sorted(hi_)) + _reh_in_premium(bk, k, hi_, x, 1)
         elif t and not s:
             side[r], lvl[r] = -1, max(lo_)
-    return {"stack_side": side, "stack_hi": lvl}
+            rungs[r] = tuple(sorted(lo_, reverse=True)) + _reh_in_premium(bk, k, lo_, x, -1)
+    return {"stack_side": side, "stack_hi": lvl, "stack_rungs": rungs}
+
+
+def _reh_in_premium(bk, k: int, lv: list, x: float, side: int) -> tuple:
+    """Item 75, the last rung: 'any REH sitting inside an HTF premium VI/FVG' - the relative equal highs (equal_levels of the stacked pivot highs, tolerance 0.05 % of the price [our interpretation]) that lie
+    inside a live weekly / daily bearish FVG / VI above the price (mirror: relative equal lows inside a bullish one below), beyond the stacked highs; ascending (descending) order."""
+    if len(lv) < 2:
+        return ()
+    eq = L.equal_levels(np.asarray(lv, float), 0.0005 * abs(x)) if side > 0 else [-q for q in L.equal_levels(-np.asarray(lv, float), 0.0005 * abs(x))]
+    out = []
+    for v in eq:
+        for arr in bk.arrs:
+            if arr.tf not in ("D", "W") or arr.typ not in ("fvg", "vi") or arr.known > k or not bk.alive(arr, k):
+                continue
+            if arr.kind == ("bear" if side > 0 else "bull") and arr.bottom <= v <= arr.top and (v - x) * side > 0:
+                out.append(float(v))
+                break
+    return tuple(sorted(set(out), reverse=side < 0))
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -477,11 +529,11 @@ def shift_origin_columns(h, l, c, ks) -> dict:
 # item 136: the fast week
 # --------------------------------------------------------------------------------------------------------------
 
-def fast_week_columns(bk, ks, px, mult: float) -> dict:
+def fast_week_columns(bk, ks, px, mult: float, df=None) -> dict:
     """B7-fast-week-htf-reversal-level (cc07_007 ~13:57): from the first row of Wednesday on (the week's sessions before the row: Monday and Tuesday at least), when the range of those sessions is at least
     `mult` x ADR5 (the mean daily range of the five sessions before the week) and the move reached a live daily / weekly array opposite to it (a bullish array for a drop; the array lay below the week's
     open and the week's extreme traded into it), the FIRST array touched (the one nearest the open) is the reversal level fw_level (its MT / CE) as long as no daily close of the week went through that MT.
-    fast_week = the reversal side (+1 after a fast DOWN week, -1 after a fast UP week); fw_tgt = the nearest live opposing array edge beyond the price (the table sees daily / weekly arrays only)."""
+    fast_week = the reversal side (+1 after a fast DOWN week, -1 after a fast UP week); fw_tgt = the nearest live opposing array edge beyond the price. With the intraday frame `df` the live 4h FVGs join the daily / weekly arrays ('the HTF level': 4h included, review fix)."""
     d = bk.d
     o, h, l, c = bk.o, bk.h, bk.l, bk.c
     wk = d.index.to_period("W-FRI")
@@ -504,9 +556,8 @@ def fast_week_columns(bk, ks, px, mult: float) -> dict:
             continue
         down = mv < 0
         best = None
-        for a in bk.arrs:
-            if a.tf not in ("D", "W") or a.typ not in ("fvg", "ob") or a.known > k0 or not bk.alive(a, k0):
-                continue
+        pool0 = [a for a in bk.arrs if a.tf in ("D", "W") and a.typ in ("fvg", "ob") and a.known <= k0 and bk.alive(a, k0)] + h4_arrs(df, d, k0)
+        for a in pool0:
             if down and a.kind == "bull" and a.top <= o[k0] and wl_ <= a.top and (best is None or a.top > best.top):
                 best = a
             if (not down) and a.kind == "bear" and a.bottom >= o[k0] and wh_ >= a.bottom and (best is None or a.bottom < best.bottom):
@@ -518,7 +569,7 @@ def fast_week_columns(bk, ks, px, mult: float) -> dict:
             continue
         fw[r], lvl[r] = (1 if down else -1), float(best.ce)
         x = float(px[r])
-        cands = [a for a in bk.arrs if a.tf in ("D", "W") and a.typ in ("fvg", "ob", "vi") and a.known <= k and bk.alive(a, k)]
+        cands = [a for a in bk.arrs if a.tf in ("D", "W") and a.typ in ("fvg", "ob", "vi") and a.known <= k and bk.alive(a, k)] + h4_arrs(df, d, k)
         if down:
             ups = [a.bottom for a in cands if a.kind == "bear" and a.bottom > x]
             tgt[r] = min(ups) if ups else NAN
@@ -680,6 +731,52 @@ def ssl_state(o15, h15, l15, c15, adr: float, bear_arr, bull_arr, eq_tol_frac: f
     return 0, NAN, NAN
 
 
+def h4_live_zones(df, until: pd.Timestamp, days: int = 60) -> tuple:
+    """The live 4h FVGs of the last `days` calendar days that closed by `until` (the frame's wall clock): ([(bottom, top)] bearish, [(bottom, top)] bullish); live = not filled through the far edge by a later bar.
+    4h bars floor at 00:00 of the frame's clock [our interpretation]. ((), ()) without bars."""
+    ix = df.index
+    cut = until.tz_localize(ix.tz) if ix.tz is not None and until.tzinfo is None else until
+    seg = df[(ix < cut) & (ix >= cut - pd.Timedelta(days=days))]
+    if len(seg) < 3:
+        return [], []
+    g = seg.groupby(seg.index.floor("240min"))
+    b = pd.DataFrame({"open": g.open.first(), "high": g.high.max(), "low": g.low.min(), "close": g.close.last()})
+    b = b[(b.index + pd.Timedelta(minutes=240)) <= cut]
+    if len(b) < 3:
+        return [], []
+    o_, h_, l_, c_ = (b[k].values.astype(float) for k in ("open", "high", "low", "close"))
+    bear, bull = [], []
+    for z in L.fvgs(h_, l_, o_, c_):
+        if z.kind == "bear" and h_[z.i + 1:].max(initial=-np.inf) < z.top:
+            bear.append((float(z.bottom), float(z.top)))
+        elif z.kind == "bull" and l_[z.i + 1:].min(initial=np.inf) > z.bottom:
+            bull.append((float(z.bottom), float(z.top)))
+    return bear, bull
+
+
+def h4_arrs(df, d, k: int) -> list:
+    """The live 4h FVGs known at the open of session `k` of the daily book `d` as array-like rows (kind, top, bottom, ce, tf '4h', typ 'fvg'): the table-side 4h arrays (review fix, items 102 / 136). Empty without a frame."""
+    if df is None or not len(df) or k < 0 or k >= len(d):
+        return []
+    from types import SimpleNamespace as NS
+    bear, bull = h4_live_zones(df, d.index[k] - pd.Timedelta(hours=6))
+    return [NS(kind="bear", top=t, bottom=b, ce=(t + b) / 2, tf="4h", typ="fvg") for b, t in bear] + [NS(kind="bull", top=t, bottom=b, ce=(t + b) / 2, tf="4h", typ="fvg") for b, t in bull]
+
+
+def ssl_fvg_below(h15, l15, s: int, lvl: float) -> float:
+    """Item 93, 'plus the inefficiency just below it': the CE of the nearest still-unfilled 15m FVG beyond the cluster level (below an SSL read, above a BSL read), NaN without one."""
+    best = NAN
+    for z in L.fvgs(h15, l15):
+        later_l, later_h = l15[z.i + 1:].min(initial=np.inf), h15[z.i + 1:].max(initial=-np.inf)
+        if s < 0 and z.top < lvl and later_l > z.bottom:
+            ce = (z.top + z.bottom) / 2
+            best = ce if best != best or ce > best else best
+        elif s > 0 and z.bottom > lvl and later_h < z.top:
+            ce = (z.top + z.bottom) / 2
+            best = ce if best != best or ce < best else best
+    return float(best)
+
+
 def wk_ssl_columns(bk, df, ks) -> dict:
     """The weekly state of `ssl_state` for every row of a week, computed once from the 15m bars before the week's first session (Friday's close / the Sunday open) and the daily arrays alive there."""
     d = bk.d
@@ -688,9 +785,9 @@ def wk_ssl_columns(bk, df, ks) -> dict:
     for k in range(len(d)):
         first.setdefault(wk[k], k)
     R = len(ks)
-    side, lvl, hi, fri = np.zeros(R, int), np.full(R, NAN), np.full(R, NAN), np.full(R, NAN)
+    side, lvl, hi, fri, fvg = np.zeros(R, int), np.full(R, NAN), np.full(R, NAN), np.full(R, NAN), np.full(R, NAN)
     if df is None or not len(df):
-        return {"wk_ssl": side, "wk_ssl_lvl": lvl, "wk_ssl_hi": hi, "wk_ssl_fri": fri}
+        return {"wk_ssl": side, "wk_ssl_lvl": lvl, "wk_ssl_hi": hi, "wk_ssl_fri": fri, "wk_ssl_fvg": fvg}
     cache = {}
     for r, k in enumerate(ks):
         k = int(k)
@@ -704,19 +801,20 @@ def wk_ssl_columns(bk, df, ks) -> dict:
             live = [a for a in bk.arrs if a.tf == "D" and a.typ in ("fvg", "ob", "vi") and a.known <= k0 and bk.alive(a, k0)]
             bear = [(float(a.bottom), float(a.top)) for a in live if a.kind == "bear"]
             bull = [(float(a.bottom), float(a.top)) for a in live if a.kind == "bull"]
-            s, lv, hh = ssl_state(o15, h15, l15, c15, adr, bear, bull)
-            cache[k0] = (s, lv, hh, float(bk.h[k0 - 1]) if s < 0 else float(bk.l[k0 - 1]))
-        side[r], lvl[r], hi[r], fri[r] = cache[k0]
-    return {"wk_ssl": side, "wk_ssl_lvl": lvl, "wk_ssl_hi": hi, "wk_ssl_fri": fri}
+            b4, u4 = h4_live_zones(df, until)                          # review fix (93): the rejection may be at a 4h array too ('a D/4h array')
+            s, lv, hh = ssl_state(o15, h15, l15, c15, adr, bear + b4, bull + u4)
+            cache[k0] = (s, lv, hh, float(bk.h[k0 - 1]) if s < 0 else float(bk.l[k0 - 1]), ssl_fvg_below(h15, l15, s, lv) if s else NAN)
+        side[r], lvl[r], hi[r], fri[r], fvg[r] = cache[k0]
+    return {"wk_ssl": side, "wk_ssl_lvl": lvl, "wk_ssl_hi": hi, "wk_ssl_fri": fri, "wk_ssl_fvg": fvg}
 
 
 # --------------------------------------------------------------------------------------------------------------
 # item 102: the weekly two-sided map
 # --------------------------------------------------------------------------------------------------------------
 
-def two_draw_columns(bk, ks) -> dict:
+def two_draw_columns(bk, ks, df=None) -> dict:
     """L14-weekly-two-sided-map (099 ~34:25: 'premium up here discount down here'): from the first row of Wednesday on, the premium draw = the nearest unfilled weekly / daily inefficiency (FVG, VI) above
-    TUESDAY's close (its near edge) and the discount draw = the nearest below (its near edge), judged on the arrays alive at Wednesday's open. NaN on Monday / Tuesday rows and without one."""
+    TUESDAY's close (its near edge) and the discount draw = the nearest below (its near edge), judged on the arrays alive at Wednesday's open (daily / weekly, and the live 4h FVGs with the intraday frame). NaN on Monday / Tuesday rows and without one."""
     d = bk.d
     wk = d.index.to_period("W-FRI")
     first = {}
@@ -734,8 +832,9 @@ def two_draw_columns(bk, ks) -> dict:
         if kt not in cache:
             x = float(bk.c[kt])
             kw = kt + 1
-            ups = [a.bottom for a in bk.arrs if a.tf in ("D", "W") and a.typ in ("fvg", "vi") and a.known <= kw and a.kind == "bear" and a.bottom > x and bk.alive(a, kw)]
-            dns = [a.top for a in bk.arrs if a.tf in ("D", "W") and a.typ in ("fvg", "vi") and a.known <= kw and a.kind == "bull" and a.top < x and bk.alive(a, kw)]
+            h4 = h4_arrs(df, d, kw)                                      # review fix: 'daily/4h unfilled arrays'
+            ups = [a.bottom for a in bk.arrs if a.tf in ("D", "W") and a.typ in ("fvg", "vi") and a.known <= kw and a.kind == "bear" and a.bottom > x and bk.alive(a, kw)] + [a.bottom for a in h4 if a.kind == "bear" and a.bottom > x]
+            dns = [a.top for a in bk.arrs if a.tf in ("D", "W") and a.typ in ("fvg", "vi") and a.known <= kw and a.kind == "bull" and a.top < x and bk.alive(a, kw)] + [a.top for a in h4 if a.kind == "bull" and a.top < x]
             cache[kt] = (float(min(ups)) if ups else NAN, float(max(dns)) if dns else NAN)
         prem[r], disc[r] = cache[kt]
     return {"wk_prem_draw": prem, "wk_disc_draw": disc}
@@ -849,28 +948,43 @@ def rollover_columns(out: pd.DataFrame, bk, ks, px, pdcfg) -> pd.DataFrame:
     rh, rl = out.pd20_hi.values.astype(float).copy(), out.pd20_lo.values.astype(float).copy()
     st, ps = out.pd20.values.copy(), out.pd20_pos.values.astype(float).copy()
     oh, ol, rr = np.full(R, NAN), np.full(R, NAN), np.zeros(R, int)
+    top_, bot_ = (np.maximum(o, c), np.minimum(o, c)) if bodies else (h, l)
+    carry = None                                       # review fix: the rolled range lasts until its array is traded or the range breaks the other way [our interpretation of 'no longer valid']
     for r, k in enumerate(ks):
         k = int(k)
         if rh[r] != rh[r] or k - n < 0:
             continue
-        a = k - n
-        hh = (np.maximum(o, c)[a:k - 1].max() if bodies else h[a:k - 1].max()) if k - 1 > a else rh[r]
-        ll = (np.minimum(o, c)[a:k - 1].min() if bodies else l[a:k - 1].min()) if k - 1 > a else rl[r]
         x = float(px[r])
-        live = [x_ for x_ in bk.arrs if x_.tf in ("D", "W") and x_.typ in ("fvg", "ob", "vi") and x_.known <= k and bk.alive(x_, k)]
-        prem = [x_.bottom for x_ in live if x_.kind == "bear" and x_.bottom > max(x, hh)]       # beyond the broken high as well as the price
-        disc = [x_.top for x_ in live if x_.kind == "bull" and x_.top < min(x, ll)]
-        top_last = max(o[k - 1], c[k - 1]) if bodies else h[k - 1]
-        bot_last = min(o[k - 1], c[k - 1]) if bodies else l[k - 1]
-        lo2, hi2, roll = rollover_range(ll, hh, hh, ll, x, top_last, bot_last, prem, disc)
-        if roll > 0:
-            nl_, nh_ = ll, hi2
-        elif roll < 0:
-            nl_, nh_ = lo2, hh
-        else:
-            continue
+        roll = 0
+        if carry is not None:
+            k0 = carry["k0"]
+            seg_hi = float(top_[k0:k].max()) if k > k0 else -np.inf
+            seg_lo = float(bot_[k0:k].min()) if k > k0 else np.inf
+            if (carry["roll"] > 0 and (seg_hi >= carry["hi"] or seg_lo < carry["lo"])) or (carry["roll"] < 0 and (seg_lo <= carry["lo"] or seg_hi > carry["hi"])):
+                carry = None                           # the array was traded (or the range broke the other way): the table's own range returns
+            else:
+                nl_, nh_, roll = carry["lo"], carry["hi"], carry["roll"]
+                oh[r], ol[r] = (carry["old"] if roll > 0 else NAN), (carry["old"] if roll < 0 else NAN)
+        if carry is None:
+            a = k - n
+            hh = (np.maximum(o, c)[a:k - 1].max() if bodies else h[a:k - 1].max()) if k - 1 > a else rh[r]
+            ll = (np.minimum(o, c)[a:k - 1].min() if bodies else l[a:k - 1].min()) if k - 1 > a else rl[r]
+            live = [x_ for x_ in bk.arrs if x_.tf in ("D", "W") and x_.typ in ("fvg", "ob", "vi") and x_.known <= k and bk.alive(x_, k)]
+            top_last = max(o[k - 1], c[k - 1]) if bodies else h[k - 1]
+            bot_last = min(o[k - 1], c[k - 1]) if bodies else l[k - 1]
+            prem = [x_.bottom for x_ in live if x_.kind == "bear" and x_.bottom > max(x, hh, top_last)]       # beyond the broken high and the price; an array the last session already entered is traded, not ahead
+            disc = [x_.top for x_ in live if x_.kind == "bull" and x_.top < min(x, ll, bot_last)]
+            lo2, hi2, roll = rollover_range(ll, hh, hh, ll, x, top_last, bot_last, prem, disc)
+            if roll > 0:
+                nl_, nh_ = ll, hi2
+                carry = dict(roll=1, hi=float(hi2), lo=float(ll), old=float(hh), k0=k)
+            elif roll < 0:
+                nl_, nh_ = lo2, hh
+                carry = dict(roll=-1, hi=float(hh), lo=float(lo2), old=float(ll), k0=k)
+            else:
+                continue
+            oh[r], ol[r] = (hh if roll > 0 else NAN), (ll if roll < 0 else NAN)
         rr[r] = roll
-        oh[r], ol[r] = (hh if roll > 0 else NAN), (ll if roll < 0 else NAN)
         rh[r], rl[r] = nh_, nl_
         s_, p_ = pd_state(x, float(nh_), float(nl_), zone, tuple(ote))
         st[r], ps[r] = s_, p_
@@ -925,7 +1039,7 @@ def finish5(out: pd.DataFrame, cfg: dict, d, w, arrs, es_pt: float, df=None) -> 
             out[k_] = v_
         sw("shift_origin_pool")
     if "fw" in cfg:
-        for k_, v_ in fast_week_columns(bk, ks, px, float(cfg["fw"])).items():
+        for k_, v_ in fast_week_columns(bk, ks, px, float(cfg["fw"]), df).items():
             out[k_] = v_
         sw("fast_week_rev")
     if "eqb" in cfg:
@@ -945,7 +1059,7 @@ def finish5(out: pd.DataFrame, cfg: dict, d, w, arrs, es_pt: float, df=None) -> 
             out[k_] = v_
         sw("wk_ssl_draw")
     if "two" in cfg:
-        for k_, v_ in two_draw_columns(bk, ks).items():
+        for k_, v_ in two_draw_columns(bk, ks, df).items():
             out[k_] = v_
         sw("wk_two_draw")
     if "b7sf" in cfg:
@@ -1018,9 +1132,27 @@ def stock_lrlr(weekly: pd.DataFrame, max_pct: float = 0.10, ext_atr: float = 2.0
     return dict(passed=reason == "", old_high=old, dist_pct=dist, broken_mid=broken, extension=ext, reason=reason)
 
 
-def seasonal_entry_report(table: pd.DataFrame, seasonal_map, ahead: int = 20) -> pd.DataFrame:
+def weekly_from_daily(daily: pd.DataFrame) -> pd.DataFrame:
+    """Weekly bars (open / high / low / close, W-FRI) from a daily frame (e.g. the Alpaca daily bars): the aggregator stock_lrlr needs."""
+    return daily.resample("W-FRI").agg({"open": "first", "high": "max", "low": "min", "close": "last"}).dropna()
+
+
+def stock_lrlr_symbol(symbol: str, start: str, end: str | None = None, max_pct: float = 0.10, ext_atr: float = 2.0, daily: pd.DataFrame | None = None) -> dict:
+    """`stock_lrlr` for a symbol: the Alpaca daily bars (`daily` when given, else alpaca_data.bars(symbol, 1440, start, end)) aggregated to weekly bars (review fix, 176)."""
+    if daily is None:
+        from . import alpaca_data
+        daily = alpaca_data.bars(symbol, 1440, start, end)
+    return stock_lrlr(weekly_from_daily(daily), max_pct, ext_atr)
+
+
+def seasonal_entry_report(table: pd.DataFrame, seasonal_map=None, ahead: int = 20) -> pd.DataFrame:
     """B23-seasonal-entry-arrays (cc05_011 ~24:21), report only: the first table row of every month whose seasonal reading (`seasonal_map`, January first) is 'bull' after a month that was not = a bullish window
-    start; whether the price sits inside a weekly bullish OB (`in_w_ob`) or above a broken weekly pivot high (`above_broken_high`), and the return of the next `ahead` rows (px to px)."""
+    start (`seasonal_map` None = Params.seasonal_map, the map daycontext.seasonal / seasonal_tag reads; a Params object is taken for its seasonal_map); whether the price sits inside a weekly bullish OB (`in_w_ob`) or above a broken weekly pivot high (`above_broken_high`), and the return of the next `ahead` rows (px to px)."""
+    if seasonal_map is None:
+        from .strategy import Params
+        seasonal_map = Params().seasonal_map
+    elif hasattr(seasonal_map, "seasonal_map"):
+        seasonal_map = seasonal_map.seasonal_map
     rows = []
     idx = [pd.Timestamp(x) for x in table.index]
     px = table.px.values.astype(float)

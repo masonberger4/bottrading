@@ -55,7 +55,7 @@ def _c(ctx) -> dict:
 
 def on(p) -> bool:
     """Any engine-side bias_htf#5/7 switch is on (the hooks return at once otherwise)."""
-    return bool(p.org_with_bias or p.pm_range_break or p.pdh_raid_rev or p.range_block_probed or p.h4_ob_flip or p.program_gate or p.wk_two_draw or p.wk_range
+    return bool(p.org_with_bias or p.pm_range_break or p.pdh_raid_rev or p.range_block_probed or p.h4_ob_flip or p.program_gate or p.wk_two_draw or p.wk_range or p.wk_ssl_draw
                 or (p.weekly_open_array and p.weekly_open != "off"))
 
 
@@ -74,7 +74,7 @@ def prefs_on(p) -> bool:
 
 
 def targets_on(p) -> bool:
-    return bool(p.nwog_fill_rule or p.wk_range or p.org_pm_draw or p.shift_origin_pool)
+    return bool(p.nwog_fill_rule or p.wk_range or p.org_pm_draw or p.shift_origin_pool or p.org_with_bias or p.stack_draw or p.wk_ssl_draw)
 
 
 def rows_on(p) -> bool:
@@ -102,7 +102,8 @@ def _tk(p) -> float:
 
 
 def _want0(ctx, p, session: str, i: int) -> int:
-    """The bias side WITHOUT this module's own adjustments (the table reading through every earlier hook): used where a rule needs 'the bias' as an input and must not read its own output."""
+    """The session want (htf_bias value through every hook, the bias_htf#5/7 overrides included - review fix: the rule compares the gap with the session want). `in_want` stays a guard against a reading
+    that asks for its own input."""
     c = _c(ctx)
     if c.get("in_want"):
         return 0
@@ -146,7 +147,7 @@ def nwog_now(ctx, i: int):
 
 
 def eth_gaps(ctx, p, i: int) -> list:
-    """The gaps the gap theory reads: the day's NWOG / NDOG rows (or the frame's weekly gaps) and today's ORG: [(hi, lo, ce, kind)]."""
+    """The gaps the gap theory reads: the day's NWOG / NDOG rows (or the frame's weekly gaps), today's ORG and (gap_theory_bias) the untraded 15m FVGs of the last two sessions: [(hi, lo, ce, kind)]."""
     out = []
     gl = getattr(ctx, "gaps", None)
     if gl is not None:
@@ -160,6 +161,11 @@ def eth_gaps(ctx, p, i: int) -> list:
     if og is not None:
         hi, lo = max(og), min(og)
         out.append((float(hi), float(lo), float((hi + lo) / 2), "org"))
+    if p.gap_theory_bias and i >= ctx.start:
+        # review fix (80, 'any gap (FVG, liquidity void)'): the untraded 15m FVGs of the last two completed sessions are gaps too, read with the same CE-side / close-beyond logic
+        for kind, top, bot, untouched in _resampled_zones(ctx, p, ctx.start - 1, 15, 2):
+            if untouched:
+                out.append((float(top), float(bot), float((top + bot) / 2), "fvg15"))
     return out
 
 
@@ -208,8 +214,9 @@ def nwog_below_state(ctx, p, i: int):
         return 0, None
     hi, lo, ce = ng
     a = ctx.start
-    below = np.flatnonzero(ctx.l[a:i + 1] < lo)
-    above = np.flatnonzero(ctx.h[a:i + 1] > hi)
+    prev_c = np.concatenate([[ctx.c[a - 1] if a > 0 else (lo + hi) / 2], ctx.c[a:i]])      # the close before each bar: a break is a CROSSING of the edge, not a day that opens beyond it [our interpretation, review fix]
+    below = np.flatnonzero((ctx.l[a:i + 1] < lo) & (prev_c >= lo))
+    above = np.flatnonzero((ctx.h[a:i + 1] > hi) & (prev_c <= hi))
     j_b = a + int(below[0]) if len(below) else None
     j_a = a + int(above[0]) if len(above) else None
     if j_b is None and j_a is None:
@@ -281,7 +288,7 @@ def org_pm_state(ctx, p, i: int):
         k0 = _k570(ctx)
         gap = abs(pc - op)
         if pc > op:                                                   # gap down
-            if ctx.l[k0:kpm].min() < ctx.prev_am[1] and ctx.h[k0:kpm].max() < op + 0.10 * gap:
+            if ctx.l[k0:kpm].min() < ctx.prev_am[1] and ctx.h[k0:kpm].max() < op + 0.10 * gap:       # [our interpretation] 'traded into the ORG' = a high above the open + 10 % of the gap
                 lun = ctx.h[_idx(ctx, 720):kpm].max() if kpm > _idx(ctx, 720) else None
                 res = (1, (float(op), float((pc + op) / 2), float(pc), lun))
         else:
@@ -499,24 +506,27 @@ def or60_side(ctx, p, i: int) -> int:
     pools += [(float(ctx.pd[k]), 1 if k == "pmh" else -1, ctx.start) for k in ("pmh", "pml") if k in ctx.pd]
     pre_hi, pre_lo = (float(ctx.h[ctx.start:k0].max()), float(ctx.l[ctx.start:k0].min())) if k0 > ctx.start else (-np.inf, np.inf)
 
+    j_lo, j_hi = k0 + int(np.argmin(ctx.l[k0:k1])), k0 + int(np.argmax(ctx.h[k0:k1]))
+
+    # a pool counts only when it was untaken at 09:30 (the bars before it did not trade through it, review fix); the 2-point overshoot cap is [our interpretation]
     def swept_low():
-        return any(sdn < 0 and lvl <= float(ctx.c[k0 - 1] if k0 > 0 else lvl) and lo_ <= lvl + tk and lvl - lo_ <= 2.0 * p.es_pt for lvl, sdn, cr in pools)
+        return any(sdn < 0 and lvl <= float(ctx.c[k0 - 1] if k0 > 0 else lvl) and pre_lo > lvl and lo_ <= lvl + tk and lvl - lo_ <= 2.0 * p.es_pt for lvl, sdn, cr in pools)
 
     def swept_high():
-        return any(sdn > 0 and lvl >= float(ctx.c[k0 - 1] if k0 > 0 else lvl) and hi_ >= lvl - tk and hi_ - lvl <= 2.0 * p.es_pt for lvl, sdn, cr in pools)
+        return any(sdn > 0 and lvl >= float(ctx.c[k0 - 1] if k0 > 0 else lvl) and pre_hi < lvl and hi_ >= lvl - tk and hi_ - lvl <= 2.0 * p.es_pt for lvl, sdn, cr in pools)
 
-    def in_array(price: float, bull: bool) -> bool:
+    def in_array(price: float, bull: bool, j_ext: int) -> bool:
         for m in (5, 15):
             if m < ctx.tf:
                 continue
             bb = B1.tf_complete(ctx, m, k1 - 1)
             for z in L.fvgs(bb["h"], bb["l"], bb["o"], bb["c"]):
-                if z.kind == ("bull" if bull else "bear") and z.bottom <= price <= z.top:
+                if z.kind == ("bull" if bull else "bear") and z.bottom <= price <= z.top and bb["last"][z.i] < j_ext:      # review fix: the array formed before the extreme
                     return True
         return False
 
-    lo_formed = swept_low() or in_array(lo_, True)
-    hi_formed = swept_high() or in_array(hi_, False)
+    lo_formed = swept_low() or in_array(lo_, True, j_lo)
+    hi_formed = swept_high() or in_array(hi_, False, j_hi)
     res = 1 if (lo_formed and not hi_formed) else (-1 if (hi_formed and not lo_formed) else 0)
     c["or60"] = res
     if res:
@@ -528,44 +538,49 @@ def or60_side(ctx, p, i: int) -> int:
 # item 103: the 1h spike floor
 # --------------------------------------------------------------------------------------------------------------
 
-def b7_floor(ctx, p, row, i: int):
+def b7_floor(ctx, p, row, i: int, side: int = 1):
     """B7-spike-floor-1h-ob-fvg (101 ~38:37: 'here's your order block right there and it has a fair value gap'): with the daily bullish OB guard (its MT, table b7sf_guard) in force - the previous daily close
     not below it - and price trading below it today: the nearest 1h bullish OB below the MT with a bullish FVG right after it. Returns (floor = the OB low, entry = the open of its anchor candle, dead) or None.
-    dead = a trade through the floor after price went under the MT. Skipped on a jobs-report (NFP) day."""
-    if row is None or "b7sf_guard" not in row:
+    dead = a trade through the floor after price went under the MT. Skipped on a jobs-report (NFP) day.
+    side=-1 is the bearish mirror (review fix, 'Bearish mirror' of the rule): guard b7sf_guard_sh, previous daily close not above it, price trading above it today, the nearest 1h bearish OB above the MT with a
+    bearish FVG; floor = the OB high, dead = a trade above it."""
+    col = "b7sf_guard" if side > 0 else "b7sf_guard_sh"
+    if row is None or col not in row:
         return None
-    g = _f(row, "b7sf_guard")
+    g = _f(row, col)
     if g != g:
         return None
     hist = getattr(ctx, "hist", None) or []
-    if hist and float(hist[-1].close.iloc[-1]) < g:
-        return None                                               # a daily close below the MT = the B7 failure, not a spike
+    if hist and (float(hist[-1].close.iloc[-1]) - g) * side < 0:
+        return None                                               # a daily close beyond the MT = the B7 failure, not a spike
     from claude_hf.daytypes import events
     if "jobs" in events(ctx.day):
         return None
-    below = np.flatnonzero(ctx.l[ctx.start:i + 1] < g)
-    if not len(below):
+    away = np.flatnonzero((ctx.l[ctx.start:i + 1] < g) if side > 0 else (ctx.h[ctx.start:i + 1] > g))
+    if not len(away):
         return None
-    j_g = ctx.start + int(below[0])
+    j_g = ctx.start + int(away[0])
     b = B1.tf_complete(ctx, 60, i)
     if len(b["c"]) < 5:
         return None
     best = None
+    kind, nm = ("bull", "bull") if side > 0 else ("bear", "bear")
     for z in L.fvgs(b["h"], b["l"], b["o"], b["c"]):
-        if z.kind != "bull":
+        if z.kind != kind:
             continue
-        ob = L.order_block_blend(b["o"], b["h"], b["l"], b["c"], z.i - 4, z.i - 2, "bull")
-        if ob is None or ob.top >= g:
+        ob = L.order_block_blend(b["o"], b["h"], b["l"], b["c"], z.i - 4, z.i - 2, nm)
+        if ob is None or (ob.top >= g if side > 0 else ob.bottom <= g):
             continue
-        if best is None or ob.top > best[0].top:
+        if best is None or (ob.top > best[0].top if side > 0 else ob.bottom < best[0].bottom):
             best = (ob, z)
     if best is None:
         return None
     ob = best[0]
-    op = float(b["o"][ob.src]) if 0 <= ob.src < len(b["o"]) else float(ob.top)
+    op = float(b["o"][ob.src]) if 0 <= ob.src < len(b["o"]) else float(ob.top if side > 0 else ob.bottom)
     entry = min(max(op, float(ob.bottom)), float(ob.top))
-    dead = bool(ctx.l[j_g:i + 1].min() < ob.bottom)
-    return float(ob.bottom), entry, dead
+    if side > 0:
+        return float(ob.bottom), entry, bool(ctx.l[j_g:i + 1].min() < ob.bottom)
+    return float(ob.top), entry, bool(ctx.h[j_g:i + 1].max() > ob.top)
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -735,6 +750,19 @@ def _week_hl(ctx, i: int) -> tuple:
     return max(hh), min(ll)
 
 
+def week_top(ctx, p, ws: int, wh: float, wl: float, i: int):
+    """The anticipated end of the week's range that is NOT the draw (item 143 on item 137): on Monday (from 09:30) the Monday London-swing projection (sm3.wk_proj_levels, first multiple; `wk_high_proj`) when it
+    lies beyond the week's extreme so far, else the week's high (bearish week) / low (bullish) so far - the rule after Wednesday."""
+    ext = wh if ws < 0 else wl
+    if p.wk_high_proj and ctx.day.weekday() == 0 and i >= _k570(ctx):
+        from . import sm3
+        lv = sm3.wk_proj_levels(ctx, ws, p)
+        if lv:
+            pj = float(lv[0][1])
+            return max(pj, ext) if ws < 0 else min(pj, ext)
+    return ext
+
+
 def weekly_draw_level(ctx, row, side: int, i: int):
     """The weekly range's other end: the nearest 4h / daily / weekly array edge on the side the week runs to (below the price for a bearish week), from the confluence table, else the table's weekly draw."""
     px = float(ctx.c[i])
@@ -781,13 +809,17 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p):
             dr = weekly_draw_level(ctx, row, ws, i)
             wh, wl = _week_hl(ctx, i)
             if dr is not None:
-                top, bot = (wh, dr) if ws < 0 else (dr, wl)
+                tp = week_top(ctx, p, ws, wh, wl, i)
+                top, bot = (tp, dr) if ws < 0 else (dr, tp)
                 if top > bot:
                     eq = (top + bot) / 2
                     sw("wk_range")
                     if (ws < 0 and entry_raw < eq - 1e-9) or (ws > 0 and entry_raw > eq + 1e-9):
                         return "x_bh5_wk_range"
                     tags.append("wk_range_" + ("prem" if ws < 0 else "disc"))
+    if p.wk_ssl_draw and row is not None and "wk_ssl" in row and _n(row, "wk_ssl") == sign and ctx.day.weekday() == 0:
+        tags.append("wk_ssl_monday")                       # review fix (93): 'observe on Monday, trade from Tuesday' - Monday is a tag only
+        sw("wk_ssl_draw")
     if p.weekly_open_array and p.weekly_open != "off" and row is not None and not _n(row, "wo_expired"):
         wd = _n(row, "wk_dir")
         if wd and sign == wd:
@@ -817,9 +849,6 @@ def want_adjust(ctx, p, session: str, i: int, v: int) -> int:
     """The htf_bias value after the bias_htf#5/7 readings. Overrides (the spec sets the side): the buy / sell program, the stacked highs, the EQ-breakout side, the fast week's reversal, the NWOG-below return, the
     delayed PM ORG draw, the PM flip, the PM range break, the alternation of an intraday range, the failed 1h spike floor (a bullish bias turns 0). Fallbacks (only when the bias is neutral): the monthly control, the
     shift-origin MSS, the carried daily draw, the weekly SSL read (Tuesday on), the gap theory; the OR60 side counts when the bias is neutral or agrees."""
-    c = _c(ctx)
-    if c.get("in_want"):
-        return v
     row = _row(ctx, session, i)
     t = int(ctx.t[i])
     if row is not None:
@@ -842,6 +871,12 @@ def want_adjust(ctx, p, session: str, i: int, v: int) -> int:
         if not v:
             for flag, col, name in ((p.monthly_ctrl, "m_ctrl", "monthly_ctrl"), (p.d_draw_carry, "d_draw_dir", "d_draw_carry")):
                 if flag and col in row and _n(row, col):
+                    if name == "monthly_ctrl" and p.monthly_ctrl_smt:
+                        im = getattr(ctx, "intermarket", None) or {}
+                        if "msmt" in im:                             # the monthly SMT must agree (no partner frame: the gate is inert)
+                            if int(im["msmt"] or 0) != _n(row, col):
+                                continue
+                            sw("monthly_ctrl_smt")
                     sw(name)
                     v = _n(row, col)
                     break
@@ -855,8 +890,8 @@ def want_adjust(ctx, p, session: str, i: int, v: int) -> int:
             if not ssl_cancelled(ctx, p, row, i):
                 sw("wk_ssl_draw")
                 v = _n(row, "wk_ssl")
-        if p.b7_spike_floor and v > 0:
-            fl = b7_floor(ctx, p, row, i)
+        if p.b7_spike_floor and v:
+            fl = b7_floor(ctx, p, row, i, 1 if v > 0 else -1)
             if fl is not None and fl[2]:
                 sw("b7_spike_floor")
                 v = 0
@@ -984,6 +1019,11 @@ def lock_prefs(ctx, p, row, t_lock: int, session: str, S: int, px: float, kl: in
                 tg = v if v == v else None
             if tg is not None:
                 out.append((tg, "array", "fast_week_tgt", 0, S))
+        if p.nwog_fill_rule and "nwog_fill" in row and _n(row, "nwog_gap") and _n(row, "nwog_fill", 1) == 1:
+            ng = nwog_now(ctx, kl - 1)                                 # review fix (22): a full fill expected - Friday's close (the far edge) is ranked as the draw
+            if ng is not None:
+                out.append((ng[1] if _n(row, "nwog_gap") > 0 else ng[0], "array", "nwog_far_fill", 0, S))
+                sw("nwog_fill_rule")
         if p.d_draw_carry and "d_draw_dir" in row and _n(row, "d_draw_dir"):
             v = _f(row, "d_draw")
             if v == v:
@@ -992,7 +1032,7 @@ def lock_prefs(ctx, p, row, t_lock: int, session: str, S: int, px: float, kl: in
             side = _n(row, "shift_last")
             v = _f(row, "shift_origin_lo" if side < 0 else "shift_origin_hi")
             if v == v:
-                out.append((v, "pool", "shift_origin", -side if side < 0 else side, S))
+                out.append((v, "pool", "shift_origin", int(side), S))                  # review fix: +1 the high pool, -1 the low pool
         if p.wk_ssl_draw and "wk_ssl" in row and _n(row, "wk_ssl") and ctx.day.weekday() >= 1 and kl - 1 >= S:
             v = _f(row, "wk_ssl_lvl")
             if v == v and not ssl_cancelled(ctx, p, row, kl - 1):
@@ -1042,6 +1082,14 @@ def targets_post(ctx, sd, i: int, p, above: float, lv: list) -> list:
     high as the first rung; shift_origin_pool: the stored origin pool is a pool rung."""
     session = getattr(ctx, "cur_session", "") or ("PM" if ctx.t[i] >= 810 else "AM")
     row = _row(ctx, session, i)
+    if p.org_with_bias and session == "AM" and i >= _k570(ctx) and org_with_bias_dir(ctx, p, i):
+        og = org_now(ctx, p, i)                           # review fix (35): the ORG levels leave the AM ladder as well as the lock
+        if og is not None:
+            xs = [sd.x(og[0]), sd.x(og[1]), sd.x((og[0] + og[1]) / 2)]
+            kept = [(v, k) for v, k in lv if all(abs(v - x) > 1e-9 for x in xs)]
+            if len(kept) != len(lv):
+                sw("org_with_bias")
+            lv = kept
     if p.nwog_fill_rule and row is not None and "nwog_fill" in row and _n(row, "nwog_gap") and not _n(row, "nwog_fill", 1):
         ng = nwog_now(ctx, i)
         if ng is not None:
@@ -1061,7 +1109,7 @@ def targets_post(ctx, sd, i: int, p, above: float, lv: list) -> list:
                 x = sd.x(dr)
                 if x > above:
                     sw("wk_range")
-                    lv = list(lv) + [(float(x), "array")]
+                    lv = [(v, k) for v, k in lv if v < x - 1e-9] + [(float(x), "array")]          # review fix (143): the weekly draw is the FINAL target of the week's trades - nothing beyond it
     if p.org_pm_draw and ctx.t[i] >= 810:
         s, info = org_pm_state(ctx, p, i)
         if s and s == sd.sign:
@@ -1069,6 +1117,17 @@ def targets_post(ctx, sd, i: int, p, above: float, lv: list) -> list:
             near, ce, far, lun = info
             lvl = ([(sd.x(lun), "pool")] if lun is not None else []) + [(sd.x(near), "array"), (sd.x(ce), "array"), (sd.x(far), "array")]
             lv = list(lv) + [(float(v), k) for v, k in lvl if v > above]
+    if p.wk_ssl_draw and row is not None and "wk_ssl_fvg" in row and _n(row, "wk_ssl") == sd.sign and ctx.day.weekday() >= 1 and not ssl_cancelled(ctx, p, row, i):
+        v = _f(row, "wk_ssl_fvg")                         # review fix (93): the inefficiency just beyond the cluster is part of the draw
+        if v == v and sd.x(v) > above:
+            sw("wk_ssl_draw")
+            lv = list(lv) + [(float(sd.x(v)), "array")]
+    if p.stack_draw and row is not None and "stack_rungs" in row and _n(row, "stack_side") == sd.sign:
+        rg = [sd.x(float(v)) for v in row["stack_rungs"]]               # review fix (75): the nearest stacked high, the higher stacked highs, then the REH inside an HTF premium array
+        rg = [v for v in rg if v > above]
+        if rg:
+            sw("stack_draw")
+            lv = list(lv) + [(float(v), "pool") for v in rg]
     if p.shift_origin_pool and row is not None:
         v = _f(row, "shift_origin_hi" if sd.sign > 0 else "shift_origin_lo")
         if v == v:
@@ -1080,7 +1139,7 @@ def targets_post(ctx, sd, i: int, p, above: float, lv: list) -> list:
 
 
 def entry_rows(ctx, sd, i: int, p=None) -> list:
-    """Entry arrays (side space (top, bottom, known)): the 1h OB open of the b7 spike floor (zero height, a long only) and the 4h bullish OB that formed once the 4h bearish OB's candle was traded through."""
+    """Entry arrays (side space (top, bottom, known)): the 1h OB open of the b7 spike floor (zero height, either side) and the 4h bullish OB that formed once the 4h bearish OB's candle was traded through."""
     out = []
     if p is None:
         return out
@@ -1089,8 +1148,8 @@ def entry_rows(ctx, sd, i: int, p=None) -> list:
     if row is None:
         return out
     kn = ctx.idx[ctx.start]
-    if p.b7_spike_floor and sd.sign > 0:
-        fl = b7_floor(ctx, p, row, i)
+    if p.b7_spike_floor:
+        fl = b7_floor(ctx, p, row, i, sd.sign)
         if fl is not None and not fl[2]:
             sw("b7_spike_floor")
             out.append((float(sd.x(fl[1])), float(sd.x(fl[1])), kn))
@@ -1112,7 +1171,8 @@ TARGET_TFS = {"one_lower": {"M": ("W", "D", "4h"), "W": ("D", "4h"), "D": ("4h",
 
 def target_tfs(react_tf: str, mode: str) -> tuple:
     """L14-target-timeframe (cc07_003 ~2:50; cc07_004 ~14:37; cc06_006 ~3:24): the timeframes the draw is searched on after a reaction at `react_tf`: 'one_lower' = monthly -> weekly / daily (4h allowed), weekly -> daily /
-    4h, daily -> 4h / 1h; 'same' = the reaction timeframe's own opposing arrays; () for 'off' or an unknown timeframe. (cc06_006 same-timeframe position context vs the cc07_003 one-lower weekly templates.)"""
+    4h, daily -> 4h / 1h; 'same' = the reaction timeframe's own opposing arrays; () for 'off' or an unknown timeframe. (cc06_006 same-timeframe position context vs the cc07_003 one-lower weekly templates.)
+    The table's react_tf is 'W' or 'D' only, so the monthly entry never fires today (kept for a table that reports 'M'). With matrix_tf_lower also on, target_tf replaces its preference (strategy.mark_levels)."""
     return TARGET_TFS.get(mode, {}).get(react_tf, ())
 
 

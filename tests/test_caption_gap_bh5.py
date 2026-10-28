@@ -18,7 +18,7 @@ NEW_FIELDS = (
     "dfvg_upclose_anchor", "h4_ob_flip", "iof_follow", "iof_follow_days", "swing_min_days", "monthly_ctrl", "mega_min_days", "nwog_fill_rule", "nwog_eq_band", "nwog_below_return", "nwog_draw_confl",
     "confl_pts", "org_with_bias", "org_pm_draw", "dce_proj_study", "range_alternate", "range_block_probed", "pm_flip_draw", "pm_flip_adr", "pm_flip_days", "pm_range_break", "stack_draw", "stack_n",
     "program_gate", "gap_theory_bias", "wk_ssl_draw", "wk_two_draw", "b7_spike_floor", "shift_origin_pool", "target_tf", "wk_ref_friday", "fast_week_rev", "fast_week_adr", "eq_breakout_draw",
-    "wk_range", "d_draw_carry", "pdh_raid_rev", "raid_run_days", "or60_bias", "stock_old_high_max_pct", "range_rollover", "weekly_open_array")
+    "wk_range", "monthly_ctrl_smt", "d_draw_carry", "pdh_raid_rev", "raid_run_days", "or60_bias", "stock_old_high_max_pct", "range_rollover", "weekly_open_array")
 KNOBS = {"iof_follow_days", "swing_min_days", "mega_min_days", "nwog_eq_band", "confl_pts", "range_block_probed", "pm_flip_adr", "pm_flip_days", "stack_n", "fast_week_adr", "raid_run_days",
          "stock_old_high_max_pct", "target_tf"}
 OFF = {k: False for k in NEW_FIELDS if k not in KNOBS}
@@ -155,6 +155,10 @@ def test_stacked_highs_bias():
     bk = book(rows, [arr("bull", "fvg", 4015, 4005, 3)])
     c = BH5.stack_columns(bk, np.array([14]), np.array([4012.0]), 3)
     assert c["stack_side"].tolist() == [1] and c["stack_hi"][0] == 4030.0                  # four untaken highs (4080, 4070, 4060, 4030): the nearest is the draw
+    assert c["stack_rungs"][0] == (4030.0, 4060.0, 4070.0, 4080.0)                           # review fix: the nearest stacked high, then the higher ones
+    bear = book(rows, [arr("bear", "fvg", 4120, 4100, 3)])
+    assert BH5._reh_in_premium(bear, 14, [4101.0, 4101.5, 4030.0], 4012.0, 1) == (4101.5,)    # ... then the REH inside a live HTF premium FVG
+    assert BH5._reh_in_premium(bear, 14, [4101.0, 4130.0], 4012.0, 1) == ()
     assert BH5.stack_columns(bk, np.array([14]), np.array([4012.0]), 5)["stack_side"].tolist() == [0]
     assert BH5.stack_columns(book(rows, []), np.array([14]), np.array([4012.0]), 3)["stack_side"].tolist() == [0]      # no unfilled BISI under the price
 
@@ -259,6 +263,23 @@ def test_consolidation_above_lows_draw():
     assert BH5.ssl_state(o, h, l, c, 100.0, [], [])[0] == 0                      # no rejection at a daily array
 
 
+def test_ssl_read_uses_4h_arrays_and_the_fvg_below():
+    """Review fix (93): the rejection may be at a 4h array; the inefficiency just below the cluster is part of the draw."""
+    blocks = [(120, 121, 119, 119.5), (115, 116, 112, 113), (108, 109, 105, 106), (106, 107, 105.5, 106.5)]
+    rows = [r for r in blocks for _ in range(48)]
+    ix = pd.date_range("2026-03-02 00:00", periods=len(rows), freq="5min", tz="America/New_York")
+    df = pd.DataFrame(rows, columns=["open", "high", "low", "close"], index=ix)
+    until = ix[-1] + pd.Timedelta(minutes=5)
+    bear, bull = BH5.h4_live_zones(df, until.tz_localize(None))
+    assert (109.0, 119.0) in bear and (107.0, 112.0) in bear and bull == []
+    assert BH5.h4_live_zones(df, ix[0].tz_localize(None) + pd.Timedelta(hours=4)) == ([], [])          # nothing complete yet: no look-ahead
+    h3 = np.array([60, 62, 70, 72, 74], float)
+    l3 = np.array([58, 60, 66, 68, 70], float)                                           # bullish FVGs [60, 66] (CE 63) and [62, 68] (CE 65), below a level at 80, never refilled: the nearest (highest) CE
+    assert np.isnan(BH5.ssl_fvg_below(np.array([61, 62, 70, 72, 74], float), np.array([59, 60, 66, 68, 61.0]), -1, 80.0))        # refilled by a later low under the gap's bottom
+    assert BH5.ssl_fvg_below(h3, l3, -1, 80.0) == 65.0
+    assert np.isnan(BH5.ssl_fvg_below(h3, l3, -1, 62.0))                                 # not below the level
+
+
 # --- item 102: the two-sided map -----------------------------------------------------------------------------------------------------------
 
 def test_weekly_two_draw_columns():
@@ -266,6 +287,23 @@ def test_weekly_two_draw_columns():
     bk = book(rows, [arr("bear", "fvg", 4160, 4150, 0), arr("bull", "fvg", 4050, 4040, 0)])
     c = BH5.two_draw_columns(bk, np.array([6, 7, 8]))                              # the second week: Monday = 5, Tuesday = 6
     assert np.isnan(c["wk_prem_draw"][0]) and c["wk_prem_draw"].tolist()[1:] == [4150.0, 4150.0] and c["wk_disc_draw"].tolist()[1:] == [4050.0, 4050.0]
+
+
+def test_two_draw_and_fast_week_read_4h_arrays():
+    """Review fix (102 / 136): the live 4h FVGs join the daily / weekly arrays in the table columns."""
+    blocks = [(4180, 4190, 4170, 4175), (4170, 4172, 4160, 4162), (4150, 4155, 4140, 4145)]
+    rows = [r for r in blocks for _ in range(48)]
+    ix = pd.date_range("2026-01-13 00:00", periods=len(rows), freq="5min", tz="America/New_York")
+    df = pd.DataFrame(rows, columns=["open", "high", "low", "close"], index=ix)
+    bk = book([(4100.0, 4105.0, 4095.0, 4100.0)] * 10, [arr("bear", "fvg", 4260, 4250, 0), arr("bull", "fvg", 4050, 4040, 0)])
+    ks = np.array([6, 7, 8])
+    base = BH5.two_draw_columns(bk, ks)
+    c = BH5.two_draw_columns(bk, ks, df)
+    assert base["wk_prem_draw"].tolist()[1:] == [4250.0, 4250.0] and c["wk_prem_draw"].tolist()[1:] == [4155.0, 4155.0]       # the 4h gap [4155, 4170] is the nearer premium draw
+    assert c["wk_disc_draw"].tolist()[1:] == [4050.0, 4050.0]
+    a4 = BH5.h4_arrs(df, bk.d, 7)
+    assert [(a.kind, a.bottom, a.top, a.ce) for a in a4 if a.bottom == 4155.0] == [("bear", 4155.0, 4170.0, 4162.5)]
+    assert BH5.h4_arrs(df, bk.d, 6) == [] and BH5.h4_arrs(None, bk.d, 7) == []                  # not known before the cut
 
 
 # --- item 135 / 30: the week's price ---------------------------------------------------------------------------------------------------------
@@ -297,6 +335,17 @@ def test_seasonal_entry_array_tag():
     r = BH5.seasonal_entry_report(t, m, 10)
     assert len(r) == 1 and bool(r.in_w_ob.iloc[0]) and r.ret_next.iloc[0] > 0
     assert study.seasonal_entry_report(t, m, 10).equals(r)
+    pm = Params(seasonal_map=m)                                              # review fix: the report reads Params.seasonal_map (the map seasonal_tag uses)
+    assert BH5.seasonal_entry_report(t, pm, 10).equals(r) and len(BH5.seasonal_entry_report(t, None, 10)) >= 0
+
+
+def test_stock_lrlr_symbol_aggregates_daily_to_weekly():
+    idx = pd.bdate_range("2025-01-06", periods=100)
+    px = np.linspace(100, 110, 100)
+    d = pd.DataFrame({"open": px, "high": px + 1, "low": px - 1, "close": px}, index=idx)
+    w = BH5.weekly_from_daily(d)
+    assert len(w) == 20 and w.high.iloc[0] == d.high.iloc[:5].max() and w.close.iloc[0] == d.close.iloc[4]
+    assert BH5.stock_lrlr_symbol("X", "2025-01-01", daily=d) == BH5.stock_lrlr(w) and study.stock_lrlr_symbol("X", "2025-01-01", daily=d)["reason"] == BH5.stock_lrlr(w)["reason"]
 
 
 # --- item 179: the rollover -----------------------------------------------------------------------------------------------------------------------
@@ -306,6 +355,20 @@ def test_dealing_range_rollover():
     assert (lo, hi, roll) == (4000.0, 4130.0, 1) and (lo + hi) / 2 == 4065.0
     assert BH5.rollover_range(4000.0, 4100.0, 4100.0, 4000.0, 4105.0, 4110.0, 4090.0, [], []) == (4000.0, 4100.0, 0)
     assert BH5.rollover_range(4000.0, 4100.0, 4100.0, 4000.0, 3995.0, 4090.0, 3990.0, [], [3960.0]) == (3960.0, 4100.0, -1)
+
+
+def test_rollover_is_carried_until_the_array_trades():
+    """Review fix (179): the rolled range lasts beyond the one table row after the break session - until the array is traded or the range breaks the other way."""
+    from test_caption_gap_bh1 import arr as mk_arr
+    ohlc = [(100, 110, 95, 105)] * 7 + [(105, 115, 104, 112), (112, 113, 110, 112), (112, 114, 110, 112), (112, 126, 111, 124), (124, 125, 120, 123)]
+    bk = book(ohlc, [mk_arr("bear", "fvg", 130.0, 125.0, 2)])
+    ks = np.array([8, 9, 10, 11, 12])
+    R = len(ks)
+    out = pd.DataFrame(dict(pd20_hi=[110.0] * R, pd20_lo=[95.0] * R, pd20=[0] * R, pd20_pos=[0.5] * R, px=[112.0] * R, react=[0] * R, pd=[0] * R))
+    r = BH5.rollover_columns(out, bk, ks, np.full(R, 112.0), (5, False, "half", (0.62, 0.79), False))
+    assert r.pd20_roll.tolist() == [1, 1, 1, 0, 0]                           # rows 8, 9, 10 carry the rolled range, the session that traded the array (10) ends it
+    assert r.pd20_hi.tolist()[:3] == [125.0] * 3 and r.pd20_old_hi.iloc[1] == 110.0 and r.pd20_lo.iloc[1] == 95.0
+    assert r.pd20_hi.iloc[3] != 125.0
 
 
 # --- items 176 / 199 / 204: the screen and the definitions -----------------------------------------------------------------------------------------

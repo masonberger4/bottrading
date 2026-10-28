@@ -3418,7 +3418,8 @@ class Params:
     iof_follow: bool = False             # B6-broken-highs-follow-through (cc06_002 ~5:05): the daily IOF needs (b) broken swing highs followed by higher highs (bearish: lows by lower lows): a broken high with no new high within iof_follow_days drops the IOF to 0
     iof_follow_days: int = 5             # ... [our interpretation] the time limit on the follow-through
     swing_min_days: int = 10             # M17-swing-trade-definition (cc06_001 ~0:50): a swing trade lasts about two weeks or more (>= ~10 trading days); a documentation constant for the future swing engine (htf.mw_side is the M/W side gate)
-    monthly_ctrl: bool = False           # new-monthly-structure-control (cc12_001 ~23:53): table m_ctrl - two successive lower monthly pivot highs = a long-term high is in control (-1), two successive higher lows = a long-term low (+1); a neutral bias takes it (the SMT confirmation is not built)
+    monthly_ctrl: bool = False           # new-monthly-structure-control (cc12_001 ~23:53): table m_ctrl - two successive lower monthly pivot highs = a long-term high is in control (-1), two successive higher lows = a long-term low (+1); a neutral bias takes it (the SMT confirmation is monthly_ctrl_smt)
+    monthly_ctrl_smt: bool = False       # new-monthly-structure-control (cc12_001 ~23:53, 'confirm with SMT'): the monthly_ctrl fallback needs the monthly SMT of the two index frames (backtest.run partner; bh5.monthly_smt_map) to agree with it: a long-term high (-1) needs one index failing the higher monthly high, a long-term low (+1) one failing the lower monthly low [our interpretation of the index mapping]; without a partner the gate is inert
     mega_min_days: int = 126             # new-mega-trade-definition (cc11_003 ~0:37; cc11_004 ~43:02): a position held this many trading days (stocks: 6-9+ months) or a bond move of >= 10 ZB handles is a mega trade (htf.mega_tag; a classifier only)
     nwog_fill_rule: bool = False         # L5-friday-close-location-fill (028 ~1:09:54): table nwog_fill - +1 = Friday's close expected to fill fully, 0 = a partial fill is fine (Friday closed near the range EQ after a one-sided week and the gap runs toward the less explored side); a 0 drops the NWOG far edge from the draws
     nwog_eq_band: float = 0.10           # ... [our interpretation] near EQ = within +-10 % of the 20-session body range
@@ -4047,11 +4048,13 @@ class Params:
             raise ValueError("bias_htf#5/7: iof_follow_days / swing_min_days / mega_min_days >= 1, 0 < nwog_eq_band < 0.5, confl_pts >= 0, range_block_probed >= 0, pm_flip_adr >= 0, pm_flip_days >= 1, stack_n >= 1, "
                              "fast_week_adr > 0, raid_run_days >= 2, stock_old_high_max_pct > 0")
         inert = []                                  # switches the current draw_lock / vi_arrays make inert
-        if self.htf_bias == "off" and (self.monthly_ctrl or self.shift_origin_pool or self.stack_draw or self.program_gate or self.fast_week_rev or self.eq_breakout_draw or self.d_draw_carry or self.wk_ssl_draw
+        if self.htf_bias == "off" and (self.monthly_ctrl or self.monthly_ctrl_smt or self.shift_origin_pool or self.stack_draw or self.program_gate or self.fast_week_rev or self.eq_breakout_draw or self.d_draw_carry or self.wk_ssl_draw
                                        or self.gap_theory_bias or self.nwog_below_return or self.org_pm_draw or self.pm_flip_draw or self.pm_range_break or self.or60_bias or self.b7_spike_floor
                                        or self.range_alternate or self.org_with_bias or self.pdh_raid_rev):
             inert.append("monthly_ctrl / shift_origin_pool / stack_draw / program_gate / fast_week_rev / eq_breakout_draw / d_draw_carry / wk_ssl_draw / gap_theory_bias / nwog_below_return / org_pm_draw / pm_flip_draw / "
                          "pm_range_break / or60_bias / b7_spike_floor / range_alternate / org_with_bias / pdh_raid_rev set or gate the htf_bias side: inert with htf_bias='off'")
+        if self.monthly_ctrl_smt and not self.monthly_ctrl:
+            inert.append("monthly_ctrl_smt confirms the monthly_ctrl fallback: it needs monthly_ctrl")
         if (self.range_alternate or self.range_block_probed) and "chop" not in self.sloppy_tests:
             inert.append("range_alternate / range_block_probed read the intraday chop state (the sloppy-day 'chop' test): add 'chop' to sloppy_tests")
         if self.weekly_open_array and self.weekly_open == "off":
@@ -6239,7 +6242,7 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
                 r = ctx.conf.opposing(now, px, sgn, ("1h", "4h", "D", "W"), (3,))
             if r:
                 prefs.append((r[0][0], "array", "htf_vi", 0, S))
-    if p.matrix_tf_lower:                          # L14c: the opposing array one timeframe below the one price reacted from
+    if p.matrix_tf_lower and p.target_tf == "off":  # L14c: the opposing array one timeframe below the one price reacted from (caption-gap L14-target-timeframe: target_tf, when on, replaces this preference - one rule picks the timeframe)
         r_ = _BD.tf_lower_pref(ctx, row, px, pd.Timestamp(ctx.day, tz=ctx.idx.tz) + pd.Timedelta(minutes=t_lock), S)
         if r_ is not None:
             prefs.append(r_)

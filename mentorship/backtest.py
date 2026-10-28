@@ -433,6 +433,13 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
         warnings.warn("dsmt_bias is on but backtest.run got no partner frame: the daily SMT bias is inert (B18-htf-daily-smt)", stacklevel=2)
     elif _bh3.needs_dsmt(p):
         warnings.warn("bias_htf#3/7: a switch that reads the daily SMT / the second index is on but backtest.run got no partner frame: its SMT part is inert", stacklevel=2)
+    msmt = None
+    if p.monthly_ctrl_smt:                             # caption-gap new-monthly-structure-control (bias_htf#5/7): the monthly SMT of the two frames confirms the monthly control
+        if partner is not None:
+            from . import bh5 as _bh5
+            msmt = _bh5.monthly_smt_map(df, partner)
+        else:
+            warnings.warn("monthly_ctrl_smt is on but backtest.run got no partner frame: the monthly SMT confirmation is inert", stacklevel=2)
     if not p.stock_intraday and str(symbol).upper() not in _DWC3.INDEX_SYMBOLS:
         warnings.warn(f"{symbol}: individual stocks are swing-only (OT-stocks-swing-only, cc10_018 ~33:36) - run_day returns no intraday trades (stock_intraday=True lifts it)", RuntimeWarning, stacklevel=2)
     pmap = {g.index[0].date(): g for g in days(partner, tf, partial_last, p.session_close)} if partner is not None else {}
@@ -469,6 +476,8 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
                 im_d = (intermarket or INTERMARKET()).get(d)
                 if dsmt is not None:
                     im_d = {**(im_d or {}), "dsmt": dsmt.get(d, 0)}
+                if msmt is not None:
+                    im_d = {**(im_d or {}), "msmt": msmt.get(d, 0)}
                 if fall_low is not None:
                     im_d = {**(im_d or {}), "fall_low": fall_low.get(d, 0)}
                 if poised is not None:

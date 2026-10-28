@@ -3106,6 +3106,7 @@ _BH5_DECISIONS = {
     "B6-broken-highs-follow-through": dict(iof_follow=True, iof_follow_days=5, **BH5_IOF),
     "M17-swing-trade-definition": dict(swing_min_days=10, **BH5_BASE),
     "new-monthly-structure-control": dict(monthly_ctrl=True, **BH5_BASE),
+    "new-monthly-structure-control-smt": dict(monthly_ctrl=True, monthly_ctrl_smt=True, **BH5_BASE),
     "new-mega-trade-definition": dict(mega_min_days=126, **BH5_BASE),
     "L5-friday-close-location-fill": dict(nwog_fill_rule=True, nwog_eq_band=0.10, **BH5_BASE),
     "L5-below-nwog-low": dict(nwog_below_return=True, **BH5_BASE),
@@ -3152,7 +3153,13 @@ def stock_lrlr(weekly, max_pct: float = 0.10, ext_atr: float = 2.0) -> dict:
     return bh5.stock_lrlr(weekly, max_pct, ext_atr)
 
 
-def seasonal_entry_report(table, seasonal_map, ahead: int = 20):
+def stock_lrlr_symbol(symbol: str, start: str, end: str | None = None, max_pct: float = 0.10, ext_atr: float = 2.0, daily=None) -> dict:
+    """stock_lrlr on a symbol's Alpaca daily bars aggregated to weekly bars (a daily frame can be passed in). See bh5.stock_lrlr_symbol."""
+    from . import bh5
+    return bh5.stock_lrlr_symbol(symbol, start, end, max_pct, ext_atr, daily)
+
+
+def seasonal_entry_report(table, seasonal_map=None, ahead: int = 20):
     """B23-seasonal-entry-arrays (cc05_011 ~24:21), report only: the bullish seasonal window starts with the weekly-array context and the next return. See bh5.seasonal_entry_report."""
     from . import bh5
     return bh5.seasonal_entry_report(table, seasonal_map, ahead)
