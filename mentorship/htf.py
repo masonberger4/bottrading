@@ -164,7 +164,7 @@ def bar_minutes(df: pd.DataFrame) -> int:
 
 
 def _arr_alive(a: Arr, k: int, o, h, l, c, wo, wc, wl, vi_body_death: bool, vi_rule: str = "full_span",
-               ol: float = 0.0, oh: float = 0.0, open_only: bool = False, bal: str = "legacy", lcl=None) -> bool:
+               ol: float = 0.0, oh: float = 0.0, open_only: bool = False, bal: str = "legacy", lcl=None, to_mt: bool = False, mon=None) -> bool:
     """Is array `a` still valid on day k (the table's inline test): a VI under `vi_body_death` dies once a later own-TF body spans
     it (rule "full_span") or overlaps it ("overlap"); other arrays die on a close through the far side / the OB mean threshold;
     opening gaps are never retired by a fill (039). open_only (caption-gap B21 window pick): also not fully rebalanced - the draw
@@ -181,6 +181,11 @@ def _arr_alive(a: Arr, k: int, o, h, l, c, wo, wc, wl, vi_body_death: bool, vi_r
     elif a.tf == "D" and bal == "next_lower" and lcl is not None:
         parts = [lcl[j] for j in range(s, k) if j < len(lcl) and len(lcl[j])]
         cl = np.concatenate(parts) if parts else np.array([])
+    if to_mt and a.typ == "ob" and a.tf in ("W", "M"):       # caption-gap A12-htf-ob-trade-through-to-mt (bias_htf#4/7; cc06_005 ~30:28): a weekly / monthly block dies only on a close of ITS OWN timeframe beyond the MT
+        if a.tf == "W":
+            cl = wc[[j for j in range(len(wl)) if a.known < wl[j] <= k]]
+        elif mon is not None:
+            cl = mon[1][[j for j in range(len(mon[0])) if a.known < mon[0][j] <= k]]
     gap = a.typ in ("ndog", "nwog")
     if a.typ == "vi" and vi_body_death:
         if a.tf == "D":
@@ -293,9 +298,16 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     Caption-gap pass (bias_htf#1/7): `wk_joint` (B8-weekly-ith-both-indices-close; bh1.wk_joint_map) = {date of a week's last session: the joint ES + NQ weekly-ITH state}: the wk_dc -1 flip applies only while it is True."""
     from . import bias_htf as BH
     X = BH.parse(bx)
+    from . import bh4 as BH4                         # caption-gap pass bias_htf#4/7 (bh4.py): table-time rules (age tiers, reach tolerance, weekly / monthly life, origin OB, mitigation, OB to MT, event wicks)
+    tc = BH4.table_cfg(X)
     d = sessions(df)
     D = len(d)
     o, h, l, c = (d[k].values.astype(float) for k in ("open", "high", "low", "close"))
+    h_pv, l_pv = BH4.event_wick_adjust(o, h, l, c, float(tc["ew"])) if tc["ew"] else (h, l)       # A4-event-wick-ignore: the swing pivots (and 'untaken' tests) use the body extreme of an event candle
+    if tc["ew"]:
+        BH4.sw("event_wick_ignore")
+    if tc["hm"]:
+        BH4.sw("htf_history_months")
     drill = _ltf_provider(df, d, 60) if htf_ob_ltf_drill else None
     lcl = _ltf_closes(df, d, 240) if balance_tf == "next_lower" else None
     arrs = _arrays(o, h, l, c, "D", lambda i: i + 1, vi, c2_dir, vi_min_gap, vi_wick_overlap, vi_multi,
@@ -313,6 +325,13 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         ml_ = [pos[t] + 1 for t in mth["last"]]
         arrs += _arrays(*(mth[k].values.astype(float) for k in ("open", "high", "low", "close")), "M",
                         lambda i: ml_[i], vi, c2_dir, vi_min_gap, vi_wick_overlap, vi_multi, void_rt=void_rt_ob)
+    mon_ = None
+    if tc["tomt"]:                                   # A12-htf-ob-trade-through-to-mt: the monthly completions and closes (an own-timeframe close test for a monthly block)
+        mth_ = months(d)
+        mon_ = ([pos[t] + 1 for t in mth_["last"]], mth_["close"].values.astype(float))
+    if tc["oob"]:                                    # A12-sponsorship-origin-ob (cc03_003 ~12:43): the body zone of the origin candle of each daily displacement
+        arrs += BH4.origin_arrays(o, h, l, c, "D", lambda i: i + 1, existing=arrs)
+        BH4.sw("origin_ob")
     # opening gaps (ICT 039/051/052): NWOG Fri close -> Sun 18:00, NDOG 17:00 -> 18:00 Mon-Thu
     pos_of = {t: k for k, t in enumerate(d.index)}
     og_df = opening_gaps(df, es_pt, min_gap_pts, nwog_cfd_src)
@@ -328,8 +347,11 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     if b2.get("ow"):                                 # caption-gap E4-daily-one-way-delivery-rebalance (bias_htf#2/7): the one-way-delivery range as a draw
         from . import bh2
         arrs += bh2.oneway_arrays(o, h, l, c, int(b2["ow"]))
+    if tc["mit"]:                                    # A15-htf-ob-as-mitigation (cc03_002 ~25:51): a broken weekly / monthly block is a daily mitigation block afterwards
+        arrs += BH4.mitigation_arrays(arrs, c, D)
+        BH4.sw("htf_ob_mitigation")
     arrs.sort(key=lambda a: a.known)
-    piv_h, piv_l = L.pivots(h, l, 1)
+    piv_h, piv_l = L.pivots(h_pv, l_pv, 1)
 
     # overnight (reopen to 09:29) of each trading day
     lab = pd.to_datetime((df.index + pd.Timedelta(hours=7)).date)
@@ -358,7 +380,9 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         lo_k = max(0, k - lb_d)
         if ipda_window:                                  # B21 ipda_arrays: only arrays / swings formed inside the 60-session window ending at the anchor
             lo_k = max(lo_k, L.ipda_end_index(dates_[:k], dates_[k], ipda_window, h[:k], l[:k], c[:k]) - 60)
-        live = [a for a in arrs if lo_k <= a.known - 1 and a.known <= k and a.typ != "nwog"]
+        wm_ = tc["wm"]                               # A5-A10-htf-lifetime / B5-htf-lookback-9-18-months: the weekly / monthly arrays live wm_ sessions (0 = no cap) instead of the daily look-back
+        lo_wm = (0 if not wm_ else max(0, k - int(wm_))) if wm_ is not None else lo_k
+        live = [a for a in arrs if (lo_wm if (wm_ is not None and a.tf in ("W", "M")) else lo_k) <= a.known - 1 and a.known <= k and a.typ != "nwog"]
         live += [a for a in arrs if a.typ == "nwog" and k - lookback <= a.known <= k]   # 60 days (051)
         # NDOGs live through the week they form in (Mon-Fri)
         wk = day.to_period("W-FRI")
@@ -368,6 +392,7 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         react = 0.0
         ru = rd = rw_up = rw_dn = 0.0
         draws_up, draws_dn = [], []
+        au_, ad_, prev_age = [], [], None      # A5-pd-array-lookback-priority: the age (sessions) of every draw, parallel to the lists
         win = 60
         if ipda_first20:                                 # B21: the first window that still has an open daily array
             for cand_ in (20, 40, 60):
@@ -376,8 +401,17 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
                     win = cand_
                     break
         for a in live:
+            if tc["tiers"]:
+                au_ += [prev_age] * (len(draws_up) - len(au_))
+                ad_ += [prev_age] * (len(draws_dn) - len(ad_))
             s = a.known
             age_ = k - a.known + 1
+            prev_age = min(age_, 60) if (a.tf in ("W", "M") and wm_ is not None) else age_      # item 113: a weekly / monthly array past the daily window keeps tier 3
+            if wm_ is not None and a.tf in ("W", "M") and a.typ == "ob" and s < k:        # A5-A10-htf-lifetime (cc03_001 ~28:41): a weekly / monthly block is valid until first traded back into (its reaction window is kept)
+                tch = np.flatnonzero((l[s:k] <= a.top) if a.kind == "bull" else (h[s:k] >= a.bottom))
+                if len(tch) and k > s + int(tch[0]) + react_days:
+                    BH4.sw("htf_lifetime_wm")
+                    continue
             a.ipda_w = 20 if age_ <= 20 else 40 if age_ <= 40 else 60 if age_ <= 60 else 0
             if ipda_first20 and a.tf == "D" and a.typ in ("fvg", "ob", "vi") and (a.ipda_w == 0 or a.ipda_w > win):
                 continue
@@ -397,8 +431,10 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
                 if t_ is not None:
                     (draws_dn if a.kind == "bull" else draws_up).append((abs(px - t_), f"{a.tf}_spr", t_))
                 continue
-            if not _arr_alive(a, k, o, h, l, c, wo, wc, wl, vi_body_death, vi_dead_rule, bal=balance_tf, lcl=lcl):
+            if not _arr_alive(a, k, o, h, l, c, wo, wc, wl, vi_body_death, vi_dead_rule, bal=balance_tf, lcl=lcl, to_mt=tc["tomt"], mon=mon_):
                 continue
+            if tc["tomt"] and a.typ == "ob" and a.tf in ("W", "M"):
+                BH4.sw("htf_ob_to_mt")
             wt = 2.0 if a.tf == "W" else 3.0 if a.tf == "M" else 1.0
             if a.typ == "oneway":                        # caption-gap E4-daily-one-way-delivery-rebalance: a draw only, no reaction weight
                 if a.kind == "bear":
@@ -420,11 +456,16 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
             if ob_reach == "body" and a.typ == "ob":
                 bl_, bh_ = np.minimum(o, c)[max(s, k - react_days):k], np.maximum(o, c)[max(s, k - react_days):k]
                 rl, rh = (bl_ if len(bl_) else np.array([np.inf])), (bh_ if len(bh_) else np.array([-np.inf]))
-            if a.kind == "bull" and rl.min() <= a.top and px > a.ce:
+            tol_ = tc["tol"]                             # caption-gap new-layered-orders-before-level (cc06_006 ~10:17): a reversal within tol_ short of an HTF level counts as the touch
+            if tol_ and a.kind == "bull" and a.top < rl.min() <= a.top + tol_ and px > a.ce:
+                BH4.sw("htf_reach_tol_pts")
+            if tol_ and a.kind == "bear" and a.bottom > rh.max() >= a.bottom - tol_ and px < a.ce:
+                BH4.sw("htf_reach_tol_pts")
+            if a.kind == "bull" and rl.min() <= a.top + tol_ and px > a.ce:
                 react += wt
                 ru += wt
                 rw_up += a.tf == "W"
-            if a.kind == "bear" and rh.max() >= a.bottom and px < a.ce:
+            if a.kind == "bear" and rh.max() >= a.bottom - tol_ and px < a.ce:
                 react -= wt
                 rd += wt
                 rw_dn += a.tf == "W"
@@ -456,24 +497,36 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
                         elif a.top < px:
                             draws_dn.append((px - a.top, f"{a.tf}_{a.typ}", a.top))
         # liquidity: untaken daily swing highs/lows, previous day and week extremes
-        hh = np.append(h[:k], oh); ll = np.append(l[:k], ol)
+        if tc["tiers"]:
+            au_ += [prev_age] * (len(draws_up) - len(au_))
+            ad_ += [prev_age] * (len(draws_dn) - len(ad_))
+        hh = np.append(h_pv[:k], oh); ll = np.append(l_pv[:k], ol)
         up_sw = [p for p in piv_h if p.known < k and p.i >= lo_k and hh[p.i + 1:].max() < p.price]
         dn_sw = [p for p in piv_l if p.known < k and p.i >= lo_k and ll[p.i + 1:].min() > p.price]
         for p in up_sw:
             draws_up.append((p.price - px, "D_swing_high", p.price))
+            au_.append(k - p.i)
         for p in dn_sw:
             draws_dn.append((px - p.price, "D_swing_low", p.price))
+            ad_.append(k - p.i)
         if h[k - 1] > max(px, oh):
             draws_up.append((h[k - 1] - px, "PDH", h[k - 1]))
+            au_.append(1)
         if l[k - 1] < min(px, ol):
             draws_dn.append((px - l[k - 1], "PDL", l[k - 1]))
+            ad_.append(1)
         pw = [t for t in w.index if w.at[t, "last"] < day][-1:] if len(w) else []
         if pw:
             pwh, pwl = float(w.at[pw[0], "high"]), float(w.at[pw[0], "low"])
             if pwh > max(px, oh):
                 draws_up.append((pwh - px, "PWH", pwh))
+                au_.append(5)
             if pwl < min(px, ol):
                 draws_dn.append((px - pwl, "PWL", pwl))
+                ad_.append(5)
+        if tc["tiers"]:
+            draws_up = BH4.tier_filter(draws_up, au_)
+            draws_dn = BH4.tier_filter(draws_dn, ad_)
         up = min(draws_up) if draws_up else None
         dn = min(draws_dn) if draws_dn else None
         vu = min((x for x in draws_up if x[1].endswith("_vi")), default=None)   # vi_news_draw
@@ -561,6 +614,10 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
     if b3 and len(out):
         from . import bh3
         out = bh3.finish3(out, b3, d, w, arrs, es_pt, df)                           # caption-gap bias_htf#3/7 (bh3.py): the columns after bh2.finish
+    b4 = dict(X.get("b4") or {})
+    if b4 and len(out):
+        b4["_cut"] = int(cut_min)
+        out = BH4.finish4(out, b4, d, w, arrs, es_pt, df)                            # caption-gap bias_htf#4/7 (bh4.py): the columns after bh3.finish3
     return out
 
 

@@ -959,7 +959,7 @@ def im_columns(dxy: pd.Series | None, tnx: pd.Series | None, spx: pd.Series | No
     return out
 
 
-def dsmt_map(df_a, df_b, days: int = 18) -> dict:
+def dsmt_map(df_a, df_b, days: int = 18, ew=None) -> dict:
     """B18-htf-daily-smt (cc03_005 ~19:41; cc04_001 ~11:04; cc11_003 ~23:40): {date: +1 / -1 / 0} of the daily SMT between two indices, known before that session. +1 = within the last `days` sessions
     one index's low went under its latest known daily pivot low while the other's did not (the failing index's higher low holds: no later session of it traded under it); -1 = the same with highs (one
     index takes its latest pivot high, the other fails to; valid while the failing index's high holds); the later event wins. Whole-session lows / highs only ('if it is not obvious, it is not there')."""
@@ -969,6 +969,11 @@ def dsmt_map(df_a, df_b, days: int = 18) -> dict:
     a, b = a.loc[idx], b.loc[idx]
     ha, la = a.high.values.astype(float), a.low.values.astype(float)
     hb, lb = b.high.values.astype(float), b.low.values.astype(float)
+    if ew:                                            # caption-gap A4-event-wick-ignore (bias_htf#4/7; cc05_007 ~4:42): the wick of a one-off event candle is ignored - its body extreme counts
+        from . import bh4
+        ha, la = bh4.event_wick_adjust(a.open.values, ha, la, a.close.values, float(ew))
+        hb, lb = bh4.event_wick_adjust(b.open.values, hb, lb, b.close.values, float(ew))
+        sw("event_wick_ignore")
     lha, lla = pivot_levels(ha, la)
     lhb, llb = pivot_levels(hb, lb)
     D = len(idx)

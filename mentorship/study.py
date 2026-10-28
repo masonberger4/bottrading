@@ -3045,6 +3045,55 @@ _BH3_DECISIONS = {
 DECISIONS.update(_BH3_DECISIONS)
 
 
+# --- Caption-gap pass, package bias_htf#4/7 (day_selection_news_calendar.md items 46, 51, 74, 75; definitions_pd_arrays_structure.md items 27 .. 185; bh4.py / bh4e.py): one variant per switch (name prefix = the gap id).
+# The lock stays on (draw_lock "session"); the htf bias is 'combo' (the table's react / P/D reading) so a neutral-bias fallback or a gate has something to act on. ----------------------------------------------------
+BH4_BASE = dict(ob_entry="post_mss", htf_resist_cap=False, htf_bias="combo", bias_neutral="both")
+
+_BH4_DECISIONS = {
+    "B17-range-day-sit-out-am": dict(range_day_mode="pm_only", pm_carry_draw=True, **BH4_BASE),
+    "B17-range-day-sit-out-am_scalp": dict(range_day_mode="scalp", **BH4_BASE),
+    "N8-middle-of-range": dict(ipda_mid_skip=True, **BH4_BASE),
+    "DS2-buy-day-checklist": dict(htf_checklist=True, **BH4_BASE),
+    "new-perspective-cadence": dict(bias_cadence="weekly", **BH4_BASE),
+    "new-perspective-cadence_midweek": dict(bias_cadence="weekly_midweek", **BH4_BASE),
+    "A5-ltf-fvgs-inside-daily-bisi": dict(dbisi_lower_half=True, **BH4_BASE),
+    "A21-htf-fvg-upper-half-and-discount": dict(dbisi_upper_and_discount=True, **BH4_BASE),
+    "A5-pd-array-lookback-priority": dict(array_age_tiers=True, **BH4_BASE),
+    "A8-ce-line-bearish-read": dict(ce_line_bias=True, **BH4_BASE),
+    "A8-ifvg-bias-without-retest": dict(ifvg_bias=True, **BH4_BASE),
+    "A8-ifvg-bias-without-retest_edge_add": dict(ifvg_bias=True, ifvg_edge_add=True, **BH4_BASE),
+    "A21-salient-dealing-ranges": dict(salient_pd=(60,), **BH4_BASE),
+    "A21-salient-dealing-ranges_all": dict(salient_pd=(15, 60, 240, 1440), **BH4_BASE),
+    "A5-A10-htf-lifetime": dict(htf_lifetime_wm=0, **BH4_BASE),
+    "A11-trapped-trader-bpr": dict(trapped_bpr_bias=True, bpr_max_gap_bars=8, **BH4_BASE),
+    "A4-event-wick-ignore": dict(event_wick_ignore=True, event_wick_mult=2.0, **BH4_BASE),
+    "A15-htf-ob-as-mitigation": dict(htf_ob_mitigation=True, htf_monthly_arrays=True, **BH4_BASE),
+    "A12-sponsorship-origin-ob": dict(origin_ob=True, **BH4_BASE),
+    "new-monthly-dealing-range": dict(monthly_range=True, **BH4_BASE),
+    "A12-bearish-activation": dict(monthly_flow_gate=True, **BH4_BASE),
+    "A12-stepping-ob": dict(ob_ladder=True, ob_ladder_px="open", **{**BH4_BASE, "htf_bias": "mwd"}),
+    "A12-stepping-ob_high": dict(ob_ladder=True, ob_ladder_px="high", **{**BH4_BASE, "htf_bias": "mwd"}),
+    "new-buy-program": dict(program_tag=True, program_days=3, **BH4_BASE),
+    "A22-matrix-range-tf": dict(matrix_tfs=("M", "W", "D"), **BH4_BASE),
+    "A21-60day-body-range": dict(htf_bias="pd", day_pd="20d", pd_day_range=60, pd_body_multiday=True, ob_entry="post_mss", htf_resist_cap=False, bias_neutral="both"),
+    "A21-htf-range-anchored-at-arrays": dict(htf_range_arrays=True, **BH4_BASE),
+    "A21-swing-no-new-longs-80-90": dict(swing_extreme_block=True, **BH4_BASE),
+    "A21-swing-discount-exception": dict(swing_ignore_eq=True, htf_range_arrays=True, **BH4_BASE),
+    "A21-quadrant-grid": dict(pd_grid=True, pd_grid_days=60, **BH4_BASE),
+    "new-pd-array-at-quadrant-level": dict(grade_confluence=True, **BH4_BASE),
+    "A21-range-position-needs-array": dict(pd_need_array=True, pd_grid=True, **BH4_BASE),
+    "A21-range-excursion-tolerance": dict(pd_range_break="two_close", pd_grid=True, **BH4_BASE),
+    "new-monthly-failed-consolidation-break": dict(failed_consol_break=True, **BH4_BASE),
+    "A21-nested-ranges": dict(nested_pd_bias=True, **BH4_BASE),
+    "A21-htf-eq-not-violated": dict(htf_eq_invalid=True, htf_range_arrays=True, **BH4_BASE),
+    "A12-htf-ob-trade-through-to-mt": dict(htf_ob_to_mt=True, htf_monthly_arrays=True, **BH4_BASE),
+    "new-layered-orders-before-level": dict(htf_reach_tol_pts=3.0, **BH4_BASE),
+    "B5-htf-lookback-9-18-months": dict(htf_history_months=18, **BH4_BASE),
+    "A13-daily-breaker-regime": dict(breaker_regime=True, **BH4_BASE),
+}
+DECISIONS.update(_BH4_DECISIONS)
+
+
 def macro_runs_study(days, macro_run_pts: float = 5.0, leg_extra_min: int = 0) -> dict:
     """T7-1500-at-least-one (022 ~03:16:44): see dwc3.macro_runs_study. No engine change."""
     from . import dwc3

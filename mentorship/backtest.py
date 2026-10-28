@@ -220,6 +220,8 @@ def hist_days(p: Params) -> int:
         n = max(n, p.ipda_beyond_days + 1)
     n = max(n, getattr(p, "dw2_hist", 0))           # caption-gap pass day_week_context#2/3: the 60-session ADR5 tercile / 60-day EQ
     n = max(n, getattr(p, "dw1_hist", 0))           # caption-gap pass day_week_context#1/3: the seasonal windows / 252-session trend / monthly closes
+    if getattr(p, "htf_history_months", 0):
+        n = max(n, int(p.htf_history_months) * 21 + 1)      # caption-gap B5-htf-lookback-9-18-months (bias_htf#4/7): the months of daily history the weekly / monthly arrays need
     return max(n, getattr(p, "org_days", 0) + 1)
 
 
@@ -420,7 +422,7 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     fall_low = poised = None
     if (p.dsmt_bias or _bh3.needs_dsmt(p)) and partner is not None:           # caption-gap B18-htf-daily-smt (bias_htf#2/7): the daily ES / NQ SMT of the two frames (known before each session), passed to run_day with the intermarket values
         from . import bh2
-        dsmt = bh2.dsmt_map(df, partner, p.dsmt_days)
+        dsmt = bh2.dsmt_map(df, partner, p.dsmt_days, float(p.event_wick_mult) if p.event_wick_ignore else None)
         if p.fall_low_bias:
             fall_low = _bh3.fall_low_map(df, partner, dsmt)
         if p.season_poised:

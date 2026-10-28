@@ -616,8 +616,12 @@ def carry_lock(ctx, p, name: str, lk: dict) -> dict:
     """T8 pm_carry_draw (029 ~1:29:48; 031 ~1:04:22): the PM lock keeps the AM's draw when the AM's lock is
     still undelivered at the PM's lock time. Only side / target / kind / name are carried; the mark-up (the
     ladder rungs) is the PM's own."""
-    if name != "PM" or not p.pm_carry_draw:
+    if name != "PM" or not (p.pm_carry_draw or p.range_day_mode == "pm_only"):          # (caption-gap B17-range-day-sit-out-am, bias_htf#4/7: a range day trades the PM only, with the AM's draw)
         return lk
+    if not p.pm_carry_draw:
+        from . import bh4e as _B4
+        if not _B4.range_day(ctx):
+            return lk
     am = (getattr(ctx, "lock", None) or {}).get("AM")
     if am is None or not am.get("side") or am.get("delivered"):
         return lk

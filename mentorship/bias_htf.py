@@ -127,6 +127,10 @@ def bx_string(p) -> str:
     b3 = bh3.bx_cfg(p)                         # caption-gap pass bias_htf#3/7 (bh3.py): the columns / flip configuration of its items
     if b3:
         x["b3"] = b3
+    from . import bh4                          # caption-gap pass bias_htf#4/7 (bh4.py): the columns / table-time configuration of its items
+    b4 = bh4.bx_cfg(p)
+    if b4:
+        x["b4"] = b4
 
     return json.dumps(x, sort_keys=True, separators=(",", ":")) if x else ""
 

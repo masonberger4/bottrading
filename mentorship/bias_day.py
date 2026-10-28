@@ -119,6 +119,9 @@ def want_at(ctx, p, session: str, i: int) -> int:
     from . import bh3e as _B3                        # caption-gap pass bias_htf#3/7: the weekly / daily checklist composers, fall_low_bias
     if _B3.want_on(p):
         v = _B3.want_override(ctx, p, session, i, v)
+    from . import bh4e as _B4                        # caption-gap pass bias_htf#4/7: the neutral-bias fallbacks (trapped BPR, failed break, nested ranges, IFVG) and the EQ-violated neutral
+    if _B4.want_on(p):
+        v = _B4.want_adjust(ctx, p, session, i, v)
     return v
 
 

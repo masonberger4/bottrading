@@ -512,6 +512,12 @@ def more_add_arrays(ctx, sd, pos, tr, i, p, arm) -> bool:
     """E12b add_arrays vi / ifvg / ob / breaker and the owner #7 htf_fvg: arm at most one add on
     bar i's close at the array's top. `arm(px, **kw)` is the caller's arming function. True if armed."""
     ar = set(p.add_arrays)
+    if p.ifvg_edge_add and not pos.get("ifvg_add_used"):          # caption-gap A8-ifvg-bias-without-retest (bias_htf#4/7; 070 ~13:02): bodies holding at the HTF IFVG's edge = an add point
+        from . import bh4e as _B4
+        z4 = _B4.ifvg_add_zone(ctx, sd, pos, i, p)
+        if z4 is not None and arm(z4[0], floor=z4[1]):
+            pos["ifvg_add_used"] = True
+            return True
     if "vi" in ar:
         vs = [z for z in sd.vis("bull") if z.i == i and z.i > pos["fill_i"] + 1]
         if vs and arm(vs[-1].top, floor=vs[-1].bottom):

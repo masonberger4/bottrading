@@ -3362,6 +3362,54 @@ class Params:
     chop_lean: bool = False              # B17-chop-revert-middle (031 ~19:39): on a chop / range day only the side toward the pool on the far side of the post-08:30 baseline (the midpoint of the range since 08:30) from price trades (above = longs); a lean, not an entry signal
     chop_target_baseline: bool = False   # ... the baseline is a target rung for counter-moves (a single exit back to the middle; no runners, no extensions)
 
+    # --- Caption-gap pass, package bias_htf#4/7 (digests/rulebook_gaps/day_selection_news_calendar.md items 46, 51, 74, 75 and definitions_pd_arrays_structure.md items 27, 28, 29, 61, 80, 110, 113, 119, 139, 143,
+    # 145, 147, 148, 150, 160, 162, 168-170, 172, 173, 176-185; bh4.py table side, bh4e.py engine side). Everything defaults off (the spec defaults are the "off" value); thresholds the sources never give are [our interpretation]. -----
+    range_day_mode: str = "off"          # B17-range-day-sit-out-am (031 ~25:16, ~35:13; 032 ~28:53): on a range-bound day (the last range_day_n daily closes inside the high-low of the day before them, table draw 0) "pm_only" = no AM / pre-open entries, the AM draw is carried into the PM (pm_carry_draw); "scalp" = every order is a scalp
+    range_day_n: int = 5                 # ... [our interpretation] the N closes of the range tag
+    ipda_mid_skip: bool = False          # N8-middle-of-range (cc07_005 ~00:23:47): the prior close in the middle band (ipda_mid_lo .. ipda_mid_hi of the 60-session range) skips the day unless the bias and a locked draw are defined; outside the band only longs trade in the lower region, only shorts in the upper
+    ipda_mid_lo: float = 0.375           # ... [our interpretation] 3/8 of the 60-session range
+    ipda_mid_hi: float = 0.625           # ... 5/8
+    htf_checklist: bool = False          # DS2-buy-day-checklist (cc08_007 ~00:06:40): a long needs (a) the quarter bullish (q_dir, else price over the quarter open), (b) a daily react up within 3 sessions, (c) no live opposing daily array between price and the draw (shorts mirror)
+    bias_cadence: str = "daily"          # new-perspective-cadence (cc02_006 ~00:48:38): "weekly" = the weekly-timeframe columns (weekly bias, W / M draws, ...) are frozen at the Monday open; "weekly_midweek" = one refresh at the Wednesday open if the daily flip column changed
+    dbisi_lower_half: bool = False       # A5-ltf-fvgs-inside-daily-bisi (012 ~19:16): price inside a daily BISI (SIBI): a 1h / 15m FVG in the lower (upper) half of it filled by a body close = no longs (shorts) off the daily FVG that session; upper-half fills are fine
+    dbisi_upper_and_discount: bool = False  # A21-htf-fvg-upper-half-and-discount (012 ~18:29, ~21:04): a long off an active daily BISI must sit at or above its CE AND below the 50 % EQ of the multi-day range (mirror); both must hold
+    array_age_tiers: bool = False        # A5-pd-array-lookback-priority (015 ~4:35; cc07_004 ~3:50): the table's draws come from the arrays and pools of the last 20 sessions first, then 21-40, then 41-60 - only when a side has none in the nearer tier
+    ce_line_bias: bool = False           # A8-ce-line-bearish-read (030 ~1:38:43): price traded under the CE of a recent daily bullish FVG and came back into it: bearish (no longs) while below the CE; two 15m closes above the CE that hold lift it (shorts blocked); bearish gaps mirror
+    ifvg_bias: bool = False              # A8-ifvg-bias-without-retest (072 ~9:18): a daily (weekly) close beyond an FVG's far side marks an IFVG for bias at once (table ifvg_bias, kept ifvg_bias_days sessions): the bias when the htf bias is neutral; no retest needed (an entry AT the zone still needs A8's retest)
+    ifvg_edge_add: bool = False          # ... later bodies holding at or beyond the IFVG's edge = an add point: with a position open one add is armed at the edge (wicks may poke)
+    ifvg_bias_days: int = 20             # ... [our interpretation] how long an inversion keeps the bias
+    salient_pd: tuple = ()               # A21-salient-dealing-ranges (061 ~1:38:11): timeframes (minutes: 15 / 60 / 240 / 1440 = D) whose latest intermediate-term run EQ must agree with a trade: a long below, a short above the EQ of each
+    htf_lifetime_wm: int = -1            # A5-A10-htf-lifetime (077 ~3:59; 099 ~4:14; cc04_010 ~2:19; cc03_001 ~28:41): -1 = the weekly / monthly arrays live as long as the daily ones (the old 60 sessions); 0 = no cap; N = sessions. With it set a weekly / monthly OB is valid until first traded back into
+    htf_history_months: int = 0          # B5-htf-lookback-9-18-months (cc06_008 ~12:21; cc12_001 ~32:31): > 0 loads that many months of daily history and keeps the weekly / monthly arrays (monthly arrays on) that long (test 18); 0 = off
+    trapped_bpr_bias: bool = False       # A11-trapped-trader-bpr (104 ~26:09): a large-range down candle's SIBI and, within bpr_max_gap_bars (8 when 0), a large-range up candle's overlapping BISI = a BPR with trapped shorts below: a neutral bias takes its side (15m)
+    event_wick_ignore: bool = False      # A4-event-wick-ignore (cc05_007 ~4:42): a daily wick beyond the body longer than event_wick_mult x the 20-session mean range is an event wick: the daily pivots and the daily SMT use the body extreme
+    event_wick_mult: float = 2.0         # ... [our interpretation]
+    htf_ob_mitigation: bool = False      # A15-htf-ob-as-mitigation (cc03_002 ~25:51): a weekly / monthly order block broken by a daily body close is a daily mitigation block (resistance for a broken bullish one) until a close beyond its MT
+    origin_ob: bool = False              # A12-sponsorship-origin-ob (cc03_003 ~12:43): the BODY (open to close, no wick) of the last opposite-close daily candle before a displacement is a daily order-block array
+    monthly_range: bool = False          # new-monthly-dealing-range (cc03_004 ~8:15): table m_rng_dir / m_rng_lo / m_rng_hi - the most recent monthly down (up) candle D to the nearest older up (down) candle U beyond it; tag on the orders
+    monthly_flow_gate: bool = False      # A12-bearish-activation (cc03_004 ~14:23): table m_flow = the side most recently activated on the monthly bars (a down candle's high violated = +1; an up candle's low violated = -1); orders against it are rejected
+    ob_ladder: bool = False              # A12-stepping-ob (cc04_003 ~28:30; cc05_003 ~1:06:00): with the B10 sequential (else the weekly / monthly bias, the flip state) up, the daily down-close candles above the HTF swing low followed by a higher high form a ladder; the highest is an HTF entry level (the opposite for the bearish side)
+    ob_ladder_px: str = "open"           # ... the entry level of a ladder candle: "open" (cc04_003) or "high" (cc05_003; the low for a bearish ladder)
+    program_tag: bool = False            # new-buy-program (cc05_001 ~9:01): table program = +1 / -1 after program_days consecutive up (down) closes with higher highs (lower lows); tag on the orders
+    program_days: int = 3                # ... [our interpretation]
+    matrix_tfs: tuple = ("D",)           # A22-matrix-range-tf (cc05_014 ~6:31, ~17:49): timeframes the PD-array matrix is built on - add "W" and "M" for the weekly / monthly dealing range, its EQ and the arrays split at it (table mx_<tf>_*; tag on the orders)
+    htf_range_arrays: bool = False       # A21-htf-range-anchored-at-arrays (cc05_015 ~9:05; cc06_008 ~24:56): table htf_rng_lo / hi / dir / eq - the weekly / monthly range from the body-based reference of the newest origin order block to the nearest premium array / swing high (bearish mirror); tag on the orders
+    swing_extreme_block: bool = False    # A21-swing-no-new-longs-80-90 (cc06_004 ~34:43): no new long at or above swing_block_long of the htf range, no new short at or below swing_block_short
+    swing_block_long: float = 0.8
+    swing_block_short: float = 0.3
+    swing_ignore_eq: bool = False        # A21-swing-discount-exception (cc05_017 ~10:19; cc06_003 ~17:18): with the htf range direction intact the leg_pd premium test is waived for a long below the last down-close daily candle's close or inside a bullish array between the origin low and the intermediate high (the 0.8 cap stays)
+    htf_ob_to_mt: bool = False           # A12-htf-ob-trade-through-to-mt (cc06_005 ~30:28): a weekly / monthly order block fails only on a close of its OWN timeframe beyond the MT, not on a trade through its open
+    htf_reach_tol_pts: float = 0.0       # new-layered-orders-before-level (cc06_006 ~10:17): an HTF level counts as reached (the table's react, the HTF-array tags) when price turns this many points short of it
+    pd_grid: bool = False                # A21-quadrant-grid (cc07_005 ~12:10): the 60-session body range in eighths: table grid_k / grid_q / grid_half at the price; tags on the orders (a long in a quadrant's discount is allowed inside the overall premium)
+    pd_grid_days: int = 60               # ... the range length (sessions)
+    grade_confluence: bool = False       # new-pd-array-at-quadrant-level (cc07_006 ~6:03): tag an order whose entry lies within 10 % of a grid spacing of a k/8 line on the discount side (premium for shorts) as grade_confluence
+    pd_need_array: bool = False          # A21-range-position-needs-array (cc07_005 ~14:52): a long needs the entry in the discount of its grid quadrant AND inside a bullish HTF array (the confluence table / htf zones) - range position alone is no signal (mirror)
+    pd_range_break: str = "off"          # A21-range-excursion-tolerance (cc07_005 ~15:37): "two_close" = the 60-session range ignores a one-day poke (a close beyond that the next day closed back inside); broken only when the next day does not close back inside
+    failed_consol_break: bool = False    # new-monthly-failed-consolidation-break (cc12_001 ~45:46): a run beyond a consolidation's extreme, back inside and through its midpoint = failed_break -1 (+1): a neutral bias takes it; the target is the lowest (highest) body of the range
+    nested_pd_bias: bool = False         # A21-nested-ranges (cc07_007 ~16:59): the daily swing range's discount (premium) array held while the price stays in the 60-session range's premium (discount): a neutral bias takes that side
+    htf_eq_invalid: bool = False         # A21-htf-eq-not-violated (cc12_002 ~26:38): a weekly close beyond the htf range's EQ against its direction (below it for a bullish range) turns that direction's bias neutral
+    breaker_regime: bool = False         # A13-daily-breaker-regime (cc12_003 ~22:54): trade only in the direction of the most recent daily breaker until the opposite one forms (training wheels): the other side is rejected
+
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
         _sb_check(self)
@@ -3929,7 +3977,26 @@ class Params:
             raise ValueError("bias_htf#3/7: 0 <= stack_min <= 5, trend_slope_min > 0, in_play_days >= 1, in_play_room_pts >= 0, consol_ratio in (0, 1]")
         if self.htf_bias_tf == "M":
             self.htf_monthly_arrays = True        # B5-monthly-first-hierarchy: the monthly draw needs the monthly arrays
+        # caption-gap pass bias_htf#4/7 (bh4.py / bh4e.py)
+        for name, ok in (("range_day_mode", ("off", "pm_only", "scalp")), ("bias_cadence", ("daily", "weekly", "weekly_midweek")), ("ob_ladder_px", ("open", "high")), ("pd_range_break", ("off", "two_close"))):
+            if getattr(self, name) not in ok:
+                raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
+        if not set(self.matrix_tfs) <= {"D", "W", "M"} or not set(self.salient_pd) <= {15, 60, 240, 1440}:
+            raise ValueError("matrix_tfs: a subset of ('D', 'W', 'M'); salient_pd: a subset of (15, 60, 240, 1440) minutes")
+        if (self.range_day_n < 2 or not 0 < self.ipda_mid_lo < self.ipda_mid_hi < 1 or self.ifvg_bias_days < 1 or self.htf_lifetime_wm < -1 or self.htf_history_months < 0 or self.event_wick_mult <= 0
+                or self.program_days < 2 or not 0 < self.swing_block_short < self.swing_block_long <= 1 or self.htf_reach_tol_pts < 0 or self.pd_grid_days < 8):
+            raise ValueError("bias_htf#4/7: range_day_n >= 2, 0 < ipda_mid_lo < ipda_mid_hi < 1, ifvg_bias_days >= 1, htf_lifetime_wm >= -1, htf_history_months >= 0, event_wick_mult > 0, program_days >= 2, "
+                             "0 < swing_block_short < swing_block_long <= 1, htf_reach_tol_pts >= 0, pd_grid_days >= 8")
+        if self.htf_history_months > 0:
+            self.htf_monthly_arrays = True        # B5-htf-lookback-9-18-months: the monthly arrays exist from that far back
+        if self.htf_ob_to_mt and not self.htf_monthly_arrays:
+            pass                                  # (a monthly block is judged on monthly closes only when the monthly arrays are built; the weekly one always)
         inert = []                                  # switches the current draw_lock / vi_arrays make inert
+        if self.htf_bias == "off" and (self.trapped_bpr_bias or self.failed_consol_break or self.nested_pd_bias or self.ifvg_bias or self.htf_eq_invalid):     # the neutral-bias fallbacks read the htf_bias value
+            inert.append("trapped_bpr_bias / failed_consol_break / nested_pd_bias / ifvg_bias / htf_eq_invalid reshape the htf_bias reading: inert with htf_bias='off'")
+        if self.range_day_mode == "pm_only" and self.draw_lock != "session":
+            inert.append("range_day_mode='pm_only' carries the AM draw into the PM through the draw lock (draw_lock='session')")
+
         if (self.draw_lock_pick != "nearest" or self.draw_ext_target or self.cond_draw) and self.draw_lock != "session":
             inert.append("draw_lock_pick / draw_ext_target / cond_draw act only in the #9 lock (draw_lock='session')")
         if self.htf_bias == "off" and (self.bias_persist or self.next_array_on_fail or self.objective_neutral != "off"):
@@ -4699,6 +4766,7 @@ def _htf_tag(ctx: DayCtx, sd: Side, i: int, price: float, tol: float) -> bool | 
     direction known by the close of bar i."""
     if not ctx.hzones:
         return None
+    tol = tol + float(getattr(ctx, "htf_reach_tol", 0.0))      # caption-gap new-layered-orders-before-level (bias_htf#4/7): a turn short of the level counts
     now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
     j = ctx.full_off + i
     for z, known, m in ctx.hzones:
@@ -6489,6 +6557,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     ctx.bias_by_cut = bias_by_cut or {}                   # (bias_htf rows known before 09:30 come from these cuts)
     ctx.intermarket = intermarket or {}                   # (caption-gap bias_htf#3/7: the seasonal qualifiers of the DayPlan read the day's intermarket values)
     ctx.bh3_mwdl = bool(p.mwd_levels_entries)
+    ctx.bh4_obl = bool(p.ob_ladder)                      # caption-gap A12-stepping-ob (bias_htf#4/7): the ladder's active level is an HTF entry array
+    ctx.htf_reach_tol = float(p.htf_reach_tol_pts) * float(p.es_pt)      # caption-gap new-layered-orders-before-level: the HTF-array tag tolerance
     dw = _DW.plan(ctx, hist, p, week, eve, dt)            # day_week_context: the day's blocks / flags / tags
     p = _DWC.day_params(p, dw)                            # caption-gap pass day_week_context#1/3: iw_no_measured
     p = _DWC2.day_params(p, dw)                           # caption-gap pass day_week_context#2/3: expansion_mode "full", the Friday single exit, the consolidation scalp outs
@@ -7026,7 +7096,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 pending = None                       # ran to target without us (D11 run_cancel loosens it)
             elif p.sb_only and t < sb_a:
                 pass                                 # armed before the window: wait for it
-            elif (not ob_pre and not pending.get("no_leg_wait") and p.leg_pd and p.leg_pd_at == "fill" and pending["entry"] >
+            elif (not ob_pre and not pending.get("no_leg_wait") and p.leg_pd and p.leg_pd_at == "fill" and not (p.swing_ignore_eq and _BH4E.leg_pd_exempt(ctx, sd, pending["entry"], i, p)) and pending["entry"] >
                   (_ES1.pd_line(ctx, sd, p, pending, i) if (_ES1.pd_active(p) or pending.get("pd_top") is not None) else
                    pending.get("leg_lo", pending["ext"]) + p.leg_pd * ((pending["leg_hi0"] if pending.get("no_new_extreme") else
                                                 sd.h[pending["ext_i"]:i].max()) - pending.get("leg_lo", pending["ext"])))):
@@ -9022,6 +9092,8 @@ def _ts_arrays0(ctx, sd, i, known_by, tfs=TS_TFS, src=(0, 1, 3)) -> list:
             out.append((max(a, b), min(a, b), pd.Timestamp(int(kn), tz="UTC").tz_convert(ctx.idx.tz)))
         if getattr(ctx, "bh3_mwdl", False):
             out += _BH3E.dcandle_rows(ctx, sd, i)             # caption-gap X3-b10-case-c-to-b-upgrade (bias_htf#3/7): the case-B daily down-candle levels as entry arrays
+        if getattr(ctx, "bh4_obl", False):
+            out += _BH4E.ladder_rows(ctx, sd, i)              # caption-gap A12-stepping-ob (bias_htf#4/7): the active ladder level as an HTF entry array
         return out
     if not getattr(ctx, "hzones", None):
         return out
@@ -9503,7 +9575,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     pd_line_ = leg_lo + p.leg_pd * (pd_hi - leg_lo)
     if pd_act:
         pd_line_ = _ES1.frame_line(ctx, sd, p, pd_line_)
-    if not skip_leg_pd and p.leg_pd and p.leg_pd_at == "arm" and p.leg_pd_anchor != "target" and entry > pd_line_:
+    if (not skip_leg_pd and p.leg_pd and p.leg_pd_at == "arm" and p.leg_pd_anchor != "target" and entry > pd_line_
+            and not (p.swing_ignore_eq and _BH4E.leg_pd_exempt(ctx, sd, entry, i, p))):          # (caption-gap A21-swing-discount-exception, bias_htf#4/7: the waiver)
         _f("x_leg_premium")
         return None                                   # entry FVG not in the leg's discount
     if not skip_leg_pd and p.leg_pd_min and entry < leg_lo + p.leg_pd_min * (pd_hi - leg_lo) - 1e-9:
@@ -10304,3 +10377,4 @@ from . import tp4 as _TP4  # noqa: E402  (caption-gap pass, targets_partials #4/
 from . import bh1e as _BH1E  # noqa: E402  (caption-gap pass, bias_htf#1/7: engine glue)
 from . import bh2e as _BH2E  # noqa: E402  (caption-gap pass, bias_htf#2/7: engine glue)
 from . import bh3e as _BH3E  # noqa: E402  (caption-gap pass, bias_htf#3/7: engine glue)
+from . import bh4e as _BH4E  # noqa: E402  (caption-gap pass, bias_htf#4/7: engine glue)
