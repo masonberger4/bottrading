@@ -322,6 +322,10 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
             continue
         arrs.append(Arr("bull" if r.up else "bear", r.kind, "W" if r.kind == "nwog" else "D",
                         r.high, r.low, r.ce, k))
+    b2 = X.get("b2") or {}
+    if b2.get("ow"):                                 # caption-gap E4-daily-one-way-delivery-rebalance (bias_htf#2/7): the one-way-delivery range as a draw
+        from . import bh2
+        arrs += bh2.oneway_arrays(o, h, l, c, int(b2["ow"]))
     arrs.sort(key=lambda a: a.known)
     piv_h, piv_l = L.pivots(h, l, 1)
 
@@ -391,6 +395,20 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
             if not _arr_alive(a, k, o, h, l, c, wo, wc, wl, vi_body_death, vi_dead_rule, bal=balance_tf, lcl=lcl):
                 continue
             wt = 2.0 if a.tf == "W" else 3.0 if a.tf == "M" else 1.0
+            if a.typ == "oneway":                        # caption-gap E4-daily-one-way-delivery-rebalance: a draw only, no reaction weight
+                if a.kind == "bear":
+                    hs_ = hi_after.max()
+                    if hs_ < a.top:
+                        near = max(a.bottom, hs_)
+                        if near > px:
+                            draws_up.append((near - px, f"{a.tf}_{a.typ}", near))
+                else:
+                    ls_ = lo_after.min()
+                    if ls_ > a.bottom:
+                        near = min(a.top, ls_)
+                        if near < px:
+                            draws_dn.append((px - near, f"{a.tf}_{a.typ}", near))
+                continue
             # reaction in the last react_days completed days or tonight
             rl = np.append(l[max(s, k - react_days):k], ol)
             rh = np.append(h[max(s, k - react_days):k], oh)
@@ -500,14 +518,20 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
         cols += [k_ for k_ in (rows[0] if rows else {}) if k_ not in cols]
     out = pd.DataFrame(rows, columns=cols or None).set_index("date")
     b1 = X.get("b1") or {}
+    pd3_log = None
+    fl_b2 = {}
+    if b2:
+        from . import bh2
+        fl_b2 = bh2.flip_cfg(b2)                     # caption-gap bias_htf#2/7: flip_pd3 neutral result / first-array caution log
+        pd3_log = fl_b2.get("pd3_log")
     defer = bool(flip_triggers and "ob_low_touch" in flip_triggers and X)          # caption-gap BH-B9-HTF-OB-low-trade-through: the objective-met columns come from add_columns
     if flip_triggers and len(out) and not defer:
-        fl = _flip(d, w, arrs, flip_triggers, dict(b1.get("fl") or {}, **({"wk_joint": wk_joint} if wk_joint is not None else {})))
+        fl = _flip(d, w, arrs, flip_triggers, dict(b1.get("fl") or {}, **fl_b2, **({"wk_joint": wk_joint} if wk_joint is not None else {})))
         out["flip"] = [fl.get(pd.Timestamp(x), 0) for x in out.index]
     if X and len(out):
         out = BH.add_columns(out, X, d, w, arrs, og_df, on, df, es_pt, vi)
     if defer and len(out):
-        cfg_ = dict(b1.get("fl") or {})
+        cfg_ = dict(b1.get("fl") or {}, **fl_b2)
         if wk_joint is not None:
             cfg_["wk_joint"] = wk_joint
         if "obj_day" in out or "obj_week" in out:
@@ -518,6 +542,9 @@ def table(df: pd.DataFrame, es_pt: float = 1.0, react_days: int = 2, lookback: i
             cfg_["obj"] = om
         fl = _flip(d, w, arrs, flip_triggers, cfg_)
         out["flip"] = [fl.get(pd.Timestamp(x), 0) for x in out.index]
+    if b2 and len(out):
+        from . import bh2
+        out = bh2.finish(out, b2, d, w, arrs, es_pt, b1.get("dr"), pd3_log)       # caption-gap bias_htf#2/7 (bh2.py): the columns after the flip
     return out
 
 
@@ -587,8 +614,13 @@ def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple, cfg: di
     if new_tr:
         from . import bh1
         fs = bh1.FlipState(d, w, arrs, triggers, cfg)
+    pd3n = cfg.get("pd3n")                         # caption-gap B8-three-pd-array-abort: the displacement multiple (None = flip_pd3 flips as built)
+    pd3_log = cfg.get("pd3_log")                   # {date: arrays closed through in the state, known before the session} (the first-array caution)
+    pd3_pend, pd3_set = 0, -1
     for k in range(len(d)):
         out[d.index[k]] = state                     # known before session k
+        if pd3_log is not None:
+            pd3_log[d.index[k]] = len(broken)
         prev = state
         if "ob_mt" in triggers and k >= 1:
             bull = [a for a in obs if a.kind == "bull" and a.known <= k]
@@ -618,7 +650,11 @@ def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple, cfg: di
                 if intact and (c[k] < lvl if state > 0 else c[k] > lvl):
                     broken.add(j)
             if len(broken) >= 3:
-                state = -state
+                if pd3n:                           # caption-gap B8-three-pd-array-abort (bias_htf#2/7): abandon the bias (neutral); the opposite state only after a displacement day
+                    pd3_pend, pd3_set = -state, k
+                    state = 0
+                else:
+                    state = -state
         if "flip_close_above" in triggers and state != 0 and k >= 1:
             ub = max(o[k - 1], c[k - 1])
             lb = min(o[k - 1], c[k - 1])
@@ -657,6 +693,15 @@ def _flip(d: pd.DataFrame, w: pd.DataFrame, arrs: list, triggers: tuple, cfg: di
                 last_dn_week = r.high
             elif r.close > r.open:
                 last_up_week = r.low
+        if pd3_pend and k > pd3_set:                 # B8-three-pd-array-abort: a displacement day in the new direction ends the neutral wait
+            if state != 0:
+                pd3_pend = 0
+            elif k >= 5:
+                adr_ = float((h[k - 5:k] - l[k - 5:k]).mean())
+                rng_ = float(h[k] - l[k])
+                if adr_ > 0 and rng_ >= float(pd3n) * adr_ and ((pd3_pend > 0 and c[k] >= l[k] + 0.75 * rng_) or (pd3_pend < 0 and c[k] <= l[k] + 0.25 * rng_)):
+                    state = pd3_pend
+                    pd3_pend = 0
         if fs is not None:
             state = fs.step(k, state, last_week, prev)       # caption-gap bias_htf#1/7: the five new triggers and the B9 persistence
         if k in wk_last:

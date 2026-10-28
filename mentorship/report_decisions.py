@@ -44,6 +44,19 @@ def m3_scan(*runs: pd.DataFrame) -> dict:
     return dict(days=len(union), both_days=len(both), one_market_days=len(one), share_one_market=len(one) / len(union), setups_per_day=n / len(union))
 
 
+def b19_sign(t: pd.DataFrame) -> pd.DataFrame:
+    """Decision "B19_sign" (B19-bond-stock-dxy-sign; cc10_019 ~2:37, cc10_009 ~14:33, cc05_009 ~8:31): the trades by the sign regime of the day (Params.im_regime_tag adds the tag
+    im_b<with|against>_d<with|against>: whether the bond-price proxy and the dollar moved with or against stocks over the 20 sessions before the trade; "none" = no tag). Report only - no gate:
+    trades, win rate, mean R and net per regime."""
+    if not len(t):
+        return pd.DataFrame(columns=["trades", "win_rate", "avg_R", "net"])
+    tag = t.lv_tags.fillna("").astype(str).str.extract(r"(im_b(?:with|against)_d(?:with|against))")[0].fillna("none")
+    rows = []
+    for k, g in t.assign(regime=tag).groupby("regime"):
+        rows.append(dict(regime=k, trades=int(len(g)), win_rate=round(float((g.net > 0).mean()), 3), avg_R=round(float(g.R.mean()), 3), net=round(float(g.net.sum()), 2)))
+    return pd.DataFrame(rows).set_index("regime")
+
+
 def main(path="runs/mentorship/decision_trades.csv"):
     t = pd.read_csv(path)
     for tf in sorted(t.tf.unique()):

@@ -1308,6 +1308,10 @@ def side_ok(ctx, p, sign: int, session: str, i: int) -> str | None:
     why_ = _B1.side_ok(ctx, p, sign, session, i)
     if why_ is not None:
         return why_
+    from . import bh2e as _B2                        # caption-gap pass bias_htf#2/7
+    why_ = _B2.side_ok(ctx, p, sign, session, i)
+    if why_ is not None:
+        return why_
     from . import bias_day as _BD                    # bias_htf: the bias side (all engines), weekly open, judas, filters ...
     return _BD.side_ok(ctx, p, sign, session, i)
 
@@ -1349,6 +1353,10 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p) -> str | None:
     why_ = _B1.order_ok(ctx, sd, o, session, i, p)
     if why_ is not None:
         return why_
+    from . import bh2e as _B2                        # caption-gap pass bias_htf#2/7
+    why_ = _B2.order_ok(ctx, sd, o, session, i, p)
+    if why_ is not None:
+        return why_
     from . import bias_day as _BD                    # bias_htf: mwd_nest, mmbm_zone, 50/50 and the order tags
     return _BD.order_ok(ctx, sd, o, session, i, p)
 
@@ -1373,6 +1381,10 @@ def scalp_now(ctx, p, session: str, i: int | None = None, sign: int = 0) -> str:
         return why_
     from . import bh1e as _B1                        # caption-gap pass bias_htf#1/7
     why_ = _B1.scalp_now(ctx, p, session, i, sign)
+    if why_:
+        return why_
+    from . import bh2e as _B2                        # caption-gap pass bias_htf#2/7
+    why_ = _B2.scalp_now(ctx, p, session, i, sign)
     if why_:
         return why_
     from . import bias_day as _BD                    # bias_htf: neutral bias / no narrative / chop / consolidation-week scalps

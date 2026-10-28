@@ -677,6 +677,10 @@ def extras_blocked(ctx, p, session: str, ts, extra=()) -> bool:
     extra = list(extra)
     seen = {id(t) for t in base}
     day, sess = stops_from(p, base + [t for t in extra if id(t) not in seen], ts)
+    if day and p.allow_reversal_after_target:
+        from . import bh2e as _B2                    # caption-gap B3-reversal-after-target (bias_htf#2/7): a winning AM trade does not end the PM family once the AM lock reversed after its target
+        if _B2.extras_unblocked(ctx, p, session, day):
+            day = None
     return bool(day) or fam(session) in sess
 
 

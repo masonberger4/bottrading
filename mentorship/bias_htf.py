@@ -110,6 +110,15 @@ def bx_string(p) -> str:
         x["tb"] = p.eq_tol_pts                   # caption-gap BH-B2-draw-by-proximity: the table's draw column breaks near-ties by the opposing arrays in the path
     if p.wick_ce_draw or p.stack_far or p.draw_order == "inefficiency_first":
         x["ord"] = 1                           # (the ordered draw columns the wick CE / stacked gaps / inefficiency-first order rewrite)
+    from . import bh2                          # caption-gap pass bias_htf#2/7 (bh2.py): the columns / flip configuration of its items
+    b2 = bh2.bx_cfg(p)
+    if b2:
+        x["b2"] = b2
+    if p.htf_after_draw == "reverse" or p.fast_draw_extend:
+        x["obj"] = 1                           # the B17.3 objective-met columns and the weekly draw levels (after_draw_* / fast_draw read them)
+        x["wk"] = 1
+    if p.tug_required or p.first_clue_neutral:
+        x["pr"] = 1                            # the post-raid first_clue / tug columns (items 135 / 136)
     return json.dumps(x, sort_keys=True, separators=(",", ":")) if x else ""
 
 
@@ -1058,6 +1067,26 @@ def cot_state(day, tbl: pd.DataFrame | None, weeks: int = 52) -> int:
         return 0
     mid = (hi + lo) / 2
     return 1 if t.net.iloc[-1] > mid else (-1 if t.net.iloc[-1] < mid else 0)
+
+
+def oi_root(symbol) -> str:
+    """B20-oi-own-market-only (cc10_003 ~39:38): the file root of the traded market's open interest (the leading letters of the symbol: ES, NQ, ...); an unknown symbol is the S&P (the original single file)."""
+    if not symbol:
+        return "ES"
+    s = "".join(ch for ch in str(symbol).upper() if ch.isalpha())
+    return s or "ES"
+
+
+def oi_path(symbol) -> Path:
+    r = oi_root(symbol)
+    return OI_FILE if r == "ES" else OI_FILE.with_name(f"{r}_oi.csv")
+
+
+def load_oi_for(symbol) -> pd.Series | None:
+    """The roll-summed open interest of the traded market ONLY (data/mentorship/<ROOT>_oi.csv); never another market's series (open interest 'is not something that can be shared'). None without that file."""
+    path = oi_path(symbol)
+    assert path.name == ("ES_oi.csv" if oi_root(symbol) == "ES" else f"{oi_root(symbol)}_oi.csv"), "oi lookup must be keyed by the traded symbol"
+    return load_oi(path)
 
 
 def load_oi(path: Path | None = None) -> pd.Series | None:

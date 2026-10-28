@@ -255,7 +255,7 @@ class Params:
     flip_triggers: tuple = ("ob_mt", "wk_dc")   # B8 triggers of the htf "flip" column: ob_mt (B8a),
                                    # wk_dc (B8c), flip_pd3 (B8b), flip_close_above (B8d), flip_thu_wopen
                                    # (B8e); B8f is the engine switch stop_flip
-    bias_neutral: str = "skip"     # with a bias filter, a 0 day: "skip" it, trade "both" sides, or (Ep02.6) "scalp" them
+    bias_neutral: str = "skip"     # with a bias filter, a 0 day: "skip" it, trade "both" sides, or (Ep02.6) "scalp" them, or ("scalp_week", B17-neutral-htf-monday-close) scalp them at scalp_week_risk x the size
     lot: int = 1                   # units per contract: 1 for shares; 5 for MES, 2 for MNQ
                                    # (a unit is $1 per point, so P&L = points x units)
 
@@ -3260,6 +3260,64 @@ class Params:
     bisi60_hold: str = "off"             # BH-B8-1h-BISI-CE-hold (072 ~00:13:53, ~00:15:19): "trade" / "close" - with a +1 lock the latest 60m BISI: a trade (60m close) below its CE tags bias_weak, below its low sets the lock to neutral for the session and cancels the pending order. Mirror
     wk_dc_joint: bool = False            # B8-weekly-ith-both-indices-close (077 ~00:09:44): the wk_dc -1 flip applies only when ES and NQ BOTH closed the week below their own last down-close week's low (backtest.run with a partner; persists until a +1 on either)
     b9_persist: bool = False             # B9-retrace-above-swing-low (077 ~00:11:02): a flip to the opposite state is suppressed while the daily low (high) holds the last daily pivot low (high) and the lower (upper) breakaway FVG stays partly open
+    # --- Caption-gap pass, package bias_htf#2/7 (digests/rulebook_gaps/bias_htf_intermarket.md items 82-88, 90, 91, 93-96, 104-109, 114, 116, 117, 119, 121, 122, 130-136, 138, 139, 143; bh2.py table side, bh2e.py engine side).
+    # Everything defaults off; thresholds the sources never give are [our interpretation]. -----------------------------------------------------------------------------------------------------------------------------
+    scalp_week_risk: float = 0.5         # B17-neutral-htf-monday-close (084 ~1:26): bias_neutral="scalp_week" - a week without an HTF draw trades both sides as scalps (one target, no runners) at this multiple of the risk [our interpretation: 0.5]
+    q_days_tag: bool = False             # B22-timing-tool (cc05_001 ~35:25-37:51; cc05_003 ~29:20): the table columns q_days (sessions since the last daily MSS) and q_window (q_window_lo <= q_days <= q_window_hi); tag q_window on the orders. Report only
+    q_window_lo: int = 40                # ... [our interpretation] "the last third" of the 60-session cast: S+40 ..
+    q_window_hi: int = 60                # ... .. S+60
+    q_window_gate: bool = False          # B22-timing-tool: the daily-SMT bias (dsmt_bias) counts only inside the q_window (a time filter, not a direction source)
+    q_window_size: float = 1.0           # B22-timing-tool: risk multiplier (> 1 sizes up) when the q_window, the bias side and the seasonal direction (calendar window, else the intramonth map) all agree with the order; 1 = off
+    shift_due_tag: bool = False          # X3-shift-due-six-months (cc05_001 ~48:36): column shift_due = q_days >= 126 with the 126-session net move in one direction; tag only
+    qshift_bias: bool = False            # X3-b22-shift-trigger-quarter-bias (cc05_001 ~32:36; cc05_004 ~16:53; cc05_003 ~16:01): the concrete quarterly shift (column qshift): a new 60-session high within the last 10 sessions and then a daily low under the last daily STL -> -1 for 63 sessions (or until a new 60-session high); mirror. With the switch the bias defaults to qshift when otherwise 0
+    q_obj_lean: bool = False             # B22-quarterly-shift (084 ~22:18 ...): column q_obj = the nearest weekly array in the shift's direction beyond the 60-session range (quarterly_objective), kept until traded or q_obj_days sessions; with the switch a neutral lock leans to it
+    q_obj_days: int = 84                 # ... 84 sessions (4 months)
+    qshift_strong_consol: bool = False   # X3-b22-shift-form-strong-trend (cc05_001 ~7:35): a shift against a strong primary trend (price > qshift_strong_pct beyond its 252-session mean) is a consolidation, not a retracement: qshift does not change the bias and the next 20 sessions are scalps (tag qshift_form)
+    qshift_strong_pct: float = 0.10      # ... [our interpretation] "strong" = price more than this far beyond the 252-session mean
+    iof_weekly_weight: bool = False      # B6-weekly-iof (cc12_002 ~16:34): the B6 candle-respect score on WEEKLY bars (column iof_w, usable the session after the week closes); orders agreeing with it trade at full size, against it at iof_w_risk x (tag iof_w_agree / iof_w_oppose) [our interpretation of "favoured"]
+    iof_w_risk: float = 0.5
+    iof_w_weeks: int = 10                # ... the weekly bars scored (the daily iof_days is in sessions)
+    sibi_gate: bool = False              # NEW-daily-sibi-bias-gate (086 ~2:22, ~12:30): after a daily sell-side sweep the nearest daily bear FVG formed after it repels price: a close under its CE = only shorts; inside it above the CE = longs as scalps; above its high with a bar holding above = longs toward the buy-side pool. Mirror for a BISI after a buy-side sweep
+    wick_ce_60m: bool = False            # A23-intraday-close-line-in-sand (090 ~19:57): a completed 60m bar closing above the prior day's upper-wick CE cancels the session's short lock (mirror: below the lower-wick CE cancels a long lock)
+    sibi15_ce_cancel: bool = False       # ... (092 ~2:10:25, softer): a trade above the CE of the session's latest 15m bear FVG does the same (no close type given)
+    allow_reversal_after_target: bool = False  # B3-reversal-after-target (086 ~10:26): once the session's draw is reached a wick into an opposite-colour breaker with the next 3 bars' bodies holding the wick extreme re-locks the other side; the PM Silver Bullet in the new direction may trade after a winning AM trade
+    soft_carry: bool = False             # B17-unreached-draw-soft-bias (087 ~0:30): the previous day's last lock, not delivered, carries as a SOFT bias when today's own lock is neutral: soft_carry_risk x size, no adds (tag soft_carry); dropped when the opposing pool was taken overnight or the flip state changed
+    soft_carry_risk: float = 0.5
+    inside_bisi_release: bool = False    # B17-inside-daily-range-no-trade (091 ~6:20): an inside_bisi stand-aside day is released from the first bar that trades release_pts beyond the daily FVG's high or low - and only that side trades
+    release_pts: float = 1.0             # ... [our interpretation of "definitively"]
+    fast_draw_extend: bool = False       # NEW-speed-into-weekly-draw (095 ~8:01): a weekly draw reached at >= fast_draw_mult x the speed of the prior leg is NOT neutral (objective_neutral): the next weekly array beyond is the new draw
+    fast_draw_mult: float = 1.5          # ... [our interpretation]
+    dxy_needs_rates: bool = False        # NEW-rates-dxy-fx-direction (095 ~14:49; cc03_006 ~5:35): INTERMARKET tnx_slow / rates_dxy_agree; the dxy_filter acts only when the 60-session yield slope agrees with the dollar's side (tag rates_agree / rates_diverge)
+    pd3_result: str = "flip"             # B8-three-pd-array-abort (098 ~1:08:36 ...): the flip_pd3 trigger's result - "flip" (the opposite state, the built behaviour) or "neutral" (abandon the bias; the opposite state only after a displacement day)
+    pd3_disp_adr: float = 1.5            # ... [our interpretation] a displacement day = range >= this x ADR5 closing in the top (bottom) quarter
+    pd3_first_caution: bool = False      # ... while the first adverse array is closed through (and the third not yet) orders in the bias direction are scalps
+    wk_q75_confirm: bool = False         # B8-weekly-wick-quadrant-gate (102 ~2:11:40; 103 ~0:02:32): the bias counts only after a daily close beyond the prior week's wick 75 % quadrant in its direction (this week); otherwise 0
+    consol_dir: str = "off"              # N8-consolidation-breakout-direction (cc01_001 ~9:50; cc01_006 ~18:37): "first_expansion" (no trades inside the daily range; after the breakout only its side, entries at / under EQ + 25 % of the range) / "prior_strongest" (inside the range the side is the direction of the strongest day since the previous range, entries in the discount) - needs the drange table columns
+    consol_chase_frac: float = 0.25      # ... [our interpretation] "no chase"
+    htf_after_draw: str = "neutral"      # B17-after-draw-retrace-or-reverse (cc01_002 ~18:49; cc07_007 ~23:55; cc10_013 ~6:27; cc03_002 ~10:14): "neutral" (built) or "reverse" - at a daily/weekly array draw hit the bias is the OPPOSITE side (tag after_draw_case); a PM lock may reverse an AM draw hit at a 4h/daily array
+    pd_two_level: bool = False           # A21-two-level-discount (cc01_004 ~30:18): a long needs the entry at / below the EQ of the 20-session BODY range as well as the leg discount (tag htf_discount); mirror
+    range_no_bias: bool = False          # B3-range-trading-without-bias (cc01_005 ~18:51): with no bias a short needs the entry >= 62 % of the last 60m swing range (long <= 38 %), single target just beyond the opposite swing extreme
+    range_no_bias_pct: float = 0.62
+    eq_tiebreak: bool = False            # B3-eq-recent-structure-break (cc01_006 ~7:29; cc05_015 ~5:09): bias 0 with the prior close within eq_tie_frac of the 20-session range EQ (monthly: 12-month range) takes the direction of the most recent daily (monthly) pivot broken by a close
+    eq_tie_frac: float = 0.10
+    tier_regime_gate: bool = False       # B6-hrlr-lrlr-structure-regime (cc01_007 ~19:48): column tier_regime -1 = intact LTH, lower ITH, last two STLs broken (mirror +1): longs whose target is above the defended ITH are rejected, a neutral lock goes short
+    tug_required: bool = False           # X3-b6-tug-of-war-new-ground (cc05_002 ~16:12): the tier regime counts only with the tug-of-war reading too (column tug, post_raid)
+    raid_profile_bias: bool = False      # B6-consolidation-raid-profile (cc02_008 ~14:28): the last raid_profile_n daily ranges each raided the low first and then exited up -> +1 (mirror -1) when the bias is 0
+    raid_profile_n: int = 2
+    htf_bias_tf: str = "D"               # B5-monthly-first-hierarchy (cc04_003 ~14:07; cc04_002 ~29:38): "D" (built) / "W" (weekly draw) / "M" (monthly draw, else weekly, else none - monthly arrays are built)
+    htf_rank_tf: bool = False            # ... array rungs at the same level are labelled with the highest timeframe (M > W > D)
+    flip_terminus: bool = False          # B17-hold-bias-most-recent-htf-setup (cc03_001 ~21:17; cc05_002 ~22:06): the flip state ends (0) when the draw it was set with trades, or after flip_max_days sessions
+    flip_max_days: int = 126
+    dsmt_bias: bool = False              # B18-htf-daily-smt (cc03_005 ~19:41; cc11_003 ~23:40): the daily ES / NQ SMT (one makes a lower low in the last dsmt_days sessions, the other does not) is the bias when it is 0 (backtest.run with a partner); tag dsmt_trend / dsmt_short by the season
+    dsmt_days: int = 18
+    im_regime_tag: bool = False          # B19-bond-stock-dxy-sign (cc10_019 ~2:37; cc10_009 ~14:33; cc05_009 ~8:31): tag the orders with the 20-session bond / dollar vs stock correlation signs (INTERMARKET); no gate
+    oneway_n: int = 0                    # E4-daily-one-way-delivery-rebalance (cc03_007 ~23:41): >= this many consecutive down-close days after an up-close day U make U's range a draw (mirror); 0 off
+    raid_side_gate: bool = False         # X3-iof-60day-framing-raids (cc05_001 ~26:08; cc05_004 ~23:59): column raid_side60 - buy stops taken (20-day highs) over the last 60 sessions raid_ratio x more often than sell stops = bullish: no shorts (mirror)
+    raid_ratio: float = 2.0              # ... [our interpretation]
+    ipda_draw_side: bool = False         # X3-b21-draw-side-and-flip (cc05_003 ~1:24:00): the lock draws the next 20 / 40 / 60 day extreme on the side of the last daily MSS; a bullish MSS after a 20-day-low raid short of the 40-day low is a quarterly shift +1
+    first_clue_neutral: bool = False     # X3-one-sided-delivery-first-clue (cc05_002 ~13:28): the first daily STL break after the HTF buy-side pool was raided (table first_clue) turns the opposing state neutral until the tug of war confirms
+    ipda_extreme_pause: bool = False     # X3-60day-low-deep-discount-bounce (cc05_004 ~24:29): a prior low within 0.25 x ADR5 of the 60-day low (or under it) blocks shorts for the session (mirror: highs block longs)
+    decoupled_scalp: bool = False        # B19-four-asset-risk-map (cc10_019 ~6:41; cc05_009 ~15:12): the instrument's 20-session trend against the dollar (and commodities when loaded): not in harmony = decoupled (tag), orders are scalps
 
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
@@ -3744,7 +3802,7 @@ class Params:
         # package bias_htf: validation and the umbrellas (replace() re-runs this)
         for name, ok in (("htf_bias", ("off", "react", "draw", "pd", "combo", "flip", "ordered", "iof", "combo2", "ob_mt", "mwd",
                                        "nwog", "candle", "draw_pd", "wk", "pd20")),
-                         ("bias_neutral", ("skip", "both", "scalp")), ("judas_required", ("off", "tag", "filter")),
+                         ("bias_neutral", ("skip", "both", "scalp", "scalp_week")), ("judas_required", ("off", "tag", "filter")),
                          ("draw_first", ("off", "session")), ("day_pd", ("swing", "20d")),
                          ("pd_zone", ("half", "third", "deep", "ote")), ("weekly_gate", ("off", "tag", "filter")),
                          ("news_topdown", ("off", "tag", "side")), ("bellwether_15m", ("off", "tag", "filter")),
@@ -3808,6 +3866,20 @@ class Params:
                              "org_tell_end in (570, 720], dxy_soft_risk in (0, 1], low_in_min_highs >= 1, low_in_ratio > 0, giveback_frac in (0, 1)")
         if self.htf_monthly:
             self.htf_monthly_arrays = True        # BH-A5-HTF-FVG-own-timeframe: the named alias of the built monthly arrays
+        # caption-gap pass bias_htf#2/7 (bh2.py / bh2e.py)
+        for name, ok in (("pd3_result", ("flip", "neutral")), ("consol_dir", ("off", "first_expansion", "prior_strongest")), ("htf_after_draw", ("neutral", "reverse")),
+                         ("htf_bias_tf", ("D", "W", "M"))):
+            if getattr(self, name) not in ok:
+                raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
+        if (not 0 < self.scalp_week_risk <= 1 or self.q_window_size <= 0 or not 0 < self.soft_carry_risk <= 1 or not 0 < self.iof_w_risk <= 1 or self.q_window_lo < 0 or self.q_window_hi < self.q_window_lo
+                or self.q_obj_days < 1 or self.iof_w_weeks < 3 or self.release_pts < 0 or self.fast_draw_mult <= 0 or self.pd3_disp_adr <= 0 or not 0 < self.consol_chase_frac <= 0.5
+                or not 0.5 < self.range_no_bias_pct < 1 or not 0 <= self.eq_tie_frac < 0.5 or self.raid_profile_n < 1 or self.flip_max_days < 1 or self.dsmt_days < 2
+                or self.oneway_n < 0 or self.raid_ratio <= 0 or not 0 <= self.qshift_strong_pct < 1):
+            raise ValueError("bias_htf#2/7: scalp_week_risk / soft_carry_risk / iof_w_risk in (0, 1], q_window_size > 0, 0 <= q_window_lo <= q_window_hi, q_obj_days >= 1, iof_w_weeks >= 3, release_pts >= 0, fast_draw_mult > 0, "
+                             "pd3_disp_adr > 0, consol_chase_frac in (0, 0.5], range_no_bias_pct in (0.5, 1), eq_tie_frac in [0, 0.5), raid_profile_n >= 1, flip_max_days >= 1, dsmt_days >= 2, oneway_n >= 0, "
+                             "raid_ratio > 0, qshift_strong_pct in [0, 1)")
+        if self.htf_bias_tf == "M":
+            self.htf_monthly_arrays = True        # B5-monthly-first-hierarchy: the monthly draw needs the monthly arrays
         inert = []                                  # switches the current draw_lock / vi_arrays make inert
         if (self.draw_lock_pick != "nearest" or self.draw_ext_target or self.cond_draw) and self.draw_lock != "session":
             inert.append("draw_lock_pick / draw_ext_target / cond_draw act only in the #9 lock (draw_lock='session')")
@@ -3845,6 +3917,17 @@ class Params:
             inert.append("ceiling_ladder: the VI ceilings need vi_arrays=True (the ladder otherwise reads FVGs only)")
         if self.bellwether_15m != "off" and self.bellwether_tf:
             inert.append("bellwether_15m (the original midpoint test) and bellwether_tf (the swing-break test) are two readings of B5: both apply when both are set")
+        if self.htf_bias == "off" and (self.qshift_bias or self.dsmt_bias or self.raid_profile_bias or self.eq_tiebreak or self.htf_bias_tf != "D" or self.wk_q75_confirm       # caption-gap pass bias_htf#2/7: the documented couplings
+                                       or self.htf_after_draw == "reverse" or self.fast_draw_extend):
+            inert.append("qshift_bias / dsmt_bias / raid_profile_bias / eq_tiebreak / htf_bias_tf / wk_q75_confirm / htf_after_draw / fast_draw_extend reshape the htf_bias reading: inert with htf_bias='off'")
+        if (self.pd3_result == "neutral" or self.pd3_first_caution) and "flip_pd3" not in self.flip_triggers:
+            inert.append("pd3_result / pd3_first_caution act on the flip_pd3 trigger: add it to flip_triggers")
+        if (self.flip_terminus or self.first_clue_neutral or self.pd3_result == "neutral") and self.htf_bias != "flip":
+            inert.append("flip_terminus / first_clue_neutral / pd3_result change the stateful `flip` column: read with htf_bias='flip' (or the flip-based sessions rules)")
+        if self.inside_bisi_release and "inside_bisi" not in self.sloppy_tests:
+            inert.append("inside_bisi_release lifts the inside_bisi sloppy test: add it to sloppy_tests")
+        if (self.soft_carry or self.q_obj_lean or self.ipda_draw_side or self.wick_ce_60m or self.sibi15_ce_cancel or self.allow_reversal_after_target) and self.draw_lock != "session":
+            inert.append("soft_carry / q_obj_lean / ipda_draw_side / wick_ce_60m / sibi15_ce_cancel / allow_reversal_after_target act on the draw lock (draw_lock='session')")
         if inert:
             warnings.warn("inert switches: " + "; ".join(inert), stacklevel=3)
 
@@ -4760,6 +4843,8 @@ def _targets(ctx: DayCtx, sd: Side, i: int, above: float, eq: list[float], p: Pa
         lv = _TP1.targets_post(ctx, sd, i, p, lv)                     # caption-gap A3-reh-under-older-high / A23-stubby-wick-first-approach (targets_partials #1/4)
     if _TP2.targets_on(p):
         lv = _TP2.targets_post(ctx, sd, i, p, above, lv, eq, ext_i)    # caption-gap targets_partials #2/4: session-pool filter, defended pools, break gate, swept pools, event horizon, NWOG magnet, overnight FVGs, HTF OB open
+    if _BH2E.targets_on(p):
+        lv = _BH2E.targets_post(ctx, sd, i, p, above, lv)              # caption-gap bias_htf#2/7: the tier-regime trim, the weekly / monthly rungs
     if _BH1E.targets_on(p):
         lv = _BH1E.targets_post(ctx, sd, i, p, above, lv)              # caption-gap bias_htf#1/7: no long target above a week whose high is in (wk_high_in_gate), the stacked-gap partial rung
     out = []
@@ -5862,6 +5947,7 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
     cands += _TP2.lock_cands(ctx, p, t_lock, kl)           # caption-gap X1-london-0300-fvg-draw (018 ~00:03:49): the overnight 5m FVGs
     cands += _TP3.lock_cands(ctx, p, t_lock, kl)           # caption-gap LLT3-session-targets-15m-60m (cc10_014 ~00:04:18): the opposing 15m / 1h arrays as session objectives
     cands += _BH1E.lock_cands(ctx, p, row, t_lock, S)      # caption-gap pass bias_htf#1/7: the weekly BISI CE after a PWH give-back, the wick CE draw
+    cands += _BH2E.lock_cands(ctx, p, row, t_lock, S)      # caption-gap pass bias_htf#2/7: the next weekly array beyond a fast weekly draw
     mw_ = getattr(getattr(ctx, "dplan", None), "info", {}).get("mw")
     if p.pool_mon_wed and mw_ is not None:             # day_week_context N10.3: the Mon-Wed extremes on Thu / Fri
         cands += [(mw_[0], "pool", "mon_wed_high", 1, S), (mw_[1], "pool", "mon_wed_low", -1, S)]
@@ -6013,7 +6099,8 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
                     [(w[s_], "array", "wick_ce", 0) for w in getattr(ctx, "wicks", [ctx.wick])
                      for s_ in ("upper", "lower")] if p.wick_partial else []),
                 delivered=False, delivered_t=None, delivered_i=None, traded=False)
-    return _BH1E.lock_post(ctx, p, row, t_lock, session, kl, px, lock, mk)      # caption-gap pass bias_htf#1/7: ceiling ladder, weekly PO3, 60m BISI loss, BPR lean, raid gap, minimum criteria, 50/50, run extreme, invalidation
+    lock = _BH1E.lock_post(ctx, p, row, t_lock, session, kl, px, lock, mk)
+    return _BH2E.lock_post(ctx, p, row, t_lock, session, kl, px, lock)       # caption-gap pass bias_htf#2/7: ipda side, PM reversal, tier regime, quarterly objective, soft carry      # caption-gap pass bias_htf#1/7: ceiling ladder, weekly PO3, 60m BISI loss, BPR lean, raid gap, minimum criteria, 50/50, run extreme, invalidation
 
 
 # --- owner #11: Ep 07 order block at the sweep low ----------------------------------------
@@ -6290,7 +6377,11 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     # owner #10: sloppy days ("off" = tag only; neutral_skip above is the old alias)
     sl_day = sloppy_day(hist, day, p, ctx.opens.get("midnight")) if p.sloppy_tests else set()
     sl_all_day = {r for r in sl_day if not r.endswith(":PM")}
-    if p.sloppy_mode == "stand_aside" and sl_all_day:
+    ctx.inside_zone, ctx.inside_side = None, 0
+    if p.inside_bisi_release and "inside_bisi" in sl_all_day:
+        ctx.inside_zone = _BH2E.inside_zone(hist)                  # caption-gap B17-inside-daily-range-no-trade (091 ~6:20): the stand-aside is released by a trade beyond the daily FVG
+    rel_ = {"inside_bisi"} if ctx.inside_zone is not None else set()
+    if p.sloppy_mode == "stand_aside" and (sl_all_day - rel_):
         if skips is not None:
             skips.append((day, symbol, "sloppy", "|".join(sorted(sl_all_day))))
         return []
@@ -6367,6 +6458,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     lock_t = _lock_times(p, day, pre_windows) if p.draw_lock == "session" else {}
     ctx.lock_t = lock_t                                   # bias_htf: the session start minutes (judas, row cuts)
     ctx.lock, all_locks, spent = {}, [], []
+    ctx.prior_locks = locks if locks is not None else []        # caption-gap B17-unreached-draw-soft-bias (bias_htf#2/7): the earlier days' lock reports (the soft carry reads the last one)
     ctx.state7 = state                                    # caption-gap setups_models #7/7: the gates read the re-entry / split state, the trades of the day
     ctx.pend_now = None
     for i in range(ctx.start, len(ctx.t)):
@@ -7051,6 +7143,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             pending = None                            # an order armed earlier does not fill into a day / week rule that has
             continue                                  # switched on since (the Silver Bullet drops its order the same way)
         sl_now = set(sl_day if session == "PM" else sl_all_day)
+        if ctx.inside_zone is not None:
+            sl_now = _BH2E.sloppy_release(ctx, p, sl_now, i)       # caption-gap B17-inside-daily-range-no-trade: from the first bar beyond the FVG's high / low, that side only
         if chop.on:
             sl_now.add("chop")
         if p.sloppy_mode == "stand_aside" and sl_now:
@@ -7394,8 +7488,10 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
             if lk["side"] == 0 and p.draw_lock_neutral == "skip":
                 done[s_] = True
     for s_, lk in list(ctx.lock.items()):
-        if _BH1E.lock_on(p):                           # caption-gap pass bias_htf#1/7: invalidation touch, 60m BISI hold, raid gap guard, 50/50 and low-in re-locks, the counter-trend reopen
-            r_ = _BH1E.lock_bar(ctx, p, s_, lk, i, done, spent, state)
+        if _BH1E.lock_on(p) or _BH2E.lock_on(p):       # caption-gap pass bias_htf#1/7: invalidation touch, 60m BISI hold, raid gap guard, 50/50 and low-in re-locks, the counter-trend reopen; bias_htf#2/7: the wick CE 60m cancel, the reversal after the target
+            r_ = _BH1E.lock_bar(ctx, p, s_, lk, i, done, spent, state) if _BH1E.lock_on(p) else None
+            if r_ is None and _BH2E.lock_on(p):
+                r_ = _BH2E.lock_bar(ctx, p, s_, lk, i, done, spent, state)
             if r_ is not None:
                 nl_, cancel_ = r_
                 all_locks.append(dict(lk, failed=True))
@@ -9810,6 +9906,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             _cap = lv[0]
         elif dws.startswith("bh1_") and _BH1E.scalp_cap(ctx, sd, i, p, dws, entry, lv[0]) is not None:
             _cap = _BH1E.scalp_cap(ctx, sd, i, p, dws, entry, lv[0])      # caption-gap bias_htf#1/7: drange_t1_pts / the opposite ORG edge
+        elif dws.startswith("bh2_") and _BH2E.scalp_cap(ctx, sd, i, p, dws, entry, lv[0]) is not None:
+            _cap = _BH2E.scalp_cap(ctx, sd, i, p, dws, entry, lv[0])      # caption-gap bias_htf#2/7: the single range target (range_no_bias)
         else:
             _cap = min(entry + (p.chop_scalp_pts if (p.chop_scalp_pts > 0 and sl and p.sloppy_mode == "scalp") else (p.fri_t1_pts if (dws == "fri_one_sided" or "fri_one_sided" in _dsc) else p.sloppy_scalp_pts)) * p.es_pt, lv[0])
         lv, kinds, scalp, final_T = [_cap], [kinds[0]], True, False
@@ -10094,3 +10192,4 @@ from . import me2 as _ME2  # noqa: E402  (caption-gap pass, management_exits #2/
 from . import me3 as _ME3  # noqa: E402  (caption-gap pass, management_exits #3/3: engine glue)
 from . import tp4 as _TP4  # noqa: E402  (caption-gap pass, targets_partials #4/4: engine glue)
 from . import bh1e as _BH1E  # noqa: E402  (caption-gap pass, bias_htf#1/7: engine glue)
+from . import bh2e as _BH2E  # noqa: E402  (caption-gap pass, bias_htf#2/7: engine glue)

@@ -44,6 +44,9 @@ def bias_value(row, p) -> int:
     if row is None or p.htf_bias == "off":
         return 0
     v = _i(row.get(bias_col(p)))
+    if p.htf_bias_tf != "D" or p.wk_q75_confirm or p.htf_after_draw == "reverse" or p.fast_draw_extend:
+        from . import bh2e as _B2                        # caption-gap pass bias_htf#2/7: monthly / weekly first, the 75 % quadrant confirmation, reverse after the draw, a fast weekly draw
+        return _B2.bias_value_adjust(row, p, v, _i(row.get("obj_day")), _i(row.get("obj_week")))[0]
     if p.objective_neutral in ("day", "both") and _i(row.get("obj_day")):
         return 0                                         # B9: the previous day's draw was delivered: neutral
     if p.objective_neutral in ("week", "both") and _i(row.get("obj_week")):
@@ -101,6 +104,9 @@ def want_at(ctx, p, session: str, i: int) -> int:
     if p.neutral_lean or p.org_tell_seq:
         from . import bh1e as _B1                    # caption-gap bias_htf#1/7: the neutral lean, the confirmed ORG tell
         v = _B1.want_adjust(ctx, p, session, i, v)
+    if not v and (p.qshift_bias or p.dsmt_bias or p.raid_profile_bias or p.eq_tiebreak):
+        from . import bh2e as _B2                    # caption-gap bias_htf#2/7: a neutral bias takes the quarterly shift, the daily SMT, the raid profile, the EQ tie-break
+        v = _B2.want_adjust(ctx, p, session, i, v)
     return v
 
 
@@ -135,7 +141,7 @@ def active(p) -> bool:
         or p.dxy_gate != "off" or p.bond_range != "off" or p.bond_dir != "off" or p.cot_tag != "off" or p.oi_tag != "off"
         or p.wpr_tag != "off" or p.judas_required != "off" or p.bellwether_15m != "off" or p.news_topdown != "off"
         or p.no_narrative_scalp or p.mwd_nest != "off" or p.midnight_confirm != "off" or p.mmbm_zone != "off"
-        or p.bias_neutral == "scalp")
+        or p.bias_neutral in ("scalp", "scalp_week"))
 
 
 _WARNED: set = set()
@@ -187,9 +193,9 @@ def im_state(ctx, p) -> State:
             if p.cot_tag == "filter":
                 S.sides["cot"] = (-st,)
     if p.oi_tag != "off":
-        oi = BH.load_oi()
+        oi = BH.load_oi_for(getattr(ctx, "symbol", None))            # caption-gap B20-oi-own-market-only (cc10_003 ~39:38): the traded market's own open interest only
         if oi is None:
-            _warn_once("oi", "oi_tag is on but there is no open-interest file (data/mentorship/ES_oi.csv): the tag is inert (B20.2)")
+            _warn_once("oi", f"oi_tag is on but there is no open-interest file for {getattr(ctx, 'symbol', None)} (data/mentorship/<ROOT>_oi.csv): the tag is inert (B20.2; open interest is read only for its own market)")
         ch = BH.oi_change(oi, day, p.oi_days)
         if ch is not None and abs(ch) >= p.oi_pct:
             S.tags.add("oi_rise" if ch > 0 else "oi_drop")      # a plain change tag (the rule's "drop into HTF support" needs the array state: not built)
@@ -319,7 +325,7 @@ def row_state(ctx, p, session: str, i: int) -> State:
         if _i(row.get("qs_due")):
             S.tags.add("qs_due")
     # M0.1 / Ep02.6: no narrative -> scalp (bias_neutral="scalp" is the same reading with the htf_bias column)
-    if p.bias_neutral == "scalp" and p.htf_bias != "off":
+    if p.bias_neutral in ("scalp", "scalp_week") and p.htf_bias != "off":      # (caption-gap B17-neutral-htf-monday-close: "scalp_week" is the same reading at scalp_week_risk x the size)
         if want_at(ctx, p, session, i) == 0:
             S.scalp = S.scalp or "bias_neutral"
     if p.no_narrative_scalp:
@@ -561,6 +567,9 @@ def size_mult(ctx, sd, i: int, p, lvt) -> float:
     if p.dxy_filter == "soft":
         from . import bh1e as _B1
         m1 = _B1.size_mult(ctx, sd, i, p, lvt)
+    from . import bh2e as _B2                        # caption-gap pass bias_htf#2/7: scalp_week_risk, soft_carry_risk, iof_w_risk
+    if _B2.on(p):
+        m1 *= _B2.size_mult(ctx, sd, i, p, lvt)
     return m1 * _size_mult_q(ctx, sd, i, p, lvt)
 
 

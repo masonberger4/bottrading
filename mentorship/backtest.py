@@ -415,6 +415,12 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
         wk_joint = {}
     pr = prepare(df, tf, symbol, p, partial_last, bias_table, confluence, meta, lock_cuts, ref_df, wk_joint)
     p, ds = pr.p, pr.ds
+    dsmt = None
+    if p.dsmt_bias and partner is not None:           # caption-gap B18-htf-daily-smt (bias_htf#2/7): the daily ES / NQ SMT of the two frames (known before each session), passed to run_day with the intermarket values
+        from . import bh2
+        dsmt = bh2.dsmt_map(df, partner, p.dsmt_days)
+    elif p.dsmt_bias:
+        warnings.warn("dsmt_bias is on but backtest.run got no partner frame: the daily SMT bias is inert (B18-htf-daily-smt)", stacklevel=2)
     if not p.stock_intraday and str(symbol).upper() not in _DWC3.INDEX_SYMBOLS:
         warnings.warn(f"{symbol}: individual stocks are swing-only (OT-stocks-swing-only, cc10_018 ~33:36) - run_day returns no intraday trades (stock_intraday=True lifts it)", RuntimeWarning, stacklevel=2)
     pmap = {g.index[0].date(): g for g in days(partner, tf, partial_last, p.session_close)} if partner is not None else {}
@@ -448,7 +454,10 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             if why3 is None:
                 if p.rr_month_gate:                        # caption-gap new-rr-month-gate (cc02_001 ~12:11): the big winners (>= rr_big R) closed in this calendar month so far
                     wk_ = dict(wk_ or {}, month_big=_TP4.month_big(rows, d, p))
-                kw = day_kwargs(pr, k, eq, (intermarket or INTERMARKET()).get(d), wk_)
+                im_d = (intermarket or INTERMARKET()).get(d)
+                if dsmt is not None:
+                    im_d = {**(im_d or {}), "dsmt": dsmt.get(d, 0)}
+                kw = day_kwargs(pr, k, eq, im_d, wk_)
                 if p.target_stage:                         # caption-gap OT-target-progression (099 ~40:55): the week's staged fixed target (10 -> 15 -> 20); the risk / size never change
                     kw["p"] = _TP4.stage_params(rows, d, kw["p"])
                 if p.trader_mode or p.freq_ref > 0:       # caption-gap E8-new-trader-graduation / E9-frequency-small-size: the track record and the last 5 sessions size the day
@@ -509,6 +518,29 @@ def INTERMARKET() -> dict:
             t = t.reindex(full).ffill()
             _IM = {k.date(): {c: (0 if pd.isna(v) else int(v)) for c, v in r.items()}
                    for k, r in t.iterrows()}
+            try:                                    # caption-gap bias_htf#2/7 (NEW-rates-dxy-fx-direction, B19-bond-stock-dxy-sign, B19-four-asset-risk-map): the slow yield side, the correlations, the S&P trend
+                ser = {}
+                for n_, f_ in (("dxy", "DXY"), ("tnx", "TNX"), ("spx", "GSPC")):
+                    ff = y / f"{f_}_1d.csv"
+                    if ff.exists():
+                        s_ = pd.read_csv(ff, index_col=0)
+                        s_.columns = [c.lower() for c in s_.columns]
+                        c_ = pd.to_numeric(s_["close"], errors="coerce")
+                        c_.index = pd.to_datetime(c_.index.str[:10])
+                        ser[n_] = c_.dropna()
+                from . import bh2
+                ex = bh2.im_columns(ser.get("dxy"), ser.get("tnx"), ser.get("spx"))
+                if len(ex):
+                    ex = ex.reindex(full).ffill()
+                    for k_, r_ in ex.iterrows():
+                        dd = _IM.setdefault(k_.date(), {})
+                        for c_, v_ in r_.items():
+                            if isinstance(v_, str):
+                                dd[c_] = v_
+                            elif not pd.isna(v_):
+                                dd[c_] = int(v_) if c_ in ("tnx_slow", "rates_dxy_agree", "spx20") else float(v_)
+            except Exception as e_:                  # the extra columns are tags: a failure never stops the base intermarket values
+                warnings.warn(f"INTERMARKET extras failed: {e_!r}", RuntimeWarning)
     return _IM
 
 

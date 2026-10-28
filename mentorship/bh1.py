@@ -39,7 +39,7 @@ def hit(k: str) -> None:
 def bx_cfg(p) -> dict:
     """The "b1" part of Params.bx: only what the switches in use need ({} = nothing)."""
     c: dict = {}
-    if p.drange_scalp or p.org_consol_case or p.raid_gap_guard:
+    if p.drange_scalp or p.org_consol_case or p.raid_gap_guard or p.consol_dir != "off" or p.raid_profile_bias:     # (bias_htf#2/7: consol_dir and raid_profile_bias read the same range)
         c["dr"] = [int(p.drange_n), p.drange_break]       # (the ORG consolidation case and the raid gap guard read drange_in as their regime)
     if p.wk_high_in_gate or p.b7_mode != "mt_close":
         c["b7"] = p.b7_mode + ("+fresh" if p.b7_fresh_break else "")
@@ -120,10 +120,11 @@ def _week_starts(d) -> np.ndarray:
 # item 1: the daily consolidation regime
 # --------------------------------------------------------------------------------------------------------------
 
-def drange_states(h, l, c, n: int, brk: str = "close") -> tuple:
+def drange_states(h, l, c, n: int, brk: str = "close", events: list | None = None) -> tuple:
     """BH-B17-daily-range-scalp-regime (002 ~00:06:57; 043 ~00:06:55): per completed session j the state AFTER it: (in_range, breakout, range_hi, range_lo). A range forms at session j when the closes of the last n
     sessions (j-n+1 .. j) all lie inside the high-low of the first of them; it is held until a session closes (brk "close") or trades (brk "wick") beyond it: breakout +1 / -1, kept until a NEW range forms [our
-    interpretation: n = 5 sessions, close-vs-wick is the spec's test switch]. A session that breaks both ways is judged by its close against the range's middle."""
+    interpretation: n = 5 sessions, close-vs-wick is the spec's test switch]. A session that breaks both ways is judged by its close against the range's middle.
+    `events` (caption-gap bias_htf#2/7, items 104 / 114): a list that receives one dict per range formed - a (first session), f (formation session), hi, lo, b (breakout session or None), dir (+1 / -1 or 0)."""
     D = len(c)
     inn = np.zeros(D, int)
     out = np.zeros(D, int)
@@ -145,12 +146,16 @@ def drange_states(h, l, c, n: int, brk: str = "close") -> tuple:
             elif dn:
                 state = -1
                 brk_day = j
+            if (up or dn) and events:
+                events[-1]["b"], events[-1]["dir"] = j, state
         if (rng is None or state != 0) and j >= n - 1 and j - n + 1 > brk_day:
             a = j - n + 1
             seg = c[a:j + 1]
             if (seg <= h[a]).all() and (seg >= l[a]).all():
                 rng = (float(h[a]), float(l[a]))
                 state = 0
+                if events is not None:
+                    events.append(dict(a=a, f=j, hi=float(h[a]), lo=float(l[a]), b=None, dir=0))
         inn[j] = 1 if (rng is not None and state == 0) else 0
         out[j] = state if rng is not None else 0
         if rng is not None:

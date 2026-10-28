@@ -2941,6 +2941,54 @@ _BH1_DECISIONS = {
 DECISIONS.update(_BH1_DECISIONS)
 
 
+# --- Caption-gap pass, package bias_htf#2/7 (digests/rulebook_gaps/bias_htf_intermarket.md; bh2.py / bh2e.py): one variant per switch (name prefix = the gap id). The lock stays on (draw_lock "session"); the bias
+# reading is named where the switch needs it (the htf_bias columns: "combo" the default reading, "flip" the stateful flip column). ----------------------------------------------------------------------
+BH2_BASE = dict(ob_entry="post_mss", htf_resist_cap=False, htf_bias="combo")
+BH2_FLIP = dict(ob_entry="post_mss", htf_resist_cap=False, htf_bias="flip")
+_BH2_DECISIONS = {
+    "B17-neutral-htf-monday-close": dict(bias_neutral="scalp_week", scalp_week_risk=0.5, **BH2_BASE),
+    "B22-quarterly-shift": dict(qshift_bias=True, q_obj_lean=True, q_obj_days=84, **BH2_BASE),
+    "B22-timing-tool": dict(q_days_tag=True, q_window_gate=True, q_window_lo=40, q_window_hi=60, q_window_size=1.5, dsmt_bias=True, dsmt_days=18, **BH2_BASE),
+    "B6-weekly-iof": dict(iof_weekly_weight=True, iof_w_risk=0.5, iof_w_weeks=10, **BH2_BASE),
+    "NEW-daily-sibi-bias-gate": dict(sibi_gate=True, **BH2_BASE),
+    "A23-intraday-close-line-in-sand_60m": dict(wick_ce_60m=True, **BH2_BASE),
+    "A23-intraday-close-line-in-sand_15m": dict(wick_ce_60m=True, sibi15_ce_cancel=True, **BH2_BASE),
+    "B3-reversal-after-target": dict(allow_reversal_after_target=True, no_trade_after_win=True, **BH2_BASE),
+    "B17-unreached-draw-soft-bias": dict(soft_carry=True, soft_carry_risk=0.5, **BH2_FLIP),
+    "B17-inside-daily-range-no-trade": dict(inside_bisi_release=True, release_pts=1.0, sloppy_tests=("inside_bisi",), **BH2_BASE),
+    "NEW-speed-into-weekly-draw": dict(fast_draw_extend=True, fast_draw_mult=1.5, objective_neutral="week", **BH2_BASE),
+    "NEW-rates-dxy-fx-direction": dict(dxy_needs_rates=True, dxy_filter="soft", **BH2_BASE),
+    "B8-three-pd-array-abort_neutral": dict(pd3_result="neutral", pd3_disp_adr=1.5, flip_triggers=("ob_mt", "wk_dc", "flip_pd3"), **BH2_FLIP),
+    "B8-three-pd-array-abort_caution": dict(pd3_result="neutral", pd3_first_caution=True, flip_triggers=("ob_mt", "wk_dc", "flip_pd3"), **BH2_FLIP),
+    "B8-weekly-wick-quadrant-gate": dict(wk_q75_confirm=True, **BH2_FLIP),
+    "N8-consolidation-breakout-direction_first_expansion": dict(consol_dir="first_expansion", consol_chase_frac=0.25, **BH2_BASE),
+    "N8-consolidation-breakout-direction_prior_strongest": dict(consol_dir="prior_strongest", **BH2_BASE),
+    "B17-after-draw-retrace-or-reverse": dict(htf_after_draw="reverse", objective_neutral="both", **BH2_BASE),
+    "A21-two-level-discount": dict(pd_two_level=True, **BH2_BASE),
+    "B3-range-trading-without-bias": dict(range_no_bias=True, range_no_bias_pct=0.62, ob_entry="post_mss", htf_resist_cap=False),
+    "B3-eq-recent-structure-break": dict(eq_tiebreak=True, eq_tie_frac=0.10, **BH2_BASE),
+    "B6-hrlr-lrlr-structure-regime": dict(tier_regime_gate=True, **BH2_BASE),
+    "B6-consolidation-raid-profile": dict(raid_profile_bias=True, raid_profile_n=2, **BH2_BASE),
+    "B5-monthly-first-hierarchy_M": dict(htf_bias_tf="M", htf_rank_tf=True, **BH2_BASE),
+    "B5-monthly-first-hierarchy_W": dict(htf_bias_tf="W", **BH2_BASE),
+    "B17-hold-bias-most-recent-htf-setup": dict(flip_terminus=True, flip_max_days=126, bias_neutral="both", **BH2_FLIP),
+    "B18-htf-daily-smt": dict(dsmt_bias=True, dsmt_days=18, **BH2_BASE),
+    "B19-bond-stock-dxy-sign": dict(im_regime_tag=True, **BH2_BASE),
+    "E4-daily-one-way-delivery-rebalance": dict(oneway_n=4, **BH2_BASE),
+    "X3-iof-60day-framing-raids": dict(raid_side_gate=True, raid_ratio=2.0, **BH2_BASE),
+    "X3-b22-shift-trigger-quarter-bias": dict(qshift_bias=True, **BH2_BASE),
+    "X3-b21-draw-side-and-flip": dict(ipda_draw_side=True, ipda_next=True, **BH2_BASE),
+    "X3-b22-shift-form-strong-trend": dict(qshift_bias=True, qshift_strong_consol=True, qshift_strong_pct=0.10, **BH2_BASE),
+    "X3-shift-due-six-months": dict(shift_due_tag=True, **BH2_BASE),
+    "X3-b6-tug-of-war-new-ground": dict(tier_regime_gate=True, tug_required=True, **BH2_BASE),
+    "X3-one-sided-delivery-first-clue": dict(first_clue_neutral=True, **BH2_FLIP),
+    "X3-60day-low-deep-discount-bounce": dict(ipda_extreme_pause=True, **BH2_BASE),
+    "B19-four-asset-risk-map": dict(decoupled_scalp=True, **BH2_BASE),
+    "B20-oi-own-market-only": dict(oi_tag="tag", **BH2_BASE),
+}
+DECISIONS.update(_BH2_DECISIONS)
+
+
 def macro_runs_study(days, macro_run_pts: float = 5.0, leg_extra_min: int = 0) -> dict:
     """T7-1500-at-least-one (022 ~03:16:44): see dwc3.macro_runs_study. No engine change."""
     from . import dwc3

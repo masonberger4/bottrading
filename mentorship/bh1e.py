@@ -317,6 +317,8 @@ def side_ok(ctx, p, sign: int, session: str, i: int):
     # item 24: the dollar
     if p.dxy_filter != "off":
         dx = int((getattr(ctx, "intermarket", None) or {}).get("dxy", 0) or 0)
+        if p.dxy_needs_rates and int((getattr(ctx, "intermarket", None) or {}).get("rates_dxy_agree", 0) or 0) <= 0:
+            dx = 0                                        # caption-gap NEW-rates-dxy-fx-direction (bias_htf#2/7): the dollar counts only when the 60-session yield slope agrees with it
         if dx and ((sign > 0 and dx > 0) or (sign < 0 and dx < 0)):
             if p.dxy_filter == "hard":
                 return "x_bh1_dxy"
