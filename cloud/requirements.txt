@@ -1,0 +1,6 @@
+# cloud sessions: python3 -m pip install -r cloud/requirements.txt
+pandas==2.2.3
+numpy==2.1.3
+pyarrow
+databento
+pytest
