@@ -898,7 +898,7 @@ def test_review_switch_defaults_and_validation():
     assert (d.flip_retest_entry, d.tl_trap_entries, d.tl_tol_adr, d.hs_rearm, d.htf_monthly_arrays, d.tf_pools, d.ipda_window_arrays, d.ipda_frame,
             d.ipda_converge, d.ipda_recompute, d.monthly_frame, d.ny_hl_frame, d.tue_open_time, d.org_revisit_gate, d.reactionary_precond) == \
         (False, (), 0.0, False, False, False, False, False, False, False, False, False, "0930", False, False)
-    assert B.htf_kw(d) == {"c2_dir": True} and B.table_kw(d) == {"c2_dir": True, "balance_tf": "own"}              # the cache keys of the old settings are unchanged
+    assert B.htf_kw(d) == {"c2_dir": True, "vi_wick_overlap": False} and B.table_kw(d) == {"c2_dir": True, "vi_wick_overlap": False, "balance_tf": "own"}  # the cache keys follow the bodies-only VI default (owner decision)
     assert B.hist_days(d) == 61
     # the Silver Bullet stays off by default; its bias switches are not touched by this package
     assert d.sb_model is False and d.sb_use_bias is False
