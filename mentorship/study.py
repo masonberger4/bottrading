@@ -43,7 +43,12 @@ def _real(job):
     p = replace(Params(), **VARIANTS[name])
     a = B.run(spy, tf, "SPY", p, qqq)
     b = B.run(qqq, tf, "QQQ", replace(p, es_pt=q_pt), spy)
-    out = {"SPY": a, "QQQ": b, "combined": B.combine(a, b, pick=study_pick(p.smt_pick), laggard_consol_only=p.laggard_consol_only, one_market=p.one_market,
+    runs = [a, b]
+    if p.smt_pick == "middle":                       # D15 middle needs three books: YM (Dow) is the third, a reference only (exec_exclude)
+        ym = B.load("YM", tf, source="databento")
+        ym_pt = round(0.10 * ym.close.median() / spy.close.median(), 4)
+        runs.append(B.run(ym, tf, "YM", replace(p, es_pt=ym_pt), spy))
+    out = {"SPY": a, "QQQ": b, "combined": B.combine(*runs, pick=study_pick(p.smt_pick, len(runs)), laggard_consol_only=p.laggard_consol_only, one_market=p.one_market,
                                                      sb_one_market=p.sb_one_market, sb_am_done=p.sb_am_done, dual_deal=p.dual_deal,
                                                      exec_exclude=p.combine_exec_exclude, prefer=p.combine_prefer, max_exec=p.max_exec_markets,
                                                      max_exposure_pct=p.max_exposure_pct)}

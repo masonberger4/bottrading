@@ -847,7 +847,7 @@ def test_new_switch_defaults_and_validation():
     assert (d.bpr_def, d.bpr2_trail, d.two_pass_state, d.ob_pick, d.breaker_candle, d.breakaway_def) == \
         ("overlap", False, False, "blend", "extreme_close", "first_after_mss")
     assert (d.vi_wick_overlap, d.vi_multi, d.vi_dead_rule, d.pb_def, d.leg_anchor, d.inversions, d.initial_fvg) == \
-        (True, False, "full_span", "a16", "mss_leg", (), ())
+        (False, False, "full_span", "a16", "mss_leg", (), ())
     assert d.sb_model is False and d.sb_use_bias is False and d.want_all_engines is True                   # untouched
     for bad in (dict(ipda_anchor="x"), dict(bpr_def="x"), dict(ob_pick="x"), dict(breaker_candle="x"), dict(breakaway_def="x"),
                 dict(vi_dead_rule="x"), dict(pb_def="x"), dict(rb_level="x"), dict(leg_anchor="x"), dict(inversions=("x",)),
@@ -860,7 +860,8 @@ def test_new_switch_defaults_and_validation():
 
 
 def test_htf_kw_carries_the_vi_and_window_switches():
-    assert B.htf_kw(Params()) == {"c2_dir": True}                                          # (A5 fvg_c2_dir is the spec default)
+    assert B.htf_kw(Params())["c2_dir"] is True                                            # (A5 fvg_c2_dir is the spec default)
+    assert B.htf_kw(Params())["vi_wick_overlap"] is False                                  # bodies-only VI is the default (owner decision)
     kw = B.htf_kw(Params(vi_wick_overlap=False, vi_multi=True, vi_dead_rule="overlap", ipda_arrays_first20=True))
     assert kw["vi_wick_overlap"] is False and kw["vi_multi"] is True and kw["vi_dead_rule"] == "overlap"
     assert kw["ipda_first20"] is True and kw["vi_body_death"] is True

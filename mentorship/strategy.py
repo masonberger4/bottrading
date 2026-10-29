@@ -1724,7 +1724,7 @@ class Params:
     # N-initial-fvg-reference (048 ~5:40; 082 ~5:13)
     initial_fvg: tuple = ()              # subset of "day" / "week" / "mon10": reference FVGs tagged respected / disrespected on the trade
     # A9-vi-definition-no-wick-condition (009 ~7:18; 036 ~22:55; 027 ~22:24)
-    vi_wick_overlap: bool = True         # A9: True = the old rule (the two candles' wicks must overlap); False = ICT (bodies only; a wick gap too = also a void)
+    vi_wick_overlap: bool = False        # A9: True = the old rule (the two candles' wicks must overlap); False = ICT (bodies only; a wick gap too = also a void)
     vi_multi: bool = False               # A9: a VI may span a run of up to 3 candles (an earlier body in the run occupies its band)
     # A9-vi-delivery-state (035 ~21:01; 046 ~28:33; 050 ~33:20; 077 ~3:23; 090 ~14:07)
     vi_dead_rule: str = "full_span"      # A9: "full_span" (a body lays over the whole VI = vi_body_death, 046 / 090) / "overlap" (any overlapping body, 035)
