@@ -641,18 +641,17 @@ def stops_from(p, trades, ts=None) -> tuple:
       fomc_no_reentry  N3 / N3.5 (a design choice, no source) a loss on an FOMC day ends the day (every session, every model)"""
     closed = sorted((t for t in trades if t.exits and (ts is None or t.exits[-1][0] <= ts)),
                     key=lambda t: t.exits[-1][0])
-    if p.london_reposition:                          # caption-gap T3-london-then-ny-reposition (cc12_004 ~00:07:52): a losing London SB is not a session loss or fail
-        closed = [t for t in closed if not (t.setup == "sb_london" and _net(t, p) < 0)]
     day, sess = None, {}
     for tr in closed:
         net = _net(tr, p)
+        rep = p.london_reposition and tr.setup == "sb_london" and net < 0     # caption-gap T3-london-then-ny-reposition (cc12_004 ~00:07:52): a losing London SB is not a SESSION loss or fail (review fix: the day-level stops still see it)
         if p.no_trade_after_win and net > 0:
             day = day or "win"
         if p.chop_one_win and net > 0 and tr.slow_chop:
             day = day or "chop_win"
         if tr.stop_day:
             day = day or tr.stop_day
-        if p.loss_ends_morning and net < 0 and fam(tr.session) == "AM":
+        if p.loss_ends_morning and net < 0 and fam(tr.session) == "AM" and not rep:
             sess["AM"] = "loss_ends_morning"
         if p.fomc_day_stop and net < 0 and "fomc" in events(tr.date):
             day = day or "fomc_loss"
@@ -660,7 +659,7 @@ def stops_from(p, trades, ts=None) -> tuple:
     if n:
         for f in ("AM", "PM"):
             run = 0
-            for tr in (t for t in closed if fam(t.session) == f):
+            for tr in (t for t in closed if fam(t.session) == f and not (p.london_reposition and t.setup == "sb_london" and _net(t, p) < 0)):
                 fail = _net(tr, p) < 0 and (p.session_fail_mode == "trades"
                                             or tr.exits[-1][3].split("+")[0] in FAIL_REASONS)
                 run = run + 1 if fail else 0

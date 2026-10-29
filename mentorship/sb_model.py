@@ -95,7 +95,7 @@ def check_params(p) -> None:
         raise ValueError("sb_cancel_ticks >= 0, sb_conf_min >= 2, sb_org_chop_bars >= 1, sb_cons_bars >= 2 expected")
     if p.sb_t2_tf not in T2_TFS:                       # pass 2: the timeframes the HTF array table holds
         raise ValueError(f"sb_t2_tf {p.sb_t2_tf!r}: expected one of {sorted(T2_TFS)}")
-    if not 0.0 < p.sb_split_frac < 1.0 or p.sb_split_ticks < 0 or p.sb_rev_pre < 0:
+    if not 0.0 < p.sb_split_frac < 1.0 or p.sb_split_ticks < 0 or p.sb_rev_pre < 0 or p.sb_rev_room_pts < 0:
         raise ValueError("sb_split_frac in (0, 1), sb_split_ticks >= 0 and sb_rev_pre >= 0 expected")
     if len(p.sb_gap424_fracs) < 2 or abs(sum(p.sb_gap424_fracs) - 1.0) > 1e-6:
         raise ValueError(f"sb_gap424_fracs {p.sb_gap424_fracs!r}: expected >= 2 fractions summing to 1")
@@ -938,6 +938,8 @@ def _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, pr
         dr = [(v, k_) for v, k_ in dr if v >= rfar - 1e-9]
         if rfar > entry and not any(abs(v - rfar) <= 1e-9 for v, _ in dr):
             dr = sorted(dr + [(rfar, "pool")])
+        if p.sb_rev_room_pts > 0 and (not dr or dr[0][0] - entry < p.sb_rev_room_pts * p.es_pt):
+            return None                                # review fix (models_setups_entries#61): the reversal's own room (the spec's 10 handles)
     if p.sb_draw_pools_only:                           # A2 (033 ~24:34): an imbalance is not liquidity
         dr = [(v, k_) for v, k_ in dr if k_ in POOL_KINDS]
     scalp_fail = None
@@ -1340,10 +1342,18 @@ def _moc_ok(ctx, out, a_idx: int) -> bool:
     return not any(t.setup in ("sb_pm", "sb_lh") and _hit_target(t, t0) for t in out)
 
 
-def _entered_before(ctx, out, a_idx: int, setups=None) -> bool:
+def _entered_before(ctx, out, a_idx: int, setups=None, p=None) -> bool:
     """A Silver Bullet (of `setups`) was filled before the bar `a_idx` - what a later window may know."""
     t0 = ctx.idx[a_idx] if a_idx < len(ctx.idx) else None
-    return any((setups is None or t.setup in setups) and (t0 is None or t.entry_time < t0) for t in out)
+    return any((setups is None or t.setup in setups) and (t0 is None or t.entry_time < t0) and not (p is not None and _lost_london(t, p, t0)) for t in out)
+
+
+def _lost_london(t, p, t0) -> bool:
+    """caption-gap T3-london-then-ny-reposition (review fix): under london_reposition a London SB that already closed at a loss does not count as "a Silver Bullet entered" (one-per-day / cascade)."""
+    if not (p.london_reposition and t.setup == "sb_london" and t.exits):
+        return False
+    from . import manage as _MGR
+    return (t0 is None or t.exits[-1][0] <= t0) and _MGR._net(t, p) < 0
 
 
 # --- the window loop -------------------------------------------------------------------------------------------------
@@ -1378,9 +1388,9 @@ def run_sb(ctx, sides, p, day, symbol, blocked, btag: dict) -> list:
             continue
         if stand and win.session == "PM" and "nfp_week:PM" in getattr(ctx, "sl_day", ()):
             continue                                  # #10 stand aside (off by default)
-        if p.sb_one_per_day and _entered_before(ctx, out, _idx_at(ctx, win.a)):
+        if p.sb_one_per_day and _entered_before(ctx, out, _idx_at(ctx, win.a), p=p):
             continue                                  # M3 / 047 ~08:00: one Silver Bullet a day
-        if p.sb_cascade and win.classic and _entered_before(ctx, out, _idx_at(ctx, win.a), ("sb_london", "sb_am", "sb_pm")):
+        if p.sb_cascade and win.classic and _entered_before(ctx, out, _idx_at(ctx, win.a), ("sb_london", "sb_am", "sb_pm"), p):
             continue                                  # M3.9 / 054 ~18:01: London, else AM, else PM
         if (win.name == "moc" or (win.name == "lh" and p.sb_moc_extra)) and not _moc_ok(ctx, out, _idx_at(ctx, win.a)):
             continue                                  # gap 14: the 15:15 condition also binds the 15:00 last-hour window
@@ -1785,7 +1795,7 @@ def _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session, mg=
                 pos["t1_i"] = i
                 _t1_done(pos, p, mg)                   # X4: breakeven at the first target (extras_be_on "t1", the default)
             pos["away"] = lv_[k]
-        if pos["left"] and pos["away"] is not None and c >= pos["away"] + p.away_pts * p.es_pt and not pos.get("keep_stop"):
+        if pos["left"] and pos["away"] is not None and c >= pos["away"] + p.away_pts * p.es_pt and not (pos.get("keep_stop") and pos.get("t1_done")):
             pos["stop"] = max(pos["stop"], pos["away"] - p.trail_pad)
             pos["away"] = None
     else:
@@ -1801,7 +1811,7 @@ def _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session, mg=
         if pos["left"] and pos["t2"] is not None and pos["t1_done"] and h >= pos["t2"] + p.exit_fill_through * p.tick + _ME1.rung_hit_off(p):
             tr.exits.append((ts, sd.x(_ME1.rung_px(pos["t2"], p)), pos["left"], "t2")); pos["left"] = 0
     pos["best"] = max(pos["best"], h)
-    if mg is not None and not pos.get("super") and not pos.get("keep_stop"):
+    if mg is not None and not pos.get("super") and not (pos.get("keep_stop") and pos.get("t1_done")):
         mg.extras_be_bar(sd, pos, tr, i, p)            # X4 / D14: expansion / after_mss / stall / pool / off (extras_be_on="follow")
     if mg is not None and pos["left"] and pos["t1_done"] and p.sb_runner_trail == "fvg" and not pos.get("super"):
         mg.trail_extra(sd, pos, i, p)                  # gap X5 (055 ~14:35): the main engine's FVG trails (their own switches) on the runner
@@ -1921,7 +1931,7 @@ def as_add(ctx, p, main, sbs) -> list:
         fill = float(s_.entry)
         ext = m.ext_px if m.ext_px is not None else m.stop
         tgt = m.draw_px if m.draw_px is not None else (m.t2 if m.t2 is not None else m.t1)
-        eq = (float(ext) + float(tgt)) / 2
+        eq = float(ext) + ((p.add_pd_level if p.add_in_pd else 0.5) * (float(tgt) - float(ext)))      # review fix: add_in_pd's level when on
         ik = int(ctx.idx.searchsorted(s_.entry_time))
         q = 0
         if (p.adds and not any(e[0] < s_.entry_time for e in m.exits)           # no partial yet (the stop / target of an earlier bar ends it)
@@ -1935,6 +1945,18 @@ def as_add(ctx, p, main, sbs) -> list:
             per = sign * (fill - float(m.stop))
             room = _total_cap(p, ctx.equity) - max(0.0, sign * (bought - m.stop * n_))
             q = min(q, _lots(max(room, 0.0) / per, p.lot))
+            # review fix (stops_sizing#20): the shared add caps - E11 max contracts, leverage room, day loss-limit room [our interpretation: the
+            # loss room is the limit less the main trade's own open risk, since the day's realised P&L is not tracked after the fact]
+            q = _EN.cap_add(q, int(n_), p)
+            from . import es3 as _ES3
+            lr_ = _ES3.lev_room_units(p, ctx.equity, n_, fill)
+            if lr_ is not None and q > lr_:
+                q = _lots(lr_, p.lot)
+            if p.daily_loss_pct > 0:
+                dlr = _ES3.dl_limit(ctx, p) - max(0.0, sign * (bought - m.stop * n_))
+                q = min(q, _lots(max(dlr, 0.0) / per, p.lot))
+            if p.add_dig_mult < 1.0:
+                _f("sb_x_as_add_dig_mult_not_applied")           # the dug-FVG shrink needs the live bar loop; recorded, not applied
         if q < max(p.lot, 1):
             _f("sb_x_as_add_dropped")
             continue                                                               # the SB order is ignored

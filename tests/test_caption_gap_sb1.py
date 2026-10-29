@@ -393,6 +393,34 @@ def test_supercharge_seasonal_needs_the_calendar_window_to_agree():
     assert "sb_supercharge" in b.lv_tags                                                       # off: the first-pass behaviour
 
 
+def test_review_fixes_rev_room_inert_warnings_and_day_level_stops():
+    # sb_rev_room_pts: the reversal order needs its own room to the far side (the spec's 10 handles)
+    q = dict(sb_reversal=True, sb_room_pts=5.0)
+    ctx, sd = actx([("09:30", REV)], P(**q))
+    i, k0, kr = S._idx_at(ctx, 10 * 60 + 10), S._idx_at(ctx, 570), S._idx_at(ctx, 590)
+    arm_ = lambda **kw: sb_model._arm_all(ctx, sd, i, kr, P(**q, **kw), 0.5, None, "AM", 600, (), None, None, None, dict(k_orig=k0, far=112.0))
+    assert len(arm_()) == 1 and len(arm_(sb_rev_room_pts=10.0)) == 1 and arm_(sb_rev_room_pts=12.0) == []
+    with pytest.raises(ValueError):
+        Params(sb_rev_room_pts=-1.0)
+    # inert-switch warnings
+    with pytest.warns(UserWarning, match="one_am_trade_mode"):
+        Params(one_am_trade_mode="sb_only", sb_model=False)
+    with pytest.warns(UserWarning, match="london_reposition"):
+        Params(london_reposition=True, sb_day_dir="first_trade")
+    # london_reposition drops the losing London SB from the SESSION stops only: the day-level stops (an FOMC-day loss) still see it
+    ts = pd.Timestamp(f"{D0} 03:40", tz=NY)
+    ctx0, _ = actx([("09:30", ROWS)], P())
+    lon = _tr(ctx0, "long", "03:15", 101.7, 98.95, 100, setup="sb_london")
+    lon.exits = [(ts, 98.95, 100, "stop")]
+    p = P(london_reposition=True, loss_ends_morning=True, session_stop_after_fails=1)
+    assert MG.stops_from(p, [lon])[1] == {}
+    # one-per-day / cascade ignore a London SB that closed at a loss
+    out = [lon]
+    a_idx = S._idx_at(ctx0, 10 * 60)
+    assert sb_model._entered_before(ctx0, out, a_idx, p=P()) is True
+    assert sb_model._entered_before(ctx0, out, a_idx, p=P(london_reposition=True)) is False
+
+
 # --- no look-ahead: full vs truncated runs on a small hand-made book (18 days of the scenarios above; the new paths fire on it) ------------------
 
 def book(scen, start=date(2026, 6, 1)):
@@ -430,6 +458,84 @@ def test_look_ahead_pass2_switches_on_a_hand_made_book(group):
         assert full.lv_tags.str.contains(tg).any(), f"{tg} never fired on the book"
     if group == "reversal_split_daytrade":
         assert (full.n_adds > 0).any() and set(full.setup) >= {"sb_am", "sb_london"}
+
+
+# --- review fix: look-ahead through run_day with a confluence stand-in (the hand-made book has none, so sb_t2 / flush never fired there) ------------
+
+def _la_day(df, hist, p, kw, tag=None, tag_attr=None, base_cut=0):
+    """Full day vs the day cut after every bar from the first entry: each trade's static fields and every exit that closed well before the cut agree."""
+    full = run(df, hist, p, **kw)[0]
+    assert full, "no trade"
+    if tag:
+        assert any(tag in t.lv_tags for t in full), f"{tag} never fired"
+    if tag_attr:
+        assert any(getattr(t, tag_attr) is not None for t in full), f"{tag_attr} never set"
+    first = min(t.entry_time for t in full)
+    for c in [x for x in df.index if x >= first][::2]:
+        part = run(df[df.index <= c], hist, p, **kw)[0]
+        for t in full:
+            if t.entry_time > c:
+                continue
+            q = next((x for x in part if x.entry_time == t.entry_time), None)
+            assert q is not None, (c, t.entry_time)
+            assert (q.entry, q.stop, q.t1, q.shares) == (t.entry, t.stop, t.t1, t.shares), c
+            lim = c - pd.Timedelta(minutes=10)
+            assert [e for e in q.exits if e[0] <= lim] == [e for e in t.exits if e[0] <= lim], c
+    return full
+
+
+def test_look_ahead_run_day_sb_t2_trail_flush_supercharge(monkeypatch):
+    from mentorship import bh2e
+    opp = Conf(opp=[(112.0, 112.5, 113.0, "1h")])
+    _la_day(mk([("09:30", T2_ROWS)]), history(), P(sb_t2="htf_fvg"), dict(conf=opp), tag="sb_t2_htf_fvg")
+    _la_day(mk([("09:30", TRAIL)]), history(), P(sb_t2="htf_fvg", sb_runner_trail="none"), dict(conf=opp), tag="sb_t2_htf_fvg")
+    daily = Conf(valid=[(1, 100.0, 96.0, "D")])
+    _la_day(mk([("09:30", FLUSH)]), history(), P(sb_flush_tag=True), dict(conf=daily), tag_attr="post_sb_flush")
+    monkeypatch.setattr(bh2e, "season_side", lambda day: 1)
+    over = {date(2026, 6, 17): (112.0, 121.0, 111.0, 113.0), date(2026, 6, 18): (112.0, 114.0, 111.0, 113.0),
+            date(2026, 6, 22): (97.5, 100.8, 97.0, 100.5)}
+    rows = ROWS[:11] + [(103.9, 114.6, 103.8, 114.5)]
+    _la_day(mk([("09:30", rows)]), history(over=over),
+            P(sb_supercharge_seasonal=True, sb_runner=True, sb_supercharge=True, htf_bias="combo", sb_use_bias=True),
+            dict(bias=dict(react=0, draw=0, pd=0, combo=1)), tag="sb_supercharge")
+    monkeypatch.setattr(bh2e, "season_side", lambda day: 0)                              # an unknown seasonal side blocks the supercharge [our interpretation]
+    t = run(mk([("09:30", rows)]), history(over=over),
+            P(sb_supercharge_seasonal=True, sb_runner=True, sb_supercharge=True, htf_bias="combo", sb_use_bias=True),
+            bias=dict(react=0, draw=0, pd=0, combo=1))[0][0]
+    assert "sb_supercharge" not in t.lv_tags
+
+
+def test_sb_as_add_decision_uses_only_what_was_known_at_the_fill():
+    """The add size and the accept / ignore decision are identical whether the main trade's later exits are known or not (partials before the fill count)."""
+    p = P(sb_as_add=True, adds=(0.5, 0.33, 0.17))
+    ctx, _ = actx([("09:30", ROWS)], p)
+    ts = lambda h: pd.Timestamp(f"{D0} {h}", tz=NY)
+    for hhmm, want in (("10:05", 50), ("10:50", 50), ("11:10", 0)):
+        res = []
+        for exits in ([(ts("11:00"), 108.0, 60, "t1"), (ts("11:30"), 110.0, 40, "t2")], [(ts("11:00"), 108.0, 60, "t1")] if hhmm == "11:10" else []):
+            m = _tr(ctx, "long", "10:00", 100.0, 98.0, 100, draw_px=110.0, ext_px=97.0)
+            m.exits = exits + ([(ts("13:00"), 110.0, 100, "t2")] if not exits else [])
+            s_ = _tr(ctx, "long", hhmm, 101.0, 98.0, 400, setup="sb_am")
+            sb_model.as_add(ctx, p, [m], [s_])
+            res.append(m.adds[0][2] if m.adds else 0)
+        assert res[0] == res[1] == want, (hhmm, res)
+
+
+def test_sb_as_add_respects_the_shared_add_caps():
+    """Review fix: E11 max contracts, the leverage room and the day loss-limit room shrink an SB add like any other add."""
+    ts = lambda h: pd.Timestamp(f"{D0} {h}", tz=NY)
+
+    def go(**kw):
+        p = P(sb_as_add=True, adds=(0.5, 0.33, 0.17), **kw)
+        ctx, _ = actx([("09:30", ROWS)], p)
+        m = _tr(ctx, "long", "10:00", 100.0, 98.0, 100, draw_px=110.0, ext_px=97.0)
+        m.exits = [(ts("11:30"), 110.0, 100, "t2")]
+        sb_model.as_add(ctx, p, [m], [_tr(ctx, "long", "10:05", 101.0, 98.0, 400, setup="sb_am")])
+        return m.adds[0][2] if m.adds else 0
+    assert go() == 50
+    assert go(max_contracts_total=120) == 20                                             # 120 contracts held in all: 100 + 20
+    assert go(max_lev=0.5, account_equity=1000.0, max_notional=1e12) == 0                # no leverage room left: the order is ignored
+    assert go(daily_loss_pct=0.0001, account_equity=100000.0) == 0                       # the loss limit (10) is below the open risk (200)
 
 
 @pytest.mark.skipif(not (Path("data/mentorship/ES_5min_db.csv").exists() and Path("data/mentorship/ES_1min_dbraw.csv").exists()), reason="no ES data")

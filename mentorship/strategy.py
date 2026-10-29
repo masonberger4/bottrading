@@ -1664,6 +1664,7 @@ class Params:
     # M3-sb-reversal-variant (060_ZtLMTXv-Dr0 ~00:46:43 "it isn't always going to be a continuation")
     sb_reversal: bool = False            # a pool on the far side swept just before / inside the window + MSS + FVG: the leg starts sb_rev_pre minutes before the window, the draw is the far side of the swept range
     sb_rev_pre: int = 10                 # minutes before the window start the sweep may have run
+    sb_rev_room_pts: float = 0.0         # review fix (models_setups_entries#61): > 0 = a reversal order needs this many points to the far-side draw (the spec's 10 handles; 0 = the normal sb_room_pts check only)
     # X15-one-am-trade-is-sb-priority (047_441vklRYYR4 ~00:08:02 "if I was only going to trade one time a day in the morning")
     one_am_trade_mode: str = "off"       # "sb_only": limited to one AM trade, the 10:00-11:00 Silver Bullet is the only eligible AM setup (the main AM scan is skipped)
     # E12-sb-as-add (058_hcSGlyfgKgA ~00:43:10 "this becomes that's a pyramid")
@@ -4228,6 +4229,10 @@ class Params:
             inert.append("mwd_levels_entries needs mwd_upgrade (the table's mwd_levels)")
         if self.iof_mode == "score" and not (self.htf_bias in ("iof", "combo2") or self.needs_iof_col):
             inert.append("iof_mode='score' rewrites the daily iof column: read it with htf_bias 'iof' / 'combo2' or a switch that reads iof")
+        if self.one_am_trade_mode == "sb_only" and not self.sb_model:      # caption-gap X15-one-am-trade-is-sb-priority (review fix): the main AM scan is skipped and no SB engine runs
+            inert.append("one_am_trade_mode='sb_only' skips the main AM scan: without sb_model there is no AM trade at all")
+        if self.london_reposition and self.sb_day_dir == "first_trade":
+            inert.append("london_reposition with sb_day_dir='first_trade': the failed London trade fixes the day's direction, so the AM may not reposition against it")
         if inert:
             warnings.warn("inert switches: " + "; ".join(inert), stacklevel=3)
 

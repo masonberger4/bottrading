@@ -3313,6 +3313,8 @@ _SB1_DECISIONS = {
     "X5-trailed-stops-run-after-sb-target-flush-tag": dict(SB_ONLY, sb_flush_tag=True),
     "M3-sb-simple-vs-day-trade": dict(SB_ONLY, sb_mgmt="day_trade"),
     "M3-sb-reversal-variant": dict(SB_ONLY, sb_reversal=True),
+    "M3-sb-reversal-variant-room10": dict(SB_ONLY, sb_reversal=True, sb_rev_room_pts=10.0),
+    "M3-sb-ob-entry": dict(SB_ONLY, sb_entry_arrays=("fvg", "ob"), sb_ob_min_pts=6.0),
     "M3-sb-reversal-variant-pre30": dict(SB_ONLY, sb_reversal=True, sb_rev_pre=30),
     "X15-one-am-trade-is-sb-priority": dict(sb_model=True, one_am_trade_mode="sb_only"),
     "E12-sb-as-add": dict(sb_model=True, sb_as_add=True),
