@@ -24,6 +24,8 @@ Per window (AM 10:00-11:00, PM 14:00-15:00; London 03:00-04:00 optional, futures
           draw. Capped by an unbroken opposing HTF FVG (owner #7); toward the session's locked
           draw only (owner #9). AM-window units close at 12:00 (owner #8). Flat at the close.
   count   one Silver Bullet per window (sb_max_per_window), independent of the bot's other setups.
+Pass 2 (caption-gap silver_bullet#1/1, all off): sb_t2 over-zealous HTF-FVG runner (047), sb_runner_trail / post_sb_flush (055), sb_mgmt
+"day_trade" (069), sb_reversal (060), sb_split_limits (057), sb_as_add (058, merged after the engines in as_add), london_reposition (cc12_004).
 Direction filters (all off by default): sb_draw_first + sb_day_dir (one way per day), displacement
 size (sb_disp_*), ES/NQ/YM sync (sb_sync), spotty-day skip (sb_spotty), weekly profile (sb_weekly).
 Every switch cites its rule id and source in strategy.Params ("silver_bullet package" block).
@@ -42,9 +44,13 @@ from . import daycontext as _DW
 from . import dwc3 as _DWC3                    # caption-gap day_week_context#3/3: the shared session veto
 
 MSS_MODES = ("close", "wick")
+T2_TFS = {15: "15m", 30: "30m", 60: "1h", 240: "4h", 1440: "D"}      # sb_t2_tf (minutes) -> the confluence table's timeframe label
 
 _CHOICES = {
-    "sb_mgmt": ("fixed", "ladder", "gap424", "layered057"),
+    "sb_mgmt": ("fixed", "ladder", "gap424", "layered057", "day_trade"),
+    "sb_t2": ("off", "htf_fvg"),                       # pass 2, gap M3-sb-extended-htf-target
+    "sb_runner_trail": ("fvg", "none"),                # pass 2, gap X5-trailed-stops-run-after-sb-target
+    "one_am_trade_mode": ("off", "sb_only"),           # pass 2, gap X15-one-am-trade-is-sb-priority
     "sb_fvg_pick": ("evolving", "first", "any_in_leg"),
     "sb_day_dir": ("off", "lock", "first_trade"),
     "sb_day_dir_delivered": ("hold", "free"),
@@ -87,6 +93,10 @@ def check_params(p) -> None:
         raise ValueError(f"sb_max_per_window {p.sb_max_per_window}: expected >= 1")
     if p.sb_cancel_ticks < 0 or p.sb_conf_min < 2 or p.sb_org_chop_bars < 1 or p.sb_cons_bars < 2:
         raise ValueError("sb_cancel_ticks >= 0, sb_conf_min >= 2, sb_org_chop_bars >= 1, sb_cons_bars >= 2 expected")
+    if p.sb_t2_tf not in T2_TFS:                       # pass 2: the timeframes the HTF array table holds
+        raise ValueError(f"sb_t2_tf {p.sb_t2_tf!r}: expected one of {sorted(T2_TFS)}")
+    if not 0.0 < p.sb_split_frac < 1.0 or p.sb_split_ticks < 0 or p.sb_rev_pre < 0:
+        raise ValueError("sb_split_frac in (0, 1), sb_split_ticks >= 0 and sb_rev_pre >= 0 expected")
     if len(p.sb_gap424_fracs) < 2 or abs(sum(p.sb_gap424_fracs) - 1.0) > 1e-6:
         raise ValueError(f"sb_gap424_fracs {p.sb_gap424_fracs!r}: expected >= 2 fractions summing to 1")
     if p.sb_supercharge and p.sb_mgmt != "fixed":      # SB package: the supercharge (gap 8) is the fixed-exit runner lot
@@ -592,6 +602,34 @@ def _gap424(ctx, sd, i, entry, p) -> list | None:
     return [near - ex, near + 0.25 * (far - near) - ex, (near + far) / 2 - ex]
 
 
+def _t2_htf_fvg(ctx, sd, i, p, raw_first, t1):
+    """Gap M3-sb-extended-htf-target (047 ~00:08:26 "if you want to be over zealous with your objectives") [our interpretation: the
+    timeframe is sb_t2_tf (1h) and the exit sits exit_before_pts in front of the near edge]: the near edge of the nearest unfilled
+    opposing FVG of that timeframe lying wholly beyond the first draw (the pool), side-space exit price, or None. Valid at the
+    close of bar i (the HTF table only holds arrays complete by then)."""
+    cf = getattr(ctx, "conf", None)
+    if cf is None:
+        return None
+    now = ctx.idx[i] + pd.Timedelta(minutes=ctx.tf)
+    for near, _ce, _far, _tf, _src in cf.opposing(now, sd.x(raw_first), sd.sign, (T2_TFS[p.sb_t2_tf],), src=(0,)):
+        v = sd.x(near) - p.exit_before_pts * p.es_pt
+        if v > t1 + p.es_pt:
+            return float(v)
+    return None
+
+
+def _deeper_nwog_ce(ctx, sd, i, p, first):
+    """Gap M3-sb-simple-vs-day-trade (069 ~15:57): the day-trade's final target = the CE of the nearest NWOG whose CE lies beyond the
+    first array (exit_before_pts in front of it), side space, else None (the first array stays the target)."""
+    from .strategy import _nwogs
+    best = None
+    for a, b in _nwogs(ctx, i):
+        ce = (sd.x(a) + sd.x(b)) / 2 - p.exit_before_pts * p.es_pt
+        if ce > first + p.es_pt and (best is None or ce < best):
+            best = ce
+    return best
+
+
 # --- arming ----------------------------------------------------------------------------------------------------------
 
 def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=(), win=None, ds=None, rev=None):
@@ -600,9 +638,11 @@ def _arm(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=(), 
     return max(os_, key=lambda o: o["fvg_i"]) if os_ else None
 
 
-def _arm_all(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=(), win=None, ds=None, rev=None) -> list:
+def _arm_all(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=(), win=None, ds=None, rev=None, reversal=None) -> list:
     """Orders (dicts, side space) for the closed bar i: the qualifying FVG / IFVG / OB entries of the leg from bar k0.
-    rev = dict(origin=, bottom=, since=) arms the ONE opposite Silver Bullet of gap 15 (needs the run's origin broken)."""
+    rev = dict(origin=, bottom=, since=) arms the ONE opposite Silver Bullet of gap 15 (needs the run's origin broken).
+    reversal = dict(k_orig=) (gap M3-sb-reversal-variant, 060 ~00:46:43): the leg k0 starts sb_rev_pre minutes before the window; the extreme must
+    have swept a sell-side pool, and the draw is the far side of the swept range (the high since k_orig)."""
     from .strategy import _f, _idx_at
     from .setups import disp_ok_sb
     l, h, c, o = sd.l, sd.h, sd.c, sd.o
@@ -618,6 +658,17 @@ def _arm_all(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=
     li = k0 + int(np.argmin(l[k0:i + 1]))             # the leg's extreme since the leg start
     if li >= i:
         return []
+    rfar = None
+    if reversal is not None:                           # gap M3-sb-reversal-variant (060 ~00:46:43): a pool on the far side was swept FRESHLY in [window - sb_rev_pre, window end]
+        from .strategy import _thru, _tick             # [our interpretation: a level no bar had traded through before the reversal leg (k0) and the leg's low did]
+        tk_ = _tick(p)
+        pre_lo = float(l[ctx.start:k0].min()) if k0 > ctx.start else np.inf
+        run_lo = float(l[k0:i + 1].min())
+        if not any(_thru(run_lo, v, tk_) and not _thru(pre_lo, v, tk_) for v in _sweep_levels(ctx, sd, i, p, session).values()):
+            _f("sb_x_rev_no_fresh_sweep")
+            return []
+        rfar = reversal.get("far")                     # (a test hook) else the high of the swept range: from the original leg start to the sweep low
+        rfar = float(h[reversal["k_orig"]:li + 1].max()) if rfar is None else float(rfar)
     # --- the trigger: MSS (a close or, mss_mode "wick", a wick beyond the swing that led into the extreme)
     need_mss = p.sb_mss_required and p.sb_need_mss
     refs = [q for q in sd.ph if q.i < li and q.known <= i]
@@ -780,14 +831,14 @@ def _arm_all(ctx, sd, i, k0, p, tol, lock=None, session="AM", win_a=None, prior=
             _f("sb_x_need_sweep")
             continue
         o_ = _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, prior, ds,
-                    tags + cd.get("tags", []), sw_name, sw_depth, gaps, rev)
+                    tags + cd.get("tags", []) + (["sb_reversal"] if rfar is not None else []), sw_name, sw_depth, gaps, rev, rfar)
         if o_ is not None:
             out.append(o_)
     return out
 
 
 def _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, prior, ds, tags, sw_name, sw_depth,
-           gaps, rev=None):
+           gaps, rev=None, rfar=None):
     """One order for the entry candidate `cd` (side space) or None."""
     from .strategy import (_targets, _eq_levels, _first_units, CF_SRC, _thru, _tick, POOL_KINDS, _htf_tag, _f,
                            _lots, _lv_finish_targets)
@@ -883,6 +934,10 @@ def _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, pr
         tv_ = sd.x(lock["target"])                      # even when the target list (pw_pools, OTE, fallback, London) lacks it
         if tv_ > entry and not any(abs(v - tv_) <= 1e-9 for v, _ in dr):
             dr = sorted(dr + [(tv_, "pool" if lock["kind"] == "pool" else "array")])
+    if rfar is not None:                               # gap M3-sb-reversal-variant (060 ~00:46:43): the draw comes from the far side of the swept range
+        dr = [(v, k_) for v, k_ in dr if v >= rfar - 1e-9]
+        if rfar > entry and not any(abs(v - rfar) <= 1e-9 for v, _ in dr):
+            dr = sorted(dr + [(rfar, "pool")])
     if p.sb_draw_pools_only:                           # A2 (033 ~24:34): an imbalance is not liquidity
         dr = [(v, k_) for v, k_ in dr if k_ in POOL_KINDS]
     scalp_fail = None
@@ -1021,6 +1076,9 @@ def _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, pr
             lvt.append("sb_no_runner")
         if p.sb_supercharge:
             early = wk is not None and wk.get("early_up" if sd.sign > 0 else "early_dn", 0)
+            if early and p.sb_supercharge_seasonal:    # gap 8 (048 ~2:02:20; pass 2): the seasonal tendency agrees [our interpretation: bh2e.season_side = the calendar window / intramonth map of the day]
+                from .bh2e import season_side
+                early = season_side(ctx.day) == sd.sign
             if early and (aligned or wk.get("fresh")) and not (ds.ranging if ds is not None else True):
                 sup = True
                 if t2 is None:                         # the HTF draw: the locked target, else the farthest draw
@@ -1033,6 +1091,22 @@ def _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, pr
                     lvt.append("sb_supercharge")
             else:
                 t2 = None                              # not supercharged: the full exit at the SB target (gap 8)
+    if p.sb_t2 == "htf_fvg" and not scalp_sb:          # gap M3-sb-extended-htf-target (047 ~00:08:26): the optional over-zealous T2
+        t2x = _t2_htf_fvg(ctx, sd, i, p, raw_first, t1)
+        if t2x is not None:
+            if p.sb_mgmt in ("ladder", "gap424", "layered057"):
+                if t2x > levels[-1] + p.es_pt:
+                    levels = list(levels) + [t2x]      # (the ladder modes take it as one more rung)
+                    lvt.append("sb_t2_htf_fvg")
+            else:
+                t2 = t2x                               # fixed: the runner of the 80 / 20 split; held past the window until the AM close (owner #8)
+                lvt.append("sb_t2_htf_fvg")
+    if p.sb_mgmt == "day_trade" and not scalp_sb:      # gap M3-sb-simple-vs-day-trade (069 ~15:57): the managed mode targets the deeper objective
+        deep = _deeper_nwog_ce(ctx, sd, i, p, t1)
+        if deep is not None:
+            t1, t2, levels = deep, None, [deep]
+            lvt.append("sb_day_trade_nwog")
+        lvt.append("sb_day_trade")
     chop = getattr(ctx, "chop", None)                # #10: sloppy reasons known at this close
     sl_set = {r for r in getattr(ctx, "sl_day", ()) if session == "PM" or not r.endswith(":PM")}
     if chop is not None and chop.active_before(i + 1):
@@ -1073,6 +1147,17 @@ def _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, pr
         swept = "discount_array"
     if conf is not None and p.sb_conf_mode in ("tag", "entry") and conf[2] is not None:
         lvx["sb_conf_mt"] = (float(conf[2]), False)    # gap 10: a 1m close below the MT ends the idea (wicks allowed)
+    split = None
+    if p.sb_split_limits and kind == "fvg" and not stop_at_fill and shares >= 2 * p.lot:
+        # gap E2-sb-split-limits (057 ~00:01:46): the size is two resting limits, sb_split_frac one tick INSIDE the near edge and the rest
+        # sb_split_ticks shallower (it fills first); one stop. [spec inconsistency: the example prices 4199.75 / 4199.25 do not follow the build
+        # text; the text is built: inside = entry - 1 tick, shallow = entry + sb_split_ticks ticks, side space]
+        px_a, px_b = entry - p.tick, entry + p.sb_split_ticks * p.tick
+        qa = max(p.lot, min(_lots(shares * p.sb_split_frac, p.lot), shares - p.lot))
+        if px_a - stop > 0 and px_b - stop <= p.max_risk_pts * p.es_pt and px_b < t1:
+            split = dict(px=float(px_a), q=int(qa))
+            entry, shares = float(px_b), int(shares - qa)
+            lvt.append("sb_split_limits")
     kinds = _kinds(levels, dr, bm)
     if p.friday_first_pool and ctx.day.weekday() == 4 and not scalp:     # N10 (070 ~1:06:37): Friday takes everything at the first pool
         js = [k_ for k_, kd in enumerate(kinds) if kd in POOL_KINDS]
@@ -1097,7 +1182,7 @@ def _order(ctx, sd, i, k0, li, kb, cd, p, tol, lock, session, ext_pts, a_idx, pr
                 rev=rev is not None, imm=False,
                 zone_bottom=float(cd["bottom"]), zone_top=float(cd["top"]), zone_ce=float((cd["top"] + cd["bottom"]) / 2),
                 ext=float(l[li]), ext_i=li, leg_hi=float(h[li:i + 1].max()),          # management_exits / day_week_context reads
-                level_kinds=kinds, draw=None if lock is None else float(sd.x(lock["target"])))
+                level_kinds=kinds, draw=None if lock is None else float(sd.x(lock["target"])), split=split)
 
 
 def _kinds(levels, dr, bm) -> list:
@@ -1401,8 +1486,10 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat, ff=0
             sd = pos["side"]
             o, h, l, c = sd.o[i], sd.h[i], sd.l[i], sd.c[i]
             tr = pos["trade"]
+            if pos.get("leg_pend") is not None:
+                _fill_leg(ctx, p, pos, tr, sd, i, ts, o, l)
             _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session, mg, ff=ff, day=day)
-            if pos["left"] and p.sb_adds and not pos["t1_done"]:
+            if pos["left"] and (p.sb_adds or pos.get("day")) and not pos["t1_done"]:
                 _sb_adds(ctx, p, pos, tr, sd, i, ts, o, l, c)
             if pos["left"] and ctx.equity:
                 r_now = max(0.0, (pos["entry"] - pos["stop"]) * pos["left"]) / ctx.equity
@@ -1416,6 +1503,8 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat, ff=0
                 out.append(tr)
                 n_done += 1
                 hit = _hit_target(tr)
+                if p.sb_flush_tag and hit:
+                    tr.post_sb_flush = post_sb_flush(ctx, sd, tr, i)      # gap X5 (055 ~14:35): POST-HOC study tag
                 was_rev = bool(pos.get("rev"))
                 if hit:
                     ds.delivered = True
@@ -1530,7 +1619,9 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat, ff=0
                            t1_done=False, n=shares, levels=o_["levels"], k=0, away=None, fill_i=i,
                            lvx=o_.get("lvx") or {}, fracs=fracs, zone=o_["zone"], li=o_["li"], rev=o_["rev"],
                            super=o_["super"], draw_raw_kind=o_["draw_raw_kind"], n0=shares, moved=False,
-                           add_pend=None, adds_done=0, fill_t=t, best=fill, t1_i=None)
+                           add_pend=None, adds_done=0, fill_t=t, best=fill, t1_i=None,
+                           keep_stop=p.sb_runner_trail == "none", no_trail=p.sb_runner_trail == "none",   # gap X5 (055 ~14:35): the runner keeps its initial stop
+                           day=p.sb_mgmt == "day_trade", leg_pend=o_.get("split"))                       # gaps M3-sb-simple-vs-day-trade (069), E2-sb-split-limits (057)
                 if mg is not None:
                     mg.extras_init(ctx, sd, pos, tr, dict(o_, session=session), i, p)   # X4 / X6-X9c: what exits() reads
                 pend = {}
@@ -1538,6 +1629,7 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat, ff=0
                     rev_used, rev_state = True, None       # gap 15: ONE opposite Silver Bullet per window
                 if p.sb_day_dir == "first_trade" and ds.day_side == 0:
                     ds.day_side = sd.sign
+                _fill_leg(ctx, p, pos, tr, sd, i, ts, sd.o[i], sd.l[i])    # gap E2-sb-split-limits: the deeper limit may fill on the same bar
                 if sd.l[i] <= pos["stop"]:
                     tr.exits.append((ts, sd.x(pos["stop"]), pos["left"], "stop")); pos["left"] = 0
                     out.append(tr)
@@ -1589,6 +1681,10 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat, ff=0
                 continue
             if p.tgif and sd.sign in getattr(ctx, "block_side", {}).get("tgif", ()):
                 continue                              # M14: the Friday after a one-way week (as in the main engine)
+            if p.london_reposition and win.name != "london" and session == "AM":
+                from . import manage as _MGR
+                if _MGR.london_rep_side(out, ts, ds.want, p) not in (0, sd.sign):
+                    continue                          # caption-gap T3-london-then-ny-reposition (cc12_004 ~00:07:52): after a failed London SB, the HTF direction only
             if _DW.side_ok(ctx, p, sd.sign, dws, i):
                 continue                              # day_week_context: outside day, ORG tell, strong Thursday ...
             if lk is not None and lk["side"] and sd.sign != lk["side"]:
@@ -1615,6 +1711,12 @@ def _run_window(ctx, sides, p, day, symbol, btag, win, ds, out, made, flat, ff=0
             kk0 = rev_state["k0"] if rev_state is not None else k0
             lk_sd = lk if (lk is not None and lk["side"] == sd.sign) else None
             os_ = _arm_all(ctx, sd, i, kk0, p, tol, lk_sd, session, a, out, win, ds, None)
+            if p.sb_reversal and rev_state is None and not cnt_side:
+                kr = max(_idx_at(ctx, a - p.sb_rev_pre), kk0)      # gap M3-sb-reversal-variant: the leg starts just before the window
+                if kk0 < kr < i:
+                    rv_ = {(x["kind"], x["fvg_i"]): x for x in _arm_all(ctx, sd, i, kr, p, tol, lk_sd, session, a, out, win, ds, None,
+                                                                          dict(k_orig=kk0))}
+                    os_ = [rv_.pop((x["kind"], x["fvg_i"]), x) for x in os_] + list(rv_.values())   # a setup meeting the premise uses the reversal draw
             if p.sb_cancel_sticky and dead_draws:
                 os_ = [x for x in os_ if (sd.sign, round(float(x["draw_raw"]), 6)) not in dead_draws]
             os_ = [x for x in os_ if not _DW.order_ok(ctx, sd, x, dws, i, p)]   # day_week_context: tue_off_monday / tgif_week_sweep
@@ -1683,7 +1785,7 @@ def _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session, mg=
                 pos["t1_i"] = i
                 _t1_done(pos, p, mg)                   # X4: breakeven at the first target (extras_be_on "t1", the default)
             pos["away"] = lv_[k]
-        if pos["left"] and pos["away"] is not None and c >= pos["away"] + p.away_pts * p.es_pt:
+        if pos["left"] and pos["away"] is not None and c >= pos["away"] + p.away_pts * p.es_pt and not pos.get("keep_stop"):
             pos["stop"] = max(pos["stop"], pos["away"] - p.trail_pad)
             pos["away"] = None
     else:
@@ -1699,8 +1801,10 @@ def _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session, mg=
         if pos["left"] and pos["t2"] is not None and pos["t1_done"] and h >= pos["t2"] + p.exit_fill_through * p.tick + _ME1.rung_hit_off(p):
             tr.exits.append((ts, sd.x(_ME1.rung_px(pos["t2"], p)), pos["left"], "t2")); pos["left"] = 0
     pos["best"] = max(pos["best"], h)
-    if mg is not None and not pos.get("super"):
+    if mg is not None and not pos.get("super") and not pos.get("keep_stop"):
         mg.extras_be_bar(sd, pos, tr, i, p)            # X4 / D14: expansion / after_mss / stall / pool / off (extras_be_on="follow")
+    if mg is not None and pos["left"] and pos["t1_done"] and p.sb_runner_trail == "fvg" and not pos.get("super"):
+        mg.trail_extra(sd, pos, i, p)                  # gap X5 (055 ~14:35): the main engine's FVG trails (their own switches) on the runner
     if mg is not None and pos["left"] and getattr(p, "time_stop_extras", False) and (p.time_stop_min or p.time_stop_bars)             and not pos["t1_done"]:
         frac = mg.time_stop_frac(p, pos.setdefault("ts", {}), nbars=i - pos["fill_i"] + 1,
                                  elapsed=(t + ctx.tf) - pos["fill_t"], best=pos["best"], basis=pos["entry"],
@@ -1720,8 +1824,8 @@ def _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session, mg=
         pos["bulk_done"] = True                        # X10b: the bulk off at am_bulk_t
         q_ = mg.cut_qty(pos["left"], p.am_bulk_frac, p)
         tr.exits.append((ts, sd.x(c), q_, "am_bulk")); pos["left"] -= q_
-    if (pos["left"] and session == "AM" and p.am_exit and p.am_exit_extras
-            and t + ctx.tf >= p.am_exit):              # owner #8: close (not tighten) at 12:00
+    if (pos["left"] and session == "AM" and p.am_exit and p.am_exit_extras and not pos.get("day")
+            and t + ctx.tf >= p.am_exit):              # owner #8: close (not tighten) at 12:00 (gap M3-sb-simple-vs-day-trade: not the managed day trade, 069)
         if p.am_exit_mode == "close":
             tr.exits.append((ts, sd.x(c), pos["left"], "am_exit")); pos["left"] = 0
         elif not pos.get("am_tightened"):
@@ -1742,10 +1846,118 @@ def _manage(ctx, p, win, pos, tr, sd, i, t, ts, o, h, l, c, flat_w, session, mg=
         tr.exits.append((ts, sd.x(c), pos["left"], "eod")); pos["left"] = 0
 
 
+def _fill_leg(ctx, p, pos, tr, sd, i, ts, o, l) -> None:
+    """Gap E2-sb-split-limits (057 ~00:01:46): the resting deeper limit of a split SB order fills while the first target is not taken
+    and the stop is not hit; the units join the same Trade as an add (one stop, the exits are shared). A gap through the stop
+    cancels it. Called before the bar's stop test (the limit is hit first, then the stop is what it is)."""
+    lg = pos.get("leg_pend")
+    if lg is None:
+        return
+    if pos["t1_done"] or not pos["left"] or o <= pos["stop"]:
+        pos["leg_pend"] = None
+        return
+    ft_ = p.fill_through * p.tick
+    if not (l <= lg["px"] - ft_ + 1e-12 if ft_ else l < lg["px"]):
+        return
+    px = min(lg["px"], o)
+    q = int(lg["q"])
+    tr.adds.append((ts, sd.x(px), q))
+    pos["left"] += q
+    pos["n"] += q
+    pos["n0"] = pos.get("n0", 0) + q
+    if "basis" in pos:
+        pos["basis"] += px * q                         # (management_exits: the breakeven reads the average entry)
+    if ctx.equity:
+        extra = max(0.0, px - pos["stop"]) * q / ctx.equity
+        tr.entry_risk_pct = round((tr.entry_risk_pct or 0.0) + extra, 5)
+        tr.peak_risk_pct = round(max(tr.peak_risk_pct or 0.0, tr.entry_risk_pct), 5)
+    pos["leg_pend"] = None
+
+
+def post_sb_flush(ctx, sd, tr, i):
+    """Gap X5-trailed-stops-run-after-sb-target (055_qiv8pkcNvGk ~00:14:35) - a POST-HOC study tag (it reads the 60 minutes AFTER the target
+    fill and never acts on them; the trading code does not read it): after an AM SB reaches its target, did price trade back into the 75%
+    line of the nearest daily same-side (discount) FVG below the exit within 60 min? Side space: the line is bottom + 0.75 x (top - bottom).
+    None when no daily FVG sits below the target."""
+    cf = getattr(ctx, "conf", None)
+    if cf is None or not tr.exits:
+        return None
+    import re
+    hit = next((e for e in tr.exits if re.fullmatch(r"t\d+", e[3])), None)
+    if hit is None:
+        return None
+    t_x, ex = hit[0], sd.x(hit[1])
+    now = t_x + pd.Timedelta(minutes=ctx.tf)
+    best = None
+    for top, bot, _tf, _src, _known in cf.valid(now, sd.sign, ("D",), src=(0,)):
+        t_, b_ = (sd.x(top), sd.x(bot)) if sd.sign > 0 else (sd.x(bot), sd.x(top))
+        if t_ < ex and (best is None or t_ > best[0]):
+            best = (float(t_), float(b_))
+    if best is None:
+        return None
+    line = best[1] + 0.75 * (best[0] - best[1])
+    k0 = int(ctx.idx.searchsorted(t_x, side="right"))                  # the bars after the target bar
+    k1 = int(ctx.idx.searchsorted(t_x + pd.Timedelta(minutes=60), side="right"))
+    return bool(k1 > k0 and float(sd.l[k0:k1].min()) <= line + 1e-12)
+
+
+def as_add(ctx, p, main, sbs) -> list:
+    """Gap E12-sb-as-add (058_hcSGlyfgKgA ~00:43:10 "you don't have to have the 2022 entry but guess what this becomes that's a pyramid").
+    A same-side Silver Bullet fill while a main-engine trade is open is NOT a second trade: it is a pyramid add to that trade (size at most the
+    previous unit - the E12 `adds` fractions - inside the total risk cap), allowed only before any partial and only below the EQ of the
+    range from the trade's sweep extreme to its draw (above it for a short); otherwise the SB order is ignored. Applied after the day's
+    engines ran: the decision uses only what was known at the SB fill (the main trade's open state, its partials before that time and its
+    fixed levels); the added units then share the trade's later exits pro rata [our interpretation: the main loop and the SB run
+    separately, so the add is merged after the fact]. Returns the SB trades that stay separate."""
+    from .strategy import _total_cap, _lots, _f
+    from . import entries as _EN
+    keep = []
+    for s_ in sorted(sbs, key=lambda t: t.entry_time):
+        m = next((t for t in main if t.exits and t.side == s_.side and t.entry_time <= s_.entry_time < t.exits[-1][0]), None)
+        if m is None:
+            keep.append(s_)
+            continue
+        sign = 1 if m.side == "long" else -1
+        fill = float(s_.entry)
+        ext = m.ext_px if m.ext_px is not None else m.stop
+        tgt = m.draw_px if m.draw_px is not None else (m.t2 if m.t2 is not None else m.t1)
+        eq = (float(ext) + float(tgt)) / 2
+        ik = int(ctx.idx.searchsorted(s_.entry_time))
+        q = 0
+        if (p.adds and not any(e[0] < s_.entry_time for e in m.exits)           # no partial yet (the stop / target of an earlier bar ends it)
+                and sign * (fill - eq) <= 1e-9 and sign * (fill - float(m.stop)) > 0
+                and not _EN.adds_blocked(ctx, None, {}, min(ik, len(ctx.t) - 1), p)):
+            prev = m.adds[-1][2] if [a for a in m.adds if a[0] < s_.entry_time] else m.shares
+            q = min(_lots(m.shares * p.adds[min(len([a for a in m.adds if a[0] < s_.entry_time]), len(p.adds) - 1)], p.lot),
+                    prev, s_.shares)
+            n_ = m.shares + sum(a[2] for a in m.adds if a[0] < s_.entry_time)
+            bought = m.entry * m.shares + sum(a[1] * a[2] for a in m.adds if a[0] < s_.entry_time)
+            per = sign * (fill - float(m.stop))
+            room = _total_cap(p, ctx.equity) - max(0.0, sign * (bought - m.stop * n_))
+            q = min(q, _lots(max(room, 0.0) / per, p.lot))
+        if q < max(p.lot, 1):
+            _f("sb_x_as_add_dropped")
+            continue                                                               # the SB order is ignored
+        rows = [k for k, e in enumerate(m.exits) if e[0] >= s_.entry_time]
+        tot = sum(m.exits[k][2] for k in rows)
+        cum = 0
+        for j, k in enumerate(rows):
+            ts_, px_, qq, tag = m.exits[k]
+            ex_ = q - cum if j == len(rows) - 1 else min(q - cum, _lots(q * qq / tot, p.lot))
+            m.exits[k] = (ts_, px_, qq + ex_, tag)
+            cum += ex_
+        m.adds.append((s_.entry_time, fill, int(q)))
+        m.adds.sort(key=lambda a: a[0])
+        m.lv_tags = "|".join(x for x in (m.lv_tags, "sb_as_add") if x)
+    return keep
+
+
 def _t1_done(pos, p, mg) -> None:
     """The first target / rung was taken: t1_done, and breakeven now when extras_be_on is "t1" (the default: the
     pre-package behaviour). A supercharged runner (gap 8) keeps its stop."""
-    if mg is not None and not pos.get("super"):
+    if pos.get("keep_stop"):
+        pos["t1_done"] = True                          # gap X5 (sb_runner_trail "none"): the initial stop stays
+    elif mg is not None and not pos.get("super"):
         mg.extras_t1(pos, p)
     else:
         pos["t1_done"] = True
@@ -1765,7 +1977,7 @@ def _sb_adds(ctx, p, pos, tr, sd, i, ts, o, l, c):
     if ap is not None and l <= ap["px"] and i > ap["i"]:           # a resting add limit fills
         px = min(ap["px"], o)
         per = px - pos["stop"]
-        q = max(p.lot, _lots(pos["n0"] * 0.5, p.lot))
+        q = max(p.lot, _lots(pos["n0"] * (p.adds[min(pos["adds_done"], len(p.adds) - 1)] if pos.get("day") else 0.5), p.lot))
         q = _EN.cap_add(q, pos["n"], p)
         if per > 0 and ctx.equity:
             room = _total_cap(p, ctx.equity) - max(0.0, (pos["entry"] - pos["stop"]) * pos["left"])
@@ -1777,6 +1989,15 @@ def _sb_adds(ctx, p, pos, tr, sd, i, ts, o, l, c):
                 pos["basis"] += px * q                 # (management_exits: the breakeven reads the average entry)
             pos["adds_done"] += 1
         pos["add_pend"] = None
+        return
+    if pos.get("day"):                                             # gap M3-sb-simple-vs-day-trade (069 ~15:57): the day trade pyramids on the NEXT FVG of the
+        if pos["adds_done"] >= len(p.adds):                        # displacement leg with the E12 decreasing fractions (p.adds); a newer FVG moves the resting limit
+            return
+        for g in sd.gaps:
+            if g.i == i and g.i - 2 > pos["fill_i"] and g.bottom > pos["stop"] and g.i > pos.get("day_gap_i", -1):
+                pos["day_gap_i"] = g.i
+                pos["add_pend"] = dict(px=g.top, i=i)
+                return
         return
     if pos["adds_done"] >= 2 or ap is not None:
         return

@@ -241,7 +241,8 @@ class Params:
     sb_room_pts: float = 5.0       # minimum room to the draw's exit price; 10 = new-trader switch (046)
     sb_target_pts: float = 5.0     # fixed-mode target only (sb_target_mode="fixed")
     sb_mgmt: str = "fixed"         # "fixed": all off at the first target (80% with sb_runner); "ladder":
-                                   # scale out through the draw levels with the ladder rules
+                                   # scale out through the draw levels with the ladder rules; "day_trade" (gap M3-sb-simple-vs-day-trade,
+                                   # 069 ~15:57): the managed mode - no 12:00 close, the next FVG adds (E12 fractions), the deeper NWOG CE target
     sb_runner: bool = False        # keep 20% for the next draw, stop to breakeven
     sb_min_rr: float = 0.0         # optional reward:risk floor on t1 (x min_rr)
     sb_london: bool = False        # 03:00-04:00 window (futures only; SPY can't trade it)
@@ -1651,8 +1652,28 @@ class Params:
     # exits (M3.11, gap 8)
     sb_runner_if_weekly: bool = False    # M3.11 (048 ~2:02:12): the runner only when the weekly profile is aligned
     sb_supercharge: bool = False         # gap 8: Mon-Wed, daily not ranging, week extreme not yet in -> 1 lot runner
-    sb_supercharge_seasonal: bool = False  # needs the B23 seasonal column (not built): reserved, no effect
+    sb_supercharge_seasonal: bool = False  # gap 8 (048 ~2:02:20; caption-gap pass 2): the seasonal tendency of the coming weeks (bh2e.season_side, B23) must agree with the side for the supercharge [our interpretation]
     sb_gap424_fracs: tuple = (0.4, 0.2, 0.4)   # M3.11 / 057: 4 / 2 / 4 of 10 at the NWOG high / 75% / CE
+    # --- caption-gap pass 2, silver_bullet#1/1 (rulebook_gaps/*.md; every switch cites its gap id + source video/time) ---
+    # M3-sb-extended-htf-target (047_441vklRYYR4 ~00:08:26 "if you want to be over zealous with your objectives")
+    sb_t2: str = "off"                   # "htf_fvg": the optional over-zealous T2 = the near edge of the nearest unfilled HTF opposing FVG beyond T1 (runner; held until the AM close, owner #8)
+    sb_t2_tf: int = 60                   # ... its timeframe in minutes (15 / 30 / 60 / 240 / 1440) [our interpretation: 1h, exit 0.5 pt (exit_before_pts) in front of the near edge]
+    # X5-trailed-stops-run-after-sb-target (055_qiv8pkcNvGk ~00:14:35)
+    sb_runner_trail: str = "fvg"         # "fvg" = the runner is managed as before (breakeven at the first target; the main engine's FVG trails apply when their own switches are on) / "none" = it keeps its initial stop until the target or am_exit
+    sb_flush_tag: bool = False           # study tag post_sb_flush (POST-HOC, read after the trade): price traded back to the 75% line of the daily discount FVG within 60 min of the target fill
+    # M3-sb-reversal-variant (060_ZtLMTXv-Dr0 ~00:46:43 "it isn't always going to be a continuation")
+    sb_reversal: bool = False            # a pool on the far side swept just before / inside the window + MSS + FVG: the leg starts sb_rev_pre minutes before the window, the draw is the far side of the swept range
+    sb_rev_pre: int = 10                 # minutes before the window start the sweep may have run
+    # X15-one-am-trade-is-sb-priority (047_441vklRYYR4 ~00:08:02 "if I was only going to trade one time a day in the morning")
+    one_am_trade_mode: str = "off"       # "sb_only": limited to one AM trade, the 10:00-11:00 Silver Bullet is the only eligible AM setup (the main AM scan is skipped)
+    # E12-sb-as-add (058_hcSGlyfgKgA ~00:43:10 "this becomes that's a pyramid")
+    sb_as_add: bool = False              # a same-side SB fill during an open main-engine trade is a pyramid add (below the EQ of the sweep..draw range, before any partial), not a new trade
+    # E2-sb-split-limits (057_DkOuO0eNwUA ~00:01:46 "build my typical 10 contracts into this morning limit entry"); named *_limits: sb_split is the X3b scale-out switch
+    sb_split_limits: bool = False        # the SB size is two resting limits in the FVG: sb_split_frac one tick inside the near edge, the rest sb_split_ticks shallower (fills first); one stop
+    sb_split_frac: float = 0.6
+    sb_split_ticks: int = 2              # [our interpretation of "a few ticks"]
+    # T3-london-then-ny-reposition (cc12_004_Oec_0NM_OeY ~00:07:52 "if I fail in London I look for a New York open setup to reposition")
+    london_reposition: bool = False      # a losing sb_london trade does not end the AM (no session loss / fail count); the AM re-enters in the HTF direction only
 
     # --- caption-gap pass, levels_detectors #1/3 (digests/rulebook_gaps/*.md; every switch cites its gap id + source video/time) ---
     # X3-l8-vb-exhaustion-gap (cc04_009 ~2:48)
@@ -4527,6 +4548,7 @@ class Trade:
     sb_n: int = 0                  # nth Silver Bullet entry of its window (1 = first)
     sb_sweep_depth: float | None = None   # M3.5: ES pts the leg low ran beyond the swept level (None: no sweep)
     sb_pre_run_ticks: float | None = None  # gap 17: ticks the market ran beyond the draw before the fill
+    post_sb_flush: bool | None = None      # X5 sb_flush_tag (POST-HOC study tag, 055 ~14:35): the SB hit its target and price traded back to the daily discount FVG's 75% line within 60 min (None: no target / no daily FVG)
     # package setups_models #1/7 (caption-gap pass; every tag stays empty / None while its switch is off)
     open_grade: str = ""           # B12 open_tol_pts: "best" (beyond every reference open) / "allowed" (inside the wrong-side tolerance)
     po3_seq: bool = False          # B12 po3_seq: the Judas -> close back across the open -> MSS order held
@@ -6567,7 +6589,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
     kw = dict(partner=partner, live=live, bias=bias, conf=conf, gaps=gaps, closes=closes, evening=evening,
               partner2=partner2, intermarket=intermarket, equity=equity, bias_by_cut=bias_by_cut, meta=meta, eth=eth,
               week=week, eve=eve, prev_full=prev_full, post_eve=post_eve, daily_all=daily_all)
-    if not ((_MG.any_stop_switch(p, df.index[0].date()) or p.max_trades_week) and (p.ma_deuce or p.sb_model)
+    if not ((_MG.any_stop_switch(p, df.index[0].date()) or p.max_trades_week or (p.london_reposition and p.sb_london)) and (p.ma_deuce or p.sb_model)
             and p.stops_passes > 1):                       # (the D19 / X15 week budget is two-way across the engines the same way)
         return _run_day_once(df, hist, symbol, p, tf, log=log, locks=locks, skips=skips, risk_state=risk_state, objective=objective, **kw)
     import copy
@@ -7320,6 +7342,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 if p.mss_on_side == "tag" and _SM.on_side_since(sd, o, i):   # A19.4
                     tr.lv_tags = "|".join(x for x in (tr.lv_tags, "on_side") if x)
                 done[o.get("done_key", o["session"])] = True
+                if p.one_am_trade_mode == "sb_only" and o["session"] == "AM":
+                    done["AM"] = done["SB_AM"] = True        # caption-gap X15-one-am-trade-is-sb-priority: after any AM fill the AM is done
                 lk = ctx.lock.get("LH" if o.get("done_key") == "LH" and "LH" in ctx.lock else o["session"])
                 if lk is not None:
                     lk["traded"] = True
@@ -7439,7 +7463,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             done_key = "LH"
             done.setdefault("LH", False)
         skip_main = (t < w0 or done[done_key] or pos is not None
-                     or (wl is not None and _DW.budget_full(ctx, ts, trades, state["ext"])))   # D19 / X15 week budget, all engines
+                     or (wl is not None and _DW.budget_full(ctx, ts, trades, state["ext"]))     # D19 / X15 week budget, all engines
+                     or (p.one_am_trade_mode == "sb_only" and session == "AM"
+                         and not (p.sb_setup and _in_sb(t, p))))     # caption-gap X15-one-am-trade-is-sb-priority (047 ~00:08:02): limited to one AM trade, only the Silver Bullet is eligible in the AM
         if _MG.blocked_now(state, session):
             continue                                  # X7c / X12 / X13a / X14b / X14d: the session or the day is stopped
         if (session == "PM" and p.pm_consol_exit and t >= p.pm_consol_exit and pos is None
@@ -7513,6 +7539,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             os_ = state["only_side"].get(session)
             if os_ and sd.sign != os_:
                 continue                              # X13a reverse_in_session: the opposite side only
+            if p.london_reposition and session == "AM" and state["ext"] and _MG.london_rep_side(state["ext"], ts, want, p) not in (0, sd.sign):
+                continue                              # caption-gap T3-london-then-ny-reposition (cc12_004 ~00:07:52): after a failed London SB the AM repositions in the HTF direction only
             rc_ = state["re_ctx"].get(session)
             if rc_ is not None and rc_.get("pending") and p.reentry_gate and sname != rc_["side"]:
                 continue                              # X13b: a re-entry is the same direction only
@@ -7638,7 +7666,11 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
         trades += run_ma_deuce(ctx, hist, p, day, symbol, btag, sides)
     if p.sb_model:
         from .sb_model import run_sb
-        trades += run_sb(ctx, sides, p, day, symbol, blocked, btag)
+        sb_new = run_sb(ctx, sides, p, day, symbol, blocked, btag)
+        if p.sb_as_add and sb_new:
+            from .sb_model import as_add
+            sb_new = as_add(ctx, p, trades[:n_main], sb_new)     # caption-gap E12-sb-as-add (058 ~00:43:10): a same-side SB fill during an open trade is a pyramid add
+        trades += sb_new
     if p.ndog_scalp and post_eve is not None and len(post_eve):
         trades += _SM4.ndog_scalp(ctx, post_eve, p, day, symbol, btag)       # caption-gap new-ndog-asian-scalp: the Asian-evening NDOG scalp (its own window, after the day's frame)
     if p.journal_timing and len(trades) > n_main:

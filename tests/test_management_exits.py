@@ -1278,3 +1278,27 @@ def test_smt_exit_against_works_without_smt_bank():
     pos, tr = _tpos(fill_i=1), _TpTr()
     TP.manage(ctx, sd, pos, tr, 5, ctx.idx[5], p, SimpleNamespace(start=0), ps, ppos)
     assert [e[3] for e in tr.exits] == ["smt_bank2"] and pos["left"] == 0                # the WHOLE position is out
+
+
+# --- caption-gap pass 2, silver_bullet#1/1: T3-london-then-ny-reposition (cc12_004 ~00:07:52) ------------------------------------
+
+def test_london_reposition():
+    """A losing sb_london long (stopped at 03:40) is not an AM session loss / fail: the AM may re-enter, and only in the HTF direction (the
+    losing London trade's, or `want`): an AM long arms, an AM short does not. A winning London trade is untouched."""
+    from mentorship.strategy import Trade
+    ts = lambda h: pd.Timestamp(f"{D0} {h}", tz=NY)
+    lon = Trade(D0, "ES", "AM", "sb_london", "long", "none", False, None, ts("03:15"), ts("03:15"), 101.7, 98.95, 108.0, None, 100)
+    lon.exits = [(ts("03:40"), 98.95, 100, "stop")]
+    win = Trade(D0, "ES", "AM", "sb_london", "long", "none", False, None, ts("03:15"), ts("03:15"), 101.7, 98.95, 108.0, None, 100)
+    win.exits = [(ts("03:40"), 108.0, 100, "t1")]
+    off, on = Params(**BASE, loss_ends_morning=True), Params(**BASE, loss_ends_morning=True, london_reposition=True)
+    assert MG.stops_from(off, [lon])[1] == {"AM": "loss_ends_morning"} and MG.stops_from(on, [lon])[1] == {}
+    assert MG.extras_blocked(SimpleNamespace(day=D0, risk_view=None), off, "AM", ts("09:50"), [lon]) is True
+    assert MG.extras_blocked(SimpleNamespace(day=D0, risk_view=None), on, "AM", ts("09:50"), [lon]) is False
+    at = ts("09:50")
+    side = MG.london_rep_side([lon], at, 1, on)
+    assert side == 1                                                  # an AM long (sign +1) arms, an AM short (sign -1) does not
+    assert [s for s in (1, -1) if side in (0, s)] == [1]
+    assert MG.london_rep_side([win], at, 1, on) == 0                  # a winner: no restriction
+    assert MG.london_rep_side([lon], at, -1, on) == -1                # the bias, when known, is the direction
+    assert Params().london_reposition is False

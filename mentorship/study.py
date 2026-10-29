@@ -3303,6 +3303,27 @@ _BH7_DECISIONS = {
 DECISIONS.update(_BH7_DECISIONS)
 
 
+# --- Caption-gap pass 2, package silver_bullet#1/1 (models_setups_entries.md item 61; levels_liquidity_targets.md item 72; management_partials_trailing_exits.md items 22, 73;
+# session_day_week_stops_frequency.md item 14; stops_sizing_scaling_in.md items 20, 50; times_sessions_macros.md item 66; sb_model.py): one variant per switch (name prefix = gap id).
+# The Silver Bullet alone (SB_ONLY) unless the switch needs the main engine; the x5 flush tag is a POST-HOC study column (Trade.post_sb_flush: report its mean over the SB wins). ---
+_SB1_DECISIONS = {
+    "M3-sb-extended-htf-target": dict(SB_ONLY, sb_t2="htf_fvg"),
+    "M3-sb-extended-htf-target-15m": dict(SB_ONLY, sb_t2="htf_fvg", sb_t2_tf=15),
+    "X5-trailed-stops-run-after-sb-target": dict(SB_ONLY, sb_runner=True, sb_t2="htf_fvg", sb_runner_trail="none"),
+    "X5-trailed-stops-run-after-sb-target-flush-tag": dict(SB_ONLY, sb_flush_tag=True),
+    "M3-sb-simple-vs-day-trade": dict(SB_ONLY, sb_mgmt="day_trade"),
+    "M3-sb-reversal-variant": dict(SB_ONLY, sb_reversal=True),
+    "M3-sb-reversal-variant-pre30": dict(SB_ONLY, sb_reversal=True, sb_rev_pre=30),
+    "X15-one-am-trade-is-sb-priority": dict(sb_model=True, one_am_trade_mode="sb_only"),
+    "E12-sb-as-add": dict(sb_model=True, sb_as_add=True),
+    "E2-sb-split-limits": dict(SB_ONLY, sb_split_limits=True),
+    "E2-sb-split-limits-50-50": dict(SB_ONLY, sb_split_limits=True, sb_split_frac=0.5, sb_split_ticks=1),
+    "T3-london-then-ny-reposition": dict(sb_model=True, sb_london=True, london_reposition=True, loss_ends_morning=True),
+    "M3-sb-supercharge-runner-seasonal": dict(SB_ONLY, sb_runner=True, sb_supercharge=True, sb_supercharge_seasonal=True),
+}
+DECISIONS.update(_SB1_DECISIONS)
+
+
 def osok_study(df, direction=None, **kw):
     """M17-osok-short-term-trade-definition / M17-osok-execution-chain-1h-minimum / new-missed-monthly-array-use-lower-tf / M17-osok-weekly-to-daily (research, bh7s.osok): One Shot One Kill on a minute
     frame - weekly holding, 1h execution at 1h arrays inside weekly / daily / 4h arrays, Mon-Wed entries, the nearest untouched daily opposing array as the target. Rows are trades with origin_tf / leg / seq."""

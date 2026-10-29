@@ -641,6 +641,8 @@ def stops_from(p, trades, ts=None) -> tuple:
       fomc_no_reentry  N3 / N3.5 (a design choice, no source) a loss on an FOMC day ends the day (every session, every model)"""
     closed = sorted((t for t in trades if t.exits and (ts is None or t.exits[-1][0] <= ts)),
                     key=lambda t: t.exits[-1][0])
+    if p.london_reposition:                          # caption-gap T3-london-then-ny-reposition (cc12_004 ~00:07:52): a losing London SB is not a session loss or fail
+        closed = [t for t in closed if not (t.setup == "sb_london" and _net(t, p) < 0)]
     day, sess = None, {}
     for tr in closed:
         net = _net(tr, p)
@@ -665,6 +667,16 @@ def stops_from(p, trades, ts=None) -> tuple:
             if run >= n:
                 sess[f] = "fails"
     return day, sess
+
+
+def london_rep_side(trades, ts, want, p) -> int:
+    """Caption-gap T3-london-then-ny-reposition (cc12_004 ~00:07:52): after a LOSING London Silver Bullet (closed by `ts`) the AM may
+    reposition in the HTF direction only: `want` when the bias is known, else the direction of the failed London trade (it was taken with
+    the bias). 0 = no failed London trade (no restriction)."""
+    lost = [t for t in trades if t.setup == "sb_london" and t.exits and (ts is None or t.exits[-1][0] <= ts) and _net(t, p) < 0]
+    if not lost:
+        return 0
+    return int(want) if want else (1 if lost[0].side == "long" else -1)
 
 
 def extras_blocked(ctx, p, session: str, ts, extra=()) -> bool:
