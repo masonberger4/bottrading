@@ -1528,6 +1528,10 @@ class Params:
     # B19 intermarket and B20 COT / OI / sentiment
     intermarket_model: bool = False      # B19 umbrella: dxy_gate "block", bond_range "scalp", bond_dir "filter", decoupled_mode "scalp" (intermarket_model_skip leaves parts alone)
     intermarket_model_skip: tuple = ()   # from ("dxy_gate", "bond_range", "bond_dir", "decoupled_mode")
+    im_source: str = "databento"         # intermarket data (dxy_gate, bond_range, bond_dir, dxy_filter and the INTERMARKET columns): "databento" = DX futures
+                                         # (1d, 2019 onward) and ZN / ZB futures (1d, 2016 onward) from data/databento_extra (databento_extra.py; bond prices
+                                         # inverted to a yield direction), "yahoo" = the free daily DXY / ^TNX files (data/mentorship/yahoo), the old path
+    im_bond: str = "ZN"                  # the bond behind the yield rules with im_source="databento": "ZN" 10-year note (the ^TNX analogue), "ZB" 30-year bond
     dxy_gate: str = "off"                # B19.1 (031 ~7:54; 045 ~42:05): "tag" / "block" - the dollar's prior close above its 20-day high and rising: no longs
     dxy_gate_days: int = 20
     bond_range: str = "off"              # B19.3 (061 ~1:05:42; cc10_008 ~8:47): "tag" / "scalp" / "skip" - the 10-year yield in a range: markets consolidate

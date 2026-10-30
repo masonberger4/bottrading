@@ -517,7 +517,7 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
             if why3 is None:
                 if p.rr_month_gate:                        # caption-gap new-rr-month-gate (cc02_001 ~12:11): the big winners (>= rr_big R) closed in this calendar month so far
                     wk_ = dict(wk_ or {}, month_big=_TP4.month_big(rows, d, p))
-                im_d = (intermarket or INTERMARKET()).get(d)
+                im_d = (intermarket or INTERMARKET(p.im_source, p.im_bond)).get(d)
                 if dsmt is not None:
                     im_d = {**(im_d or {}), "dsmt": dsmt.get(d, 0)}
                 if msmt is not None:
@@ -562,41 +562,49 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     return out
 
 
-_IM = None
+_IM: dict = {}
 
 
-def INTERMARKET() -> dict:
-    """date -> {"dxy": +1/-1, "tnx": +1/-1}: the prior day's close vs its 20-day mean for the
-    dollar index and the 10-year yield (free Yahoo daily data, data/mentorship/yahoo)."""
-    global _IM
-    if _IM is None:
-        _IM = {}
-        y = DATA / "yahoo"
+def _im_close(name: str, source: str, bond: str) -> pd.Series | None:
+    """Daily closes indexed by date: 'DXY' / 'TNX' from the Databento futures (im_source="databento": DX, and the `bond`
+    futures inverted to a yield direction) or from the Yahoo files; 'GSPC' always from Yahoo."""
+    if source == "databento" and name in ("DXY", "TNX"):
+        from .databento_extra import intermarket_daily
+        f = intermarket_daily(name, bond)
+        return None if f is None else f.close.dropna()
+    f = DATA / "yahoo" / f"{name}_1d.csv"
+    if not f.exists():
+        return None
+    s = pd.read_csv(f, index_col=0)
+    s.columns = [c.lower() for c in s.columns]
+    c = pd.to_numeric(s["close"], errors="coerce")
+    c.index = pd.to_datetime(c.index.str[:10])
+    return c                                     # (NaN rows kept: the yahoo path computes exactly as before)
+
+
+def INTERMARKET(source: str = "databento", bond: str = "ZN") -> dict:
+    """date -> {"dxy": +1/-1, "tnx": +1/-1, ...}: the prior day's close vs its 20-day mean for the dollar index and the
+    10-year yield. Source (Params.im_source): "databento" = DX futures (2019 onward) and the ZN / ZB futures inverted to a
+    yield direction (2016 onward), see databento_extra.py; "yahoo" = the free daily DXY / ^TNX files (data/mentorship/yahoo)."""
+    key = (source, bond)
+    if key not in _IM:
+        im = _IM[key] = {}
         cols = {}
-        for n in ("DXY", "TNX"):
-            f = y / f"{n}_1d.csv"
-            if f.exists():
-                s = pd.read_csv(f, index_col=0).iloc[:, :]
-                s.columns = [c.lower() for c in s.columns]
-                c = pd.to_numeric(s["close"], errors="coerce")
-                c.index = pd.to_datetime(c.index.str[:10])
-                cols[n.lower()] = np.sign(c - c.rolling(20).mean()).shift(1)   # prior day only
+        ser = {}
+        for n_, f_ in (("dxy", "DXY"), ("tnx", "TNX"), ("spx", "GSPC")):
+            c = _im_close(f_, source, bond)
+            if c is None or not len(c):
+                continue
+            if n_ != "spx":
+                cols[n_] = np.sign(c - c.rolling(20).mean()).shift(1)   # prior day only
+            ser[n_] = c.dropna()
         if cols:
             t = pd.DataFrame(cols).dropna(how="all")
             full = pd.date_range(t.index[0], t.index[-1] + pd.Timedelta(days=3))
             t = t.reindex(full).ffill()
-            _IM = {k.date(): {c: (0 if pd.isna(v) else int(v)) for c, v in r.items()}
-                   for k, r in t.iterrows()}
+            im.update({k.date(): {c: (0 if pd.isna(v) else int(v)) for c, v in r.items()}
+                       for k, r in t.iterrows()})
             try:                                    # caption-gap bias_htf#2/7 (NEW-rates-dxy-fx-direction, B19-bond-stock-dxy-sign, B19-four-asset-risk-map): the slow yield side, the correlations, the S&P trend
-                ser = {}
-                for n_, f_ in (("dxy", "DXY"), ("tnx", "TNX"), ("spx", "GSPC")):
-                    ff = y / f"{f_}_1d.csv"
-                    if ff.exists():
-                        s_ = pd.read_csv(ff, index_col=0)
-                        s_.columns = [c.lower() for c in s_.columns]
-                        c_ = pd.to_numeric(s_["close"], errors="coerce")
-                        c_.index = pd.to_datetime(c_.index.str[:10])
-                        ser[n_] = c_.dropna()
                 from . import bh2
                 ex = bh2.im_columns(ser.get("dxy"), ser.get("tnx"), ser.get("spx"))
                 from . import bh3                    # caption-gap bias_htf#3/7: notes_dxy, the trend ratios, bond_lt
@@ -606,7 +614,7 @@ def INTERMARKET() -> dict:
                 if len(ex):
                     ex = ex.reindex(full).ffill()
                     for k_, r_ in ex.iterrows():
-                        dd = _IM.setdefault(k_.date(), {})
+                        dd = im.setdefault(k_.date(), {})
                         for c_, v_ in r_.items():
                             if isinstance(v_, str):
                                 dd[c_] = v_
@@ -614,7 +622,7 @@ def INTERMARKET() -> dict:
                                 dd[c_] = int(v_) if c_ in ("tnx_slow", "rates_dxy_agree", "spx20", "bond_lt") else float(v_)
             except Exception as e_:                  # the extra columns are tags: a failure never stops the base intermarket values
                 warnings.warn(f"INTERMARKET extras failed: {e_!r}", RuntimeWarning)
-    return _IM
+    return _IM[key]
 
 
 def _evening(df: pd.DataFrame, d) -> pd.DataFrame:

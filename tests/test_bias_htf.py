@@ -404,7 +404,7 @@ def test_intermarket_flags_use_prior_sessions_only(monkeypatch):
     spx = 4000 * np.cumprod(1 + rng.normal(0, 0.01, 120))
     ndx = spx * 3 * np.cumprod(1 + rng.normal(0, 0.002, 120))
     monkeypatch.setattr(BH, "_IMD", {"DXY": mk(dxy), "TNX": mk(tnx, 0.02), "GSPC": mk(spx, 5), "NDX": mk(ndx, 5)})
-    p = Params()
+    p = Params(im_source="yahoo")                              # the injected frames are keyed by the Yahoo name
     last = days[-1].date()
     assert BH.im_flags(last, p)["dxy_hi"] is False             # day D's own close (the spike) is not read
     nxt = (days[-1] + pd.Timedelta(days=1)).date()

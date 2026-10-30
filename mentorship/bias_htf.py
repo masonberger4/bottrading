@@ -1226,26 +1226,37 @@ def oi_change(oi: pd.Series | None, day, days: int = 10) -> float | None:
 
 
 # --------------------------------------------------------------------------------------------------------------
-# B19 / B17.5: intermarket values of PRIOR sessions from the free daily data (data/mentorship/yahoo)
+# B19 / B17.5: intermarket values of PRIOR sessions: Databento DX / ZN / ZB futures (Params.im_source="databento") or the free
+# Yahoo daily data (data/mentorship/yahoo, im_source="yahoo"); the S&P / Nasdaq decoupling always reads the Yahoo files
 # --------------------------------------------------------------------------------------------------------------
 
 YAHOO = Path("data/mentorship/yahoo")
 _IMD: dict = {}
 
 
-def _daily(name: str) -> pd.DataFrame | None:
-    if name in _IMD:
-        return _IMD[name]
-    f = YAHOO / f"{name}_1d.csv"
+def _daily(name: str, source: str = "yahoo", bond: str = "ZN") -> pd.DataFrame | None:
+    """Daily bars (date / open / high / low / close) by the Yahoo name. With source="databento" (Params.im_source), 'DXY' is the
+    DX futures (2019 onward) and 'TNX' the `bond` futures (ZN / ZB, 2016 onward) inverted to a yield direction
+    (databento_extra.py); 'GSPC' / 'NDX' always come from the Yahoo files."""
+    key = (name, source, bond) if source == "databento" and name in ("DXY", "TNX") else name
+    if key in _IMD:
+        return _IMD[key]
     out = None
-    if f.exists():
-        s = pd.read_csv(f)
-        s.columns = [c.lower() for c in s.columns]
-        s["date"] = pd.to_datetime(s["date"].astype(str).str[:10])
-        for k in ("open", "high", "low", "close"):
-            s[k] = pd.to_numeric(s[k], errors="coerce")
-        out = s.dropna(subset=["close"]).set_index("date").sort_index()
-    _IMD[name] = out
+    if key != name:
+        from .databento_extra import intermarket_daily
+        out = intermarket_daily(name, bond)
+        if out is not None:
+            out = out.dropna(subset=["close"]).sort_index()
+    else:
+        f = YAHOO / f"{name}_1d.csv"
+        if f.exists():
+            s = pd.read_csv(f)
+            s.columns = [c.lower() for c in s.columns]
+            s["date"] = pd.to_datetime(s["date"].astype(str).str[:10])
+            for k in ("open", "high", "low", "close"):
+                s[k] = pd.to_numeric(s[k], errors="coerce")
+            out = s.dropna(subset=["close"]).set_index("date").sort_index()
+    _IMD[key] = out
     return out
 
 
@@ -1261,20 +1272,21 @@ def im_flags(day, p) -> dict:
       decoupled   B17.5 (045 ~1:01:43; 046 ~1:06; 090 ~41:00): the S&P 500 and the Nasdaq 100 are out of step - the correlation of
                   their daily returns over the last p.decouple_days sessions is under p.decouple_corr, or the prior session's
                   returns have opposite signs and both exceed 0.2% [our interpretation]"""
-    key = (str(day), p.dxy_gate_days, p.bond_range_days, p.bond_range_frac, p.decouple_days, p.decouple_corr)
+    src, bond = getattr(p, "im_source", "yahoo"), getattr(p, "im_bond", "ZN")
+    key = (str(day), p.dxy_gate_days, p.bond_range_days, p.bond_range_frac, p.decouple_days, p.decouple_corr, src, bond)
     c = _IMD.setdefault("_flags", {})
     if key in c:
         return c[key]
     out = {}
     ts = pd.Timestamp(day)
-    x = _daily("DXY")
+    x = _daily("DXY", src, bond)
     if x is not None:
         x = x[x.index < ts]
         n = p.dxy_gate_days
         if len(x) > n + 2:
             hi = float(x.high.iloc[-1 - n:-1].max())
             out["dxy_hi"] = bool(x.close.iloc[-1] > hi and x.close.iloc[-1] > x.close.iloc[-2])
-    x = _daily("TNX")
+    x = _daily("TNX", src, bond)
     if x is not None:
         x = x[x.index < ts]
         n = p.bond_range_days

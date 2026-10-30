@@ -11,6 +11,7 @@ The API key is read from the DATABENTO_API_KEY user environment variable (never 
 
     python -m mentorship.databento_data --quote          # cost only, spends nothing
     python -m mentorship.databento_data --buy ES NQ      # download (spends credit)
+    python -m mentorship.databento_data --build ES NQ YM # rebuild the CSVs (2016-18 history from data/databento_extra joined)
 """
 from __future__ import annotations
 
@@ -82,13 +83,26 @@ def back_adjust(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def build(s: str) -> pd.DataFrame:
+def build(s: str, history: bool = True) -> pd.DataFrame:
+    """The main 2019-onward ES.v.0 / NQ.v.0 / YM.v.0 file, with `history` the 2016-2018 front-month bars from
+    data/databento_extra (databento_extra.minute_history) joined in front of it, so the engine loads January 2016 to now.
+    Back-adjusting runs over the joined series: a roll only shifts the bars BEFORE it, so 2019-onward prices are unchanged."""
     import databento as db
     raw = DATA / "databento" / f"{s}_ohlcv1m.dbn.zst"
     df = db.DBNStore.from_file(str(raw)).to_df()
     df.index = pd.DatetimeIndex(df.index).tz_convert(NY)
     df = df[["open", "high", "low", "close", "volume", "instrument_id"]].sort_index()
     df = df[~df.index.duplicated(keep="last")]
+    if history:
+        from .databento_extra import minute_history
+        old = minute_history(s)
+        if old is not None:
+            df = pd.concat([old[old.index < df.index[0]], df])
+    return _write(s, df)
+
+
+def _write(s: str, df: pd.DataFrame) -> pd.DataFrame:
+    """Raw front-month bars -> the raw CSV, the back-adjusted 1-minute and 5-minute CSVs."""
     df.to_csv(DATA / f"{s}_1min_dbraw.csv")
     df = back_adjust(df)
     g = df.groupby(df.index.floor("5min"))
@@ -103,16 +117,32 @@ def build(s: str) -> pd.DataFrame:
     return df
 
 
+def extend_2016(s: str) -> pd.DataFrame:
+    """Prepend the 2016-18 front-month bars (databento_extra.minute_history) to the 2019-onward raw CSV, then rebuild
+    the raw, back-adjusted 1-minute and 5-minute files. Needs no credit."""
+    from .databento_extra import minute_history
+    cols = ["open", "high", "low", "close", "volume", "instrument_id"]
+    old = pd.read_csv(DATA / f"{s}_1min_dbraw.csv", index_col=0)
+    old.index = pd.to_datetime(old.index, utc=True).tz_convert(NY)
+    ext = minute_history(s)
+    df = pd.concat([ext[cols], old[cols]]).sort_index()
+    df = df[~df.index.duplicated(keep="last")]
+    return _write(s, df)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quote", action="store_true")
     ap.add_argument("--buy", nargs="*")
+    ap.add_argument("--extend2016", nargs="*")
     a = ap.parse_args()
     if a.quote:
         for s, v in quote().items():
             print(s, f"${v:.2f}")
     if a.buy:
         buy(a.buy)
+    for s_ in a.extend2016 or []:
+        extend_2016(s_)
 
 
 if __name__ == "__main__":
