@@ -1022,8 +1022,8 @@ def test_new_switch_defaults_and_validation():
 
 
 def test_htf_kw_and_gap_plumbing_unchanged_at_defaults():
-    assert B.htf_kw(Params()) == {"c2_dir": True}                                          # unchanged at the built values (cache keys!)
-    assert B.table_kw(Params()) == {"c2_dir": True, "balance_tf": "own"}
+    assert B.htf_kw(Params()) == {"c2_dir": True, "vi_wick_overlap": False}                # unchanged at the built values (cache keys!); bodies-only VI default
+    assert B.table_kw(Params()) == {"c2_dir": True, "balance_tf": "own", "vi_wick_overlap": False}
     assert B.htf_kw(Params(tf_lookback={"D": 100}))["tf_lookback"] == {"D": 100}
     assert B.hist_days(Params()) == 61
 
