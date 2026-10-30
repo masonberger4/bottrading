@@ -1035,8 +1035,8 @@ def test_new_switch_defaults_and_validation():
 
 
 def test_htf_kw_carries_the_array_switches():
-    assert B.htf_kw(Params()) == {"c2_dir": True}                                          # unchanged at the built values (cache keys!)
-    assert B.table_kw(Params()) == {"c2_dir": True, "balance_tf": "own"}
+    assert B.htf_kw(Params()) == {"c2_dir": True, "vi_wick_overlap": False}                # unchanged at the built values (cache keys!); bodies-only VI default
+    assert B.table_kw(Params()) == {"c2_dir": True, "balance_tf": "own", "vi_wick_overlap": False}
     kw = B.htf_kw(Params(nwog_cfd_src="monday_0930", void_rt_ob=True))
     assert kw["nwog_cfd_src"] == "monday_0930" and kw["void_rt_ob"] is True
     tk = B.table_kw(Params(single_pass_draw=True, htf_ob_ltf_drill=True, balance_tf="own"))
