@@ -514,3 +514,16 @@ def test_pre_owner_switches_reproduce_the_old_engine():
     t = B.run(df, 5, "ES", p)
     assert len(t) == 23 and round(t.net.sum(), 2) == 4693.52
     assert list(t.entry_time.astype(str).str[:16])[:3] == ["2024-01-09 10:25", "2024-01-10 15:30", "2024-01-11 10:00"]
+
+
+DBN = {s: Path(f"data/databento/{s}_ohlcv1m.dbn.zst") for s in ("ES", "NQ", "YM")}
+
+
+@pytest.mark.skipif(not all(p.exists() for p in DBN.values()), reason="no raw Databento 1m files on disk")
+@pytest.mark.parametrize("sym", ["ES", "NQ", "YM"])
+def test_each_year_2016_to_2025_has_full_1m_coverage(sym):
+    """Every calendar year 2016-2025 must carry more than 300k 1-minute bars (about 1 year of RTH+ETH)."""
+    df = B.load(sym, 1, source="databento")
+    counts = df.groupby(df.index.year).size()
+    for y in range(2016, 2026):
+        assert counts.get(y, 0) > 300_000, (sym, y, int(counts.get(y, 0)))

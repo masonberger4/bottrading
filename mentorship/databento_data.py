@@ -118,16 +118,10 @@ def _write(s: str, df: pd.DataFrame) -> pd.DataFrame:
 
 
 def extend_2016(s: str) -> pd.DataFrame:
-    """Prepend the 2016-18 front-month bars (databento_extra.minute_history) to the 2019-onward raw CSV, then rebuild
-    the raw, back-adjusted 1-minute and 5-minute files. Needs no credit."""
-    from .databento_extra import minute_history
-    cols = ["open", "high", "low", "close", "volume", "instrument_id"]
-    old = pd.read_csv(DATA / f"{s}_1min_dbraw.csv", index_col=0)
-    old.index = pd.to_datetime(old.index, utc=True).tz_convert(NY)
-    ext = minute_history(s)
-    df = pd.concat([ext[cols], old[cols]]).sort_index()
-    df = df[~df.index.duplicated(keep="last")]
-    return _write(s, df)
+    """Rebuild the raw, back-adjusted 1-minute and 5-minute files from the raw 2019-onward .dbn.zst plus the
+    2016-18 front-month bars (via build). Never reads the existing CSV, so a stale CSV cannot leak into the build.
+    Needs no credit."""
+    return build(s, history=True)
 
 
 def main():
