@@ -378,9 +378,15 @@ def ifvg_filter(ctx, sd, sw, gaps, i, p):
     return out
 
 
-def ifvg_stop(sd, g, entry: float, stop: float, p, i: int | None = None):
+def ifvg_stop(sd, g, entry: float, stop: float, p, i: int | None = None, tf: int | None = None):
     """M10 / A8 entry and stop for an inversion FVG: ifvg_entry "ce"; ifvg_depth (no prior pass ->
-    the far edge, else the CE); ifvg_stop_pts beyond the CE."""
+    the far edge, else the CE); ifvg_stop_pts beyond the CE. `tf` = the IFVG's timeframe in minutes (ifvg_stop="by_tf")."""
+    mode, pts = p.ifvg_stop, p.ifvg_stop_pts
+    if mode == "by_tf":                      # OA1029 Q98: daily+ -> CE + pts (3.0 when unset); under 1h -> the whole IFVG; 1h-4h -> CE as built [our interpretation]
+        if tf is not None and tf >= 1440:
+            mode, pts = "ce", (pts or 3.0)
+        else:
+            mode = "far" if tf is None or tf < 60 else "ce"
     ce = (g.top + g.bottom) / 2
     if p.ifvg_entry == "ce":
         entry = ce
@@ -396,9 +402,9 @@ def ifvg_stop(sd, g, entry: float, stop: float, p, i: int | None = None):
         orig = g.src + 1                     # the original gap's third candle
         ps = L.ifvg_passes(sd.h, sd.l, g.top, g.bottom, orig, g.i)
         stop = (g.bottom if ps == "none" else ce) - p.pad
-    if p.ifvg_stop_pts:
-        stop = ce - p.ifvg_stop_pts * p.es_pt - p.pad
-    if p.ifvg_stop == "far":                 # caption-gap M10-ifvg-stop-below-whole-ifvg (067 ~01:19:07): "my stop loss is below the inversion fair value gap" - the whole IFVG, never tightened inside it
+    if pts:
+        stop = ce - pts * p.es_pt - p.pad
+    if mode == "far":                 # caption-gap M10-ifvg-stop-below-whole-ifvg (067 ~01:19:07): "my stop loss is below the inversion fair value gap" - the whole IFVG, never tightened inside it
         stop = g.bottom - p.pad
         S._ES2.hit("ifvg_stop_far")
     if stop >= entry:
@@ -871,6 +877,10 @@ def _cisd_ob(ctx, sd, sw, i, p, session, risk_mult):
         return None                                 # arm on the CISD bar itself, once (open mode: or on a later bar while the wait below holds)
     rng_hi = float(h[e:i + 1].max())
     entry = top if open_mode else min((sw["ext"] + rng_hi) / 2, ob.top)
+    if open_mode and p.cisd_open_discount and entry > (sw["ext"] + rng_hi) / 2 + 1e-9:
+        sw["cisd_open_wait"] = fl                   # OA1029 Q90: open_ref is still in premium of the post-CISD range - not armed yet (the CISD is not consumed; a later bar arms it once the range puts it in discount)
+        S._ES1.hit("cisd_open_premium")
+        return None
     if open_mode and entry >= c[i]:
         sw["cisd_open_wait"] = fl                   # review fix (A12-cisd-open-buy-level): the CISD bar closed back at / under the open - the buy limit would sit above the market; the CISD is NOT consumed, the order is armed on the first later bar that closes above the open (a body close under the run low voids it, floor)
         S._ES1.hit("cisd_open_wait")

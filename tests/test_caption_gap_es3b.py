@@ -10,6 +10,21 @@ import pytest
 
 from mentorship import backtest as B, es3, sm2, strategy as S, study
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
+    bk_depth: str = "ce"                    # OA1029 Q11 / Q113 / Q171: the pre-build values these path tests were written for
+    bk_bpr_ce: bool = False
+    htf_gap_final: str = "ce"
+    objective_done_pm: str = "off"
+    tgif_exits: object = False              # OA1029 Q132 / Q47 / Q98 / Q23 / D4
+    dagger_level: str = "ce"
+    ifvg_stop: str = "ce"
+    lc_retry_until: int = 0
+    htf_resist_tfs: tuple = ("15m", "30m", "1h", "4h", "D")
 
 from test_levels_detectors import ES
 from test_caption_gap_ld1 import ENTRY, SYN

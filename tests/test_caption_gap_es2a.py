@@ -10,7 +10,14 @@ import pandas as pd
 import pytest
 
 from mentorship import es2, levels as L, setups as SM, sm2, strategy as S, study
+from mentorship.study import OA1029_OLD
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
 
 from test_review_fixes import A_LOCK, A_ROWS, B_POST, B_ROWS, BASE, D0, day, history, run as rf_run
 from test_caption_gap_sm1a import sd_of, stub
@@ -29,7 +36,7 @@ KNOBS = ("ob_session_windows", "ob_grade_tol", "gap_risk_near_pts", "bpr_adj_pts
 # --- defaults / validation ------------------------------------------------------------------------------------------------------------
 
 def test_new_switch_defaults_and_validation():
-    p = Params()
+    p = Params(**OA1029_OLD)                 # the built values; the OA1029 defaults are checked in test_owner_answers_oa1029.py
     assert (p.ob_session_filter, p.ob_session_windows, p.ob_grade_mult, p.ob_grade_tol, p.gap_risk, p.gap_risk_near_pts, p.rb_ctx_mult, p.entry_fvg_min_tf, p.ob_mt_two_sided, p.stop_bpr_mt,
             p.bpr_adj_pts) == (False, ((120, 300), (420, 660)), (1.0, 1.0), 0.10, "off", 2.0, 1.0, 1, False, False, 1.0)
     assert (p.fvg_wick_ce, p.ob_mt_if_swept, p.bz_higher_array, p.bz_higher_pts, p.fri_shallow, p.vi_ob_add, p.vi_ob_entry, p.vi_add_early_pts, p.close_proximity, p.close_prox_windows, p.vi_first,
@@ -638,21 +645,22 @@ ADD_ROWS = A_ROWS[:5] + [(100.3, 100.9, 100.2, 100.8), (100.8, 101.6, 100.7, 101
 
 def add_run(**kw):
     """Scenario A + two FVG adds (101.3 at 10:10, 102.6 at 10:30), no partials before T; risk 0.3 % so the 1.3 % cap does not bind the first add."""
-    p = Params(**{**BASE, "adds": (0.5, 0.33, 0.17), "ob_adds": False, "draw_lock_partials": False, "min_risk_pts": 0.5, "risk_pct": 0.003, **kw})
+    p = Params(**{**BASE, "adds": (0.5, 0.33, 0.17), "ob_adds": False, "draw_lock_partials": False, "min_risk_pts": 0.5, "risk_pct": 0.003,
+                  "add_ladder": "", "ob_need_narrative": False, **kw})   # pre-OA1029 adds and OB rule
     tr, *_ = rf_run(day(ADD_ROWS, spike=True), history(), p, A_LOCK)
     return tr
 
 
 def test_add_size_fracs_presets():
-    p = Params(es_pt=1.0)
+    p = Params(es_pt=1.0, add_ladder="")                                  # the pre-OA1029 adds (631 is the default now)
     assert es2.add_size_fracs(p) == p.adds == (0.5, 0.33, 0.17)
-    assert es2.add_size_fracs(Params(add_sizes="equal_or_less", add_max_n=2)) == (1.0, 1.0)
-    assert es2.add_size_fracs(Params(add_sizes="equal_013")) == (1.0, 0.5, 0.5)
+    assert es2.add_size_fracs(Params(add_sizes="equal_or_less", add_max_n=2, add_ladder="")) == (1.0, 1.0)
+    assert es2.add_size_fracs(Params(add_sizes="equal_013", add_ladder="")) == (1.0, 0.5, 0.5)
     assert es2.add_size_fracs(Params(add_ladder="631")) == (0.5, 0.17)
     assert es2.add_size_fracs(Params(add_ladder="6421")) == (0.67, 0.33, 0.17)
     assert es2.add_size_fracs(Params(add_ladder="6321")) == Params().adds                       # 6/3/2/1 = today's adds
     assert es2.add_size_fracs(Params(add_ladder="067", add_sizes="equal_or_less")) == (0.625, 0.625, 0.25, 0.625, 0.625)        # the ladder wins
-    assert not es2.sizing_on(Params()) and es2.sizing_on(Params(add_ladder="631")) and es2.sizing_on(Params(add_sizes="equal_013"))
+    assert not es2.sizing_on(Params(add_ladder="")) and es2.sizing_on(Params()) and es2.sizing_on(Params(add_ladder="631")) and es2.sizing_on(Params(add_sizes="equal_013"))
     assert es2.apply_sizing(Params(add_ladder="631")).adds == (0.5, 0.17)
     assert es2.apply_sizing(Params(add_ladder="631", adds=())).adds == ()                        # a size switch never turns the pyramid on
     assert es2.apply_sizing(Params()) is not None
@@ -928,7 +936,8 @@ VI_OB = A_ROWS[:5] + [(100.3, 100.9, 100.2, 100.8), (101.4, 101.9, 100.9, 101.8)
 
 
 def vi_run(rows, **kw):
-    p = Params(**{**BASE, "adds": (0.5, 0.33, 0.17), "ob_adds": False, "draw_lock_partials": False, "min_risk_pts": 0.5, "risk_pct": 0.003, **kw})
+    p = Params(**{**BASE, "adds": (0.5, 0.33, 0.17), "ob_adds": False, "draw_lock_partials": False, "min_risk_pts": 0.5, "risk_pct": 0.003,
+                  "add_ladder": "", "ob_need_narrative": False, **kw})   # pre-OA1029 adds and OB rule
     tr, *_ = rf_run(day(rows, spike=True), history(), p, A_LOCK)
     return tr
 

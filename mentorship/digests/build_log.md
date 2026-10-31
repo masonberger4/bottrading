@@ -3741,3 +3741,41 @@ times_sessions_macros#66 T3-london-then-ny-reposition | done | `london_repositio
 - silver_bullet#8: B23's average next-10-day return table is NOT built; an unknown seasonal side (`season_side` = 0) blocks the supercharge (stricter than the spec) [our interpretation].
 - stops_sizing#50: the legs are sized on the original entry (the shallower leg risks slightly more than the cap computes; `tr.shares` is the shallow leg, the deeper leg is in `Trade.adds`). Spec test names (`test_sb_split_limits` exists) for the 18 already-built items are not used: the coverage is `test_silver_bullet.py::test_gap<N>_*` (gap1 ifvg / ifvg_market / reaper, gap2 room overshoot, gap3 room + org chop, gap6 bpr_exclude, gap7 rebalance, gap8 supercharge, gap9 ob entry, gap10 confluence, gap13 premise, gap14 moc / max_per_window / adds, gap15 reverse, gap16 fvg_pick, gap17 cancel threshold, gap18 lrc, gap19 stop modes, gap20 simple, gap21 cons wait, gap22 nwog expansion). silver_bullet#9 `sb_ob_min_pts` now has the study variant `M3-sb-ob-entry`.
 - Look-ahead: the hand-made-book group never fired sb_t2 / flush / as_add (no confluence there). New tests: `test_look_ahead_run_day_sb_t2_trail_flush_supercharge` (run_day full vs cut after every second bar with a `Conf` stand-in: asserts the tags `sb_t2_htf_fvg`, `sb_supercharge`, a non-None `post_sb_flush` fire, and entries / stops / exits agree), `test_sb_as_add_decision_uses_only_what_was_known_at_the_fill`, `test_sb_as_add_respects_the_shared_add_caps`, `test_review_fixes_rev_room_inert_warnings_and_day_level_stops`. `sb_as_add` cannot be reached by a synthetic run_day day (the main AM trade and the SB are opposite sides on every scenario), hence the as-add decision test on fixed trades.
+
+## Owner answers 2026-10-29 (OA1029)
+
+Mase approved every recommendation in owner_questions_settled.md (2026-10-29 15:18 UTC). Every changed default keeps its old value as a switch value: `study.OA1029_OLD` (merged into `PRE_OWNER` and `CURRENT`, so the golden regression still reproduces the old engine) and one study variant per item, `OA1029_<switch>_old`. Tests: `tests/test_owner_answers_oa1029.py` (new defaults, old values, variants, unit tests, truncation tests).
+
+| Item | Switch | New default | Old value (switch) |
+|---|---|---|---|
+| Q11 | `bk_depth` / `bk_bpr_ce` | "any_open" / True | "ce" / False |
+| Q92 | `ob_need_narrative` | True | False |
+| Q94 | `add_ladder` | "631" | "" |
+| Q113 | `htf_gap_final` | "far_edge" (htf_gap_gate stays False) | "ce" |
+| Q132 | `tgif_exits` | "066" (acts only on a TGIF day model: `tp4.tgif066`) | False |
+| Q142 | `hold_through_0830` | True (no_entry_0825 stays True) | False |
+| Q171 | `objective_done_pm` | "reversal_only" | "off" |
+| Q186 | `tgif_window` | "off" (tgif stays off) | "pm" |
+| Q228 | `pd3_result` | "neutral" (table config only with flip_pd3) | "flip" |
+| Q270 | `org_with_bias` | True | False |
+| Q285 | `htf_monthly_series` | "raw" | "adjusted" |
+| Q238 | `htf_bias_pools` | True | False |
+| D2 / Q19 | `release_ob_entry` (N5b) | True (N1 / N5a stay off) | False |
+| Q47 | `dagger_level` | "ltf" | "ce" |
+| Q81 | `lc_mode` / `lc_adr_mult` / `lc_retrace` | already "failure_swing" / 1.0 / 0.25 | - |
+| Q90 | `cisd_ob_px` + new `cisd_open_discount` | "open", armed only while open_ref <= EQ of the post-CISD range | "eq" (discount check False = the first "open" build) |
+| Q98 | `ifvg_stop` | "by_tf": daily+ "ce" with 3.0 pts, under 1h "far", 1h-4h "ce" as built [our interpretation] | "ce" |
+| Q23 | new `lc_retry_until` | 720 (the London-close retry slot keeps the AM open to 12:00) | 0 = am[1] |
+| D4 / Q131 | `htf_resist_tfs` | 5m added (bumps under htf_resist_mode="bump") | ("15m", "30m", "1h", "4h", "D") |
+| Q71 | new `ifvg_targets_after` | "cisd" (the real A12 CISD, `sm5.a12_cisd_bar`) | "mss" |
+| Q236 / Q242 | new `qshift_broken` | "leg" (the low / high that started the leg to the new 60-session extreme) [our interpretation] | "literal" (latest STL / STH) |
+| Q55 | new `ifvg_sym_ym` | True (YM must agree too when the YM book is loaded) | False |
+| Q226a | `dxy_filter` | "tag" (DXY from Databento) | "off" |
+
+Study only (defaults unchanged): `OA1029_D1_stop_three_pd` (D1 / Q103), `OA1029_D3_counter_trend` (D3 / Q226b); Q92's effect is `OA1029_ob_need_narrative_old` vs the default. Not built: Q175 (macro_risk_dates - see the coverage-gap build), Q245 / Q148 (COT / OI - data now on disk). Unchanged on purpose: Q1 `breaker_candle="extreme_close"`, Q6 `balance_tf="own"`.
+
+Effect note: Q92 removes most trades (ES 5m Dec 2022 - Jan 2023: 0 trades vs 20 with the old value). Tests that exercise other rules pin the old value (a `Params` subclass at the top of the test file, commented).
+
+Fixes found while testing: `Params()` raised inert-switch warnings for OA1029 defaults whose parent switch is off (the inert checks now fire only when the switch leaves its default); `pd3_result="neutral"` wrote the table config without flip_pd3; the 066 TGIF exits switched the target hooks on every day; the 631 ladder turned the mohawk add on with the pyramid off (`es3._ES2_fracs` returns () when `adds` is empty).
+
+Review Q260 (bias_htf#2/7 round-2 edits in f8e921b): no look-ahead; the `htf_after_draw="reverse"` inert warning was wrong (it acts without objective_neutral) and is removed. Owner questions: `tier_stl_mode` default "last2" (the spec) vs the old two-of-four; `tug_required` now reads `tug_spec` with no switch back to `tug`.

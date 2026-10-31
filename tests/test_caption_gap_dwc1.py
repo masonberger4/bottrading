@@ -11,8 +11,19 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from mentorship.study import OA1029_OLD
 from mentorship import backtest as B, bias_day as BD, calendar as C, daycontext as DW, dwc1 as D1, nct2 as N2, study, strategy as S
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
+    bk_depth: str = "ce"                    # OA1029 Q11 / Q113 / Q171: the pre-build values these path tests were written for
+    bk_bpr_ce: bool = False
+    htf_gap_final: str = "ce"
+    objective_done_pm: str = "off"
 
 from test_review_fixes import BASE, D0, A_ROWS, day, frame, history  # noqa: E402  (shared scenario builders)
 from test_entries_stops import _no_look_ahead  # noqa: E402
@@ -103,6 +114,8 @@ def test_defaults_and_validation():
            "macro_risk_dates": "", "tgif_strict": False, "mo_overdue": False, "mon_how": "off", "wk_push_range": False, "wk_profile": "off", "iw_reversal_watch": False,
            "iw_no_measured": False, "three_day_small": False, "day_profile": "off", "day_profile_gate": False, "n8_use_overnight": True}
     for k, v in off.items():
+        if k in OA1029_OLD:                     # OA1029 moved this default (checked in test_owner_answers_oa1029.py)
+            continue
         assert getattr(p, k) == v, k
     assert p.august_from_day == 1                                         # N7-august: the whole month (the default was already 1)
     assert p.dw1_hist == 0 and Params(season_windows="tag").dw1_hist == 270 and Params(mo_overdue=True).dw1_hist == 270

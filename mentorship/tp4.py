@@ -118,16 +118,21 @@ def raw_on(p) -> bool:
     return bool(p.weekly_hl_rung or p.proj_breaker_multi or p.pm_ladder_am or p.skip_balanced or p.ob_target_tod)
 
 
+def tgif066(p) -> bool:
+    """OA1029 Q132: the 066 TGIF exits are the default, but they act only on a TGIF day model (tgif / tgif_model / tgif_zone on)."""
+    return p.tgif_exits == "066" and bool(p.tgif or p.tgif_model or p.tgif_zone)
+
+
 def late_on(p) -> bool:
     return bool(p.collapse_adr_frac > 0 or p.runner_frac > 0 or p.capture_zone or p.runner_at_half or p.runner_htf or p.gap_speed_bump_partial > 0 or p.partial_trigger
                 or p.eq60_rung or p.subrange_first or p.confluence_weight or p.void_ladder or p.mm_first > 0 or p.fulcrum_exit or p.lrlr_ceiling or p.lrlr_zone or p.consol_eq_target
                 or p.consol_no_runner or p.same_range_t1 or p.tf_target_cap or p.void_draw or p.void_rearm or p.rr_month_gate or p.ladder_kind or p.m1450_targets
-                or p.min_rr_final > 0 or p.strength_hold or p.tgif_exits == "066" or p.tgif_reentry_pm or p.ob_target_tod or p.target_stage)
+                or p.min_rr_final > 0 or p.strength_hold or tgif066(p) or p.tgif_reentry_pm or p.ob_target_tod or p.target_stage)
 
 
 def any_on(p) -> bool:
     """True when the state dict of _finish_order is needed (every hook)."""
-    return bool(raw_on(p) or late_on(p) or p.tgif_exits == "066")
+    return bool(raw_on(p) or late_on(p) or tgif066(p))
 
 
 # --- 2. helpers -------------------------------------------------------------------------------------------------------------------------------------

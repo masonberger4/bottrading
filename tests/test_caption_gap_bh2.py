@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from mentorship.study import OA1029_OLD
 from mentorship import backtest as B, bh2 as BH2, bias_htf as BX, htf, levels as L, study
 from mentorship.strategy import Params
 
@@ -77,6 +78,8 @@ def test_defaults_and_validation():
     for f in NEW_FIELDS:
         assert f in Params.__dataclass_fields__, f
     for k, v in OFF.items():
+        if k in OA1029_OLD:                     # OA1029 moved this default (checked in test_owner_answers_oa1029.py)
+            continue
         assert getattr(p, k) == v, k
     assert (p.scalp_week_risk, p.q_window_lo, p.q_window_hi, p.q_obj_days, p.qshift_strong_pct, p.iof_w_risk, p.iof_w_weeks, p.soft_carry_risk, p.release_pts, p.fast_draw_mult) == (0.5, 40, 60, 84, 0.10, 0.5, 10, 0.5, 1.0, 1.5)
     assert (p.pd3_disp_adr, p.consol_chase_frac, p.range_no_bias_pct, p.eq_tie_frac, p.raid_profile_n, p.flip_max_days, p.dsmt_days, p.raid_ratio) == (1.5, 0.25, 0.62, 0.10, 2, 126, 18, 2.0)
@@ -119,7 +122,7 @@ def test_table_configuration_names_what_the_switches_need():
     assert set(x["b2"]) >= {"qd", "sibi", "ad", "fd", "tier", "fl", "cd"} and x["b2"]["fl"] == {"pd3n": 1.5, "pd3log": 1} and x["obj"] == 1 and x["wk"] == 1 and x["pr"] == 1
     assert x["b1"]["dr"] == [5, "close"]                                             # consol_dir reads the daily range columns
     y = json.loads(Params(eq_tiebreak=True, ipda_draw_side=True, qshift_bias=True, iof_weekly_weight=True, oneway_n=4, htf_bias_tf="W").bx)
-    assert y["b2"]["brk"] == [0.1] and y["b2"]["qs2"][2] == 1 and y["b2"]["ow"] == 4 and y["b2"]["btf"] == [0, 1, 0] and y["b2"]["iofw"] == [10, 2]
+    assert y["b2"]["brk"] == [0.1] and y["b2"]["qs2"][2] == 1 and y["b2"]["ow"] == 4 and y["b2"]["btf"] == [1, 1, 0] and y["b2"]["iofw"] == [10, 2]
     assert json.loads(Params(raid_profile_bias=True, raid_profile_n=3).bx)["b2"]["rp"] == 3
     assert Params(soft_carry=True, wick_ce_60m=True).bx == ""                       # engine-only switches add nothing to the table
     assert json.loads(Params(bias_neutral="scalp_week").bx) == {"wk": 1}             # scalp_week reads the weekly draw columns (a week without a weekly draw)
@@ -696,7 +699,7 @@ def test_inert_switch_warnings():
         return " ".join(str(x.message) for x in w if "inert" in str(x.message))
     assert "htf_bias='off'" in warns(qshift_bias=True) and "htf_bias='off'" in warns(htf_bias_tf="W")
     assert not warns(qshift_bias=True, htf_bias="combo")
-    assert "flip_pd3" in warns(pd3_result="neutral", htf_bias="flip") and not warns(pd3_result="neutral", htf_bias="flip", flip_triggers=("ob_mt", "flip_pd3"))
+    assert "flip_pd3" in warns(pd3_result="flip", htf_bias="flip") and not warns(pd3_result="flip", htf_bias="flip", flip_triggers=("ob_mt", "flip_pd3"))   # OA1029: "neutral" is the default now
     assert "htf_bias='flip'" in warns(flip_terminus=True, htf_bias="combo") and not warns(flip_terminus=True, htf_bias="flip")
     assert "inside_bisi" in warns(inside_bisi_release=True) and not warns(inside_bisi_release=True, sloppy_tests=("inside_bisi",))
     assert "draw lock" in warns(soft_carry=True, draw_lock="off") and not warns(soft_carry=True)
@@ -710,8 +713,8 @@ def test_inert_warnings_round2():
         return " ".join(str(x.message) for x in w if "inert" in str(x.message))
     assert "tug_required" in warns(tug_required=True) and not warns(tug_required=True, tier_regime_gate=True)
     assert "ipda_draw_side" in warns(ipda_draw_side=True) and not warns(ipda_draw_side=True, ipda_next=True)
-    assert "objective_neutral" in warns(htf_after_draw="reverse", htf_bias="combo") and not warns(htf_after_draw="reverse", htf_bias="combo", objective_neutral="both")
-    assert "htf_bias_pools" in warns(htf_bias_pools=True) and not warns(htf_bias_pools=True, htf_bias="combo", htf_bias_tf="M")
+    assert "htf_after_draw" not in warns(htf_after_draw="reverse", htf_bias="combo")   # review Q260: it acts without objective_neutral (flip column, PM lock)
+    assert "htf_bias_pools" in warns(htf_bias_pools=False) and not warns(htf_bias_pools=False, htf_bias="combo", htf_bias_tf="M")   # OA1029: True is the default now
 
 
 def test_after_draw_reverse_writes_the_flip_state():
@@ -739,5 +742,5 @@ def test_tier_stl_mode_last2_vs_two_of_four():
 def test_btf_cfg_names_pools_and_rank():
     c = json.loads(Params(htf_bias_tf="M", htf_bias_pools=True, htf_rank_tf=True).bx)["b2"]["btf"]
     assert c == [1, 1, 1]
-    assert json.loads(Params(htf_rank_tf=True).bx)["b2"]["btf"] == [0, 0, 1]                      # rank only: no bias columns
+    assert json.loads(Params(htf_rank_tf=True).bx)["b2"]["btf"] == [1, 0, 1]                      # rank only: no bias columns (pools on by default, OA1029 Q238)
     assert "btf" not in (json.loads(Params().bx or "{}").get("b2") or {})

@@ -572,10 +572,15 @@ def ifvg_hunt_ok(ctx, sd, i: int, p, tags: dict) -> bool:
 
 def ifvg_target_levels(ctx, sd, sw, i: int, p, above: float) -> list:
     """M10-ifvg-footholds-buy-program, targets part: after the CISD / MSS (sw["broke"] set) the bearish FVGs of the prior down leg that are still open (no high went into them since) are buy-side
-    delivery targets first - near edge and CE: [(level, "array")] above `above` (side space)."""
-    if sw.get("broke") is None:
-        return []
+    delivery targets first - near edge and CE: [(level, "array")] above `above` (side space). OA1029 Q71: ifvg_targets_after="cisd" (default) waits for the real
+    A12 CISD (a high 1 tick through the open of the down-close run into the sweep low, by bar i); "mss" = the MSS stand-in as first built."""
     e = int(sw["ext_i"])
+    if p.ifvg_targets_after == "cisd":
+        if a12_cisd_bar(sd, e, i, p) is None:
+            return []
+        hit("ifvg_targets_cisd")
+    elif sw.get("broke") is None:
+        return []
     out = []
     for z in sd.opposing():
         if z.kind != "bear" or z.i > e + 1 or z.i < max(ctx.start - 1, 0) or z.bottom <= above:
@@ -586,6 +591,19 @@ def ifvg_target_levels(ctx, sd, sw, i: int, p, above: float) -> list:
     if out:
         hit("ifvg_targets")
     return out
+
+
+def a12_cisd_bar(sd, e: int, i: int, p):
+    """OA1029 Q71: the A12 CISD bar (side space) - the first bar after the sweep low `e`, up to bar i, whose high trades 1 tick through the open of the first
+    (highest) candle of the down-close run into the low (A12-cisd-open-buy-level, 032 ~53:04); None when it has not printed yet."""
+    if i <= e:
+        return None
+    ob = L.order_block_blend(sd.o, sd.h, sd.l, sd.c, e - 5, e, "bull")
+    if ob is None:
+        return None
+    ref = float(sd.o[ob.src])
+    k = np.flatnonzero(sd.h[e + 1:i + 1] >= ref + p.tick - 1e-9)
+    return e + 1 + int(k[0]) if len(k) else None
 
 
 # --- 86 A4-bodies-hold-prev-day-50 ------------------------------------------------------------------------------------------------------------------

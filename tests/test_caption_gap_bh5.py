@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from mentorship.study import OA1029_OLD
 from mentorship import bh2 as BH2, bh5 as BH5, bias_htf as BX, htf, levels as L, study
 from mentorship.strategy import Params
 
@@ -38,6 +39,8 @@ def test_defaults_and_validation():
     for f in NEW_FIELDS:
         assert f in Params.__dataclass_fields__, f
     for k, v in OFF.items():
+        if k in OA1029_OLD:                     # OA1029 moved this default (checked in test_owner_answers_oa1029.py)
+            continue
         assert getattr(p, k) == v, k
     assert (p.iof_follow_days, p.swing_min_days, p.mega_min_days, p.nwog_eq_band, p.confl_pts, p.pm_flip_adr, p.pm_flip_days, p.stack_n, p.fast_week_adr, p.raid_run_days, p.stock_old_high_max_pct) == \
         (5, 10, 126, 0.10, 2.0, 0.25, 5, 3, 1.5, 3, 0.10)
@@ -75,7 +78,8 @@ def test_study_variants_exist_and_build():
                 warnings.simplefilter("ignore")
                 p = Params(**dict(FUT, **study.DECISIONS[k]))
             used |= {f for f in NEW_FIELDS if getattr(p, f) != getattr(Params(), f)}
-    assert (set(NEW_FIELDS) - KNOBS) <= used, sorted((set(NEW_FIELDS) - KNOBS) - used)
+    left = set(NEW_FIELDS) - KNOBS - set(OA1029_OLD)                         # OA1029 defaults: their old value is an OA1029_* variant
+    assert left <= used, sorted(left - used)
 
 
 # --- item 191: the up-close anchor ---------------------------------------------------------------------------------------------

@@ -11,7 +11,14 @@ import pandas as pd
 import pytest
 
 from mentorship import backtest as B, levels as L, setups as SM, sm2, strategy as S, study
+from mentorship.study import OA1029_OLD
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
 
 from test_levels_detectors import BASE, D0, ES, NY, day, ctx_for, history, prior_days, rth_day
 from test_review_fixes import B_POST, B_ROWS
@@ -34,7 +41,7 @@ def run_day(df, hs, p, **kw):
 
 
 def test_new_switch_defaults_and_validation():
-    p = Params()
+    p = Params(**OA1029_OLD)                 # the built values; the OA1029 defaults are checked in test_owner_answers_oa1029.py
     assert (p.nfp_release_fvg, p.nfp_release_fvg_min, p.nfp_release_fvg_add, p.post_news_continuation, p.post_news_run_pts, p.release_ob_entry) == \
         (False, 5, True, False, 5.0, False)
     assert (p.require_judas_news, p.judas_news_min, p.judas_news_tag, p.profile_two_session, p.pm_reversal_pool, p.pm_reversal_ltf_only,

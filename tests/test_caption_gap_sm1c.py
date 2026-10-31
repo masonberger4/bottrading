@@ -11,7 +11,14 @@ import pandas as pd
 import pytest
 
 from mentorship import backtest as B, sm2, strategy as S, study
+from mentorship.study import OA1029_OLD
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
 
 from test_levels_detectors import BASE, D0, ES, NY, day, history
 from test_review_fixes import B_POST, B_ROWS
@@ -472,7 +479,7 @@ def test_default_switches_leave_the_trades_unchanged(seed):
     for name, kw in GOLDEN_CFG.items():
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            t = B.run(x, 5, "RW", Params(**{**syn, **kw}), partner=y)
+            t = B.run(x, 5, "RW", Params(**{**syn, **OA1029_OLD, **kw}), partner=y)      # the pre-OA1029 engine the digests were taken on
         assert digest(t) == GOLDEN[(seed, name)], (seed, name)
 
 

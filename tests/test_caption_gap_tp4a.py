@@ -10,7 +10,14 @@ import pandas as pd
 import pytest
 
 from mentorship import levels as L, newscal, sm2, sm5, strategy as S, targets as TP, tp3, tp4, study
+from mentorship.study import OA1029_OLD
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
 
 from test_targets_partials import conf
 from test_caption_gap_tp2a import D0, P, flat, hist_days, mk, side
@@ -56,7 +63,7 @@ def L4(p, ctx, sd, keep, **o):
 # --- defaults / validation / study variants ---------------------------------------------------------------------------------------------------------------
 
 def test_new_switch_defaults_and_validation():
-    p = Params()
+    p = Params(**OA1029_OLD)                 # the built values; the OA1029 defaults are checked in test_owner_answers_oa1029.py
     assert (p.weekly_hl_rung, p.collapse_adr_frac, p.runner_frac, p.capture_zone, p.capture_n, p.runner_at_half, p.runner_htf, p.runner_htf_pts, p.runner_htf_steps, p.gap_speed_bump_partial, p.bump_max_pts,
             p.partial_trigger, p.r_ladder, p.r_be, p.eq60_rung, p.eq60_frac, p.subrange_first, p.confluence_weight, p.confluence_only, p.void_ladder, p.mm_first, p.fulcrum_exit, p.tgif_exits,
             p.tgif_reentry_pm, p.tgif_last_hour_cover) == (False, 0.0, 0.0, False, 3, False, False, 2.0, False, 0.0, 2.0, "", (), 0.0, False, 0.25, False, False, False, False, 0.0, "", False, False, False)

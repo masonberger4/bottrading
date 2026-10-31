@@ -264,6 +264,18 @@ PRE_OWNER = dict(htf_ob_anchor="extreme", ob_entry="post_mss", draw_lock="off", 
                  skip_post_holiday_am=False, london_adr_skip=0.0, friday_slow_split=False,
                  # silver_bullet package: the Silver Bullet draw list (PWH / PWL) and the cancel stay as they were
                  sb_pw_pools=False, sb_cancel_sticky=False)
+# owner answers 2026-10-29 (OA1029): the old value of every default changed by that build, so PRE_OWNER
+# still reproduces the pre-build engine; each one is also a study variant "OA1029_<switch>_old"
+OA1029_OLD = dict(bk_depth="ce", bk_bpr_ce=False, ob_need_narrative=False, add_ladder="", htf_gap_final="ce",
+                  hold_through_0830=False, objective_done_pm="off", tgif_window="pm", pd3_result="flip",
+                  org_with_bias=False, htf_monthly_series="adjusted", htf_bias_pools=False,
+                  release_ob_entry=False, tgif_exits=False, dagger_level="ce",
+                  ifvg_stop="ce", lc_retry_until=0,                      # stage 2: Q98, Q23, D4
+                  htf_resist_tfs=("15m", "30m", "1h", "4h", "D"), cisd_ob_px="eq",
+                  ifvg_targets_after="mss", qshift_broken="literal",
+                  ifvg_sym_ym=False, dxy_filter="off")
+PRE_OWNER.update(OA1029_OLD)
+CURRENT.update(OA1029_OLD)
 LEGACY_1PCT_2PCT = dict(risk_dollars=1000.0, max_total_risk=2000.0)   # E8 / owner #12 preset
 # setups_models review: the FVG-path variants need the FVG path to trade at all - post_mss with the
 # owner #9 lock and #7 cap produced 0 trades on ES 5m 2023H2, so those variants drop both too
@@ -3329,6 +3341,11 @@ _SB1_DECISIONS = {
     "M3-sb-supercharge-runner-seasonal": dict(SB_ONLY, sb_runner=True, sb_supercharge=True, sb_supercharge_seasonal=True),
 }
 DECISIONS.update(_SB1_DECISIONS)
+
+# owner answers 2026-10-29: one variant per changed default, back at its old value
+DECISIONS.update({f"OA1029_{k}_old": {k: v} for k, v in OA1029_OLD.items()})
+# ... and the study-only items (defaults unchanged): D1 / Q103 three-PD-array stop vs ob_mt, D3 / Q226b one counter trade after the locked draw
+DECISIONS.update({"OA1029_D1_stop_three_pd": dict(stop_mode="three_pd"), "OA1029_D3_counter_trend": dict(allow_counter_trend=True)})
 
 
 def osok_study(df, direction=None, **kw):

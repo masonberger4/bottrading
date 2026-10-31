@@ -501,6 +501,8 @@ def add_locations3(ctx, sd, pos, tr, i: int, p, arm) -> None:
 
 
 def _ES2_fracs(p) -> tuple:
+    if not p.adds:
+        return ()                                         # the pyramid is off: a size switch (add_ladder, the OA1029 631 default) never turns it on
     return _S()._ES2.add_size_fracs(p)
 
 

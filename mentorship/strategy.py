@@ -299,7 +299,7 @@ class Params:
     conf_breakers: bool = False          # confluence: breaker zones with inv = MT (slow on 1m data)
     # #7 opposing HTF FVG = resistance cap (Ep02.10, L9, X3f)
     htf_resist_cap: bool = True
-    htf_resist_tfs: tuple = ("15m", "30m", "1h", "4h", "D")
+    htf_resist_tfs: tuple = ("5m", "15m", "30m", "1h", "4h", "D")   # OA1029 D4 / Q131: 5m added (speed bumps under the default htf_resist_mode="bump"; with "cap" it caps too); old ("15m", "30m", "1h", "4h", "D")
     htf_resist_src: tuple = ("fvg",)     # "ob" / "gap" / "vi" / "breaker" as switches
     htf_resist_buffer_pts: float = 0.5   # exit this many ES pts before its near edge
     htf_resist_min_room: float = 0.0     # ES pts; 5 = owner #2's minimum room to the cap
@@ -1041,7 +1041,7 @@ class Params:
     tgif_zone_levels: tuple = (0.20, 0.225, 0.25, 0.30)    # from the extreme (week low incl. Sunday 18:00 to the high)
     tgif_cap: float = 0.30               # no target beyond 30%
     tgif_stand_down: float = 0.40        # 40%+ is reversal talk: no trade
-    tgif_exits: bool | str = False       # M14.4: 25/25/50 at the first three zone levels; caption-gap M14-tgif-management (066): "066" = L20 / L22.5 / L25 / L27.5 / L30 with 15/15/50/10/10 (targets_partials #4/4)
+    tgif_exits: bool | str = "066"       # M14.4: 25/25/50 at the first three zone levels; caption-gap M14-tgif-management (066): "066" = L20 / L22.5 / L25 / L27.5 / L30 with 15/15/50/10/10 (targets_partials #4/4)
     tgif_exit_fracs: tuple = (0.25, 0.25, 0.5)
     # Ep04.x / Ep07.1 / Ep03.19 / X3b -------------------------------------------------------------------------
     target_order: tuple = ()             # Ep04.12 (Ep 04): kinds in the order they are taken, e.g. ("eq", "daily", "vi"); the
@@ -1786,9 +1786,9 @@ class Params:
     # A12-tf-relative-ob (079 ~15:06)
     htf_ob_ltf_drill: bool = False       # A12: a wrong-coloured HTF swing-extreme candle takes its OB from the last opposite-colour 1h bar inside it
     # A6-breakaway-depth-qualification (062 ~37:12 / ~39:01; 065 ~4:39:02; 075 ~1:39:36; 084 ~29:16; cc04_009 ~13:37)
-    bk_depth: str = "ce"                 # A6: how deep a retrace may go and still be a breakaway gap - "ce" (A6: at most 50%) / "any_open" (062, cc04_009: any portion left open)
+    bk_depth: str = "any_open"                 # A6: how deep a retrace may go and still be a breakaway gap - "ce" (A6: at most 50%) / "any_open" (062, cc04_009: any portion left open)
     bk_state: bool = False               # A6: the candidate -> retraced -> QUALIFIED state machine; the breakaway trail (trail_breakaway / ladder_trail "breakaway") and the entry tag use only qualified gaps
-    bk_bpr_ce: bool = False              # A6 (065): a BPR directly beyond the gap's far edge limits the retrace to the near side of the CE even under any_open
+    bk_bpr_ce: bool = True              # A6 (065): a BPR directly beyond the gap's far edge limits the retrace to the near side of the CE even under any_open
     # A9-vi-breakaway (079 ~14:20; 103 ~25:18)
     vi_breakaway: bool = False           # A9: a VI on the candles leaving a consolidation / right after the MSS / inside the displacement leg beyond the retrace limit is a breakaway VI - not an entry zone
     # A6-gap-hierarchy-common (062 ~39:41 / ~43:58; cc04_010 ~12:25)
@@ -1957,6 +1957,7 @@ class Params:
     judas_depth_tag: bool = False        # B12-judas-depth-adr: tag Trade.judas_depth at every fill with an open (no gate; judas_max_adr gates)
     # T3-london-close-multiday-reversal (cc09_005 ~32:44)
     lc_tag: bool = False                 # T3: tag lc_reversal (a 10:00-12:00 fill whose sweep was at an HTF array against the morning)
+    lc_retry_until: int = 720            # OA1029 Q23: the London-close retry (lc_reentry / lc_second_swipe) has its own window to this minute (12:00, T3 10:00-12:00); other AM setups keep am[1]; 0 = am[1] (as built)
     lc_reentry: bool = False             # T3: after a stopped-out lc_reversal one more try in the same direction when the new sweep runs beyond the first extreme at the same HTF array
     # B18-pm-smt-reference-points (cc10_014 ~2:18)
     smt_pm_points: bool = False          # B18.2: the PM SMT compares the lunch-hour (12:00-13:00) extreme with the first pivot formed after 13:00
@@ -1967,7 +1968,7 @@ class Params:
     # N5-entry-at-release (040 ~1:28; 049 ~2:27)
     post_news_continuation: bool = False # N5 (a): after the 08:30 run-out in the daily bias direction, the first 1m OB retrace in that direction
     post_news_run_pts: float = 5.0       # [our interpretation] the run-out leg is at least this many ES pts
-    release_ob_entry: bool = False       # N5 (b): 10:00 high-impact day, price at 10:00 inside a 5m OB in the bias direction: a market entry at the 10:00 open
+    release_ob_entry: bool = True       # N5 (b): 10:00 high-impact day, price at 10:00 inside a 5m OB in the bias direction: a market entry at the 10:00 open
     # T13-judas-news-driver (cc01_002 ~15:16)
     require_judas_news: bool = False     # T13: with require_judas only a Judas sweep within judas_news_min of a scheduled release counts
     judas_news_min: int = 30             # [our interpretation] the window around the release (minutes)
@@ -2181,7 +2182,7 @@ class Params:
     # --- caption-gap pass, setups_models #4/7 (every switch defaults off / to the built behaviour; the gap id is the comment's first word) ---
     # new-falling-dagger-upper-half-buy (012 ~00:20:06; experienced-only, conflicts with E1 / M0)
     dagger_entry: bool = False           # new: bias + a bullish daily FVG price is trading back into, in its UPPER half: a pre-MSS buy limit into the falling move (stop under the daily CE); skipped once a lower-half 60m / 15m FVG was filled today
-    dagger_level: str = "ce"             # ... the limit: "ce" (the daily FVG CE) / "ltf" (the highest 15m / 60m FVG low between the CE and the daily FVG top)
+    dagger_level: str = "ltf"             # ... the limit: "ce" (the daily FVG CE) / "ltf" (the highest 15m / 60m FVG low between the CE and the daily FVG top)
     # M12-0930-htf-fvg-stab-no-mss (015 ~00:16:57; 038 ~00:21:57)
     stab_tfs: tuple = (15, 60)           # M12 turtle_soup="htf_stab": the HTF FVG timeframes (minutes) a pool run may stab into with no MSS / SMT
     # B12-po3-low-after-0830-into-old-low (013 ~00:04:52)
@@ -2250,6 +2251,7 @@ class Params:
     lunch_nwog_entry: str = "ce"         # T7 (review fix): "ce" = a limit at the NWOG CE; "ob" = at the body top of a down-close OB inside the zone (else the CE)
     lunch_nwog_long: bool = False        # T7: 11:40-12:10 inside [the NWOG low, the NWOG CE] after a down AM, nothing under the NWOG low: a limit at the CE (bypasses the lunch block)
     # A8-symmetry-skip-ifvg-confirmation (048 ~00:38:07)
+    ifvg_sym_ym: bool = True             # OA1029 Q55: ifvg_symmetry_skip also needs YM to agree when the YM book is loaded (False = ES / NQ only, the first build)
     ifvg_symmetry_skip: bool = False     # A8: ES and NQ agree (the same higher high in the window): an opposing FVG is bought inside directly, the inversion steps are skipped
     ifvg_sym_bars: int = 30              # [our interpretation] the agreement window (bars)
     # A8-ifvg-5m-to-1m-handoff (048 ~00:21:30)
@@ -2306,6 +2308,7 @@ class Params:
     cisd_rearm: bool = False             # M11b: after a trade under the OB low the setup is void; re-arm only on a NEW CISD after it
     max_stop_pts: float = 0.0            # E5 (item 44, built here for M11b): a structural stop farther than this many ES pts drops the order but keeps the sweep alive (0 = off)
     # M10-ifvg-footholds-buy-program (075 ~01:29:33)
+    ifvg_targets_after: str = "cisd"     # OA1029 Q71: ifvg_targets start after the real A12 CISD ("cisd") or the MSS stand-in ("mss", the first build)
     ifvg_targets: bool = False           # M10: after the CISD the open bearish FVGs of the prior down leg are buy-side targets (near edge, CE)
     ifvg_need_hunt: bool = False         # M10: an IFVG entry arms only after a short-term low was run while no body closed under the IFVG CE
     # A4-bodies-hold-prev-day-50 (076 ~00:22:29)
@@ -2534,7 +2537,8 @@ class Params:
     no_origin_retest: bool = False       # NEW-no-return-to-origin-ob (cc03_003 ~00:21:37): after >= 2 tests of a daily low and a daily close above the last daily pivot high, the origin low / OB is no entry array of the HTF-array entries (turtle-soup cc_limit / external / ts arrays); the swing's 25-50% arrays stay
     entry_pd_frame: str = "leg"          # B5-prior-day-ny-range-retracement (cc08_007 ~00:00:40): the leg_pd frame - "leg" (the displacement leg, built) / "prev_day" (previous RTH day H-L) / "prev_ny" (previous NY session 08:30-16:00 [our interpretation]) / "any" (either one in discount passes)
     ob_need_fvg: bool = False            # A12-ob-requires-signatures (022 ~13:12, ~1:37:52): an OB order arms only once an FVG with c1 on the OB candle (or the next one) has printed (c3 closed) - until then it is a potential OB
-    cisd_ob_px: str = "eq"               # A12-cisd-open-buy-level (032 ~53:04, ~55:30): "eq" (M11b: the post-CISD range EQ, built) / "open" (the first candle's open of the down-close run; CISD = high >= open + 1 tick; valid while no body closes under the run low)
+    cisd_open_discount: bool = True      # OA1029 Q90: with cisd_ob_px="open" the buy limit at open_ref is armed only while open_ref sits at / below the EQ of the post-CISD range (mirror shorts); False = the first "open" build
+    cisd_ob_px: str = "open"             # OA1029 Q90 default "open" (was "eq"). A12-cisd-open-buy-level (032 ~53:04, ~55:30): "eq" (M11b: the post-CISD range EQ, built) / "open" (the first candle's open of the down-close run; CISD = high >= open + 1 tick; valid while no body closes under the run low)
     cisd_adds: bool = False              # ... every later down-close run with its own CISD before the draw gives a new open as an add (E12 sizes; none after a partial)
     ob_vi_overshoot: bool = False        # A12-ob-overshoot-to-vi (050 ~33:56): an adjacent VI under the bullish OB (above a bearish one) extends the zone to the VI's far edge: stop = far edge - 1 tick, a body close beyond it exits
     mt_break: str = "off"                # D4-mt-source-tally: "off" (the built stop_mode / mt_close_stop behaviour) / "close" (a body close under the OB MT is the failure; the hard stop sits at the OB far edge) / "trade" (any trade under the MT stops) / "warn" (a trade under the MT is a tag only; the far-edge stop)
@@ -2557,7 +2561,7 @@ class Params:
     ob_ce_tol_pts: float = 1.0
     leg_fib: str = "wick"                # A21-intraday-fib-bodies (058 ~41:48): the leg / EQ anchors - "wick" (built) / "body" (lowest min(o,c) .. highest max(o,c))
     htf_depth_mult: tuple = (1.0, 1.0, 1.0)   # A8-htf-gap-resistance-grade (065 ~1:27:00): risk multiplier by how deep an HTF gap entry reacted: (near / ce / far); tag lv_tags htf_depth_*
-    ob_need_narrative: bool = False      # A12-ob-requires-narrative (059 ~19:00; 064 ~51:56; 065 ~1:28:02): an OB qualifies only with the bias this way, a transitional event (a pool swept, or an array traded into) before or by it, and (ob_need_htf_array) lying inside an HTF array
+    ob_need_narrative: bool = True      # A12-ob-requires-narrative (059 ~19:00; 064 ~51:56; 065 ~1:28:02): an OB qualifies only with the bias this way, a transitional event (a pool swept, or an array traded into) before or by it, and (ob_need_htf_array) lying inside an HTF array
     ob_need_htf_array: bool = True       # ... (2) the OB lies inside a same-side HTF array [our interpretation: the array contains the OB bodies, tolerance eq_tol_pts]
     ob_wick_ltf_entry: bool = False      # A12-ob-open-anchor-ltf-wick (061 ~26:10): an HTF OB with a stubby wick (< 25% of its range) - the entry is an LTF FVG / OB inside [open, low] of it; the wick area does not invalidate
     htf_ob_anchor: str = "open"          # A12-ob-anchor-level (default "open" = the 2023 Mentorship level; "extreme" is the Core Content swing level and sits in study.PRE_OWNER) (cc03_001 ~28:18; cc06_004; cc10_005; 072): the HTF OB level - "open" (A12 2023) / "extreme" (CC swing: the OB candle's high / highest high of the series)
@@ -2604,7 +2608,8 @@ class Params:
     mot_dead_mult: float = 1.0           # E1-market-on-touch (089 ~00:04:20) / E5-breakaway-gap-chase: a converted market order is dead when the next open lies farther over the entry than this many times the planned risk (entry - stop) [our interpretation: 1 = total risk at most 2x]
     fri_shallow_edge: str = "fvg"         # new-friday-near-draw-shallow-entry (070 ~00:47:11): the shallow entry - "fvg" the first FVG of the leg at its near edge / "breaker" the breaker's upper edge (the FVG when there is no breaker under the market)
     breaker_iofed: bool = False          # E2-iofed-breaker-exact-match (043 ~00:16:21): the breaker limit sits 1 tick inside (market side of) the breaker extreme, so an exact match fills under E3
-    ifvg_stop: str = "ce"                # M10-ifvg-stop-below-whole-ifvg (067 ~01:19:07): the IFVG stop - "ce" (built: CE + pts) / "far" (beyond the whole IFVG: the far edge - pad)
+    ifvg_stop: str = "by_tf"             # M10-ifvg-stop-below-whole-ifvg (067 ~01:19:07): the IFVG stop - "ce" (built: CE + pts) / "far" (beyond the whole IFVG: the far edge - pad) /
+                                         # "by_tf" (OA1029 Q98, the default): daily+ IFVGs "ce" with ifvg_stop_pts (3.0 when unset), under 1h "far" [our interpretation: 1h-4h keep "ce"]
     ifvg_ob_add: bool = False            # ... an add where the IFVG overlaps a reclaimed OB (levels.reclaimed_obs)
     iofed_gap_bars: int = 5              # E2-iofed-depth-second-gap (074 ~00:36:02): entry="auto2" - the near edge (IOFED) when another same-side gap lies within this many bars ...
     iofed_gap_pts: float = 3.0           # ... and this many points beyond the picked gap, else the CE
@@ -2615,7 +2620,7 @@ class Params:
     add_far_edge: bool = False           # ... add location: a limit at the entry FVG's far edge while no body closed under it (001)
     add_wick_retouch: bool = False       # ... add location: a limit at the prior retrace's wick extreme (096)
     add_htf_fvg_edge: bool = False       # ... add location: the near edge of the nearest 30m FVG under the price (002)
-    add_ladder: str = ""                 # E12-ladder-631 / E12-067-citation-wrong (021, 026, 060, 070, 067): "" (adds) / "631" / "6421" / "6321" / "067" (8, then 5/5/2/5/5 at reclaimed OB / IFVG retests)
+    add_ladder: str = "631"                 # E12-ladder-631 / E12-067-citation-wrong (021, 026, 060, 070, 067): "" (adds) / "631" / "6421" / "6321" / "067" (8, then 5/5/2/5/5 at reclaimed OB / IFVG retests)
     add_on_ifvg: bool = False            # ... an IFVG formed after the fill, a limit at its near edge (067)
     add_stop_under_array: bool = False   # ... each add raises the stop to the add array's bottom - pad when that is higher and leaves >= min_risk_pts (never lowers)
     in_zone_ladder: bool = False         # E12-in-zone-larger-second (103 ~00:34:22): a breaker entry rests as two limits - 1/3 at the near edge and 2/3 at the breaker MT; later adds are sized from the first leg
@@ -2750,7 +2755,7 @@ class Params:
     org_beyond: bool = False             # L7-org-overshoot-discount (043 ~00:12:22): with the ORG far edge as the draw the ladder goes on to the first pool / HTF array beyond it within org_beyond_adr x ADR5
     org_beyond_adr: float = 0.5
     org_ce_if_flow: bool = False         # L7-org-partial-close-orderflow (068 ~00:11:50): opposing arrays (FVG / OB) inside the ORG make its CE the final rung; the far edge stays as a runner slice (htf_runner_frac)
-    htf_gap_final: str = "ce"            # L9-htf-fvg-target-ladder (010 ~00:58:40; 029 ~00:32:25; 098 ~01:01:48; 102 ~02:12:22): with htf_gap_gate the 75 % and the far edge of an HTF FVG appear only after a bar closed beyond its CE ("ce"); "far_edge" keeps them while the bias table's flip is not against the order
+    htf_gap_final: str = "far_edge"            # L9-htf-fvg-target-ladder (010 ~00:58:40; 029 ~00:32:25; 098 ~01:01:48; 102 ~02:12:22): with htf_gap_gate the 75 % and the far edge of an HTF FVG appear only after a bar closed beyond its CE ("ce"); "far_edge" keeps them while the bias table's flip is not against the order
     htf_gap_gate: bool = False           # ... the switch that turns the CE-first gating on (the spec's default "ce" would otherwise change the built ladder)
     weekly_bisi_ts_block: bool = False   # L9 (102 ~02:12:22) [our interpretation]: no turtle-soup long at a pool within ts_max_pts above an unfilled weekly BISI (the draw is the BISI)
     keep_traded_wfvg: bool = False       # L9 (098 ~01:01:48): the edges of weekly FVGs price traded through stay "array" levels
@@ -2906,7 +2911,7 @@ class Params:
     heavy_scale: float = 0.33
     no_lunch_retrace_hold: bool = False  # T9-strong-am-no-lunch-retrace (cc10_012 ~00:11:54): a strong AM rally from the day's low whose 12:00-13:00 low retraces < lunch_retr_max of the AM leg keeps the AM position past the 12:00 close (stop to the lunch low, out at 15:50 or the target); else it closes at 13:00. The PM-entry extension to the last hour is NOT built
     lunch_retr_max: float = 0.3          # ... [our interpretation] 25-30 %
-    hold_through_0830: bool = False      # N5-hold-through-0830 (032 ~00:06:56; 091 ~00:22:26): the experienced version - a pre-09:30 position (incl. Ma Deuce / SB London) is held through the 08:30 release, the exit being a resting limit at the pool; jobs / CPI days stay excluded. PRE8 orders still never fill on or after the 08:30 bar. Default OFF (flat at 08:29, pre_flat_0830) because owner directive "No 08:30 entries; pre-09:30 setups are test-only switches" (owner_directives.md line 16) wins over the experienced-version rule; listed under the owner questions
+    hold_through_0830: bool = True      # N5-hold-through-0830 (032 ~00:06:56; 091 ~00:22:26): the experienced version - a pre-09:30 position (incl. Ma Deuce / SB London) is held through the 08:30 release, the exit being a resting limit at the pool; jobs / CPI days stay excluded. PRE8 orders still never fill on or after the 08:30 bar. Default OFF (flat at 08:29, pre_flat_0830) because owner directive "No 08:30 entries; pre-09:30 setups are test-only switches" (owner_directives.md line 16) wins over the experienced-version rule; listed under the owner questions
     no_entry_0825: bool = True           # ... no pre-09:30 order fills 08:25-08:30 on a day with a 08:30 release (main engine; the experienced hold_through_0830 lifts it) [spec default on: the existing intent of pre_flat_0830]
     thu_cap: bool = False                # N10-thursday-caps-week (cc08_001 ~00:21:59): a Thursday position entered before 09:30 is closed at 10:00; a Thursday 09:30-12:00 new weekly extreme into a daily array blocks entries in its direction that day (x_thu_week_ext) [our interpretation]
     bpr_limit: str = "mt_body_close_abort"   # A11-bpr-retrace-allowance (001 ~20:43; 012 ~22:34; 024 ~6:18; 026 ~1:05:53; 065 ~4:28): how deep a return into the BPR under the entry may go (needs bpr_abort or bpr_rule): "mt_body_close_abort" (the built rule, 065) / "no_reentry" (001) / "ce_touch" (012) / "mt_warn_far_exit" (026) / "far_edge" (024: a trade-through of the far edge)
@@ -3126,7 +3131,7 @@ class Params:
     skip_election: str = "off"           # N7-election (cc04_002 ~00:26:40): "two_weeks" (Nov 1 to election day + 9) / "narrow" (election day and the next trading day) - ICT's personal practice
     holiday_eve_cases: str = "a"         # DS2-holiday-eve-friday-before-tue-holiday (cc10_019 ~00:23:45): "a" = the day before a holiday, "ab" = also the Friday before a Monday / Tuesday holiday (skip_holiday_eve)
     objective_frac_gate: float = 0.0     # N9-objective-before-lunch (015 ~00:16:22): 0 = off (test 0.5) - once the move to the session's locked draw is past this share, no continuation entry toward it [our interpretation: the 'more than about half' threshold]
-    objective_done_pm: str = "off"       # ... "reversal_only": after the AM draw traded before 12:00 the PM trades only the counter direction (not the whole PM skipped as objective_done_skip does)
+    objective_done_pm: str = "reversal_only"       # ... "reversal_only": after the AM draw traded before 12:00 the PM trades only the counter direction (not the whole PM skipped as objective_done_skip does)
     sd_intraday: str = "off"             # N8-intraday-seek-destroy (015 ~00:21:31; 024 ~00:19:27): "tag" or "rules" (single exit, no entry before the range breaks, none after the locked HTF level traded)
     sd_intraday_until: int = 630         # ... [our interpretation] the detector window 09:30-10:30
     sd_intraday_frac: float = 0.35       # ... [our interpretation] the session range < this x ADR5
@@ -3193,7 +3198,7 @@ class Params:
     choppy_week_tag: bool = False        # N8-choppy-week-no-hold (079 ~00:21:40): after choppy_week_days consecutive days that each swept the prior day's high (bearish week; low if bullish) before the bias-direction extreme: tag choppy_week; the day takes the slow ladder and no runner
     choppy_week_days: int = 2            # ... [our interpretation] "consecutive days" = 2
     tgif_week_high_exit: bool = True     # M14-tgif-invalidation-timing (075 ~01:40:30): with tgif on, a TGIF order is void (pending cancelled, stop at the level) beyond the week high (low) that preceded it
-    tgif_window: str = "pm"              # M14-tgif-am-timing (085 ~00:17:32; 089 ~00:01:29; spec default "pm"): with tgif on, TGIF entries only in "am" (09:30-12:00) | "london_close" (10:00-12:00) | "pm" (13:30-15:00); "off" = no window. Under tgif_model the M14.3 tgif_timing windows stay in force (unless tgif_model_skip has "tgif_timing")
+    tgif_window: str = "off"              # M14-tgif-am-timing (085 ~00:17:32; 089 ~00:01:29; spec default "pm"): with tgif on, TGIF entries only in "am" (09:30-12:00) | "london_close" (10:00-12:00) | "pm" (13:30-15:00); "off" = no window. Under tgif_model the M14.3 tgif_timing windows stay in force (unless tgif_model_skip has "tgif_timing")
     tgif_min_adr: float = 3.0            # M14-tgif-am-timing (spec default 3.0): with tgif on, the Mon-Thu range must exceed this x ADR5 for a TGIF tag (0 = off)
     tgif_need_htf_array: bool = True     # M14-tgif-am-timing (spec default True): with tgif on, the Friday sweep must be at a same-side HTF array (tgif_htf_array behaviour); tgif_precond="loose" waives it
     inside_bisi_redelivered: bool = False  # B17-M15-madeuce-inside-bisi (091 ~00:15:17): the sloppy "inside_bisi" fires only when yesterday already traded through the daily FVG's CE and today opens within bisi_ce_band of it (in the not-yet-re-delivered premium-half state it does not fire, so Ma Deuce is free there)
@@ -3265,7 +3270,7 @@ class Params:
     org_tell_skip_min: int = 3           # ... the first minutes after 09:30 are ignored
     org_tell_end: int = 600              # ... the tell is judged at this minute (10:00)
     org_consol_case: bool = False        # BH-B15-ORG-consolidation-case (055 ~00:18:18): objective met / a consolidating market (daily range or NWOG regime) and the ORG filled: the day ranges inside the gap - every later order a scalp capped at the opposite ORG edge or CE; tag org_consol
-    dxy_filter: str = "off"              # BH-B19-DXY-soft-filter-for-indices (063 ~00:10:53; 046 ~02:13:40; 028 ~00:22:53): "tag" counter_dxy / dxy_ok, "soft" (a counter-dollar index order trades at dxy_soft_risk x risk as a scalp, tagged counter_dxy), "hard" (block longs with the dollar rising, shorts with it falling); prior-day dollar vs its 20-day mean
+    dxy_filter: str = "tag"              # OA1029 Q226a: "tag" is the default now (DXY from Databento; "off" = the first build). BH-B19-DXY-soft-filter-for-indices (063 ~00:10:53; 046 ~02:13:40; 028 ~00:22:53): "tag" counter_dxy / dxy_ok, "soft" (a counter-dollar index order trades at dxy_soft_risk x risk as a scalp, tagged counter_dxy), "hard" (block longs with the dollar rising, shorts with it falling); prior-day dollar vs its 20-day mean
     dxy_soft_risk: float = 0.5           # ... [our interpretation] the reduced size of a counter-dollar index trade
     low_in_relock: bool = False          # BH-failed-sweeps-low-in (022 ~02:01:51): after the AM sell-side draw is delivered, repeated short-term highs taken against few new lows = the morning low is in: re-lock the session buy-side (a second trade); tag low_in. Mirror
     low_in_min_highs: int = 3            # ... [our interpretation] at least this many short-term highs taken
@@ -3295,6 +3300,7 @@ class Params:
     q_window_gate: bool = False          # B22-timing-tool: the daily-SMT bias (dsmt_bias) counts only inside the q_window (a time filter, not a direction source)
     q_window_size: float = 1.0           # B22-timing-tool: risk multiplier (> 1 sizes up) when the q_window, the bias side and the seasonal direction (calendar window, else the intramonth map) all agree with the order; 1 = off
     shift_due_tag: bool = False          # X3-shift-due-six-months (cc05_001 ~48:36): column shift_due = q_days >= 126 with the 126-session net move in one direction; tag only
+    qshift_broken: str = "leg"           # OA1029 Q236 / Q242: the quarterly shift's broken swing - "leg" (the low / high that started the leg to the new 60-session extreme) / "literal" (the latest daily STL / STH, the first build)
     qshift_bias: bool = False            # X3-b22-shift-trigger-quarter-bias (cc05_001 ~32:36; cc05_004 ~16:53; cc05_003 ~16:01): the concrete quarterly shift (column qshift): a new 60-session high within the last 10 sessions and then a daily low under the last daily STL -> -1 for 63 sessions (or until a new 60-session high); mirror. With the switch the bias defaults to qshift when otherwise 0
     q_obj_lean: bool = False             # B22-quarterly-shift (084 ~22:18 ...): column q_obj = the nearest weekly array in the shift's direction beyond the 60-session range (quarterly_objective), kept until traded or q_obj_days sessions; with the switch a neutral lock leans to it
     q_obj_days: int = 84                 # B22-quarterly-shift (084 ~22:18): the quarterly objective stays valid 84 sessions (4 months) unless traded earlier [our interpretation of "until the objective is reached"]
@@ -3314,7 +3320,7 @@ class Params:
     fast_draw_extend: bool = False       # NEW-speed-into-weekly-draw (095 ~8:01): a weekly draw reached at >= fast_draw_mult x the speed of the prior leg is NOT neutral (objective_neutral): the next weekly array beyond is the new draw
     fast_draw_mult: float = 1.5          # ... [our interpretation]
     dxy_needs_rates: bool = False        # NEW-rates-dxy-fx-direction (095 ~14:49; cc03_006 ~5:35): INTERMARKET tnx_slow / rates_dxy_agree; the dxy_filter acts only when the 60-session yield slope agrees with the dollar's side (tag rates_agree / rates_diverge)
-    pd3_result: str = "flip"             # B8-three-pd-array-abort (098 ~1:08:36 ...): the flip_pd3 trigger's result - "flip" (the opposite state, the built behaviour) or "neutral" (abandon the bias; the opposite state only after a displacement day)
+    pd3_result: str = "neutral"             # B8-three-pd-array-abort (098 ~1:08:36 ...): the flip_pd3 trigger's result - "flip" (the opposite state, the built behaviour) or "neutral" (abandon the bias; the opposite state only after a displacement day)
     pd3_disp_adr: float = 1.5            # ... [our interpretation] a displacement day = range >= this x ADR5 closing in the top (bottom) quarter
     pd3_first_caution: bool = False      # ... while the first adverse array is closed through (and the third not yet) orders in the bias direction are scalps
     wk_q75_confirm: bool = False         # B8-weekly-wick-quadrant-gate (102 ~2:11:40; 103 ~0:02:32): the bias counts only after a daily close beyond the prior week's wick 75 % quadrant in its direction (this week); otherwise 0
@@ -3331,7 +3337,7 @@ class Params:
     raid_profile_bias: bool = False      # B6-consolidation-raid-profile (cc02_008 ~14:28): the last raid_profile_n daily ranges each raided the low first and then exited up -> +1 (mirror -1) when the bias is 0
     raid_profile_n: int = 2              # B6-consolidation-raid-profile (cc02_008 ~14:28): "the last two" daily ranges
     htf_bias_tf: str = "D"               # B5-monthly-first-hierarchy (cc04_003 ~14:07; cc04_002 ~29:38): "D" (built) / "W" (weekly draw) / "M" (monthly draw, else weekly, else none - monthly arrays are built)
-    htf_bias_pools: bool = False         # ... [our interpretation, owner question] the monthly / weekly bias reading also counts the previous month's / week's high and low as draws (like htf.table's PWH / PWL); off = the literal spec (FVGs of that timeframe only)
+    htf_bias_pools: bool = True         # ... [our interpretation, owner question] the monthly / weekly bias reading also counts the previous month's / week's high and low as draws (like htf.table's PWH / PWL); off = the literal spec (FVGs of that timeframe only)
     tier_stl_mode: str = "last2"         # B6-hrlr-lrlr-structure-regime (cc01_007 ~19:48): the short-term lows (highs) being run - "last2" (the spec: each of the last two was broken) / "two_of_four" [our interpretation, owner question]
     htf_rank_tf: bool = False            # ... array rungs at the same level are labelled with the highest timeframe and ranked M > W > D (table columns rk_<tf>_up / _dn; bh2e.rung_tf)
     flip_terminus: bool = False          # B17-hold-bias-most-recent-htf-setup (cc03_001 ~21:17; cc05_002 ~22:06): the flip state ends (0) when the draw it was set with trades, or after flip_max_days sessions
@@ -3452,7 +3458,7 @@ class Params:
     nwog_below_return: bool = False      # L5-below-nwog-low (033 ~08:19, ~32:30): price trades below the current NWOG low without displacement = accumulation then a return into the gap: want +1 with the NWOG CE then its high as the draw (acceleration down keeps the bias; the gap above price mirrors)
     nwog_draw_confl: bool = False        # L5-nwog-not-standalone (051 ~13:55): an NWOG level is a locked draw only with a pool or an HTF array level within confl_pts, or in the bias direction; otherwise a ladder rung only
     confl_pts: float = 2.0               # ... [our interpretation]
-    org_with_bias: bool = False          # L7-breakaway-test (070 ~27:06): the ORG in the bias direction with an untaken daily pivot / PDH / PWH beyond the open = trade the gap direction only (no fill trades) and the ORG levels leave the AM lock
+    org_with_bias: bool = True          # L7-breakaway-test (070 ~27:06): the ORG in the bias direction with an untaken daily pivot / PDH / PWH beyond the open = trade the gap direction only (no fill trades) and the ORG levels leave the AM lock
     org_pm_draw: bool = False            # L7-org-fill-delayed-pm (067 ~31:06, ~1:07:42): a gap down not touched since 09:30 with today's low under the previous AM low = PM want +1 and the ORG near edge (then CE, far edge) is the PM draw; the gap up mirrors
     dce_proj_study: bool = False         # L13-old-high-to-daily-ce-projection (019 ~2:35): table dce_proj - the A-B midpoint, B and B + k(B-A), k = .25/.5/.75/1, from an untaken daily pivot A and the nearest higher daily body CE B; a research column (study.dce_proj_hits)
     range_alternate: bool = False        # L14-consolidation-alternation (022 ~3:04:38; 031 ~1:02:53): inside an intraday range the next draw is the pool on the side swept fewer times since 08:30 (a tie: opposite the last sweep): want follows it
@@ -3509,7 +3515,7 @@ class Params:
     london_dir_gate: bool = False        # new-ny-continues-london (cc09_005 ~00:30:13; taught on FX): NY continues London - with no unmet HTF array at the 07:00-09:30 high / low an AM setup against London's direction is blocked; at an array both sides are allowed
     london_dir_tag: bool = False         # ... the tag nyl_cont / nyl_rev on AM orders (the spec writes it always; kept a switch so default trade files stay unchanged)
     htf_series: str = "adjusted"         # OT-htf-array-data-series (056 ~00:01:13; 078 ~00:35:43): the series the table's daily / weekly arrays are drawn on: "adjusted" (the back-adjusted engine frame), "raw" (the unadjusted front-month series, mapped back per day by the adj before the session), "contract" (056 exact - needs per-contract raw data: NotImplementedError)
-    htf_monthly_series: str = "adjusted"  # ... with htf_monthly: the series of the monthly arrays: "adjusted" (as built) / "raw" (078: the continuous unadjusted chart; the spec's default - kept off here so the built htf_monthly behaviour does not change)
+    htf_monthly_series: str = "raw"  # ... with htf_monthly: the series of the monthly arrays: "adjusted" (as built) / "raw" (078: the continuous unadjusted chart; the spec's default - kept off here so the built htf_monthly behaviour does not change)
     stocks_mode: bool = False            # M17 (parked): the stock watch-list modules (stocks.py / stocks_watch.py) raise unless this is on
     stock_piv_n: int = 2                 # OT-stocks-smt-weekly-screen (cc10_016 ~00:02:01): the daily pivot size of the Dow-vs-stock screen
     stock_match_days: int = 5            # ... the +/- window (days) matching the stock's low to the index's pivot low [our interpretation]
@@ -4067,7 +4073,7 @@ class Params:
         if self.htf_monthly:
             self.htf_monthly_arrays = True        # BH-A5-HTF-FVG-own-timeframe: the named alias of the built monthly arrays
         # caption-gap pass bias_htf#2/7 (bh2.py / bh2e.py)
-        for name, ok in (("pd3_result", ("flip", "neutral")), ("consol_dir", ("off", "first_expansion", "prior_strongest")), ("htf_after_draw", ("neutral", "reverse")),
+        for name, ok in (("pd3_result", ("flip", "neutral")), ("ifvg_targets_after", ("cisd", "mss")), ("qshift_broken", ("leg", "literal")), ("consol_dir", ("off", "first_expansion", "prior_strongest")), ("htf_after_draw", ("neutral", "reverse")),
                          ("htf_bias_tf", ("D", "W", "M")), ("tier_stl_mode", ("last2", "two_of_four"))):
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
@@ -4120,9 +4126,11 @@ class Params:
         if not 0 < self.late_obj_k <= 1.0 or self.wr_lookback < 2 or self.stock_piv_n < 1 or self.stock_match_days < 0 or self.stock_near_high_pct < 0 or self.stock_ext_atr <= 0 or not 0 <= self.stock_rs_min <= 100 or self.stock_top_sectors < 1:
             raise ValueError("bias_htf#7/7: 0 < late_obj_k <= 1, wr_lookback >= 2, stock_piv_n >= 1, stock_match_days >= 0, stock_near_high_pct >= 0, stock_ext_atr > 0, 0 <= stock_rs_min <= 100, stock_top_sectors >= 1")
         inert = []                                  # switches the current draw_lock / vi_arrays make inert
+        # OA1029 defaults that only act under a parent switch: warn only when set away from the default
+        nd = lambda n: getattr(self, n) != type(self).__dataclass_fields__[n].default
         if self.htf_bias == "off" and (self.monthly_ctrl or self.monthly_ctrl_smt or self.shift_origin_pool or self.stack_draw or self.program_gate or self.fast_week_rev or self.eq_breakout_draw or self.d_draw_carry or self.wk_ssl_draw
                                        or self.gap_theory_bias or self.nwog_below_return or self.org_pm_draw or self.pm_flip_draw or self.pm_range_break or self.or60_bias or self.b7_spike_floor
-                                       or self.range_alternate or self.org_with_bias or self.pdh_raid_rev):
+                                       or self.range_alternate or nd("org_with_bias") or self.pdh_raid_rev):
             inert.append("monthly_ctrl / shift_origin_pool / stack_draw / program_gate / fast_week_rev / eq_breakout_draw / d_draw_carry / wk_ssl_draw / gap_theory_bias / nwog_below_return / org_pm_draw / pm_flip_draw / "
                          "pm_range_break / or60_bias / b7_spike_floor / range_alternate / org_with_bias / pdh_raid_rev set or gate the htf_bias side: inert with htf_bias='off'")
         if self.htf_bias == "off" and (self.both_pools_gate or self.weekly_persist or self.factor_tag):
@@ -4133,8 +4141,8 @@ class Params:
             inert.append("pd_subrange relaxes the pd_two_level gate; without it only pd_top_skip acts")
         if self.weekly_flip_follow and not self.flip_triggers:
             inert.append("weekly_flip_follow needs the table's stateful bias: flip_triggers is empty")
-        if self.htf_monthly_series == "raw" and not (self.htf_monthly or self.htf_monthly_arrays):
-            inert.append("htf_monthly_series='raw' draws the monthly arrays on the raw series: it needs htf_monthly (the monthly arrays)")
+        if nd("htf_monthly_series") and not (self.htf_monthly or self.htf_monthly_arrays):
+            inert.append("htf_monthly_series picks the series of the monthly arrays: it needs htf_monthly (the monthly arrays)")
         if self.scenario_check and self.draw_lock != "session":
             inert.append("scenario_check re-locks the session draw: it acts only in the #9 lock (draw_lock='session')")
         if self.scenario_flip and not self.scenario_check:
@@ -4183,7 +4191,7 @@ class Params:
             inert.append("ir_def acts through ir_entries (M11a) or imm_rebalance_disp")
         if self.vi_breakaway and not (self.vi_entries or self.vi_targets or "vi" in self.entry_arrays):
             inert.append("vi_breakaway acts on the VI entry zones / entry_arrays 'vi' / vi_targets")
-        if (self.bk_state or self.bk_depth != "ce" or self.bk_bpr_ce) and not (self.breakaway != "off" or self.trail_breakaway
+        if (self.bk_state or nd("bk_depth") or nd("bk_bpr_ce")) and not (self.breakaway != "off" or self.trail_breakaway
                                                                                or self.ladder_trail == "breakaway"):
             inert.append("bk_depth / bk_state / bk_bpr_ce act on the breakaway tag, trail_breakaway and ladder_trail='breakaway'")
         if self.nwog_rebalanced and self.gap_mode != "ict":
@@ -4195,9 +4203,9 @@ class Params:
         if self.htf_bias == "off" and (self.qshift_bias or self.dsmt_bias or self.raid_profile_bias or self.eq_tiebreak or self.htf_bias_tf != "D" or self.wk_q75_confirm       # caption-gap pass bias_htf#2/7: the documented couplings
                                        or self.htf_after_draw == "reverse" or self.fast_draw_extend):
             inert.append("qshift_bias / dsmt_bias / raid_profile_bias / eq_tiebreak / htf_bias_tf / wk_q75_confirm / htf_after_draw / fast_draw_extend reshape the htf_bias reading: inert with htf_bias='off'")
-        if (self.pd3_result == "neutral" or self.pd3_first_caution) and "flip_pd3" not in self.flip_triggers:
+        if (nd("pd3_result") or self.pd3_first_caution) and "flip_pd3" not in self.flip_triggers:
             inert.append("pd3_result / pd3_first_caution act on the flip_pd3 trigger: add it to flip_triggers")
-        if (self.flip_terminus or self.first_clue_neutral or self.pd3_result == "neutral") and self.htf_bias != "flip":
+        if (self.flip_terminus or self.first_clue_neutral or nd("pd3_result")) and self.htf_bias != "flip":
             inert.append("flip_terminus / first_clue_neutral / pd3_result change the stateful `flip` column: read with htf_bias='flip' (or the flip-based sessions rules)")
         if self.inside_bisi_release and "inside_bisi" not in self.sloppy_tests:
             inert.append("inside_bisi_release lifts the inside_bisi sloppy test: add it to sloppy_tests")
@@ -4207,9 +4215,8 @@ class Params:
             inert.append("tug_required narrows tier_regime_gate: inert without it")
         if self.ipda_draw_side and not (self.ipda_pools or self.ipda_next):
             inert.append("ipda_draw_side picks among the IPDA pools: add ipda_next (or ipda_pools)")
-        if self.htf_after_draw == "reverse" and self.objective_neutral == "off":
-            inert.append("htf_after_draw='reverse' replaces the objective-met neutral: set objective_neutral to 'day', 'week' or 'both'")
-        if self.htf_bias_pools and self.htf_bias_tf == "D":
+        # (review Q260: htf_after_draw='reverse' is NOT inert without objective_neutral - it still rewrites the flip column and reverses the PM lock - no warning)
+        if nd("htf_bias_pools") and self.htf_bias_tf == "D":
             inert.append("htf_bias_pools shapes the monthly / weekly bias reading: set htf_bias_tf to 'W' or 'M'")
         if self.tier_stl_mode != "last2" and not self.tier_regime_gate:
             inert.append("tier_stl_mode acts on the tier regime: set tier_regime_gate")
@@ -6566,6 +6573,14 @@ def _extra_sig(trs) -> tuple:
                                                                  for e in t.exits)) for t in trs))
 
 
+def _lc_retry_end(ctx, p, am_hi: int) -> int:
+    """OA1029 Q23: the AM window end - `lc_retry_until` while the re-opened London-close slot (an AM retry) is live, else am[1]."""
+    ry = getattr(ctx, "lc_retry", None)
+    if p.lc_retry_until and ry and ry.get("session") == "AM":
+        return max(am_hi, int(p.lc_retry_until))
+    return am_hi
+
+
 def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, tf: int,
             partner=None, log: list | None = None, live: bool = False, bias: dict | None = None,
             conf=None, gaps: list | None = None, closes: dict | None = None, evening=None, partner2=None,
@@ -7218,7 +7233,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             pending = None                           # caption-gap X9-entry-fvg-immediate-rejection: a print through the entry FVG's far edge voids the resting order
         if pending is not None:
             sd = pending["side"]
-            cut = {"AM": am_hi, "PM": p.pm[1], "PRE7": 510, "PRE8": _ME1.pre8_cut(day, p), "PRE9": 570,
+            cut = {"AM": _lc_retry_end(ctx, p, am_hi), "PM": p.pm[1], "PRE7": 510, "PRE8": _ME1.pre8_cut(day, p), "PRE9": 570,
                    "NEWS": 570, "LON": 300, "LUNCH": p.lunch_win[1], "PO3R": p.am_exit or 720}[pending["session"]]
             if pending.get("done_key", "").startswith("SB_"):
                 cut = p.sb_windows[0][1] if pending["session"] == "AM" else p.sb_windows[1][1]
@@ -7418,8 +7433,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 session, w0, wa, wb = name, a_, a_, b_
                 break
         if session is None:
-            if am_lo <= t < am_hi:
-                session, w0, wa, wb = "AM", am_start, am_lo, am_hi
+            am_hi_ = _lc_retry_end(ctx, p, am_hi)        # OA1029 Q23: a live London-close retry slot keeps the AM open to 12:00
+            if am_lo <= t < am_hi_:
+                session, w0, wa, wb = "AM", am_start, am_lo, am_hi_
             elif p.lunch and p.lunch_win[0] <= t < p.lunch_win[1]:
                 session, w0, wa, wb = "LUNCH", p.lunch_win[0], p.lunch_win[0], p.lunch_win[1]    # T8
             elif p.lunch_htf_program and p.lunch_macro_win[0] <= t < p.lunch_macro_win[1]:
@@ -8958,8 +8974,8 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         if ob_d_["body_top"] < entry - p.tick + 1e-9:       # the OB open lies beyond (deeper than) the FVG entry
             es2_t["then_ob"] = (float(ob_d_["body_top"]), float(ob.bottom))
             stop = min(stop, float(ob.bottom) - p.pad)
-    if is_ifvg and (p.ifvg_entry != "edge" or p.ifvg_depth or p.ifvg_stop_pts or p.ifvg_stop == "far"):   # M10 / A8
-        r_ = _SM.ifvg_stop(sd, g, entry, stop, p, i)
+    if is_ifvg and (p.ifvg_entry != "edge" or p.ifvg_depth or p.ifvg_stop_pts or p.ifvg_stop != "ce"):   # M10 / A8
+        r_ = _SM.ifvg_stop(sd, g, entry, stop, p, i, tf=ctx.tf)
         if r_ is None:
             _f("x_ifvg_depth")
             return None                           # caption-gap A8-ifvg-depth-tolerances: the retrace reached past the cap / the CE

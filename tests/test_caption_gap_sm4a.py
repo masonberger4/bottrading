@@ -10,7 +10,14 @@ import pandas as pd
 import pytest
 
 from mentorship import backtest as B, levels as L, setups as SM, sm2, sm3, sm4, strategy as S
+from mentorship.study import OA1029_OLD
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
 
 from test_levels_detectors import BASE, D0, NY, day, ctx_for, frame, history, prior_days, rth_day
 from test_caption_gap_sm1a import StubConf, hist_close, ib, mkctx, sd_of, stub
@@ -40,7 +47,7 @@ def cap(monkeypatch):
 
 
 def test_new_switch_defaults_and_validation():
-    p = Params()
+    p = Params(**OA1029_OLD)                 # the built values; the OA1029 defaults are checked in test_owner_answers_oa1029.py
     assert (p.dagger_entry, p.dagger_level, p.stab_tfs, p.po3_ideal, p.po3_resting, p.po3_rest_off_pts, p.po3_rest_mgmt) == (False, "ce", (15, 60), "off", False, 0.25, "none")
     assert (p.lh_old_low_entry, p.lh_add2_mult, p.lh_old_low_stop_pts, p.pm_old_high_fvg, p.pm_old_high_bars, p.pm_rev_partial, p.pm_rev_first_only) == (False, 1.0, 3.0, False, 6, False, True)
     assert (p.pm_after_draw, p.pm_after_room_pts, p.sb_counter_after_draw, p.leg_tfs, p.m2_live_eq, p.m2_anchor, p.implied_range_gate, p.pm_am_stops) == \
@@ -71,7 +78,7 @@ DAILY_FVG = {1: [(4010.0, 4000.0, "D", 0, 0)]}
 def test_dagger_limit_at_daily_ce(cap):
     """012 ~00:20:06: bias +1, a bullish daily FVG 4000-4010 (CE 4005), price falling into its upper half (close 4008): a buy limit at the CE, the stop under it (floored at min_risk_pts), the
     order cancelled by a trade under the CE; once per FVG; no bias / a close under the CE / a filled lower-half hourly FVG = nothing; `ltf` takes the highest 15m FVG low above the CE."""
-    p = Params(**BASE, dagger_entry=True)
+    p = Params(**BASE, dagger_entry=True, dagger_level="ce")                     # the CE limit (OA1029 Q47: "ltf" is the default; tested below)
     ctx, (sl, ss) = mkctx(DAG_ROWS, base=4020.0, bias=1, conf=StubConf(arrays=DAILY_FVG), hist=hist_close(close=4020.0, hi=4130.0, lo=3900.0))
     i = ib(ctx, "09:30") + 2
     o = sm4.dagger_order(ctx, sl, i, p, "AM", 1.0)
