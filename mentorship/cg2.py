@@ -45,9 +45,9 @@ def _swings(x: np.ndarray) -> list:
     return [j for j in range(1, len(x) - 1) if x[j] > x[j - 1] and x[j] > x[j + 1]]
 
 
-def _ext_near(starts, x, t, span) -> float | None:
-    """The highest x among the bars starting within [t - span, t + span]; None when there is none."""
-    lo, hi = starts.searchsorted(t - span, side="left"), starts.searchsorted(t + span, side="right")
+def _ext_near(starts, x, t, span, width=pd.Timedelta(0)) -> float | None:
+    """The highest x among the bars of length `width` that start within [t - span - width, t + span] (the bars intersecting the window); None when there is none."""
+    lo, hi = starts.searchsorted(t - span - width, side="right"), starts.searchsorted(t + span, side="right")
     return float(x[lo:hi].max()) if hi > lo else None
 
 
@@ -78,21 +78,27 @@ def sym_state(ctx, sg: int, i: int, p):
             if not all(es[1][sws[k]] > es[1][sws[k - 1]] for k in ks):
                 res = ("none", True)
             else:
-                def conf(b, sp=span):
+                def conf(b, sp=span, width=pd.Timedelta(0)):
                     for tn, tp in pairs:
-                        a, bb = _ext_near(b[0], b[1], tn, sp), _ext_near(b[0], b[1], tp, sp)
+                        s_eff = max(min(sp, (tn - tp) / 2 - width), pd.Timedelta(0))        # the windows of the two swings never share a bar
+                        a, bb = _ext_near(b[0], b[1], tn, s_eff, width), _ext_near(b[0], b[1], tp, s_eff, width)
                         if a is None or bb is None or not a > bb:
                             return False
                     return True
                 ok_idx = conf(nq) and conf(ym)
-                no_dxy, ok_dxy = True, True
+                no_dxy, ok_dxy = (p.sym_dxy != "off"), True
                 if p.sym_dxy != "off":
                     dtf = 60 if p.sym_dxy == "1h" else tf
                     db = DXY.closed(DXY.bars(dtf, "auto" if p.sym_dxy == "1h" else "spot"), t_end)
-                    if db is not None and len(db) and db.index[0] <= pairs[0][1]:
+                    width = pd.Timedelta(minutes=dtf)
+                    # available = DXY bars exist from before the first compared swing up to within two bars of the decision time (a spot hole, a stale hour or the end of the series = no information, not a crack)
+                    if db is not None and len(db) and db.index[0] <= pairs[0][1] and db.end.iloc[-1] >= t_end - 2 * width:
                         y = (-db.low if sg > 0 else db.high).values
-                        no_dxy = False
-                        ok_dxy = conf((db.index, y), pd.Timedelta(minutes=dtf * (1 if p.sym_dxy == "1h" else p.sym_win)))
+                        d_ = (db.index, y)
+                        wins = [_ext_near(d_[0], d_[1], t_, pd.Timedelta(0), width) for pr_ in pairs for t_ in pr_]
+                        if all(w is not None for w in wins):
+                            no_dxy = False
+                            ok_dxy = conf(d_, pd.Timedelta(minutes=dtf * (0 if p.sym_dxy == "1h" else p.sym_win)), width)
                 res = (("ok" if (ok_idx and ok_dxy) else "crack"), no_dxy)
     cache[key] = res
     return res
@@ -161,6 +167,9 @@ def _hourly_today(ctx, i: int, p):
     if h is None or dly is None or not len(h):
         return None
     day = pd.Timestamp(ctx.day)
+    h = h.iloc[h.index.searchsorted(pd.Timestamp(ctx.day, tz=DXY.NY) - pd.Timedelta(days=2)):]          # (only today's session is needed: avoid labelling the whole 2019-2026 frame)
+    if not len(h):
+        return None
     lab = DXY.session_label(h.index)
     ht = h[lab == day]
     d = dly[dly.index < day]
@@ -200,13 +209,14 @@ def dxy_ts_state(ctx, i: int, p) -> int:
                 pierced = np.flatnonzero(lo < lv) if kind == "low" else np.flatnonzero(hi > lv)
                 if not len(pierced):
                     continue
-                k = int(pierced[0])
-                for m in range(k, min(len(ht), k + p.dxy_ts_back + 1)):
-                    if (cl[m] > lv) if kind == "low" else (cl[m] < lv):
-                        e = ht.end.iloc[m]
-                        if best is None or e > best[0]:
-                            best = (e, sgn)
-                        break
+                for k in pierced:
+                    k = int(k)
+                    for m in range(k, min(len(ht), k + p.dxy_ts_back + 1)):
+                        if (cl[m] > lv) if kind == "low" else (cl[m] < lv):
+                            e = ht.end.iloc[m]
+                            if best is None or e > best[0]:
+                                best = (e, sgn)
+                            break
         res = best[1] if best else 0
     cache[key] = res
     return res
@@ -262,28 +272,30 @@ def dxy_week_delivered(ctx, d, i: int, p) -> bool:
     if dly is not None and h is not None and len(h):
         day = pd.Timestamp(d)
         mon = day - pd.Timedelta(days=day.weekday())
+        h = h.iloc[h.index.searchsorted(pd.Timestamp(mon, tz=DXY.NY) - pd.Timedelta(days=2)):]
         lab = DXY.session_label(h.index)
         wk = h[lab >= mon]
         prior = dly[(dly.index >= mon - pd.Timedelta(days=7)) & (dly.index < mon)]
-        done = dly[dly.index < day]
+        done = dly[dly.index < mon]                      # (fills are judged on the sessions before the week: this week's own highs are the delivery, not a fill)
         if len(wk) and len(prior) >= 3 and len(done) >= 5:
             hi, lo = float(wk.high.max()), float(wk.low.min())
             open_ = float(wk.open.iloc[0])
-            up = float(wk.close.iloc[-1]) >= open_
+            up = float(wk.high.max()) - open_ >= open_ - float(wk.low.min())               # the side the week has travelled further (sticky once delivered)
             if "dxy_pwh" in names and hi >= float(prior.high.max()):
                 res = True
             if "dxy_pwl" in names and lo <= float(prior.low.min()):
                 res = True
             if "dxy_obj" in names and not res:
                 x = done.iloc[-40:]
-                for j in range(len(x) - 1, 1, -1):          # newest first: a bullish FVG (x[j-2].high < x[j].low) above the open for an up week, the bearish mirror below
+                cands = []
+                for j in range(len(x) - 1, 1, -1):          # a bullish FVG (x[j-2].high < x[j].low) above the open for an up week, the bearish mirror below; the nearest to the open wins
                     a, b = x.iloc[j - 2], x.iloc[j]
                     if up and a.high < b.low and b.low > open_ and (j + 1 >= len(x) or float(x.high.iloc[j + 1:].max()) < b.low):         # an unfilled gap above the week's open
-                        res = hi >= b.low
-                        break
+                        cands.append(float(b.low))
                     if not up and a.low > b.high and b.high < open_ and (j + 1 >= len(x) or float(x.low.iloc[j + 1:].min()) > b.high):
-                        res = lo <= b.high
-                        break
+                        cands.append(float(b.high))
+                if cands:
+                    res = hi >= min(cands) if up else lo <= max(cands)
     cache[key] = res
     return res
 

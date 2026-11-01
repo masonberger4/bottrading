@@ -65,8 +65,9 @@ def spot_1m() -> pd.DataFrame | None:
 def _from_closes(c: pd.Series, tf: int) -> pd.DataFrame:
     g = c.groupby(c.index.floor(f"{tf}min"))
     b = pd.DataFrame({"close": g.last(), "hi_c": g.max(), "lo_c": g.min()})
-    b["open"] = b.close.shift(1)
-    b["open"] = b.open.fillna(g.first())
+    prev_end = b.index.to_series().shift(1) + pd.Timedelta(minutes=tf)
+    cont = (b.index.to_series() == prev_end)                      # open = the previous bar's close only inside a continuous run; after a break (17:00-18:00, weekends, holes) the first close
+    b["open"] = b.close.shift(1).where(cont, g.first())
     b["high"] = np.maximum(b.hi_c, b.open)
     b["low"] = np.minimum(b.lo_c, b.open)
     return b[["open", "high", "low", "close"]]

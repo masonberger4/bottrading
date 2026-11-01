@@ -368,7 +368,7 @@ def test_sym_state_ok_and_cracks():
     assert cg2.sym_state(ctx, 1, i, _p5()) == ("crack", False)
     _spot_from(idx, 100.0 + dn)
     ctx, idx = _ctx_sym(up, up, up)
-    assert cg2.sym_state(ctx, 1, i, _p5(sym_dxy="off"))[0] == "ok" and cg2.sym_state(ctx, 1, i, _p5(sym_dxy="off"))[1] is True
+    assert cg2.sym_state(ctx, 1, i, _p5(sym_dxy="off"))[0] == "ok" and cg2.sym_state(ctx, 1, i, _p5(sym_dxy="off"))[1] is False       # (DXY switched off: no sym_no_dxy tag)
     # ES without new extremes: no information
     ctx, idx = _ctx_sym(dn, up, up)
     assert cg2.sym_state(ctx, 1, i, _p5())[0] == "none"
@@ -553,4 +553,41 @@ def test_dxy_end_day():
     # look-ahead: DXY bars after the decision bar change nothing
     base = cg2.dxy_end_day_block(ctx, _sd(-1), i3, p, [SimpleNamespace(exits=[(pd.Timestamp("2026-06-15 09:00", tz=NY), 1, 1, "t2")], final_hit=True, side="short")])
     assert base is False
+    dxy.set_spot(None)
+
+
+# --- review fixes (second-agent review of 2 / 3a) -----------------------------------------------------------------------------------
+
+def test_sym_dxy_hole_is_no_information_not_a_crack():
+    n = 70
+    up = _wave(n, 0.4)
+    ctx, idx = _ctx_sym(up, up, up)
+    one = pd.date_range(idx[0], idx[0] + pd.Timedelta(minutes=60), freq="1min", tz=NY)           # DXY covers only the first hour, the decision is hours later
+    dxy.set_spot(pd.DataFrame({"close": np.linspace(100, 99, len(one))}, index=one))
+    assert cg2.sym_state(ctx, 1, n - 3, _p5()) == ("ok", True)
+    dxy.set_spot(None)
+
+
+def test_dxy_obj_week_done_is_sticky_and_open_gap_free():
+    specs = {pd.Timestamp(d): _plain(d, hi=(100.8 if d in WEEK1 else 100.5)) for d in WEEK1 + WEEK2}
+    specs[pd.Timestamp("2026-06-02")] = [(0, 100.5), (6, 100.0), (12, 100.4), (22.99, 100.4)]
+    specs[pd.Timestamp("2026-06-03")] = [(0, 101.0), (6, 101.0), (12, 101.5), (22.99, 101.4)]     # a daily FVG: 06-02 high 100.4 < 06-04 low 100.9 ...
+    specs[pd.Timestamp("2026-06-04")] = [(0, 101.4), (6, 100.9), (12, 101.2), (22.99, 101.2)]
+    specs[pd.Timestamp("2026-06-08")] = [(0, 100.0), (12, 100.2), (22.99, 100.2)]               # the week opens at 100.0, the FVG bottom 100.9 lies above
+    specs[pd.Timestamp("2026-06-10")] = [(0, 100.2), (6, 100.2), (12, 101.0), (22.99, 100.8)]    # Wednesday trades into it
+    dxy.set_spot(_sessions(specs))
+    p = _p3(week_done_on_draw="skip", week_done_levels=("dxy_obj",))
+    wed, thu = _es_ctx("2026-06-10"), _es_ctx("2026-06-11")
+    assert cg2.dxy_week_delivered(wed, date(2026, 6, 10), _at(wed, "15:00"), p)
+    assert cg2.dxy_week_delivered(thu, date(2026, 6, 11), _at(thu, "09:30"), p)                 # still delivered on Thursday: the week's own high is no "fill"
+    dxy.set_spot(None)
+
+
+def test_dxy_bars_open_gap_not_in_range():
+    a = pd.date_range("2026-06-01 09:00", periods=60, freq="1min", tz=NY)
+    b = pd.date_range("2026-06-01 18:00", periods=60, freq="1min", tz=NY)
+    dxy.set_spot(pd.DataFrame({"close": np.r_[np.full(60, 100.0), np.full(60, 105.0)]}, index=a.append(b)))
+    bars = dxy.bars(60, "spot")
+    reopen = bars.loc[pd.Timestamp("2026-06-01 18:00", tz=NY)]
+    assert reopen.open == 105.0 and reopen.low == 105.0                                          # the reopen bar does not carry the 17:00 close
     dxy.set_spot(None)
