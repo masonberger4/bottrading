@@ -294,7 +294,7 @@ def entry_extra(ctx, sd, sw, i: int, p, lvt: list):
             lvt.append("smt_dxy")
             if p.dxy_smt != "tag":
                 extra += 1
-        elif p.dxy_smt == "need":
+        elif v is False and p.dxy_smt == "need":                    # (None = no DXY data / no swing: no information, the entry is not blocked)
             hit("dxy_smt_need_fail")
             return extra, "x_no_dxy_smt"
     if p.dxy_unicorn != "off":
@@ -303,7 +303,7 @@ def entry_extra(ctx, sd, sw, i: int, p, lvt: list):
             lvt.append("dxy_unicorn")
             if p.dxy_unicorn != "tag":
                 extra += 1
-        elif p.dxy_unicorn == "need":
+        elif p.dxy_unicorn == "need" and (ok is False or C3._day_bars(ctx, i, 1, 0) is not None):      # (no DXY data = no information; DXY data but no unicorn = the entry is blocked)
             hit("dxy_unicorn_need_fail")
             return extra, "x_no_dxy_unicorn"
     return extra, None

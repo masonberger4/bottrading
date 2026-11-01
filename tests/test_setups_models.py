@@ -18,6 +18,9 @@ from dataclasses import dataclass as _oa_dc
 class Params(Params):   # OA1029: these tests were written for the pre-build engine and exercise other rules - every OA1029 default back at its old value
     __annotations__ = {k: object for k in __import__('mentorship.study', fromlist=['OA1029_OLD']).OA1029_OLD}
     locals().update(__import__('mentorship.study', fromlist=['OA1029_OLD']).OA1029_OLD)
+    sick_count_at: int = 570                # coverage gap 3c: the pre-build sick sister (the 09:30 count, the built reference set, any day)
+    sick_refs: str = "built"
+    sick_consol_only: bool = False
 
 ES = Path("data/mentorship/ES_5min_db.csv").exists() and Path("data/mentorship/NQ_5min_db.csv").exists()
 SYN = dict(es_pt=0.09, use_bias=False, min_draw_pts=0, leg_pd=0)
