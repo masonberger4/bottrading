@@ -1,2 +1,3 @@
 .memsave.lock
 __pycache__/
+scratch/
