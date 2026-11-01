@@ -109,6 +109,10 @@ def scalp_now(ctx, p, session: str, i, sign: int = 0) -> str:
     why = scalp_now_dxy(ctx, p, session, i, sign)
     if why:
         return why
+    from . import cg3 as _CG3
+    why = _CG3.scalp_now(ctx, p, session, i, sign)
+    if why:
+        return why
     if p.sym_gate not in ("hold", "scalp") or i is None or not sign:
         return ""
     st, _ = sym_state(ctx, sign, i, p)
@@ -119,6 +123,10 @@ def scalp_now(ctx, p, session: str, i, sign: int = 0) -> str:
 
 
 def size_mult(ctx, sd, i: int, p, lvt: list) -> float:
+    from . import cg3 as _CG3
+    m3 = _CG3.size_mult(ctx, sd, i, p, lvt)
+    if m3 != 1.0:
+        return m3
     if p.sym_gate == "scalp" and sym_state(ctx, sd.sign, i, p)[0] == "crack":
         lvt.append("size_sym_crack")
         return p.sym_scalp_risk

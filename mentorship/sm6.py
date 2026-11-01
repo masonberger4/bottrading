@@ -966,7 +966,7 @@ def order_gate6(ctx, sd, sw, i: int, p, entry: float, stop: float, session: str,
                 j0 = ctx.start + 1 + int(hit_j[0]) if len(hit_j) else None
                 if j0 is not None and ob["k"] <= j0:
                     return "x_eq_stale_ob"
-    if p.sym_swing_ts and not synth and sw.get("smt") is False:
+    if p.sym_swing_ts and not synth and sw.get("smt") is False and (not p.sym_swing_dxy or S._CG3.dxy_confirms(ctx, sd, i, p)):
         hit("sym_swing")
         if sw["ext"] <= float(sd.l[ctx.start:i + 1].min()) + p.tick:
             return "x_sym_swing"

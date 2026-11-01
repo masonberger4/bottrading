@@ -591,3 +591,150 @@ def test_dxy_bars_open_gap_not_in_range():
     reopen = bars.loc[pd.Timestamp("2026-06-01 18:00", tz=NY)]
     assert reopen.open == 105.0 and reopen.low == 105.0                                          # the reopen bar does not carry the 17:00 close
     dxy.set_spot(None)
+
+
+# --- DXY intraday entry rules (cg3.py): items 1, 4, 5, 6, sym_swing_dxy ------------------------------------------------------------------
+
+from mentorship import cg3
+
+
+def _spot_day(day, anchors, start="00:00", end="16:00"):
+    """A 1-minute close series for one calendar day from (hh:mm, value) anchors."""
+    t = pd.date_range(pd.Timestamp(f"{day} {start}", tz=NY), pd.Timestamp(f"{day} {end}", tz=NY), freq="1min")
+    xs = np.array([(pd.Timestamp(f"{day} {h}", tz=NY) - t[0]).total_seconds() / 60 for h, _ in anchors])
+    ys = np.array([v for _, v in anchors])
+    return pd.DataFrame({"close": np.interp(np.arange(len(t)), xs, ys)}, index=t)
+
+
+DAY = "2026-06-24"
+
+
+def _ctx_day(day=DAY):
+    return _es_ctx(day, "00:00", "16:00")
+
+
+def _p4(**kw):
+    return Params(**kw)
+
+
+def test_cg3_params_off_by_default():
+    p = Params()
+    assert (p.dxy_states, p.dxy_session_gate, p.dxy_eq_gate, p.dxy_range_trigger, p.sym_swing_dxy, p.dxy_state_from) == ("off", "off", "off", "off", False, "07:00")
+    for bad in (dict(dxy_states="x"), dict(dxy_session_gate="x"), dict(dxy_eq_gate="x"), dict(dxy_range_from="x"), dict(dxy_range_trigger="x")):
+        with pytest.raises(ValueError):
+            Params(**bad)
+
+
+def test_dxy_states():
+    # a rally: 07:00 base, a swing high at 07:40, a close above it by 09:30
+    up = _spot_day(DAY, [("00:00", 100.0), ("07:00", 100.0), ("07:40", 100.4), ("08:00", 100.2), ("08:20", 100.5), ("08:40", 100.3), ("09:30", 101.0), ("16:00", 101.0)])
+    dxy.set_spot(up)
+    ctx = _ctx_day()
+    i = _at(ctx, "09:30")
+    assert cg3.dxy_state(ctx, i, _p4()) == 1
+    o = dict(entry=1.0, lv_tags="")
+    assert cg3.order_ok(ctx, _sd(1), o, "AM", i, _p4(dxy_states="filter")) == "x_cg_dxy_state" and "dxy_up" in o["lv_tags"]
+    assert cg3.order_ok(ctx, _sd(-1), dict(entry=1.0, lv_tags=""), "AM", i, _p4(dxy_states="filter")) is None              # shorts are fine in a rising dollar
+    assert cg3.order_ok(ctx, _sd(1), dict(entry=1.0, lv_tags=""), "AM", i, _p4(dxy_states="soft")) is None                 # soft: a scalp at half risk instead
+    assert cg3.scalp_now(ctx, _p4(dxy_states="soft"), "AM", i, 1) == "cg_dxy_state"
+    assert cg3.size_mult(ctx, _sd(1), i, _p4(dxy_states="soft"), []) == 0.5
+    assert cg3.size_mult(ctx, _sd(1), i, _p4(dxy_states="filter"), []) == 1.0
+    # a falling dollar: longs full size (no block, no scalp)
+    dn = _spot_day(DAY, [("00:00", 100.0), ("07:00", 100.0), ("07:40", 99.6), ("08:00", 99.8), ("08:20", 99.5), ("08:40", 99.7), ("09:30", 99.0), ("16:00", 99.0)])
+    dxy.set_spot(dn)
+    ctx = _ctx_day()
+    assert cg3.dxy_state(ctx, i, _p4()) == -1
+    assert cg3.order_ok(ctx, _sd(1), dict(entry=1.0, lv_tags=""), "AM", i, _p4(dxy_states="filter")) is None and cg3.scalp_now(ctx, _p4(dxy_states="filter"), "AM", i, 1) == ""
+    assert cg3.order_ok(ctx, _sd(-1), dict(entry=1.0, lv_tags=""), "AM", i, _p4(dxy_states="filter")) == "x_cg_dxy_state"      # a falling dollar blocks ES shorts
+    # flat: scalp
+    flat = _spot_day(DAY, [("00:00", 100.0), ("07:00", 100.0), ("07:40", 100.3), ("08:00", 100.0), ("08:20", 100.3), ("08:40", 99.9), ("09:30", 100.1), ("16:00", 100.1)])
+    dxy.set_spot(flat)
+    ctx = _ctx_day()
+    assert cg3.dxy_state(ctx, i, _p4()) == 0 and cg3.scalp_now(ctx, _p4(dxy_states="filter"), "AM", i, 1) == "cg_dxy_state"
+    # no data (the file ends before the day)
+    dxy.set_spot(_spot_day("2026-06-01", [("00:00", 100.0), ("16:00", 100.0)]))
+    ctx = _ctx_day()
+    assert cg3.dxy_state(ctx, i, _p4()) is None
+    o = dict(entry=1.0, lv_tags="")
+    assert cg3.order_ok(ctx, _sd(1), o, "AM", i, _p4(dxy_states="filter")) is None and "dxy_na" in o["lv_tags"]
+    dxy.set_spot(None)
+
+
+def test_dxy_states_no_lookahead():
+    base = [("00:00", 100.0), ("07:00", 100.0), ("07:40", 100.4), ("08:00", 100.2), ("08:20", 100.5), ("08:40", 100.3), ("09:30", 100.1)]
+    a = _spot_day(DAY, base + [("09:31", 100.1), ("16:00", 100.1)])
+    b = _spot_day(DAY, base + [("09:31", 105.0), ("16:00", 105.0)])
+    out = []
+    for df in (a, b):
+        dxy.set_spot(df)
+        ctx = _ctx_day()
+        out.append(cg3.dxy_state(ctx, _at(ctx, "09:20"), _p4()))                              # the 09:20 bar closes at 09:25: nothing later may count
+    assert out[0] == out[1]
+    dxy.set_spot(None)
+
+
+def test_dxy_session_gate():
+    # 00:00-09:30: a swing low near 03:00 (key support 99.80) and a bullish 15m FVG under price: DXY bullish structure, ES bearish
+    pts = [("00:00", 100.0), ("02:00", 99.95), ("03:00", 99.8), ("03:45", 99.82), ("04:30", 100.3), ("06:00", 100.5), ("07:00", 100.7), ("09:30", 100.8), ("16:00", 100.8)]
+    dxy.set_spot(_spot_day(DAY, pts))
+    ctx = _ctx_day()
+    p = _p4(dxy_session_gate="filter")
+    assert cg3.dxy_sess_state(ctx, _at(ctx, "09:20"), p) is None                                    # before the mark: not set
+    st = cg3.dxy_sess_state(ctx, _at(ctx, "09:35"), p)
+    assert st == 1
+    assert cg3.order_ok(ctx, _sd(1), dict(entry=1.0, lv_tags=""), "AM", _at(ctx, "09:35"), p) == "x_cg_dxy_sess"
+    assert cg3.order_ok(ctx, _sd(-1), dict(entry=1.0, lv_tags=""), "AM", _at(ctx, "09:35"), p) is None
+    # DXY breaks down through the FVG and the support after 09:30: the long block lifts, then the short block
+    pts2 = pts[:-2] + [("09:30", 100.8), ("10:15", 100.0), ("11:00", 99.5), ("16:00", 99.5)]
+    dxy.set_spot(_spot_day(DAY, pts2))
+    ctx = _ctx_day()
+    assert cg3.dxy_sess_state(ctx, _at(ctx, "09:35"), p) == 1
+    assert cg3.dxy_sess_state(ctx, _at(ctx, "11:30"), p) == -1
+    dxy.set_spot(None)
+
+
+def test_dxy_eq_gate():
+    # a down leg: swing high 08:00 (100.7), swing low 09:00 (100.2), EQ 100.45; a 5m close above the EQ blocks longs
+    pts = [("00:00", 100.4), ("07:30", 100.4), ("08:00", 100.7), ("08:30", 100.5), ("09:00", 100.2), ("09:20", 100.35), ("09:50", 100.55), ("16:00", 100.55)]
+    dxy.set_spot(_spot_day(DAY, pts))
+    ctx = _ctx_day()
+    p = _p4(dxy_eq_gate="block")
+    assert cg3.dxy_eq_state(ctx, _at(ctx, "09:25"), p) == 0                                         # still under the EQ (100.45)
+    assert cg3.dxy_eq_state(ctx, _at(ctx, "09:55"), p) == 1
+    assert cg3.order_ok(ctx, _sd(1), dict(entry=1.0, lv_tags=""), "AM", _at(ctx, "09:55"), p) == "x_cg_dxy_eq"
+    assert cg3.order_ok(ctx, _sd(-1), dict(entry=1.0, lv_tags=""), "AM", _at(ctx, "09:55"), p) is None
+    assert cg3.order_ok(ctx, _sd(1), dict(entry=1.0, lv_tags=""), "AM", _at(ctx, "09:55"), _p4(dxy_eq_gate="tag")) is None
+    dxy.set_spot(None)
+
+
+def test_dxy_range_trigger():
+    # the 09:15-09:30 range is 103.00-103.10; DXY then dips and runs above 103.10 at 09:52
+    pts = [("00:00", 103.0), ("09:15", 103.0), ("09:22", 103.1), ("09:29", 103.05), ("09:40", 102.9), ("09:52", 103.2), ("09:58", 103.3), ("10:05", 103.4), ("16:00", 103.4)]
+    dxy.set_spot(_spot_day(DAY, pts))
+    ctx = _ctx_day()
+    p = _p4(dxy_range_trigger="gate")
+    assert cg3.dxy_range_state(ctx, _at(ctx, "09:40"), p) == 0                        # the dip armed the long side, the recovery closed above its bearish FVG: nothing armed, the short waits
+    assert cg3.order_ok(ctx, _sd(-1), dict(entry=1.0, lv_tags=""), "AM", _at(ctx, "09:40"), p) == "x_cg_dxy_range"          # the ES short waits
+    assert cg3.dxy_range_state(ctx, _at(ctx, "10:00"), p) == 1
+    assert cg3.order_ok(ctx, _sd(-1), dict(entry=1.0, lv_tags=""), "AM", _at(ctx, "10:00"), p) is None
+    assert cg3.order_ok(ctx, _sd(1), dict(entry=1.0, lv_tags=""), "AM", _at(ctx, "10:00"), p) == "x_cg_dxy_range"
+    assert cg3.order_ok(ctx, _sd(1), dict(entry=1.0, lv_tags=""), "PM", _at(ctx, "10:00"), p) is None                       # AM only
+    # a bullish 1m FVG (a gap up on the closes) forms in the run; a later 1m close under it cancels, break_only ignores that
+    pts2 = [("00:00", 103.0), ("09:15", 103.0), ("09:22", 103.1), ("09:29", 103.05), ("09:52", 103.2), ("09:53", 103.5), ("09:56", 103.6), ("10:05", 103.0), ("16:00", 103.0)]
+    dxy.set_spot(_spot_day(DAY, pts2))
+    ctx = _ctx_day()
+    assert cg3.dxy_range_state(ctx, _at(ctx, "10:15"), p) == 0
+    assert cg3.dxy_range_state(ctx, _at(ctx, "10:15"), _p4(dxy_range_trigger="break_only")) in (0, 1)
+    dxy.set_spot(None)
+
+
+def test_sym_swing_dxy_confirms():
+    pts = [("00:00", 100.0), ("07:00", 100.0), ("08:00", 100.4), ("09:00", 100.2), ("09:20", 100.9), ("16:00", 100.9)]
+    dxy.set_spot(_spot_day(DAY, pts))
+    ctx = _ctx_day()
+    p = _p4(sym_win=2)
+    assert cg3.dxy_confirms(ctx, _sd(1), _at(ctx, "09:25"), p) is True                           # an ES low is confirmed by a new DXY high
+    assert cg3.dxy_confirms(ctx, _sd(-1), _at(ctx, "09:25"), p) is False
+    dxy.set_spot(_spot_day("2026-06-01", [("00:00", 100.0), ("16:00", 100.0)]))
+    assert cg3.dxy_confirms(_ctx_day(), _sd(1), _at(ctx, "09:25"), p) is True                    # no data: the extra condition is not applied
+    dxy.set_spot(None)

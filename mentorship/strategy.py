@@ -3552,6 +3552,15 @@ class Params:
     dxy_end_day: str = "off"             # 059 ~23:01: ES hit its final target and, at the same time, DXY reached the first level of its HTF ladder = the day's move is done. "tag" / "block" (no same-direction orders until 15:00; the last hour is left alone) / "block_day"
     dxy_end_win: int = 3                 # [our interpretation of "at the same time"] 5-minute bars of margin around the DXY 1h bar
     dxy_obj_levels: tuple = ("rb", "rb_ce", "wick", "fvg")   # the ladder of 035 ~24:19: rejection-block close, wick CE, wick extreme, the next daily FVG; the weekly OB open of 059 is not built (needs weekly dollar arrays)
+    # DXY intraday entry rules (cg3.py; dxy_intraday_spec_2026-10-31.md items 1, 4, 5, 6, 11) - need the 1-minute spot file (2019-2025), otherwise no information; all off
+    dxy_states: str = "off"              # 048 ~23:44; 022 ~4:25: the dollar's 5m state - a rally = no ES longs, consolidating = small scalps, falling = full size (shorts mirror). "tag" / "filter" (D2: hard block) / "soft" (a rally = a half-risk scalp)
+    dxy_state_from: str = "07:00"        # [our interpretation] the DXY swings of the state are counted from here
+    dxy_session_gate: str = "off"        # 031 ~7:54, ~15:17: at 09:30 DXY's key support and the bullish 15m FVG beneath it: held = ES bearish (no longs), a 15m body close below the FVG cancels, through the support = ES decisively bullish (no shorts); the mirror. "tag" / "filter" / "bias" (= filter; the day-bias feed is not wired)
+    dxy_eq_gate: str = "off"             # 045 ~42:00: a DXY 5m close above the EQ of its down-leg range = no ES longs (the up-leg mirror: below the EQ = no shorts). "tag" / "block" / "block_short_model" (= block; the arming of the ES short model is not built)
+    dxy_range_from: str = "swings"       # "swings" (the latest 5m swing high / low pair) / "0830" / "0930" (the range from that time to now)
+    dxy_range_trigger: str = "off"       # 042 ~19:00, ~23:30, ~41:41: an AM ES short waits for DXY to trade above its 09:15-09:30 range high and to hold its nearest bullish 1m FVG after 09:30 (a 1m body close under it cancels); the long mirrors. "tag" / "gate" / "break_only" (no FVG hold)
+    dxy_range_win: tuple = ("09:15", "09:30")
+    sym_swing_dxy: bool = False          # 032 ~34:51 (extends sym_swing_ts): the counter trade is dropped only when DXY also made the opposite session extreme (5m, within sym_win bars)
     # coverage gap 3c (package 3c): sick sister, ICT's exact version (acts only with sick_sister=True; setups.sick_sister / cg1.py)
     sick_count_at: int = 480             # 053 ~3:47 ("you have the high broken here at 8 am"): the minute of day of the AM count; 570 = the built 09:30 count (the PM count stays 13:30)
     sick_refs: str = "053"               # 053 ~3:47: "053" = only the prior session's afternoon high (the prior PM range's high) and the most recent overnight swing high (the latest 3-candle swing high confirmed before the count, broken = a later bar traded above it) [our interpretation of "overnight swing high"]; "built" = PDH 1-3, the overnight high, London, prior PM
@@ -4122,6 +4131,10 @@ class Params:
                 or self.dxy_mt_lookback < 3 or self.dxy_end_win < 0 or set(self.dxy_obj_levels) - {"rb", "rb_ce", "wick", "fvg"}):
             raise ValueError("coverage gap 3a: dxy_htf_src dx / spot, dxy_ts_raid off / tag / filter / prefer, dxy_daily_mt off / tag / scalp / skip, dxy_mt_mode body / range, dxy_end_day off / tag / block / block_day, "
                              "dxy_ts_back >= 1, dxy_ts_lookback / dxy_mt_lookback >= 3, dxy_end_win >= 0, dxy_obj_levels a subset of (rb, rb_ce, wick, fvg)")
+        if (self.dxy_states not in ("off", "tag", "filter", "soft") or self.dxy_session_gate not in ("off", "tag", "filter", "bias") or self.dxy_eq_gate not in ("off", "tag", "block", "block_short_model")
+                or self.dxy_range_from not in ("swings", "0830", "0930") or self.dxy_range_trigger not in ("off", "tag", "gate", "break_only") or len(self.dxy_range_win) != 2):
+            raise ValueError("DXY intraday: dxy_states off / tag / filter / soft, dxy_session_gate off / tag / filter / bias, dxy_eq_gate off / tag / block / block_short_model, dxy_range_from swings / 0830 / 0930, "
+                             "dxy_range_trigger off / tag / gate / break_only, dxy_range_win (start, end)")
         if self.sick_refs not in ("053", "built") or not 0 <= self.sick_count_at < 1440:
             raise ValueError("coverage gap 3c: sick_refs '053' / 'built', 0 <= sick_count_at < 1440")
         if self.ndog_life not in ("friday", "16h", "5d") or self.ndog_min_pts < 0:
@@ -10632,6 +10645,7 @@ from . import dwc1 as _DWC  # noqa: E402  (caption-gap pass, day_week_context#1/
 from . import dwc2 as _DWC2  # noqa: E402  (caption-gap pass, day_week_context#2/3: engine glue)
 from . import dwc3 as _DWC3  # noqa: E402  (caption-gap pass, day_week_context#3/3: engine glue)
 from . import cg1 as _CG1  # noqa: E402  (coverage gaps 3b-3d: engine glue)
+from . import cg3 as _CG3  # noqa: E402  (DXY intraday entry rules)
 INDEX_SYMBOLS = _DWC3.INDEX_SYMBOLS   # OT-stocks-swing-only: the labels that are not individual stocks (the spec lists eight; the set is wider - owner question)
 from . import setups as _SM   # noqa: E402  (setups_models package; imports this module back)
 from . import entries as _EN  # noqa: E402  (entries_stops_sizing package; imports this module back)

@@ -82,14 +82,14 @@ def _drop_bad(b: pd.DataFrame, tf: int) -> pd.DataFrame:
 
 
 def bars(tf: int, src: str = "auto") -> pd.DataFrame | None:
-    """DXY OHLC bars of `tf` minutes (5 / 15 / 60 / 240 ...), indexed by bar start, with `end` = start + tf. src: "spot" (needs the spot file; tf >= 5), "dx" (Databento DX 1h resampled; tf >= 60),
+    """DXY OHLC bars of `tf` minutes (1 / 5 / 15 / 60 / 240 ...), indexed by bar start, with `end` = start + tf. src: "spot" (needs the spot file), "dx" (Databento DX 1h resampled; tf >= 60),
     "auto" = spot when available and the bar is inside its 2019-2025 range, else dx for tf >= 60, else None. None when nothing covers it."""
     key = (tf, src, "df" in _SPOT, id(_SPOT.get("df")))
     if key in _CACHE:
         return _CACHE[key]
     out = None
     s = spot_1m() if src in ("auto", "spot") else None
-    if s is not None and len(s) and tf >= 5:
+    if s is not None and len(s) and tf >= 1:
         out = _drop_bad(_from_closes(s.close, tf), tf)
     if src in ("auto", "dx") and tf >= 60:
         from . import databento_extra as DE

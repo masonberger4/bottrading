@@ -22,8 +22,8 @@ def _tag(o: dict, t: str) -> None:
 
 def order_ok(ctx, sd, o: dict, session: str, i: int, p, trades=()):
     """A funnel key when the armed order `o` (side space) breaks a coverage-gap rule, else None."""
-    from . import cg2 as _CG2
-    why = _CG2.order_ok(ctx, sd, o, session, i, p, trades)
+    from . import cg2 as _CG2, cg3 as _CG3
+    why = _CG2.order_ok(ctx, sd, o, session, i, p, trades) or _CG3.order_ok(ctx, sd, o, session, i, p)
     if why is not None:
         return why
     if not p.ndog_ce_filter:
