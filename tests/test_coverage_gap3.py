@@ -966,10 +966,57 @@ def test_dxy_unicorn():
     ctx = _ctx_day()
     assert cg4.dxy_unicorn(ctx, sd, _at(ctx, "09:55"), _p4())["killed"] is True
     assert cg4.entry_extra(ctx, sd, None, _at(ctx, "09:55"), _p4(dxy_unicorn="need"), []) == (0, "x_no_dxy_unicorn")
-    # the vault exit closes a filled long tagged dxy_unicorn
-    pos = dict(left=4)
-    tr = SimpleNamespace(exits=[], lv_tags="a|dxy_unicorn")
+    # the vault exit: a filled long tagged dxy_unicorn closes when a DXY 1m close goes above the FVG high that was in force at the fill (not before; not in tag mode)
+    dxy.set_spot(_closes_day(DAY, [("00:00", 100.0), ("09:00", 100.0), ("09:29", 100.0)], ("09:30", _unicorn_closes() + [100.25] * 4 + [100.35, 100.36, 100.37, 100.38])))
+    ctx = _ctx_day()
     sd2 = SimpleNamespace(sign=1, c=np.full(len(ctx.idx), 100.0), x=lambda v: v)
-    cg4.unicorn_exit(ctx, sd2, pos, tr, _at(ctx, "09:55"), ctx.idx[_at(ctx, "09:55")], _p4(dxy_unicorn="qualify"))
+    f_i = _at(ctx, "09:55")
+    pos = dict(left=4, fill_i=f_i)
+    tr = SimpleNamespace(exits=[], lv_tags="a|dxy_unicorn")
+    cg4.unicorn_exit(ctx, sd2, pos, tr, _at(ctx, "10:00"), ctx.idx[_at(ctx, "10:00")], _p4(dxy_unicorn="tag"))
+    assert not tr.exits and "dxy_uni_fvg" not in pos                             # tag mode never closes a trade
+    cg4.unicorn_exit(ctx, sd2, pos, tr, _at(ctx, "10:00"), ctx.idx[_at(ctx, "10:00")], _p4(dxy_unicorn="qualify"))
     assert tr.exits and tr.exits[0][3] == "dxy_unicorn" and pos["left"] == 0
+    dxy.set_spot(None)
+
+
+def test_dxy_staged_bank_then_exit():
+    es = [100, 101, 102, 104, 103, 103.5, 104.5, 104.4, 104.2, 104.3, 104.1, 105.5, 105.4, 106.0]
+    dxy.set_spot(_dxy_flat_after_swing())
+    ctx, sd, pos, tr, idx = _short_fixture(es)
+    p = _p4(dxy_intrade="bank", dxy_intrade_tfs=("5m",), dxy_nonconf_exit="after_partial")
+    cg4.manage(ctx, sd, pos, tr, 11, idx[11], p)
+    assert [e[3] for e in tr.exits] == ["dxy_intrade"]                           # D3: the bank is the first partial ...
+    cg4.manage(ctx, sd, pos, tr, 13, idx[13], p)
+    assert [e[3] for e in tr.exits] == ["dxy_intrade", "dxy_nonconf"] and pos["left"] == 0     # ... and the next unconfirmed new extreme closes the rest
+    dxy.set_spot(None)
+
+
+def test_dxy_smt_short_mirror():
+    # an ES SHORT after a sweep of a high (side space: sd.l = -real high): the real high at j1 is above the one at j0; DXY's low near j1 is not below its low near j0 = SMT
+    n = 40
+    idx = pd.date_range(f"{DAY} 09:30", periods=n, freq="1min", tz=NY)
+    real_h = np.full(n, 100.0)
+    real_h[8], real_h[20] = 101.0, 102.0
+    real_h[7], real_h[9], real_h[19], real_h[21] = 100.5, 100.5, 101.5, 101.5
+    ctx = SimpleNamespace(idx=idx, t=(idx.hour * 60 + idx.minute).values, tf=1, day=pd.Timestamp(DAY).date(), start=0)
+    sd = SimpleNamespace(sign=-1, h=-(real_h - 0.5), l=-real_h, c=-(real_h - 0.2), x=lambda v: -v)
+    sw = dict(ext_i=20)
+    p = _p4(dxy_smt="qualify")
+    dxy.set_spot(_spot_day(DAY, [("00:00", 100.0), ("09:38", 99.6), ("09:50", 99.8), ("16:00", 99.8)]))        # DXY low 99.6 near the first high, 99.8 (higher) near the new high
+    assert cg4.dxy_smt(ctx, sd, 25, sw, p) is True
+    dxy.set_spot(_spot_day(DAY, [("00:00", 100.0), ("09:38", 99.8), ("09:50", 99.4), ("16:00", 99.4)]))        # the dollar made a lower low: it confirms
+    assert cg4.dxy_smt(ctx, sd, 25, sw, p) is False
+    dxy.set_spot(None)
+
+
+def test_sym_swing_dxy_window_is_the_swing():
+    pts = [("00:00", 100.0), ("07:00", 100.0), ("08:00", 100.4), ("09:00", 100.2), ("09:10", 100.9), ("09:40", 100.3), ("10:00", 100.3), ("16:00", 100.3)]
+    dxy.set_spot(_spot_day(DAY, pts))
+    ctx = _ctx_day()
+    p = _p4(sym_win=2)
+    sw = dict(ext_i=_at(ctx, "09:10"))                                          # the ES low printed with the DXY high of 09:10
+    assert cg3.dxy_confirms(ctx, _sd(1), _at(ctx, "10:00"), p, sw) is True      # even though the order arms 50 minutes later and DXY has since fallen back
+    sw2 = dict(ext_i=_at(ctx, "09:45"))
+    assert cg3.dxy_confirms(ctx, _sd(1), _at(ctx, "10:00"), p, sw2) is False
     dxy.set_spot(None)

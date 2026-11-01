@@ -37,16 +37,25 @@ def _tf_bars(ctx, i: int, tf: int, from_min: int = 7 * 60):
 
 
 def dxy_unconfirmed(ctx, sg: int, i: int, tf: int, t_from, from_min: int = 7 * 60) -> bool | None:
-    """True when the dollar has NOT confirmed an ES move in direction sg on its `tf`-minute bars at the closed ES bar i: since `t_from` (the fill) it has made no Y extreme beyond the one it produced between
-    `from_min` and `t_from` [the quote "so far it hasn't made a higher high than the high it's already produced" (037 ~32:37)]. None = no data / nothing before the fill."""
+    """True when the dollar has NOT confirmed an ES move in direction sg at the closed ES bar i (037 ~32:37: "so far it hasn't made a higher high than the high it's already produced"): since `t_from` (the fill) its
+    closed 5-minute closes have made no Y extreme beyond the last confirmed swing of its `tf`-minute bars that ended before the fill. Y = -close (sg > 0) or close (sg < 0). None = no data / no swing before the fill."""
+    tfill = pd.Timestamp(t_from)
     b = _tf_bars(ctx, i, tf, from_min)
-    if b is None or len(b) < 4:
+    b5 = _tf_bars(ctx, i, 5, from_min)
+    if b is None or b5 is None:
         return None
-    y = _Y(b, sg)
-    cut = int(b.index.searchsorted(DXY.floor_tz(pd.DatetimeIndex([pd.Timestamp(t_from)]), f"{tf}min")[0], side="left"))
-    if cut < 2 or cut >= len(y):
+    pre = b[b.end <= tfill]
+    if len(pre) < 3:
         return None
-    return bool(y[cut:].max() <= y[:cut].max() + 1e-12)
+    y = -pre.close.values if sg > 0 else pre.close.values
+    sw = C3._swing_idx(y, True)
+    if not sw:
+        return None
+    post = b5[b5.index >= tfill]
+    if not len(post):
+        return None
+    yp = -post.close.values if sg > 0 else post.close.values
+    return bool(yp.max() <= y[sw[-1]] + 1e-12)
 
 
 def _es_new(sd, pos, i: int) -> bool:
@@ -84,13 +93,14 @@ def cap_next_rung(pos: dict) -> bool:
     if pos.get("t2") is not None and pos["t2"] > pos["levels"][-1]:
         pos["t2"] = pos["levels"][-1]
     pos["final_T"] = False
+    pos["runner"] = False
     return True
 
 
 def _ladder_levels(ctx, sg: int, p):
     """All levels of the dollar's HTF ladder in the direction opposite to ES (sg < 0 -> up), from the completed daily bars before today (cg2._ladder_all); [] when none."""
     from . import cg2
-    d = DXY.daily(p.dxy_htf_src)
+    d = DXY.daily("spot")                                  # always the spot series: it is compared with spot bars (spec 0.3: never mix series)
     if d is None:
         return []
     day = pd.Timestamp(ctx.day)
@@ -166,30 +176,34 @@ def manage(ctx, sd, pos: dict, tr, i: int, ts, p) -> None:
                         pos["left"] = 0
                         pos["dxy_nc_done"] = True
                         return
-            if want7 and not started and (c - basis) / risk >= p.smt_bank_min_r:
+            if want7 and not started and not pos.get("dxy_banked") and (c - basis) / risk >= p.smt_bank_min_r:
                 tfs = [TFS[t] for t in p.dxy_intrade_tfs]
                 if all(dxy_unconfirmed(ctx, sg, i, t, ctx.idx[pos["fill_i"]]) for t in tfs):
                     hit("dxy_intrade")
                     if p.dxy_intrade == "bank":
                         _bank(S, sd, pos, tr, ts, c, p, p.dxy_intrade_sister_frac if sister else p.dxy_intrade_frac, "dxy_intrade")
-                        pos["dxy_nc_done"] = True
+                        pos["dxy_banked"] = True
 
     # ---- item 9: the DXY target ladder ----------------------------------------------------------------------------------------------------
     if p.dxy_target_partial != "off" and pos["left"] and (sg < 0 or p.dxy_intrade_long):
-        lv = pos.get("dxy_ladder")
-        if lv is None:
-            lv = pos["dxy_ladder"] = _ladder_levels(ctx, sg, p)
-            pos["dxy_ladder_n"] = 0
         b = _tf_bars(ctx, i, 5)
-        if lv and b is not None and pos["dxy_ladder_n"] < len(lv):
+        if "dxy_ladder" not in pos and b is not None:
+            pre = b[b.end <= ctx.idx[pos["fill_i"]]]
+            px0 = float(pre.close.iloc[-1]) if len(pre) else None
+            lv = _ladder_levels(ctx, sg, p) if px0 is not None else []
+            pos["dxy_ladder"] = [v for v in lv if ((v > px0) if sg < 0 else (v < px0))]          # only the levels still ahead of the dollar at the fill
+            pos["dxy_ladder_n"] = 0
+        lv = pos.get("dxy_ladder")
+        if lv and b is not None:
             post = b[b.index >= ctx.idx[pos["fill_i"]]]
-            if len(post):
+            while len(post) and pos["dxy_ladder_n"] < len(lv) and pos["left"]:
                 nxt = lv[pos["dxy_ladder_n"]]
-                if (float(post.high.max()) >= nxt) if sg < 0 else (float(post.low.min()) <= nxt):
-                    pos["dxy_ladder_n"] += 1
-                    hit("dxy_target_partial")
-                    if p.dxy_target_partial == "partial":
-                        _bank(S, sd, pos, tr, ts, c, p, p.dxy_target_frac, "dxy_target")
+                if not ((float(post.high.max()) >= nxt) if sg < 0 else (float(post.low.min()) <= nxt)):
+                    break
+                pos["dxy_ladder_n"] += 1
+                hit("dxy_target_partial")
+                if p.dxy_target_partial == "partial":
+                    _bank(S, sd, pos, tr, ts, c, p, p.dxy_target_frac, "dxy_target")
 
 
 # ---- item 3: the DXY SMT ---------------------------------------------------------------------------------------------------------------------
@@ -201,11 +215,8 @@ def dxy_smt(ctx, sd, i: int, sw: dict, p) -> bool | None:
         return None
     sg = sd.sign
     j1 = int(sw["ext_i"])
-    x = sd.l if sg > 0 else sd.h
-    if sg > 0:
-        hist = [j for j in range(max(ctx.start + 1, j1 - 120), j1 - 1) if x[j] < x[j - 1] and x[j] < x[j + 1]]
-    else:
-        hist = [j for j in range(max(ctx.start + 1, j1 - 120), j1 - 1) if x[j] > x[j - 1] and x[j] > x[j + 1]]
+    x = sd.l                                       # side space: the swept extreme is a low for a long AND for a short (sd.l = -high of the real series)
+    hist = [j for j in range(max(ctx.start + 1, j1 - 120), j1 - 1) if x[j] < x[j - 1] and x[j] < x[j + 1] and x[j] > x[j1]]      # the previous swing low that ES took out
     if not hist:
         return None
     j0 = hist[-1]
@@ -218,7 +229,7 @@ def dxy_smt(ctx, sd, i: int, sw: dict, p) -> bool | None:
 
     def near(j):
         t = ctx.idx[j]
-        lo, hi = b.index.searchsorted(t - span, side="left"), b.index.searchsorted(t + span + pd.Timedelta(minutes=ctx.tf), side="left")
+        lo, hi = b.index.searchsorted(t - span, side="left"), b.index.searchsorted(t + pd.Timedelta(minutes=ctx.tf), side="left")      # the same trailing window for both swings
         return float(y[lo:hi].max()) if hi > lo else None
 
     a, bb = near(j1), near(j0)
@@ -299,11 +310,20 @@ def entry_extra(ctx, sd, sw, i: int, p, lvt: list):
 
 
 def unicorn_exit(ctx, sd, pos: dict, tr, i: int, ts, p) -> None:
-    """dxy_unicorn_exit: a filled ES long qualified by the DXY unicorn closes when a DXY 1m body closes above the FVG's high (the vault, 037 ~49:48)."""
-    if not (p.dxy_unicorn != "off" and p.dxy_unicorn_exit and pos["left"] and "dxy_unicorn" in str(getattr(tr, "lv_tags", ""))):
+    """dxy_unicorn_exit (qualify / need, not tag): a filled ES long qualified by the DXY unicorn closes when a DXY 1m body closes above the FVG's high that was in force at the fill (the vault, 037 ~49:48)."""
+    if not (p.dxy_unicorn in ("qualify", "need") and p.dxy_unicorn_exit and pos["left"] and "dxy_unicorn" in str(getattr(tr, "lv_tags", ""))):
         return
-    u = dxy_unicorn(ctx, sd, i, p)
-    if u is not None and u["killed"]:
+    if "dxy_uni_fvg" not in pos:
+        u = dxy_unicorn(ctx, sd, pos["fill_i"], p)
+        pos["dxy_uni_fvg"] = None if u is None else (u["fvg_high"], u["fvg_low"])
+    f = pos["dxy_uni_fvg"]
+    if f is None:
+        return
+    b = C3._day_bars(ctx, i, 1, 0)
+    if b is None:
+        return
+    c = b[b.index >= ctx.idx[pos["fill_i"]]].close.values
+    if len(c) and ((c > f[0]).any() if sd.sign > 0 else (c < f[1]).any()):          # a long: a 1m close above the bearish FVG high; the short mirror: below the bullish FVG low
         hit("dxy_unicorn_exit")
         tr.exits.append((ts, sd.x(sd.c[i]), pos["left"], "dxy_unicorn"))
         pos["left"] = 0

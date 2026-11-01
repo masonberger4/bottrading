@@ -7609,6 +7609,11 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             _f(why_)
             pending = None                            # an order armed earlier does not fill into a day / week rule that has
             continue                                  # switched on since (the Silver Bullet drops its order the same way)
+        if pending is not None and (p.dxy_states != "off" or p.dxy_session_gate != "off" or p.dxy_eq_gate != "off" or p.dxy_range_trigger != "off"):
+            why_ = _CG3.order_ok(ctx, pending["side"], {"entry": pending["entry"], "lv_tags": ""}, session, i, p)       # DXY intraday gates: an order armed earlier does not fill into one that has switched on since
+            if why_ is not None:
+                _f(why_)
+                pending = None
         sl_now = set(sl_day if session == "PM" else sl_all_day)
         if ctx.inside_zone is not None:
             sl_now = _BH2E.sloppy_release(ctx, p, sl_now, i)       # caption-gap B17-inside-daily-range-no-trade: from the first bar beyond the FVG's high / low, that side only

@@ -216,16 +216,25 @@ def dxy_range_state(ctx, i: int, p) -> int | None:
 
 # ---- item 11 (extend): the DXY leg of sym_swing_ts ---------------------------------------------------------------------------------------
 
-def dxy_confirms(ctx, sd, i: int, p) -> bool:
-    """`sym_swing_dxy`: DXY made the opposite session extreme (for an ES low: a new DXY high; for an ES high: a new low) within the last `sym_win` 5m bars of the closed bar i, from 07:00 (the pre-open
-    swings). No DXY data = the extra condition is not applied (True)."""
+def dxy_confirms(ctx, sd, i: int, p, sw=None) -> bool:
+    """`sym_swing_dxy`: DXY made the opposite session extreme around the ES swing (for an ES low: a new DXY high; for an ES high: a new low) within `sym_win` 5m bars of the swing bar `sw["ext_i"]`, against the
+    pre-open swings from 07:00 (without a swing: the last `sym_win` bars). No DXY data = the extra condition is not applied (True)."""
     b = _day_bars(ctx, i, 5, 7 * 60)
     if b is None or len(b) < p.sym_win + 3:
         return True
-    w = p.sym_win + 1
+    ext_i = None if sw is None else sw.get("ext_i")
+    if ext_i is not None:
+        t = ctx.idx[int(ext_i)]
+        w = pd.Timedelta(minutes=5 * p.sym_win)
+        win = b[(b.index >= t - w) & (b.index < t + pd.Timedelta(minutes=ctx.tf) + w)]
+        before = b[b.index < t - w]
+    else:
+        win, before = b.iloc[-(p.sym_win + 1):], b.iloc[:-(p.sym_win + 1)]
+    if not len(win) or not len(before):
+        return True
     if sd.sign > 0:              # ES made a low -> DXY a high
-        return bool(b.high.values[-w:].max() > b.high.values[:-w].max())
-    return bool(b.low.values[-w:].min() < b.low.values[:-w].min())
+        return bool(win.high.max() > before.high.max())
+    return bool(win.low.min() < before.low.min())
 
 
 # ---- hooks ---------------------------------------------------------------------------------------------------------------------------------
