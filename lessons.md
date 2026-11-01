@@ -20,3 +20,4 @@
 - 2026-10-19 21:47 UTC the RC session went offline and took the running build (~7 h lost); see laptop_ops.md "mentorship-build-parallel".
 - RC receives only Mase's own typed messages (send_message refused); lines for the laptop must be given to Mase to send (see decisions.md "mentorship-missing-concepts").
 - Haiku pass on owner questions was shallow; use Opus for rule decisions (decisions.md "model-choice-for-decisions").
+- test
