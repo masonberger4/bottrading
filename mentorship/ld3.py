@@ -544,7 +544,7 @@ def ipda_arrays(ctx, sd, p) -> list:
 def consol_eq_day(ctx, p, i: int) -> bool:
     """B21 (cc05_003 ~1:18:00) "range (Z) day": the 09:30 open (the last close before it) hangs within ipda_eq_frac of a daily consolidation's height of its EQ
     and there is no driver - no CPI / NFP / FOMC today [our interpretation: for an index no driver = no high-impact news]."""
-    from claude_hf.daytypes import events
+    from mentorship.calendar import events
     eqs = getattr(ctx, "ipda_ceq", [])
     if not eqs or events(ctx.day) & {"cpi", "jobs", "fomc"}:
         return False

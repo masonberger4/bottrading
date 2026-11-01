@@ -27,7 +27,7 @@ from datetime import date, timedelta
 import numpy as np
 import pandas as pd
 
-from claude_hf.daytypes import events
+from mentorship.calendar import events
 from . import calendar as CAL
 from . import levels as L
 

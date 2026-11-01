@@ -28,7 +28,7 @@ from datetime import date, timedelta
 import numpy as np
 import pandas as pd
 
-from claude_hf.daytypes import events
+from mentorship.calendar import events
 from . import calendar as CAL
 from . import dwc1 as D1
 from . import levels as L
@@ -387,7 +387,7 @@ def plan_rules(P, ctx, d: date, p, hist, eth, a5, dt) -> None:
 def strict_filters(d: date, p) -> str:
     """Item 50: the cc08_006 avoidance filters beyond the sloppy-day tests: a jobs (NFP) day, the eve of a holiday, an FOMC decision / day-after (whipsaw) day, a day with two or more releases
     08:30-11:00 (the news-count test of N5). Returns the first reason or ''. [our interpretation: the video lists these as the days that are not 'clean'.]"""
-    from claude_hf.daytypes import JOBS
+    from mentorship.calendar import JOBS_SET as JOBS
     from . import nct2 as N2
     if d in JOBS:
         return "nfp"

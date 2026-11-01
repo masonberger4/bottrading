@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from claude_hf.daytypes import JOBS, is_trading_day
+from mentorship.calendar import JOBS_SET as JOBS, is_trading_day
 from . import htf
 from . import sm4 as _SM4
 from . import es3 as _ES3
@@ -455,6 +455,8 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     price frame; `lock_cuts` (#9): {minute: htf table cut there} (built here when None);
     `ref_df` (D22 bias_open_src="es_map"): the futures / CFD frame whose midnight open is mapped to this instrument.
     The result's attrs carry "days", "locks" (one row per session lock) and "skips"."""
+    from . import calendar as _CAL
+    _CAL.use((p or Params()).news_cal, (p or Params()).news_cal_path, (p or Params()).gdp_tags)     # coverage gap 1: the event calendar of this run (day lists, skips)
     wk_joint = None
     if (p or Params()).wk_dc_joint and partner is not None and htf.has_overnight(partner):       # caption-gap B8-weekly-ith-both-indices-close: the partner index's weeks decide the joint flag (the partner frame needs overnight bars; without them the flag is False = no wk_dc -1 flip)
         from . import bh1

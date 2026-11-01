@@ -102,13 +102,13 @@ def split_fracs(p, day):
 
 
 def is_jobs_day(day) -> bool:
-    from claude_hf.daytypes import events
+    from mentorship.calendar import events
     return "jobs" in events(day)
 
 
 def eve_tags(day) -> list:
     """N4-eve-of-high-impact (029 ~00:52:11; 042 ~00:39:05): the release tags of the NEXT trading day, 'pre_cpi' / 'pre_nfp' / 'pre_fomc'."""
-    from claude_hf.daytypes import events
+    from mentorship.calendar import events
     from .calendar import next_trading_day
     ev = events(next_trading_day(day))
     return [nm for tag, nm in (("cpi", "pre_cpi"), ("jobs", "pre_nfp"), ("fomc", "pre_fomc")) if tag in ev]
@@ -941,7 +941,7 @@ def hrlr_filter(ctx, p, up: list, dn: list, kl: int, t_lock: int):
     """L4-hrlr-news-exception (cc01_007 ~00:08:34): a draw that is a high-resistance run (more obstacles between the lock price and it than lrlr_max allows -
     res_high_min when lrlr_max is off) is a locked draw only on a jobs / FOMC day and only after its release; otherwise the next candidate of the list is
     the draw (the nearest intermediate pool). Lists are the lock's (distance, level, kind, name, dir), nearest first, real prices."""
-    from claude_hf.daytypes import events
+    from mentorship.calendar import events
     sm = getattr(ctx, "sides_map", None)
     if not p.hrlr_news_only or not sm:
         return up, dn

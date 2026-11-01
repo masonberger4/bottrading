@@ -314,7 +314,7 @@ def ceiling_columns(ks, d, arrs) -> dict:
 def _jobs_week(day) -> bool:
     """A week with an NFP release (claude_hf.daytypes 'jobs' event on any of its days)."""
     from datetime import timedelta
-    from claude_hf.daytypes import events
+    from mentorship.calendar import events
     mon = day - timedelta(days=day.weekday())
     return any("jobs" in events(mon + timedelta(days=q)) for q in range(5))
 

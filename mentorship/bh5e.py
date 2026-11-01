@@ -553,7 +553,7 @@ def b7_floor(ctx, p, row, i: int, side: int = 1):
     hist = getattr(ctx, "hist", None) or []
     if hist and (float(hist[-1].close.iloc[-1]) - g) * side < 0:
         return None                                               # a daily close beyond the MT = the B7 failure, not a spike
-    from claude_hf.daytypes import events
+    from mentorship.calendar import events
     if "jobs" in events(ctx.day):
         return None
     away = np.flatnonzero((ctx.l[ctx.start:i + 1] < g) if side > 0 else (ctx.h[ctx.start:i + 1] > g))

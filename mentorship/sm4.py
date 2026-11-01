@@ -126,7 +126,7 @@ def big_event_day(ctx, session: str, p, t: int = 0) -> bool:
     """Review fix (#12 / #43): a Fed-chair / FOMC / other big-event day, from the calendar itself (the engine's `blocked()` rules are switches that default off): the FOMC day or its tag, a Fed-chair
     testimony / speech day, the jobs day, a CPI day - or a day `strategy.blocked` already flags."""
     S = _S()
-    from claude_hf.daytypes import events
+    from mentorship.calendar import events
     from . import calendar as CAL
     d = ctx.day
     if events(d) & {"fomc", "jobs", "cpi"} or CAL.fomc_info(d)["fomc"] or d in CAL.FED_CHAIR or d in CAL.FED_CHAIR_EXTRA:

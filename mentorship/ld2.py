@@ -254,7 +254,7 @@ def gap_open(sd, g, i: int, ctx, p) -> bool:
     single_bar (its middle candle one large displacement candle), which is dead on ANY trade below its low (the c1 high). Not on
     NFP / FOMC days: the overshoot is expected there, so the close rule stays."""
     if p.single_bar_fvg_strict and g.tag == "single_bar":
-        from claude_hf.daytypes import events
+        from mentorship.calendar import events
         if not (events(ctx.day) & {"jobs", "fomc"}):
             from . import ld4 as _L4
             if _L4.td_hold(ctx, sd, g, i, p):      # caption-gap new-time-distortion (a): bodies hold inside the gap - the wicks do not kill it

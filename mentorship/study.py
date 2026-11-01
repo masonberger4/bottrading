@@ -274,8 +274,12 @@ OA1029_OLD = dict(bk_depth="ce", bk_bpr_ce=False, ob_need_narrative=False, add_l
                   htf_resist_tfs=("15m", "30m", "1h", "4h", "D"), cisd_ob_px="eq",
                   ifvg_targets_after="mss", qshift_broken="literal",
                   ifvg_sym_ym=False, dxy_filter="off")
+# coverage gap 1 (2026-10-31): the pre-build engine also used the legacy news calendar
+COVERAGE_OLD = dict(news_cal="legacy")
 PRE_OWNER.update(OA1029_OLD)
+PRE_OWNER.update(COVERAGE_OLD)
 CURRENT.update(OA1029_OLD)
+CURRENT.update(COVERAGE_OLD)
 LEGACY_1PCT_2PCT = dict(risk_dollars=1000.0, max_total_risk=2000.0)   # E8 / owner #12 preset
 # setups_models review: the FVG-path variants need the FVG path to trade at all - post_mss with the
 # owner #9 lock and #7 cap produced 0 trades on ES 5m 2023H2, so those variants drop both too
@@ -2574,7 +2578,7 @@ def news_pool_rows(df, hist_days, p=None, symbol="ES"):
     """N6-news-pool-mapping (study flag --news-pools): for FOMC / jobs / Fed-chair days one row per release: the untaken 5m / 15m pools within 1 x ADR5 marked one minute before it
     (nct2.pool_study) and which side's nearest pool was taken first (+1 buy side / -1 sell side / 0), whether the other followed. No trades."""
     from . import calendar as CAL, nct2, strategy as S
-    from claude_hf.daytypes import events
+    from mentorship.calendar import events
     p = p or Params(news_seq_study=True)
     rows = []
     for d, g in df.groupby(df.index.date):
@@ -2593,7 +2597,7 @@ def news_pool_rows(df, hist_days, p=None, symbol="ES"):
 def stage_label_rows(df, hist_days, p=None, symbol="ES"):
     """N3-fomc-two-stage (fomc_stage_study): one row per FOMC (14:00) and jobs (08:30) day with the stage-2 label A / B / none at release + 60 minutes."""
     from . import nct2, strategy as S
-    from claude_hf.daytypes import events
+    from mentorship.calendar import events
     p = p or Params(fomc_stage_study=True)
     rows = []
     for d, g in df.groupby(df.index.date):
@@ -3346,6 +3350,8 @@ DECISIONS.update(_SB1_DECISIONS)
 DECISIONS.update({f"OA1029_{k}_old": {k: v} for k, v in OA1029_OLD.items()})
 # ... and the study-only items (defaults unchanged): D1 / Q103 three-PD-array stop vs ob_mt, D3 / Q226b one counter trade after the locked draw
 DECISIONS.update({"OA1029_D1_stop_three_pd": dict(stop_mode="three_pd"), "OA1029_D3_counter_trend": dict(allow_counter_trend=True)})
+# coverage gap 1: the news calendar study (NEWS-csv is the default; report 2016-2018 and 2019-2026 separately)
+DECISIONS.update({"NEWS-csv": dict(news_cal="csv"), "NEWS-legacy": dict(news_cal="legacy"), "NEWS-gdp-all": dict(gdp_tags=("gdp_adv", "gdp_2nd", "gdp_3rd", "gdp_other"))})
 
 
 def osok_study(df, direction=None, **kw):

@@ -161,7 +161,7 @@ def _now(ctx, i: int):
 
 def is_news_day(ctx) -> bool:
     """A jobs / FOMC day (the release is the driver; L4-resistance-runs news exception)."""
-    from claude_hf.daytypes import events
+    from mentorship.calendar import events
     ev = events(ctx.day)
     return "jobs" in ev or "fomc" in ev
 

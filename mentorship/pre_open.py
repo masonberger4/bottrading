@@ -77,7 +77,7 @@ def run_ma_deuce(ctx, hist, p, day, symbol, btag: dict, sides=None) -> list:
     # the funnel keys md_* (strategy.FUNNEL) show which gate stops Ma Deuce (setups_models review)
     if len(hist) < 3:
         return []
-    from claude_hf.daytypes import events as _events
+    from mentorship.calendar import events as _events
     if p.nfp_first_hour and "jobs" in _events(day):
         _f("md_x_nfp_first_hour")
         return []                                      # news_calendar_times N1: nobody trades the first hour after 08:30

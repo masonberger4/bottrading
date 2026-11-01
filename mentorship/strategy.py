@@ -52,7 +52,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from claude_hf.daytypes import JOBS, day_type, events
+from mentorship.calendar import JOBS_SET as JOBS, day_type, events
 from . import calendar as _calendar  # noqa: F401  (loads 2019-2025 event dates)
 from .calendar import next_trading_day, release_times
 from . import levels as L
@@ -3524,6 +3524,10 @@ class Params:
     stock_ext_atr: float = 3.0           # ... extended = the close more than this x the 20-day ATR above the last weekly pivot low [our interpretation]
     stock_rs_min: float = 80.0           # OT-stocks-rs-leadership (cc11_003 ~00:14:23): the relative-strength percentile a leader needs [our interpretation]
     stock_top_sectors: int = 2           # ... the sectors kept when sector_of() answers [our interpretation]
+    # coverage gap 1 (coverage_build_2026-10-31 package 1): the news calendar source
+    news_cal: str = "csv"                # "csv" = data/mentorship/macro_risk_dates.csv (CPI / NFP / FOMC / PPI / PCE / GDP / retail / JOLTS 2016 on, each release at its own time) / "legacy" = the built 2019-2025 lists + claude_hf 2026
+    news_cal_path: str = "data/mentorship/macro_risk_dates.csv"   # (relative paths: from the repository root; a missing file falls back to "legacy" with a warning)
+    gdp_tags: tuple = ("gdp_adv",)       # the GDP releases that count as "gdp" with news_cal="csv": advance only (as built); ("gdp_adv", "gdp_2nd", "gdp_3rd", "gdp_other") = every estimate
 
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
@@ -4073,6 +4077,8 @@ class Params:
         if self.htf_monthly:
             self.htf_monthly_arrays = True        # BH-A5-HTF-FVG-own-timeframe: the named alias of the built monthly arrays
         # caption-gap pass bias_htf#2/7 (bh2.py / bh2e.py)
+        if self.news_cal not in ("csv", "legacy") or not set(self.gdp_tags) <= {"gdp_adv", "gdp_2nd", "gdp_3rd", "gdp_other"}:
+            raise ValueError("news_cal: 'csv' / 'legacy'; gdp_tags a subset of ('gdp_adv', 'gdp_2nd', 'gdp_3rd', 'gdp_other')")
         for name, ok in (("pd3_result", ("flip", "neutral")), ("ifvg_targets_after", ("cisd", "mss")), ("qshift_broken", ("leg", "literal")), ("consol_dir", ("off", "first_expansion", "prior_strongest")), ("htf_after_draw", ("neutral", "reverse")),
                          ("htf_bias_tf", ("D", "W", "M")), ("tier_stl_mode", ("last2", "two_of_four"))):
             if getattr(self, name) not in ok:
@@ -6596,6 +6602,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
     SB's), until the extras' trades stop changing (at most `stops_passes` passes). Every decision only uses trades closed
     by its own bar, so there is no look-ahead; the side effects (locks, skips, log, the E10 risk state) come from the last
     pass only."""
+    _calendar.use(p.news_cal, p.news_cal_path, p.gdp_tags)         # coverage gap 1: the event calendar of this run
     if not p.stock_intraday and str(symbol).upper() not in _DWC3.INDEX_SYMBOLS:
         if skips is not None:                    # caption-gap OT-stocks-swing-only (cc10_018 ~00:33:36): individual stocks are swing-only - no intraday setups
             skips.append((df.index[0].date(), symbol, "stock", "swing_only"))

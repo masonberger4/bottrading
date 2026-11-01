@@ -1340,7 +1340,7 @@ def release_setups(ctx, sides, i: int, p, state: dict, pos, pending, risk_mult: 
     sent = state.setdefault("sm2_sent", set())
     t = int(ctx.t[i])
     end = t + ctx.tf
-    from claude_hf.daytypes import events
+    from mentorship.calendar import events
     from . import newscal as NC
     tags = events(ctx.day)
     rel = NC.releases(ctx.day, p)
@@ -2617,7 +2617,7 @@ def ir_gates_ok(ctx, sd, i: int, p, session: str, use_want: bool = True) -> bool
     if (a) the draw / HTF bias was known beforehand and points its way (ir_need_draw) and (b) it prints in a window where volatility is expected (ir_need_window:
     [our interpretation] the macro window, the am / pm sessions or a Silver Bullet window - by the clock, see ir_window_ok). Used by the opt-in IR paths (ir_entries, sb_rebalance_ext)."""
     if p.ir_filters:                          # caption-gap M11-immediate-rebalance-management (092 ~1:41:37; 100 ~1:36:14): no IR on a Friday or ahead of a pending 10:00 release
-        from claude_hf.daytypes import events as _ev
+        from mentorship.calendar import events as _ev
         if ctx.day.weekday() == 4 or (_ev(ctx.day) & _S().NEWS_1000 and int(ctx.t[i]) < 600):
             hit("ir_filters")
             return False

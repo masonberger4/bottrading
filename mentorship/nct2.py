@@ -25,7 +25,7 @@ from datetime import timedelta
 
 import numpy as np
 
-from claude_hf.daytypes import events
+from mentorship.calendar import events
 from . import calendar as CAL
 from . import newscal as NC
 
