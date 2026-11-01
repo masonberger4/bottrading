@@ -5,6 +5,12 @@ import pandas as pd
 
 from mentorship import backtest as B, levels as L
 from mentorship.strategy import Params, blocked
+from dataclasses import dataclass as _oa_dc  # noqa: E402
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
 
 
 def arr(*rows):

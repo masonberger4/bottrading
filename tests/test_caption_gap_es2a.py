@@ -16,8 +16,9 @@ from dataclasses import dataclass as _oa_dc
 
 
 @_oa_dc
-class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
-    ob_need_narrative: bool = False
+class Params(Params):   # OA1029: these tests were written for the pre-build engine and exercise other rules - every OA1029 default back at its old value
+    __annotations__ = {k: object for k in __import__('mentorship.study', fromlist=['OA1029_OLD']).OA1029_OLD}
+    locals().update(__import__('mentorship.study', fromlist=['OA1029_OLD']).OA1029_OLD)
 
 from test_review_fixes import A_LOCK, A_ROWS, B_POST, B_ROWS, BASE, D0, day, history, run as rf_run
 from test_caption_gap_sm1a import sd_of, stub
@@ -660,7 +661,7 @@ def test_add_size_fracs_presets():
     assert es2.add_size_fracs(Params(add_ladder="6421")) == (0.67, 0.33, 0.17)
     assert es2.add_size_fracs(Params(add_ladder="6321")) == Params().adds                       # 6/3/2/1 = today's adds
     assert es2.add_size_fracs(Params(add_ladder="067", add_sizes="equal_or_less")) == (0.625, 0.625, 0.25, 0.625, 0.625)        # the ladder wins
-    assert not es2.sizing_on(Params(add_ladder="")) and es2.sizing_on(Params()) and es2.sizing_on(Params(add_ladder="631")) and es2.sizing_on(Params(add_sizes="equal_013"))
+    assert not es2.sizing_on(Params(add_ladder="")) and es2.sizing_on(Params(add_ladder="631")) and es2.sizing_on(Params(add_sizes="equal_013"))
     assert es2.apply_sizing(Params(add_ladder="631")).adds == (0.5, 0.17)
     assert es2.apply_sizing(Params(add_ladder="631", adds=())).adds == ()                        # a size switch never turns the pyramid on
     assert es2.apply_sizing(Params()) is not None

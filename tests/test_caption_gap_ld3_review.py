@@ -17,6 +17,12 @@ import pytest
 from mentorship import (backtest as B, bias_day as BD, calendar as C, confluence as CF, htf, ld2 as LD, ld3 as L3, ld4 as L4, levels as L, sb_model,
                         strategy as S, study)
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
 
 from test_levels_detectors import BASE, D0, ES, FUT, NY, day, frame, history, prior_days, rth_day
 from test_caption_gap_ld3 import ctx3, k_at, mk, side, FLAT

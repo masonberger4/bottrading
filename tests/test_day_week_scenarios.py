@@ -12,6 +12,13 @@ import pytest
 
 from mentorship import daycontext as DW, study, strategy as S
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029: these tests were written for the pre-build engine and exercise other rules - every OA1029 default back at its old value
+    __annotations__ = {k: object for k in __import__('mentorship.study', fromlist=['OA1029_OLD']).OA1029_OLD}
+    locals().update(__import__('mentorship.study', fromlist=['OA1029_OLD']).OA1029_OLD)
 
 from test_day_week_context import I930, NORMAL, _plan, _wk_ctx, ctx_for, daily, funnel, go, sessions  # noqa: E402
 from test_review_fixes import BASE, K, day, frame, history, rth_day  # noqa: E402

@@ -14,6 +14,12 @@ import pytest
 
 from mentorship import backtest as B, study
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
 
 from test_entries_stops import _no_look_ahead  # noqa: F401,E402  (shared helper; used through _check)
 

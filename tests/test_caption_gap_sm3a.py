@@ -12,6 +12,13 @@ import pytest
 
 from mentorship import backtest as B, levels as L, setups as SM, sm2, sm3, strategy as S, study
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029: these tests were written for the pre-build engine and exercise other rules - every OA1029 default back at its old value
+    __annotations__ = {k: object for k in __import__('mentorship.study', fromlist=['OA1029_OLD']).OA1029_OLD}
+    locals().update(__import__('mentorship.study', fromlist=['OA1029_OLD']).OA1029_OLD)
 
 from test_levels_detectors import BASE, D0, NY, day, ctx_for, frame, history, prior_days, rth_day
 from test_caption_gap_sm1a import AFTER, StubConf, hist_close, ib, mkctx, sd_of, stub
