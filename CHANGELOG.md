@@ -18,3 +18,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v12 | 2026-11-01 21:37:08Z | Mase | lessons.md | rollback-to-v10 | undo ACL test line | l | 318990d504 -> 9c4d5c2adf |
 | v13 | 2026-11-01 21:37:10Z | Mase | README.md | edit | verify tool still writes to 444 files | l | bcc60e52b9 -> 944222becb |
 | v14 | 2026-11-01 21:37:10Z | Mase | README.md | rollback-to-v7 | revert perm test | l | 944222becb -> bcc60e52b9 |
+| v15 | 2026-11-01 21:37:20Z | thread: Organize project memory into folder | tools/memsave.py | edit | Add verify command to detect raw writes that bypass the ACL | project msg cmsg_01FAHERC1Lsrg2bYtrKuRHmPSGxnAdrLYfjNbK5EV4eiTH | 527016dd7b -> 637848682c |

@@ -6,6 +6,7 @@ Usage (run from anywhere; paths are relative to the memory folder):
   memsave.py save FILE --base HASH --draft DRAFTFILE --agent WHO --reason WHY [--link URL]
         re-hashes FILE under a lock; if it differs from HASH -> exit 3 (STALE): re-pull, redraft, retry.
   memsave.py append FILE --base HASH --agent WHO --reason WHY [--link URL]   (text on stdin; same check)
+  memsave.py verify                         exit 5 + list if any file was edited outside this tool (raw writes)
   memsave.py log [FILE]                     version history
   memsave.py show FILE VERSION              print FILE as of version (e.g. v3)
   memsave.py rollback FILE VERSION --agent WHO --reason WHY [--link URL]   restore as a NEW version
@@ -127,6 +128,10 @@ def main():
         hdr = ("<!-- proposal by %s at %s; target: %s; reason: %s; link: %s; status: open -->\n" % (a.agent, time.strftime("%Y-%m-%d %H:%M:%SZ", time.gmtime()), a.file, a.reason, a.link or "-")).encode()
         p, _ = target(name)
         do_write(name, sha(p), hdr + text, a, "proposal")
+    elif a.cmd == "verify":
+        out = git("status", "--porcelain").strip()
+        print("CLEAN: every top-level file matches its last versioned save" if not out else "TAMPERED/UNSAVED (edited outside memsave):\n" + out)
+        sys.exit(0 if not out else 5)
     elif a.cmd == "log":
         print(git("log", "--format=%h %s | %b", "--", a.file) if a.file else open(CHANGELOG).read())
     elif a.cmd == "show":
