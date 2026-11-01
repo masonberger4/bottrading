@@ -87,6 +87,9 @@ Usage (run from anywhere; paths are relative to the memory folder):
   memsave.py save FILE --base HASH --draft DRAFTFILE --agent WHO --reason WHY [--link URL]
         re-hashes FILE under a lock; if it differs from HASH -> exit 3 (STALE): re-pull, redraft, retry.
   memsave.py append FILE --base HASH --agent WHO --reason WHY [--link URL]   (text on stdin; same check)
+  memsave.py sync                           fetch GitHub branch `memory`; fast-forward this folder, or report AHEAD/DIVERGED
+  memsave.py indexcheck LIVEFILE            compare live project-memory index text (in LIVEFILE) with INDEX.md; exit 7 on drift
+  memsave.py bundle                         write /mnt/project-files/memory-export/memory.bundle (for a one-time seed push from a machine with git push)
   memsave.py verify                         exit 5 + list if any file was edited outside this tool (raw writes)
   memsave.py log [FILE]                     version history
   memsave.py show FILE VERSION              print FILE as of version (e.g. v3)
@@ -95,7 +98,7 @@ Usage (run from anywhere; paths are relative to the memory folder):
 Permissions (ACL.json): top-level files are writable only by ACL "writers"; scratch/<agent>/ is free for that agent
 (unversioned, git-ignored); proposals/<agent>__* is free for that agent. Violations exit 4 (DENIED).
 Every change = new version vN, a git commit, and a CHANGELOG.md row (who, when, why, link, hash before->after).
-Exit codes: 0 ok, 2 usage/error, 3 stale hash (conflict), 4 DENIED by ACL.
+Exit codes: 0 ok, 2 usage/error, 3 stale hash (conflict), 4 DENIED by ACL, 5 verify found raw edits, 6 DIVERGED.
 NOTE: --agent is self-declared; the ACL stops mistakes and honest agents, not a malicious one.
 """
 import argparse, hashlib, json, os, subprocess, sys, time, shutil, re, tempfile
@@ -165,6 +168,14 @@ def acl_kind(rel, agent):
 def deny(rel, agent, why):
     print("DENIED: %s may not write %s. %s" % (agent, rel, why), file=sys.stderr); sys.exit(4)
 
+def vref(v):
+    """tag vN if present, else the commit whose subject starts 'vN ' (tags are local-only)."""
+    r = subprocess.run(["git", "-c", "safe.directory=*", "-C", ROOT, "rev-parse", "-q", "--verify", v + "^{commit}"], capture_output=True, text=True)
+    if r.returncode == 0: return v
+    out = git("log", "--format=%H", "--grep", "^%s " % v, "-1", check=False).strip()
+    if not out: sys.exit("unknown version " + v)
+    return out
+
 def target(f):
     p = os.path.normpath(os.path.join(ROOT, f))
     if not p.startswith(ROOT + os.sep) or ".git" in p.split(os.sep): sys.exit("path must be inside the memory folder")
@@ -209,6 +220,29 @@ def main():
         hdr = ("<!-- proposal by %s at %s; target: %s; reason: %s; link: %s; status: open -->\n" % (a.agent, time.strftime("%Y-%m-%d %H:%M:%SZ", time.gmtime()), a.file, a.reason, a.link or "-")).encode()
         p, _ = target(name)
         do_write(name, sha(p), hdr + text, a, "proposal")
+    elif a.cmd == "sync":
+        # GitHub branch `memory` is the approved store; this folder is a working mirror.
+        r = subprocess.run(["git", "-c", "safe.directory=*", "-C", ROOT, "fetch", "-q", "origin", "memory"], capture_output=True, text=True)
+        if r.returncode: sys.exit("fetch failed: " + r.stderr.strip())
+        def anc(x, y): return subprocess.run(["git", "-c", "safe.directory=*", "-C", ROOT, "merge-base", "--is-ancestor", x, y]).returncode == 0
+        if anc("FETCH_HEAD", "HEAD"):
+            n = git("rev-list", "--count", "FETCH_HEAD..HEAD").strip()
+            print("IN SYNC" if n == "0" else "AHEAD: %s local version(s) not on GitHub; propose them by PR (see README)" % n)
+        elif anc("HEAD", "FETCH_HEAD"):
+            if git("status", "--porcelain").strip(): sys.exit("local files edited outside the tool; run verify first")
+            git("merge", "-q", "--ff-only", "FETCH_HEAD"); print("UPDATED folder from GitHub branch memory")
+        else:
+            print("DIVERGED: local and GitHub both have new versions; a writer must reconcile", file=sys.stderr); sys.exit(6)
+    elif a.cmd == "indexcheck":
+        # drift check: compare the live project-memory index (saved by caller to a file) with INDEX.md
+        import difflib
+        live = open(a.file).read().strip().splitlines(); want = open(os.path.join(ROOT, "INDEX.md")).read().strip().splitlines()
+        d = list(difflib.unified_diff(want, live, "INDEX.md (approved)", "live index", lineterm=""))
+        print("NO DRIFT" if not d else "DRIFT: restore the live index to INDEX.md text:\n" + "\n".join(d)); sys.exit(0 if not d else 7)
+    elif a.cmd == "bundle":
+        out = "/mnt/project-files/memory-export/memory.bundle"
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        git("bundle", "create", out, "--branches"); print("wrote " + out)
     elif a.cmd == "verify":
         out = git("status", "--porcelain").strip()
         print("CLEAN: every top-level file matches its last versioned save" if not out else "TAMPERED/UNSAVED (edited outside memsave):\n" + out)
@@ -216,10 +250,10 @@ def main():
     elif a.cmd == "log":
         print(git("log", "--format=%h %s | %b", "--", a.file) if a.file else open(CHANGELOG).read())
     elif a.cmd == "show":
-        sys.stdout.write(git("show", "%s:%s" % (a.version, target(a.file)[1])))
+        sys.stdout.write(git("show", "%s:%s" % (vref(a.version), target(a.file)[1])))
     elif a.cmd == "rollback":
         p, rel = target(a.file)
-        old = subprocess.run(["git", "-c", "safe.directory=*", "-C", ROOT, "show", "%s:%s" % (a.version, rel)], capture_output=True)
+        old = subprocess.run(["git", "-c", "safe.directory=*", "-C", ROOT, "show", "%s:%s" % (vref(a.version), rel)], capture_output=True)
         if old.returncode: sys.exit("no such file/version")
         do_write(a.file, sha(p), old.stdout, a, "rollback-to-" + a.version)
     else: sys.exit(__doc__)
