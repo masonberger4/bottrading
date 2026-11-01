@@ -26,3 +26,13 @@ All edits go through `tools/memsave.py` (a git repo lives in this folder; CHANGE
 4. `--reason` and `--link` are mandatory in spirit: say what conversation or incident caused the change (message id, thread link, PR). `--agent` names the thread/agent or the human (e.g. "Mase").
 5. History: `memsave.py log [FILE]`; view an old version: `memsave.py show FILE v3`; roll back: `memsave.py rollback FILE v3 --agent ... --reason ... --link ...` (restores old content as a NEW version, nothing erased).
 Do not edit files here by hand without the tool. MEMORY.md (project memory index) is a separate store: its tool already rejects stale revisions; log changes to it in CHANGELOG via a note file entry when the index changes meaningfully.
+
+## Versioning and safe saves (required for every edit)
+All edits go through `tools/memsave.py` (a git repo lives in this folder; CHANGELOG.md has one row per version: who, when, why, link, hash before->after).
+1. Pull + hash: `H=$(python3 tools/memsave.py hash FILE)` and read FILE.
+2. Draft your edit in a scratch file (or text for append).
+3. Save: `python3 tools/memsave.py save FILE --base $H --draft DRAFT --agent "thread / human name" --reason "why" --link "conversation or incident link"` (or `append ... < text`).
+   The tool re-hashes FILE under a lock. If it changed since step 1 it exits 3 with STALE and writes nothing: re-pull, redraft, take a new hash, retry.
+4. --reason and --link say what conversation or incident caused the change (message id, thread link, PR). --agent names the thread/agent or the human (e.g. "Mase").
+5. History: `memsave.py log [FILE]`; old version: `memsave.py show FILE v3`; roll back: `memsave.py rollback FILE v3 --agent ... --reason ... --link ...` (restores old content as a NEW version, nothing erased).
+Don't edit files here by hand. MEMORY.md (project memory index) is a separate store whose own tool rejects stale revisions; note meaningful index changes in the reason of the related topic-file edit.
