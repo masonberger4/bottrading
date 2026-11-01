@@ -20,3 +20,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v14 | 2026-11-01 21:37:10Z | Mase | README.md | rollback-to-v7 | revert perm test | l | 944222becb -> bcc60e52b9 |
 | v15 | 2026-11-01 21:37:20Z | thread: Organize project memory into folder | tools/memsave.py | edit | Add verify command to detect raw writes that bypass the ACL | project msg cmsg_01FAHERC1Lsrg2bYtrKuRHmPSGxnAdrLYfjNbK5EV4eiTH | 527016dd7b -> 637848682c |
 | v16 | 2026-11-01 21:37:38Z | thread: Organize project memory into folder | README.md | edit | Document permissions (ACL, scratch, propose, verify) | project msg cmsg_01FAHERC1Lsrg2bYtrKuRHmPSGxnAdrLYfjNbK5EV4eiTH | bcc60e52b9 -> 69dc0e66ff |
+| v17 | 2026-11-01 21:37:40Z | thread: Organize project memory into folder | skill_drafts/memory-hygiene.md | edit | Document permissions (ACL, scratch, propose, verify) | project msg cmsg_01FAHERC1Lsrg2bYtrKuRHmPSGxnAdrLYfjNbK5EV4eiTH | 099b515fa3 -> ab746136e6 |

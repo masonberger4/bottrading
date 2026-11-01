@@ -5,7 +5,7 @@ description: Use at the start and end of any thread in the Stock trading algorit
 
 1. Read MEMORY.md (the index), then only the topic file you need in /mnt/project-files/memory/ (decisions, results, data, laptop_ops, lessons); grep by keyword.
 2. Before asking Mase a question, grep decisions.md; his answers are final and every one is a backtestable switch.
-3. Change files there ONLY with `python3 /mnt/project-files/memory/tools/memsave.py`:
+3. Top-level files are read-only unless you are a writer in ACL.json. Your own scratch pad is scratch/<your-slug>/ (free). For a top-level change run `memsave.py propose FILE --agent ... --reason ... --link ...` (text on stdin); a writer merges it. Change files ONLY with `python3 /mnt/project-files/memory/tools/memsave.py`:
    a. `H=$(python3 tools/memsave.py hash FILE)` and read the file.
    b. Draft your edit.
    c. `memsave.py save FILE --base $H --draft DRAFT --agent "<your thread or human name>" --reason "<why>" --link "<message/thread/incident link>"` (or `append` with text on stdin).
