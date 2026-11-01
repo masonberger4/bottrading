@@ -3,7 +3,7 @@
 Append new results at the top of "Latest" with date, commit, runner, $ at $1k risk, halves (2019-22 / 2023-26), trade count. Report $ not avg R.
 
 ## Latest (from the old MEMORY.md index)
-- NOW (21:10 UTC 2026-11-01): BUILD DONE (PRs #4-#6 merged; suite clean 5,205 passed). PR #7 (backtest handoff doc, mentorship/digests/handoff_backtests_2026-11-02.md) open for Mase. BACKTESTS RUNNING on commit 229c1a5, runner study.main_decisions, MENTORSHIP_SRC=databento: laptop thread "Run full backtests on laptop" (cmsg_01FAHERC1Lsrg2bYtrKuRHmP1pfMcobpGP3p8XSonjb5B8, only laptop writer; first 1,326 variants; runs\laptop_shard.py) and cloud thread "Run full backtests in cloud" (cmsg_01FAHERC1Lsrg2bYtrKuRHmPRXqHsfXutMsLpcy4u8r7uM; rest of list; merges summary). Full list 2,543 variants x 8 yrs (~1,000 h at 3 min/job, 4 workers) is too big, hence the screening plan in decisions.md.
+- Live status: see the index NOW line (INDEX.md). Results below are append-only. Backtests run on commit 229c1a5 (study.main_decisions, MENTORSHIP_SRC=databento); full list 2,543 variants x 8 yrs (~1,000 h at 3 min/job) is too big, hence the screening plan in decisions.md. Threads: threads.md.
 - Not built yet: fx_nonconf_exit (needs EURUSD/GBPUSD), dxy_smt no_press, udx_shape, weekly-OB-open ladder level.
 - ES 5m 2019-22 only ~169 trades, all variants lose ~-$5.6k.
 - Silver Bullet paper bot stopped 2026-11-01 morning; Mase told how to restart (sign out/in).
@@ -141,3 +141,6 @@ Open decisions and next steps at conversation end:
 - **Historical data**: Databento, IQFeed, or Norgate Data (candidates; not yet selected)
 - **Visual validation**: thinkorswim (thinkScript strategy file)
 - **Strategy reference**: ICT Silver Bullet YouTube video
+
+## Phase 1 screen (2021, all variants): results (append rankings here; both threads use this heading)
+Laptop: 9 of 1,332 jobs at 21:38 UTC 2026-11-01 (bias-cache build). Cloud: ~55 jobs per 10 min at 21:26. Add: variant, trades, $ at $1k risk, movers vs default.
