@@ -13,6 +13,12 @@ import pytest
 
 from mentorship import backtest as B, calendar as C, daycontext as DW, dwc1 as D1, dwc2 as D2, levels as L, nct2 as N2, study, study_week as SW, strategy as S, targets as T
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
 
 from test_review_fixes import BASE, D0, A_ROWS, day, frame, history  # noqa: E402  (shared scenario builders)
 from test_entries_stops import _no_look_ahead  # noqa: E402

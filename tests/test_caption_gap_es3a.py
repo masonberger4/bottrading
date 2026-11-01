@@ -10,6 +10,12 @@ import pytest
 
 from mentorship import backtest as B, es3, levels as L, sm5, strategy as S, study
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
 
 from test_review_fixes import BASE, day, history, run as rf_run
 from test_caption_gap_sm1a import StubConf, sd_of, stub
@@ -307,7 +313,7 @@ def test_add_gate_wick():
 # --- E12-mohawk-add-ifvg (18) ----------------------------------------------------------------------------------------------------------------
 
 def test_ifvg_mohawk_add(monkeypatch):
-    p = Params(es_pt=1.0, lot=1, ifvg_mohawk_add=True)
+    p = Params(es_pt=1.0, lot=1, ifvg_mohawk_add=True, add_ladder="")          # the pre-OA1029 adds (631 is the default now)
     # a long IFVG 4030-4034 (the short is its mirror): the far edge is 4030, the add 2 ticks beyond it
     assert es3.mohawk_rung(10, 4029.5, 4028.0, 10 * 2.0, p, 100000.0) == (4029.5, 5)         # add fraction 0 (0.5) x the first unit
     assert es3.mohawk_rung(10, 4029.5, 4029.6, 20.0, p, 100000.0) is None                    # the stop must sit beyond the rung

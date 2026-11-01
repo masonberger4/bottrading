@@ -56,7 +56,10 @@ def bx_cfg(p) -> dict:
     if p.eq_tiebreak or p.ipda_draw_side:
         c["brk"] = [float(p.eq_tie_frac)]
     if p.qshift_bias or p.q_obj_lean or p.qshift_strong_consol or p.ipda_draw_side or p.mo_bias_gate:
-        c["qs2"] = [float(p.qshift_strong_pct), int(p.q_obj_days), int(bool(p.ipda_draw_side)), int(bool(p.q_obj_lean or p.mo_bias_gate))]       # (caption-gap MB-monthly-bias-routine, bias_htf#3/7: the quarterly objective's side is a component of mo_aligned)
+        c["qs2"] = [float(p.qshift_strong_pct), int(p.q_obj_days), int(bool(p.ipda_draw_side)), int(bool(p.q_obj_lean or p.mo_bias_gate))]
+        if p.qshift_broken == "leg":
+            c["qs2"].append(1)                     # OA1029 Q236 / Q242: the broken swing = the low (high) that started the leg
+        # (caption-gap MB-monthly-bias-routine, bias_htf#3/7: the quarterly objective's side is a component of mo_aligned)
     if p.iof_weekly_weight:
         c["iofw"] = [int(p.iof_w_weeks), int(p.iof_min)]
     if p.sibi_gate:
@@ -88,7 +91,7 @@ def bx_cfg(p) -> dict:
     if p.first_clue_neutral:
         c["fcn"] = 1
     fl: dict = {}
-    if p.pd3_result == "neutral":
+    if p.pd3_result == "neutral" and "flip_pd3" in p.flip_triggers:   # OA1029: the neutral default only shapes the table when flip_pd3 runs
         fl["pd3n"] = float(p.pd3_disp_adr)
     if p.pd3_first_caution:
         fl["pd3log"] = 1
@@ -240,7 +243,7 @@ def break_columns(h, l, c, ks, frac: float, d=None) -> dict:
 # items 131 / 133 / 132 / 83: the quarterly shift, its form and its objective
 # --------------------------------------------------------------------------------------------------------------
 
-def qshift_columns(h, l, c, arrs, ks, strong_pct: float = 0.10, obj_days: int = 84, ipda: bool = False, want_obj: bool = False) -> dict:
+def qshift_columns(h, l, c, arrs, ks, strong_pct: float = 0.10, obj_days: int = 84, ipda: bool = False, want_obj: bool = False, leg: bool = False) -> dict:
     """X3-b22-shift-trigger-quarter-bias (cc05_001 ~32:36; cc05_004 ~16:53; cc05_003 ~16:01): a new 60-session high made within the last 10 sessions and then a daily low under the last daily STL
     (levels.swing_tiers "stl", known before the session) = a bearish quarterly shift (qshift -1): it holds for 63 sessions or until a new 60-session high; the mirror (a new 60-session low, then a daily
     high above the last STH) is +1. X3-b21-draw-side-and-flip (cc05_003 ~1:24:00, `ipda`): a bullish daily MSS within 10 sessions of a 20-day-low raid that stopped short of the 40-day low is +1 too (mirror
@@ -277,9 +280,21 @@ def qshift_columns(h, l, c, arrs, ks, strong_pct: float = 0.10, obj_days: int = 
                 qo = None                                              # [our interpretation] a new 60-session extreme against the shift cancels its objective too
             cur, fm = 0, ""
         fire = 0
-        if cs_l == cs_l and new_hi[max(0, j - 10):j].any() and l[j] < cs_l:
+        if leg:                                                        # OA1029 Q236 / Q242 [our interpretation]: the swing low that STARTED the leg to the new 60-session high
+            ref_l = ref_h = NAN                                        # = the lowest low of the 60 sessions before that high (the mirror for a new low); only sessions before j
+            mh = np.flatnonzero(new_hi[max(0, j - 10):j])
+            if len(mh):
+                m_ = max(0, j - 10) + int(mh[-1])
+                ref_l = float(l[max(0, m_ - 60):m_].min()) if m_ > 0 else NAN
+            ml = np.flatnonzero(new_lo[max(0, j - 10):j])
+            if len(ml):
+                m_ = max(0, j - 10) + int(ml[-1])
+                ref_h = float(h[max(0, m_ - 60):m_].max()) if m_ > 0 else NAN
+        else:
+            ref_l, ref_h = cs_l, cs_h                                  # literal: the latest daily STL / STH
+        if ref_l == ref_l and new_hi[max(0, j - 10):j].any() and l[j] < ref_l:
             fire = -1
-        if cs_h == cs_h and new_lo[max(0, j - 10):j].any() and h[j] > cs_h:
+        if ref_h == ref_h and new_lo[max(0, j - 10):j].any() and h[j] > ref_h:
             fire = 1 if fire == 0 else 0
         if fire == 0 and ipda and ev[j] and mss[j] and j >= 41:
             if ev[j] > 0:                                              # a 20-day-low raid short of the 40-day low, then the bullish MSS
@@ -861,8 +876,8 @@ def finish(out: pd.DataFrame, cfg: dict, d, w, arrs, es_pt: float, drange: tuple
         for k_, v_ in break_columns(h, l, c, ks, cfg["brk"][0], d).items():
             out[k_] = v_
     if "qs2" in cfg:
-        sp, od, ip, wo = cfg["qs2"]
-        for k_, v_ in qshift_columns(h, l, c, arrs, ks, sp, od, bool(ip), bool(wo)).items():
+        sp, od, ip, wo, *lg = cfg["qs2"]
+        for k_, v_ in qshift_columns(h, l, c, arrs, ks, sp, od, bool(ip), bool(wo), bool(lg and lg[0])).items():
             out[k_] = v_
     if "iofw" in cfg:
         out["iof_w"] = iof_w_column(d, w, ks, *cfg["iofw"])

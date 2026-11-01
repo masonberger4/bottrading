@@ -9,7 +9,16 @@ import pandas as pd
 import pytest
 
 from mentorship import backtest as B, es1, htf, levels as L, sm2, strategy as S, study
+from mentorship.study import OA1029_OLD
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
+    cisd_ob_px: str = "eq"                  # OA1029 Q90: the built values these tests were written for
+    cisd_open_discount: bool = False
 
 from test_levels_detectors import NY
 from test_review_fixes import A_LOCK, A_ROWS, BASE, D0, day, history, mirror, run as rf_run
@@ -33,7 +42,7 @@ def one(df, hist, **kw):
 # --- defaults / validation ---------------------------------------------------------------------------------------------------------
 
 def test_new_switch_defaults_and_validation():
-    p = Params()
+    p = Params(**OA1029_OLD)                 # the built values; the OA1029 defaults are checked in test_owner_answers_oa1029.py
     assert (p.no_origin_retest, p.entry_pd_frame, p.ob_need_fvg, p.cisd_ob_px, p.cisd_adds, p.ob_vi_overshoot, p.mt_break, p.breaker_refine, p.iofed_strict, p.add_pref_ob_in_vi, p.gap_tf_mode, p.vi_tol,
             p.vi_tol_small_pts) == (False, "leg", False, "eq", False, False, "off", False, False, False, "", "none", 2.0)
     assert (p.prop_mt_test, p.prop_fail_flip, p.prop_deep_mult, p.prop_deep_cut, p.mit_iofed_edge, p.leg_pd_anchor, p.broken_wick_stop, p.far_edge_reach, p.fvg_edge, p.ob_ce_confluence, p.ob_ce_tol_pts,

@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from mentorship.study import OA1029_OLD
 from mentorship import bh2 as BH2, bh7 as BH7, bh7s as S7, bias_htf as BX, htf, study, stocks as ST, stocks_watch as SW
 from mentorship.strategy import Params
 
@@ -41,6 +42,8 @@ def test_defaults_and_validation():
     for f in NEW_FIELDS:
         assert f in Params.__dataclass_fields__, f
     for k, v in OFF.items():
+        if k in OA1029_OLD:                     # OA1029 moved this default (checked in test_owner_answers_oa1029.py)
+            continue
         assert getattr(p, k) == v, k
     assert p.pd_top_skip is True and p.wr_lookback == 20 and p.stock_rs_min == 80.0 and p.stock_top_sectors == 2 and p.stock_near_high_pct == 0.05 and p.stock_ext_atr == 3.0
     assert p.sb_model is False and p.sb_use_bias == Params().sb_use_bias and p.want_all_engines == Params().want_all_engines

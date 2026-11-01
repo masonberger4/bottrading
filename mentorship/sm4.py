@@ -1129,15 +1129,25 @@ def symmetric(ctx, sd, i: int, p) -> bool:
     ps = getattr(ctx, "pside", None)
     if ps is None or ps[0] is None:
         return False
-    pctx, psides, ppos = ps
-    j = int(ppos.index.searchsorted(ctx.idx[i], side="right") - 1)
-    if j < pctx.start:
-        return False
     n = max(int(p.ifvg_sym_bars), 1)
-    psd = psides[sd.sign]
-    a, pa = max(ctx.start, i - n + 1), max(pctx.start, j - n + 1)
+    a = max(ctx.start, i - n + 1)
     mine = float(sd.h[a:i + 1].max()) >= float(sd.h[ctx.start:i + 1].max()) - MIN1
-    theirs = float(psd.h[pa:j + 1].max()) >= float(psd.h[pctx.start:j + 1].max()) - MIN1
+
+    def _agrees(book) -> bool | None:
+        pctx, psides, ppos = book
+        j = int(ppos.index.searchsorted(ctx.idx[i], side="right") - 1)
+        if j < pctx.start:
+            return None
+        psd = psides[sd.sign]
+        pa = max(pctx.start, j - n + 1)
+        return float(psd.h[pa:j + 1].max()) >= float(psd.h[pctx.start:j + 1].max()) - MIN1
+
+    theirs = _agrees(ps)
+    if theirs is None:
+        return False
+    if theirs and p.ifvg_sym_ym and getattr(ctx, "partner2", None):     # OA1029 Q55: with the YM book loaded, all three indices must agree
+        hit("ifvg_sym_ym")
+        theirs = bool(_agrees(ctx.partner2))
     if mine and theirs:
         hit("ifvg_sym_eval")
     return bool(mine and theirs)

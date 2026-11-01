@@ -23,7 +23,20 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from mentorship import backtest as B, calendar as C, manage as MG, sb_model, strategy as S          # noqa: E402
 from mentorship.strategy import Params, Trade                                         # noqa: E402
+from dataclasses import dataclass as _oa_dc  # noqa: E402
+
+
+@_oa_dc
+class Params(Params):   # OA1029: these tests were written for the pre-build engine and exercise other rules - every OA1029 default back at its old value
+    __annotations__ = {k: object for k in __import__('mentorship.study', fromlist=['OA1029_OLD']).OA1029_OLD}
+    locals().update(__import__('mentorship.study', fromlist=['OA1029_OLD']).OA1029_OLD)
 from test_silver_bullet import (BASE, D0, NY, P, ROWS, actx, history, mirror, mk, one, run, _no_look_ahead, SBCOLS, SYN)   # noqa: E402,F401
+from test_silver_bullet import P as _P0  # noqa: E402
+
+
+def P(**kw):   # OA1029: the pre-build engine these tests were written for (every OA1029 default at its old value)
+    from mentorship.study import OA1029_OLD
+    return _P0(**{**OA1029_OLD, **kw})
 
 
 class Conf:

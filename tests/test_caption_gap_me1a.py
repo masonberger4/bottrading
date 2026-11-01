@@ -10,7 +10,14 @@ import pandas as pd
 import pytest
 
 from mentorship import levels as L, me1, strategy as S, study, targets as TP
+from mentorship.study import OA1029_OLD
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
 
 from test_review_fixes import BASE, day, history, run as rf_run
 from test_caption_gap_es1a import C_ROWS, POST
@@ -94,7 +101,7 @@ def flatrows(n, v=4000.0, w=0.3):
 # --- defaults / validation / study variants ----------------------------------------------------------------------------------------------------------
 
 def test_new_switch_defaults_and_validation():
-    p = Params()
+    p = Params(**OA1029_OLD)                 # the built values; the OA1029 defaults are checked in test_owner_answers_oa1029.py
     assert all(getattr(p, k) is False for k in NEW_SWITCHES), "behaviour switches default off"
     assert (p.heavy_scale, p.lunch_retr_max, p.no_entry_0825, p.bpr_limit, p.breaker_mt_test, p.ce_exit, p.vi_mid_bars, p.stall_partial, p.resistance_def, p.resist_speed_bars, p.ifvg_fail_tf,
             p.pos_switch_frac, p.run_through_bars, p.run_through_ticks, p.sd_window, p.hold_tf, p.best_case_mult, p.best_case_bulk, p.exit_fill, p.exit_slip_ticks, p.be_mode, p.be_adr, p.runner_stop,
@@ -266,7 +273,7 @@ def test_flat_before_0830():
     from mentorship import calendar as C
     ppi = next(d for d in (date(2023, 5, 11), date(2023, 6, 14), date(2023, 7, 14)) if "ppi" in events(d))
     cpi = next(d for d in (date(2023, 5, 10), date(2023, 6, 13), date(2023, 7, 12)) if "cpi" in events(d))
-    p = pk()
+    p = pk(hold_through_0830=False)                                          # the flat (OA1029 Q142: the default holds through)
     assert me1.release_0830(ppi, p) and me1.flat_0830(ppi, p) and me1.flat_0830(cpi, p) and not me1.flat_0830(D0, p)
     q = pk(hold_through_0830=True)
     assert not me1.flat_0830(ppi, q) and me1.flat_0830(cpi, q)                          # jobs and CPI days stay excluded from the hold

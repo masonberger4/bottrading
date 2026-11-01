@@ -11,6 +11,12 @@ import pytest
 
 from mentorship import backtest as B, bh2 as BH2, bh5 as BH5, bh5e as E5, bias_day as BD, daycontext as DW, htf, strategy as S
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
 
 from test_review_fixes import BASE, D0, A_ROWS, A_LOCK, day, history, rth_day, frame  # noqa: E402
 from test_entries_stops import _no_look_ahead  # noqa: E402

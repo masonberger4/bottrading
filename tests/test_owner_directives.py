@@ -433,7 +433,8 @@ def test_owner_switches_es_no_look_ahead_and_behaviour():
 def test_futures_flatten_at_1615_and_switch():
     df = B.load("ES", 5, source="databento")
     df = df[(df.index >= "2024-01-01") & (df.index < "2024-07-01")]
-    kw = dict(**FUT, htf_resist_cap=False, draw_lock="off", news_wait="off", am=(0, 0), pm=(900, 950))
+    # ob_need_narrative pinned to the pre-OA1029 value: the new default leaves no trades in this window
+    kw = dict(**FUT, htf_resist_cap=False, draw_lock="off", news_wait="off", am=(0, 0), pm=(900, 950), ob_need_narrative=False)
     a = B.run(df, 5, "ES", Params(**kw), confluence=False)
     eod = a[a.exit_reason.str.endswith("eod")]
     assert len(eod) and (eod.exit_time.astype(str).str[11:16] == "16:10").all()
@@ -447,7 +448,8 @@ def test_front_month_prices_inside_the_raw_contract_range():
     df = B.load("ES", 5, source="databento")
     df = df[(df.index >= "2022-12-01") & (df.index < "2023-02-01")]
     meta = B.load_meta("ES", 5)
-    p = Params(**FUT, htf_resist_cap=False, draw_lock="off")
+    # ob_need_narrative pinned to the pre-OA1029 value: the new default leaves no trades in this window
+    p = Params(**FUT, htf_resist_cap=False, draw_lock="off", ob_need_narrative=False)
     t = B.run(df, 5, "ES", p, meta=meta)
     old = B.run(df, 5, "ES", replace(p, price_frame="back_adjusted", round_pools=False))
     assert len(t) and len(old)

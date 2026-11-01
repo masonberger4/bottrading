@@ -48,7 +48,7 @@ def tag(tags: dict, **kw) -> None:
 def check_params(p) -> None:
     """Validation of the chunk's Params (strategy.Params.__post_init__)."""
     for name, ok in (("add_sizes", ("decreasing", "equal_or_less", "equal_013")), ("add_ladder", ("", "631", "6421", "6321", "067")),
-                     ("gap_risk", ("off", "widen", "skip")), ("ifvg_stop", ("ce", "far")),
+                     ("gap_risk", ("off", "widen", "skip")), ("ifvg_stop", ("ce", "far", "by_tf")),
                      ("add_after_partial", ("", "inv_fvg", "high_vol")), ("add_day_mode", ("eq_cutoff", "trend_day")),
                      ("add_low_end_size", ("smallest", "ladder"))):
         if getattr(p, name) not in ok:

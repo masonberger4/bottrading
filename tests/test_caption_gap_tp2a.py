@@ -10,7 +10,14 @@ import pandas as pd
 import pytest
 
 from mentorship import confluence as CF, levels as L, strategy as S, targets as TP, tp1, tp2, study
+from mentorship.study import OA1029_OLD
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
 
 from test_targets_partials import bar_ctx, conf
 
@@ -63,7 +70,7 @@ def flat(n, v=4000.0, w=0.3):
 # --- defaults / validation / study variants -------------------------------------------------------------------------------------------------------
 
 def test_new_switch_defaults_and_validation():
-    p = Params()
+    p = Params(**OA1029_OLD)                 # the built values; the OA1029 defaults are checked in test_owner_answers_oa1029.py
     assert (p.eq_leg, p.eq_beyond_imb, p.hrlr_time_k, p.clear_path, p.linger_bars, p.linger_pts, p.session_pool_first, p.nwog_ladder, p.nwog_near_frac, p.nwog_ce_frac, p.event_horizon_target,
             p.nwog_magnet, p.org_beyond, p.org_beyond_adr, p.org_ce_if_flow, p.htf_gap_final, p.htf_gap_gate, p.weekly_bisi_ts_block, p.keep_traded_wfvg) == (
         "sweep", False, 0.0, False, 10, 1.0, False, False, 0.0, 0.8, False, False, False, 0.5, False, "ce", False, False, False)

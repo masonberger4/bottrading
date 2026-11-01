@@ -11,8 +11,19 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from mentorship.study import OA1029_OLD
 from mentorship import backtest as B, calendar as C, daycontext as DW, dwc1 as D1, dwc2 as D2, dwc3 as D3, levels as L, report_decisions as RD, study, study_week as SW, strategy as S
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
+    bk_depth: str = "ce"                    # OA1029 Q11 / Q113 / Q171: the pre-build values these path tests were written for
+    bk_bpr_ce: bool = False
+    htf_gap_final: str = "ce"
+    objective_done_pm: str = "off"
 
 from test_review_fixes import BASE, D0, A_ROWS, day, frame, history  # noqa: E402  (shared scenario builders)
 from test_entries_stops import _no_look_ahead  # noqa: E402
@@ -49,6 +60,8 @@ def test_defaults_and_validation():
     for f in NEW_FIELDS:
         assert f in Params.__dataclass_fields__, f
     for k, v in OFF.items():
+        if k in OA1029_OLD:                     # OA1029 moved this default (checked in test_owner_answers_oa1029.py)
+            continue
         assert getattr(p, k) == v, k
     assert p.choppy_week_days == 2 and p.pm_narr_gap_pts == 5.0 and p.trend_k == 0.8 and p.tgif_pm_from == 810 and p.fav_pts == 2.0 and p.bisi_ce_band == 0.15
     assert p.low_mag_months == (5, 6, 7, 8, 9, 10) and p.cl_days == (0, 1, 2) and p.carry_neutral_after is True and p.cl_pm_ok is True

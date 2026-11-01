@@ -12,7 +12,18 @@ import pandas as pd
 import pytest
 
 from mentorship import backtest as B, entries as EN, htf, ld2 as LD, ld3 as L3, levels as L, strategy as S, study, targets as TP
+from mentorship.study import OA1029_OLD
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
+    bk_depth: str = "ce"                    # OA1029 Q11 / Q113 / Q171: the pre-build values these path tests were written for
+    bk_bpr_ce: bool = False
+    htf_gap_final: str = "ce"
+    objective_done_pm: str = "off"
 
 from test_levels_detectors import BASE, D0, ES, FUT, NY, ctx_for, day, frame, history, prior_days, rth_day
 
@@ -1012,7 +1023,7 @@ NEW_SWITCHES = ("active_old_pool", "round_pool_mode", "round_conf_pts", "enginee
 
 
 def test_new_switch_defaults_and_validation():
-    d = Params()
+    d = Params(**OA1029_OLD)                 # the built values; the OA1029 defaults are checked in test_owner_answers_oa1029.py
     # new switches default off / to the built behaviour
     assert (d.active_old_pool, d.round_pool_mode, d.engineered_pools, d.rth_pool_spent, d.session_ors, d.nwog_rebalanced, d.nwog_cfd_src,
             d.open_float_pools) == (False, "pool", False, False, (), False, "auto", False)

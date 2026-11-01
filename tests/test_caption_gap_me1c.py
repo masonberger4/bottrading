@@ -7,6 +7,12 @@ import pytest
 
 from mentorship import me1, strategy as S, study
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
 
 from test_caption_gap_me1a import D0, fill, flatrows, mkctx, mkpos, pk, reasons, step
 from test_caption_gap_me1a2 import _opp_gap_rows
@@ -21,10 +27,10 @@ def test_pre8_cut_stays_at_the_release_even_when_the_position_is_held():
     for kw in ({}, dict(hold_through_0830=True), dict(hold_through_0830=True, no_entry_0825=False)):
         assert me1.pre8_cut(ppi, pk(**kw)) == 510                                  # nothing fills on or after the 08:30 bar, held position or not
     assert me1.pre8_cut(D0, pk(hold_through_0830=True)) == 570                    # no release: the old 09:30 cut
-    assert me1.pre8_cut(ppi, pk(pre_flat_0830=False)) == 570
+    assert me1.pre8_cut(ppi, pk(pre_flat_0830=False, hold_through_0830=False)) == 570      # (OA1029 Q142: the default holds through)
     assert me1.pre8_cut(ppi, pk(pre_flat_0830=False, am_from_0830=True)) == 510
     assert me1.flat_0830(ppi, pk(hold_through_0830=True)) is False                # ... while the open position is held (the Ma Deuce / SB path)
-    assert Params().hold_through_0830 is False                                     # default: owner directive "pre-09:30 setups are test-only", flat at 08:29 stays
+    assert Params().hold_through_0830 is True                                      # OA1029 Q142: the experienced hold is the default (pre-09:30 test models only; no_entry_0825 stays)
 
 
 # --- A6-breakaway-by-refusal -----------------------------------------------------------------------------------------------------------------------------

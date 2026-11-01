@@ -10,6 +10,12 @@ import pytest
 
 from mentorship import es2, levels as L, setups as SM, sm2, sm4, sm7, strategy as S
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
+    ob_need_narrative: bool = False
 
 from test_review_fixes import A_LOCK, A_ROWS, BASE, D0, day, history, run as rf_run
 from test_caption_gap_sm1a import sd_of
