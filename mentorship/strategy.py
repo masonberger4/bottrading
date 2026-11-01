@@ -2561,7 +2561,7 @@ class Params:
     ob_ce_tol_pts: float = 1.0
     leg_fib: str = "wick"                # A21-intraday-fib-bodies (058 ~41:48): the leg / EQ anchors - "wick" (built) / "body" (lowest min(o,c) .. highest max(o,c))
     htf_depth_mult: tuple = (1.0, 1.0, 1.0)   # A8-htf-gap-resistance-grade (065 ~1:27:00): risk multiplier by how deep an HTF gap entry reacted: (near / ce / far); tag lv_tags htf_depth_*
-    ob_need_narrative: bool = True      # A12-ob-requires-narrative (059 ~19:00; 064 ~51:56; 065 ~1:28:02): an OB qualifies only with the bias this way, a transitional event (a pool swept, or an array traded into) before or by it, and (ob_need_htf_array) lying inside an HTF array
+    ob_need_narrative: bool = False      # A12-ob-requires-narrative (059 ~19:00; 064 ~51:56; 065 ~1:28:02): an OB qualifies only with the bias this way, a transitional event (a pool swept, or an array traded into) before or by it, and (ob_need_htf_array) lying inside an HTF array
     ob_need_htf_array: bool = True       # ... (2) the OB lies inside a same-side HTF array [our interpretation: the array contains the OB bodies, tolerance eq_tol_pts]
     ob_wick_ltf_entry: bool = False      # A12-ob-open-anchor-ltf-wick (061 ~26:10): an HTF OB with a stubby wick (< 25% of its range) - the entry is an LTF FVG / OB inside [open, low] of it; the wick area does not invalidate
     htf_ob_anchor: str = "open"          # A12-ob-anchor-level (default "open" = the 2023 Mentorship level; "extreme" is the Core Content swing level and sits in study.PRE_OWNER) (cc03_001 ~28:18; cc06_004; cc10_005; 072): the HTF OB level - "open" (A12 2023) / "extreme" (CC swing: the OB candle's high / highest high of the series)

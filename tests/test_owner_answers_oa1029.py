@@ -7,7 +7,7 @@ from mentorship import study
 from mentorship.strategy import Params
 from mentorship.study import OA1029_OLD
 
-NEW = dict(bk_depth="any_open", bk_bpr_ce=True, ob_need_narrative=True, add_ladder="631", htf_gap_final="far_edge",
+NEW = dict(bk_depth="any_open", bk_bpr_ce=True, add_ladder="631", htf_gap_final="far_edge",
            hold_through_0830=True, objective_done_pm="reversal_only", tgif_window="off", pd3_result="neutral",
            org_with_bias=True, htf_monthly_series="raw", htf_bias_pools=True, release_ob_entry=True,
            tgif_exits="066", dagger_level="ltf", ifvg_stop="by_tf", lc_retry_until=720,
@@ -22,6 +22,7 @@ def test_new_defaults():
         assert getattr(p, k) == v, k
     assert not p.tgif and p.no_entry_0825 and not p.htf_gap_gate          # the parents the build list keeps as they were
     assert not p.nfp_release_fvg and not p.post_news_continuation         # N1 / N5a stay off (D2 / Q19: only N5b)
+    assert p.ob_need_narrative is False and study.DECISIONS["OA1029_Q92_ob_need_narrative_on"] == {"ob_need_narrative": True}   # Q92: Mase 2026-11-01, more trades
 
 
 def test_old_values_are_switch_values_and_study_variants():

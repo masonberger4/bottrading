@@ -266,7 +266,7 @@ PRE_OWNER = dict(htf_ob_anchor="extreme", ob_entry="post_mss", draw_lock="off", 
                  sb_pw_pools=False, sb_cancel_sticky=False)
 # owner answers 2026-10-29 (OA1029): the old value of every default changed by that build, so PRE_OWNER
 # still reproduces the pre-build engine; each one is also a study variant "OA1029_<switch>_old"
-OA1029_OLD = dict(bk_depth="ce", bk_bpr_ce=False, ob_need_narrative=False, add_ladder="", htf_gap_final="ce",
+OA1029_OLD = dict(bk_depth="ce", bk_bpr_ce=False, add_ladder="", htf_gap_final="ce",
                   hold_through_0830=False, objective_done_pm="off", tgif_window="pm", pd3_result="flip",
                   org_with_bias=False, htf_monthly_series="adjusted", htf_bias_pools=False,
                   release_ob_entry=False, tgif_exits=False, dagger_level="ce",
@@ -3349,6 +3349,8 @@ DECISIONS.update(_SB1_DECISIONS)
 # owner answers 2026-10-29: one variant per changed default, back at its old value
 DECISIONS.update({f"OA1029_{k}_old": {k: v} for k, v in OA1029_OLD.items()})
 # ... and the study-only items (defaults unchanged): D1 / Q103 three-PD-array stop vs ob_mt, D3 / Q226b one counter trade after the locked draw
+# Q92 (Mase 2026-11-01: more trades): ob_need_narrative stays off by default; the narrative OB rule is the switch
+DECISIONS.update({"OA1029_Q92_ob_need_narrative_on": dict(ob_need_narrative=True)})
 DECISIONS.update({"OA1029_D1_stop_three_pd": dict(stop_mode="three_pd"), "OA1029_D3_counter_trend": dict(allow_counter_trend=True)})
 # coverage gap 1: the news calendar study (NEWS-csv is the default; report 2016-2018 and 2019-2026 separately)
 DECISIONS.update({"NEWS-csv": dict(news_cal="csv"), "NEWS-legacy": dict(news_cal="legacy"), "NEWS-gdp-all": dict(gdp_tags=("gdp_adv", "gdp_2nd", "gdp_3rd", "gdp_other"))})

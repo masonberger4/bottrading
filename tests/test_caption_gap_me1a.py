@@ -18,6 +18,14 @@ from dataclasses import dataclass as _oa_dc
 @_oa_dc
 class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
     ob_need_narrative: bool = False
+    news_cal: str = "legacy"                # coverage gap 1: these tests were written for the legacy news calendar
+
+
+@pytest.fixture(autouse=True)
+def _legacy_news_calendar():   # coverage gap 1: direct calendar calls in this file read the legacy calendar too
+    from mentorship import calendar as _C
+    _C.use("legacy")
+    yield
 
 from test_review_fixes import BASE, day, history, run as rf_run
 from test_caption_gap_es1a import C_ROWS, POST
