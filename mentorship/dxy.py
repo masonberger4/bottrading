@@ -22,6 +22,13 @@ BAD_HOURS = tuple(pd.Timestamp(x, tz=NY) for x in (                    # the sta
     "2023-04-28 10:00", "2023-05-19 11:00", "2023-05-31 11:00"))
 DXY_TICK = 0.005                      # the DX futures tick [our interpretation; spot quotes to 0.001]
 
+def floor_tz(idx, freq: str):
+    """idx.floor(freq) for a tz-aware index without the DST-ambiguity error: floored in UTC (freq divides the hour, New York's offsets are whole hours) and converted back."""
+    if getattr(idx, "tz", None) is None:
+        return idx.floor(freq)
+    return idx.tz_convert("UTC").floor(freq).tz_convert(idx.tz)
+
+
 _SPOT: dict = {}
 _CACHE: dict = {}
 
@@ -63,7 +70,7 @@ def spot_1m() -> pd.DataFrame | None:
 
 
 def _from_closes(c: pd.Series, tf: int) -> pd.DataFrame:
-    g = c.groupby(c.index.floor(f"{tf}min"))
+    g = c.groupby(floor_tz(c.index, f"{tf}min"))
     b = pd.DataFrame({"close": g.last(), "hi_c": g.max(), "lo_c": g.min()})
     prev_end = b.index.to_series().shift(1) + pd.Timedelta(minutes=tf)
     cont = (b.index.to_series() == prev_end)                      # open = the previous bar's close only inside a continuous run; after a break (17:00-18:00, weekends, holes) the first close
@@ -77,7 +84,7 @@ def _drop_bad(b: pd.DataFrame, tf: int) -> pd.DataFrame:
     if not len(b):
         return b
     bad = pd.DatetimeIndex(BAD_HOURS)
-    hour = b.index.floor("60min")
+    hour = floor_tz(b.index, "60min")
     return b[~hour.isin(bad)]
 
 
@@ -97,7 +104,7 @@ def bars(tf: int, src: str = "auto") -> pd.DataFrame | None:
         if h is not None and len(h):
             d = h[["open", "high", "low", "close"]]
             if tf > 60:
-                g = d.groupby(d.index.floor(f"{tf}min"))
+                g = d.groupby(floor_tz(d.index, f"{tf}min"))
                 d = pd.DataFrame({"open": g.open.first(), "high": g.high.max(), "low": g.low.min(), "close": g.close.last()})
             out = d if out is None else _merge(out, d)
     if out is not None:

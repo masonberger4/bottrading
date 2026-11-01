@@ -43,7 +43,7 @@ def dxy_unconfirmed(ctx, sg: int, i: int, tf: int, t_from, from_min: int = 7 * 6
     if b is None or len(b) < 4:
         return None
     y = _Y(b, sg)
-    cut = int(b.index.searchsorted(pd.Timestamp(t_from).floor(f"{tf}min"), side="left"))
+    cut = int(b.index.searchsorted(DXY.floor_tz(pd.DatetimeIndex([pd.Timestamp(t_from)]), f"{tf}min")[0], side="left"))
     if cut < 2 or cut >= len(y):
         return None
     return bool(y[cut:].max() <= y[:cut].max() + 1e-12)

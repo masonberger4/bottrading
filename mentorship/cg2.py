@@ -34,7 +34,7 @@ def _tfbars(c_, sg: int, t_end, tf: int, back: int = 600):
         return None
     x = (c_.h if sg > 0 else -c_.l)[lo:n]
     s = pd.Series(x, index=idx)
-    g = s.groupby(idx.floor(f"{tf}min")).max()
+    g = s.groupby(DXY.floor_tz(idx, f"{tf}min")).max()
     starts = g.index
     ok = (starts + pd.Timedelta(minutes=tf)) <= t_end
     return starts[ok], g.values[ok]
