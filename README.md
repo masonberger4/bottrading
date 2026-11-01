@@ -36,3 +36,9 @@ Full spec for reuse in other repos: MEMORY_SYSTEM_SPEC.md. GitHub: branch `memor
 - Want a top-level change? `echo "text" | python3 tools/memsave.py propose decisions.md --agent "<you>" --reason "why" --link "..."` creates versioned `proposals/<slug>__decisions.md`. A writer reviews, merges with `save`, and notes "merged vN" in the proposal.
 - `python3 tools/memsave.py verify` lists any file edited outside the tool (exit 5).
 Honest limits: identity is self-declared via --agent (not authenticated); the shared mount ignores chmod so file permissions cannot enforce read-only; a raw `echo >> file` works but `verify` and git expose it and `rollback` repairs it; the platform project-memory index tool is writable by every thread and cannot be restricted by us.
+
+## GitHub store, index and drift check
+- Approved store: branch `memory` in masonberger4/bottrading (ruleset-locked; only Mase unlocks it). This folder is a working mirror: run `python3 tools/memsave.py sync` to fast-forward it from the branch (prints IN SYNC / AHEAD / DIVERGED).
+- Non-writers never push to `memory`. To change top-level memory: `create_branch` from `memory`, `push_files` your changed file(s) to that branch, `create_pull_request` base=`memory`; Mase (or a writer) reviews. Scratch pads stay local in scratch/.
+- Index: only Mase and the coordinator write the project-memory index. `INDEX.md` here is the approved copy of that index. Drift check (coordinator, each time it starts or after a thread ends): save `read_memory` text to a file and run `python3 tools/memsave.py indexcheck FILE`; exit 7 = drift, so restore the live index to INDEX.md text and note it in CHANGELOG. Threads do not call update_memory.
+- Seeding/unlocking steps for Mase: see MEMORY_SYSTEM_SPEC.md section 7.
