@@ -9,10 +9,14 @@ Usage (run from anywhere; paths are relative to the memory folder):
   memsave.py log [FILE]                     version history
   memsave.py show FILE VERSION              print FILE as of version (e.g. v3)
   memsave.py rollback FILE VERSION --agent WHO --reason WHY [--link URL]   restore as a NEW version
+  memsave.py propose FILE --agent WHO --reason WHY [--link URL]   (proposed text on stdin) -> proposals/<agent>__<file>.md
+Permissions (ACL.json): top-level files are writable only by ACL "writers"; scratch/<agent>/ is free for that agent
+(unversioned, git-ignored); proposals/<agent>__* is free for that agent. Violations exit 4 (DENIED).
 Every change = new version vN, a git commit, and a CHANGELOG.md row (who, when, why, link, hash before->after).
-Exit codes: 0 ok, 2 usage/error, 3 stale hash (conflict).
+Exit codes: 0 ok, 2 usage/error, 3 stale hash (conflict), 4 DENIED by ACL.
+NOTE: --agent is self-declared; the ACL stops mistakes and honest agents, not a malicious one.
 """
-import argparse, hashlib, os, subprocess, sys, time, shutil, re, tempfile
+import argparse, hashlib, json, os, subprocess, sys, time, shutil, re, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCK = os.path.join(ROOT, ".memsave.lock")
@@ -57,6 +61,28 @@ def commit(rel, before, agent, reason, link, kind):
     git("tag", "v%d" % v)
     print("saved %s as v%d (%s -> %s)" % (rel, v, before[:10], after[:10]))
 
+def slug(name):
+    n = re.sub(r"^(thread|agent|human)\s*:\s*", "", name.strip(), flags=re.I)
+    return re.sub(r"[^a-z0-9]+", "-", n.lower()).strip("-") or "unknown"
+
+def acl_kind(rel, agent):
+    """returns 'scratch' | 'open' | 'writer' (allowed) or exits 4."""
+    try: writers = [slug(w) for w in json.load(open(os.path.join(ROOT, "ACL.json")))["writers"]]
+    except Exception: writers = []
+    me, parts = slug(agent), rel.split(os.sep)
+    is_writer = me in writers
+    if parts[0] == "scratch":
+        if len(parts) >= 3 and (parts[1] == me or is_writer): return "scratch"
+        deny(rel, agent, "scratch/ is per-agent: use scratch/%s/..." % me)
+    if parts[0] == "proposals":
+        if is_writer or os.path.basename(rel).startswith(me + "__"): return "open"
+        deny(rel, agent, "proposals files must be named %s__<name>.md" % me)
+    if is_writer: return "writer"
+    deny(rel, agent, "top-level memory is read-only for you; write scratch/%s/ or run: memsave.py propose FILE ..." % me)
+
+def deny(rel, agent, why):
+    print("DENIED: %s may not write %s. %s" % (agent, rel, why), file=sys.stderr); sys.exit(4)
+
 def target(f):
     p = os.path.normpath(os.path.join(ROOT, f))
     if not p.startswith(ROOT + os.sep) or ".git" in p.split(os.sep): sys.exit("path must be inside the memory folder")
@@ -64,6 +90,11 @@ def target(f):
 
 def do_write(f, base, data, a, kind):
     p, rel = target(f)
+    kind_acl = acl_kind(rel, a.agent)
+    if kind_acl == "scratch":
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(p)); os.write(fd, data); os.close(fd); os.replace(tmp, p)
+        print("scratch write %s (unversioned, git-ignored)" % rel); return
     with Lock():
         cur = sha(p)
         if cur != base:
@@ -71,7 +102,7 @@ def do_write(f, base, data, a, kind):
             sys.exit(3)
         os.makedirs(os.path.dirname(p), exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=os.path.dirname(p)); os.write(fd, data); os.close(fd)
-        os.replace(tmp, p)
+        os.replace(tmp, p); os.chmod(p, 0o444)
         commit(rel, cur, a.agent, a.reason, a.link, kind)
 
 def main():
@@ -79,7 +110,7 @@ def main():
     ap.add_argument("cmd"); ap.add_argument("file", nargs="?"); ap.add_argument("version", nargs="?")
     ap.add_argument("--base"); ap.add_argument("--draft"); ap.add_argument("--agent"); ap.add_argument("--reason"); ap.add_argument("--link")
     a = ap.parse_args(); init()
-    if a.cmd in ("save", "append", "rollback") and not (a.agent and a.reason): sys.exit("--agent and --reason are required")
+    if a.cmd in ("save", "append", "rollback", "propose") and not (a.agent and a.reason): sys.exit("--agent and --reason are required")
     if a.cmd == "hash": print(sha(target(a.file)[0]))
     elif a.cmd == "save":
         if not (a.base and a.draft): sys.exit("--base and --draft required")
@@ -90,6 +121,12 @@ def main():
         add = sys.stdin.buffer.read()
         if old and not old.endswith(b"\n"): old += b"\n"
         do_write(a.file, a.base, old + add, a, "append")
+    elif a.cmd == "propose":
+        text = sys.stdin.buffer.read()
+        name = "proposals/%s__%s" % (slug(a.agent), a.file.replace("/", "_"))
+        hdr = ("<!-- proposal by %s at %s; target: %s; reason: %s; link: %s; status: open -->\n" % (a.agent, time.strftime("%Y-%m-%d %H:%M:%SZ", time.gmtime()), a.file, a.reason, a.link or "-")).encode()
+        p, _ = target(name)
+        do_write(name, sha(p), hdr + text, a, "proposal")
     elif a.cmd == "log":
         print(git("log", "--format=%h %s | %b", "--", a.file) if a.file else open(CHANGELOG).read())
     elif a.cmd == "show":
