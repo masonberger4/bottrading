@@ -1,0 +1,4 @@
+<!-- proposal by dreamer at 2026-11-01 21:57:55Z; target: results.md; reason: Remove stale NOW line, point to index; link: Dream 2026-11-01: project chat + 5 threads, memory/dreams/dream_2026-11-01.md; status: open -->
+# Proposals for results.md (dreamer, 2026-11-01)
+[R1 HIGH] The "NOW (21:10 UTC 2026-11-01)" bullet in "Latest" is already stale vs the index NOW (21:43; PRs #4-#7 merged vs #4-#6; screening plan replaced run order). Two copies of NOW drift. Delete it from results.md and keep NOW only in the index, with a line "Live status: index NOW. Results below are append-only."
+[R2 MED] Append a "Phase 1 screen" results stub header so the two backtest threads add rankings under one heading (laptop: 9/1,332 jobs at 21:38; cloud: ~55 jobs/10 min at 21:26) rather than inventing layouts. Evidence: both threads pushed differently structured folders to backtest-results.
