@@ -3795,3 +3795,16 @@ New switch `tug_mode` ("spec" default = column `tug_spec`; "post_raid" = the old
 | gate + tug post_raid, two_of_four | 172 | -5,712 | 0.82 |
 
 Result: defaults stay `tier_stl_mode="last2"` and `tug_mode="spec"` (each is the best or tied-best row). The differences are 1-2 trades and about $110, i.e. noise; the whole gate moves the window by +$200 (3 trades) and every row loses money. Note: the study base `htf_bias="combo"` (BH2_BASE) leaves only ~12 trades in 2019-22 and the gate never bound there (all seven variants identical); the `TT-*` variants use the default bias reading instead.
+
+## NEWS-csv vs NEWS-legacy study (coverage gap 1, 2026-11-01)
+
+ES 5m, databento, default bias reading, trades by entry year (runner `runs/news_study.py`, trades in `runs/mentorship/news_study/`):
+
+| window | variant | trades | net $ | PF | win rate | max DD $ |
+|---|---|---|---|---|---|---|
+| 2016-2018 | NEWS-csv | 138 | +2,197 | 1.11 | 0.384 | 3,647 |
+| 2016-2018 | NEWS-legacy | 144 | +2,214 | 1.11 | 0.389 | 3,641 |
+| 2019-2026 | NEWS-csv | 328 | -17,093 | 0.70 | 0.256 | 18,182 |
+| 2019-2026 | NEWS-legacy | 325 | -16,062 | 0.71 | 0.258 | 17,003 |
+
+`NEWS-gdp-all` equals `NEWS-csv` in every window (the extra GDP estimates change no trade in this setup). The csv calendar removes 6 trades in 2016-2018 (it knows the CPI / NFP / FOMC days the legacy lists lack there) at no measurable profit difference, and adds 3 trades in 2019-2026 with -$1,031 net (stricter or different release times / the corrected PCE and retail dates). Differences are a handful of trades; no evidence either calendar is better. Default stays `news_cal="csv"` (correct dates).
