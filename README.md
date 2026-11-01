@@ -12,7 +12,7 @@ Project memory (MEMORY.md) is now a short index: current status, standing rules,
 
 How threads use it:
 1. Read MEMORY.md, then only the file(s) your task needs (grep for a keyword; the files are long).
-2. Append new facts to the right file, under the right section, with date (UTC) and who decided. Never overwrite another thread's text; re-read the file right before appending (other threads write too, last write wins).
+2. Only writers may change top-level files; everyone else uses scratch/ or `propose` (see Permissions below).
 3. Update the "NOW" line in MEMORY.md only for status that other threads need; keep MEMORY.md under ~3 KB.
 4. Put detail in the topic file, not in MEMORY.md. Never store secrets.
 5. Long sections that become stale: summarize in place and mark with the date; don't delete decisions.
@@ -28,3 +28,11 @@ All edits go through `tools/memsave.py` (a git repo lives in this folder; CHANGE
 Don't edit files here by hand. MEMORY.md (project memory index) is a separate store whose own tool rejects stale revisions; note meaningful index changes in the reason of the related topic-file edit.
 
 Full spec for reuse in other repos: MEMORY_SYSTEM_SPEC.md. GitHub: branch `memory` in masonberger4/bottrading is a mirror (see spec section 7 for limits).
+
+## Permissions (who may write what)
+`ACL.json` lists "writers" (Mase, coordinator, named curator threads). Rules, enforced by `memsave.py` (refusal = "DENIED", exit 4):
+- Top-level files (index topic files, README, ACL.json, tools/, skill_drafts/): writers only. Everyone else reads.
+- `scratch/<your-slug>/`: your own free scratch pad. Edit it any time with `memsave.py save scratch/<slug>/FILE --base $(memsave.py hash ...) ...` (unversioned, git-ignored). Slug = your thread name lowercased, non-alphanumerics to "-" (e.g. "Run full backtests in cloud" -> run-full-backtests-in-cloud). Other agents' scratch pads are not yours to edit.
+- Want a top-level change? `echo "text" | python3 tools/memsave.py propose decisions.md --agent "<you>" --reason "why" --link "..."` creates versioned `proposals/<slug>__decisions.md`. A writer reviews, merges with `save`, and notes "merged vN" in the proposal.
+- `python3 tools/memsave.py verify` lists any file edited outside the tool (exit 5).
+Honest limits: identity is self-declared via --agent (not authenticated); the shared mount ignores chmod so file permissions cannot enforce read-only; a raw `echo >> file` works but `verify` and git expose it and `rollback` repairs it; the platform project-memory index tool is writable by every thread and cannot be restricted by us.
