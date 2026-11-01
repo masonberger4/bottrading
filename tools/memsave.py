@@ -7,6 +7,7 @@ Usage (run from anywhere; paths are relative to the memory folder):
         re-hashes FILE under a lock; if it differs from HASH -> exit 3 (STALE): re-pull, redraft, retry.
   memsave.py append FILE --base HASH --agent WHO --reason WHY [--link URL]   (text on stdin; same check)
   memsave.py sync                           fetch GitHub branch `memory`; fast-forward this folder, or report AHEAD/DIVERGED
+  memsave.py indexcheck LIVEFILE            compare live project-memory index text (in LIVEFILE) with INDEX.md; exit 7 on drift
   memsave.py bundle                         write /mnt/project-files/memory-export/memory.bundle (for a one-time seed push from a machine with git push)
   memsave.py verify                         exit 5 + list if any file was edited outside this tool (raw writes)
   memsave.py log [FILE]                     version history
@@ -151,6 +152,12 @@ def main():
             git("merge", "-q", "--ff-only", "FETCH_HEAD"); print("UPDATED folder from GitHub branch memory")
         else:
             print("DIVERGED: local and GitHub both have new versions; a writer must reconcile", file=sys.stderr); sys.exit(6)
+    elif a.cmd == "indexcheck":
+        # drift check: compare the live project-memory index (saved by caller to a file) with INDEX.md
+        import difflib
+        live = open(a.file).read().strip().splitlines(); want = open(os.path.join(ROOT, "INDEX.md")).read().strip().splitlines()
+        d = list(difflib.unified_diff(want, live, "INDEX.md (approved)", "live index", lineterm=""))
+        print("NO DRIFT" if not d else "DRIFT: restore the live index to INDEX.md text:\n" + "\n".join(d)); sys.exit(0 if not d else 7)
     elif a.cmd == "bundle":
         out = "/mnt/project-files/memory-export/memory.bundle"
         os.makedirs(os.path.dirname(out), exist_ok=True)
