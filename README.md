@@ -28,3 +28,4 @@ All edits go through `tools/memsave.py` (a git repo lives in this folder; CHANGE
 Don't edit files here by hand. MEMORY.md (project memory index) is a separate store whose own tool rejects stale revisions; note meaningful index changes in the reason of the related topic-file edit.
 
 Full spec for reuse in other repos: MEMORY_SYSTEM_SPEC.md. GitHub: branch `memory` in masonberger4/bottrading is a mirror (see spec section 7 for limits).
+<!-- perm test -->

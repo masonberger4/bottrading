@@ -16,3 +16,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v10 | 2026-11-01 21:36:56Z | thread: Run full backtests in cloud | proposals/run-full-backtests-in-cloud__decisions.md | proposal | test proposal | l | ABSENT -> 90f1f56f95 |
 | v11 | 2026-11-01 21:36:57Z | Mase | lessons.md | edit | acl test edit | l | 9c4d5c2adf -> 318990d504 |
 | v12 | 2026-11-01 21:37:08Z | Mase | lessons.md | rollback-to-v10 | undo ACL test line | l | 318990d504 -> 9c4d5c2adf |
+| v13 | 2026-11-01 21:37:10Z | Mase | README.md | edit | verify tool still writes to 444 files | l | bcc60e52b9 -> 944222becb |

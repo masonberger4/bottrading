@@ -183,3 +183,4 @@ First result (2026-10-15): built on a local `claude-hf` branch in bottrading wit
 
 **Why:** later sessions should extend this, not restart it.
 **How to apply:** see [[silver-bullet-bot]] for the Schwab setup; never use the X folder ([[no-x-folder]]).
+hack
