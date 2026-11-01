@@ -3842,3 +3842,23 @@ New modules: `dxy.py` (DXY bars: spot 1-minute closes when `data/dxy/spot_dxy_1m
 Study variants: `CG2-*`, `CG3a-*`. Tests: `tests/test_coverage_gap3.py` (synthetic DXY sessions for every rule incl. closed-bar checks; ES full-vs-truncated runs for the `sym` and `dxy` sets).
 
 Second-agent review of 2 / 3a, fixes: a DXY leg with no bars near the decision time (spot hole, end of the series, stale hour) is "no DXY" (tag sym_no_dxy), not a crack; the DXY / index swing windows no longer share a bar when two swings are close; `dxy_obj` week-done is sticky (fills are judged on the sessions before the week) and takes the nearest gap; every pierce of an old daily level counts for `dxy_ts_raid`; the spot-built bars no longer carry the previous close across the 17:00-18:00 break; `sym_dxy="off"` no longer adds the no-DXY tag; the hourly frame is sliced before labelling (speed). Known limits: the Silver Bullet and pre-open engines call `_DW.order_ok` / `scalp_now` without the new filters (sym_gate, dxy_ts_raid, dxy_daily_mt skip, dxy_end_day act on the main scan only; `dxy_daily_mt="scalp"` reaches them); `dxy_*` week-done levels act with `week_done_on_draw="skip"` only (no tag path, no `fed_testimony_week` / `nfp_week` tags); `sym_dxy="daily"` and `dxy_ts_tf` are not built; the dealing "none" state (ES without a run of new extremes) imposes nothing; the spot file's minute stamps are assumed to be bar-start labels.
+
+## DXY intraday rules (dxy_intraday_spec_2026-10-31.md items 1-11; 2026-11-01)
+
+New modules `cg3.py` (entry gates) and `cg4.py` (management, SMT, unicorn); `dxy.py` gained 1-minute spot bars (`line` highs / lows from closes, DST-safe flooring). They read ONLY the 1-minute spot file (`data/dxy/spot_dxy_1m_close_2019-2025_NYtime.csv.gz`); without it, or outside 2019-2025, every rule is "no information" (tag `dxy_na`, no block). Defaults all off; the spec's per-switch "default when on" is the default mode named below. Swings on the close-only file are taken on the CLOSE series (bar highs / lows tie at every close-peak).
+
+| item | switch (default off) | mode when on | notes |
+|---|---|---|---|
+| 1 | `dxy_states`, `dxy_state_from` "07:00" | "filter" (D2 hard block) | 5m state: rally = no ES longs, consolidating = scalp, falling = no ES shorts; "soft" = half-risk scalp |
+| 2 | `dxy_pool_run`, `dxy_expand_min` 0.05, `dxy_expand_bars` 3 | "cap" | failed run (pierce < min and a 5m close back) trims the ladder to its next rung (`cap_next_rung`); "hold_gate" = cap (no un-trim) |
+| 3 | `dxy_smt`, `dxy_smt_tf`, `dxy_smt_win` 2 | "qualify" | counts as one more SMT in `entry_extra`; "need" drops the order without it; "no_press" and `dxy_smt_need_all3` NOT built |
+| 4 | `dxy_session_gate` | "filter" | 09:30 key support / resistance + 15m FVG, states +1 / 0 / -1; "bias" = filter (day-bias feed not wired) |
+| 5 | `dxy_eq_gate`, `dxy_range_from` | "block" | EQ of the latest 5m swing leg; "block_short_model" = block (the ES short model arming not built) |
+| 6 | `dxy_range_trigger`, `dxy_range_win` | "gate" | AM only; the order is dropped each bar until armed (the engine re-scans, so it waits); 1m volume imbalances do not exist on line bars (FVG only) |
+| 7 | `dxy_intrade`, `_frac` 0.5, `_sister_frac` 0.8, `_tfs`, `_long` | "bank" | short ES: new extreme since the fill and the dollar has made no new Y extreme since the fill on every tf; D3: before the first partial; min-R gate `smt_bank_min_r` |
+| 8 | `dxy_unicorn`, `_exit`, `_kill` | "qualify" | 1m bearish breaker (swings on closes) + a bearish FVG inside the zone, not killed; exit when a 1m close vaults the FVG high; `breaker_high` kill not built |
+| 9 | `dxy_target_partial`, `_frac`, `dxy_ladder` | "partial" | each DXY ladder level reached (5m highs) banks a fraction of what is left; daily ladder from `cg2._ladder_all` |
+| 10 | `dxy_nonconf_exit` | "after_partial" (D3) | after the first partial ES makes a new extreme and the dollar's 5m has not confirmed = close the rest; "any" also before; `fx_nonconf_exit` NOT built (no EURUSD / GBPUSD) |
+| 11 | `sym_swing_dxy` | - | extends `sym_swing_ts`: the counter trade is dropped only if DXY also made the opposite session extreme; `sym_crack` = the package-2 `sym_gate` ("skip" is the no-continuation mode) |
+
+Tests (`tests/test_coverage_gap3.py`): synthetic DXY sessions / days for each rule, closed-bar and no-look-ahead checks, and `test_look_ahead_es[dxy1m]` (real ES / NQ / YM 2023-08-28 to 2023-11-10 with a stand-in DXY = the inverse of ES: gates and exits fire; cut runs equal the full run). NOT done: judging any of these on the real DXY (2019-2022 choose, 2023-2025 check) - the spot file is not on the laptop; the study variants for items 1-11 are not defined yet.
