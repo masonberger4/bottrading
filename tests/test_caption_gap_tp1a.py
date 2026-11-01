@@ -12,6 +12,19 @@ import pytest
 
 from mentorship import bias_htf as BH, confluence as CF, levels as L, strategy as S, targets as TP, tp1, study
 from mentorship.strategy import Params
+from dataclasses import dataclass as _oa_dc
+
+
+@_oa_dc
+class Params(Params):   # coverage gap 1: the legacy news calendar these tests were written for
+    news_cal: str = "legacy"                # coverage gap 1: these tests were written for the legacy news calendar
+
+
+@pytest.fixture(autouse=True)
+def _legacy_news_calendar():   # coverage gap 1: direct calendar calls in this file read the legacy calendar too
+    from mentorship import calendar as _C
+    _C.use("legacy")
+    yield
 
 from test_review_fixes import BASE, D0, day, history, run as rf_run
 from test_caption_gap_es1a import C_ROWS, POST

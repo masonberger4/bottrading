@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from claude_hf.daytypes import events
+from mentorship.calendar import events
 from . import calendar as CAL
 
 # ICT macros for the T7 gate (T7; 073 ~14:54): the engine's MACROS tag tuple plus the 13:30 PM macro and

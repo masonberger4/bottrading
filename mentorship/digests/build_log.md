@@ -3749,7 +3749,7 @@ Mase approved every recommendation in owner_questions_settled.md (2026-10-29 15:
 | Item | Switch | New default | Old value (switch) |
 |---|---|---|---|
 | Q11 | `bk_depth` / `bk_bpr_ce` | "any_open" / True | "ce" / False |
-| Q92 | `ob_need_narrative` | True | False |
+| Q92 | `ob_need_narrative` | False (Mase 2026-11-01: more trades; True = variant `OA1029_Q92_ob_need_narrative_on`) | - |
 | Q94 | `add_ladder` | "631" | "" |
 | Q113 | `htf_gap_final` | "far_edge" (htf_gap_gate stays False) | "ce" |
 | Q132 | `tgif_exits` | "066" (acts only on a TGIF day model: `tp4.tgif066`) | False |

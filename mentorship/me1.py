@@ -198,7 +198,7 @@ def flat_0830(day, p) -> bool:
     hit("eval_flat_0830")
     if not p.hold_through_0830:
         return True
-    from claude_hf.daytypes import events
+    from mentorship.calendar import events
     return bool(events(day) & {"jobs", "cpi"})
 
 
@@ -214,7 +214,7 @@ def entry_cut_0825(day, p, session: str) -> int | None:
     if not p.no_entry_0825 or session not in ("PRE7", "PRE8", "LON") or not p.pre_flat_0830 or not release_0830(day, p):
         return None
     if p.hold_through_0830:
-        from claude_hf.daytypes import events
+        from mentorship.calendar import events
         if not (events(day) & {"jobs", "cpi"}):
             return None
     return 505
@@ -934,7 +934,7 @@ def _runner_lock(ctx, sd, pos, tr, d, i, p, c) -> None:
     if p.event_eve_lock and not d.get("ev_done") and frac >= 0.75 - 1e-9:
         hit("eval_event_eve")
         if "ev" not in d:
-            from claude_hf.daytypes import events
+            from mentorship.calendar import events
             from .calendar import next_trading_day
             d["ev"] = bool(events(next_trading_day(ctx.day)) & {"fomc", "cpi", "jobs"})
         if d["ev"]:

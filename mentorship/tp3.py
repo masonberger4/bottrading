@@ -224,7 +224,7 @@ def base_fracs(p, K: int) -> list:
 
 def news_ahead(ctx, p, i: int) -> bool:
     """The `ahead` flag of strategy._split: a scheduled release later today after the fill (10:00 data, 14:00 FOMC) or a CPI / NFP / FOMC day next."""
-    from claude_hf.daytypes import events
+    from mentorship.calendar import events
     from .calendar import next_trading_day
     S = _S()
     day, t = ctx.day, int(ctx.t[min(i + 1, len(ctx.t) - 1)])

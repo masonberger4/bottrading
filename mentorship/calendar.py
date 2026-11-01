@@ -79,6 +79,122 @@ DT.HOLIDAYS |= _dates(HOLIDAYS)
 DT.day_type.cache_clear()
 
 
+# --- coverage gap 1: the news calendar source (Params.news_cal; build spec coverage_build_2026-10-31 package 1) --------
+# NYSE full closures 2016-2018 (2018-12-05: the Bush mourning closure). Calendar facts, added for both sources (the
+# legacy event lists start in 2019, so nothing from 2019 on changes).
+HOLIDAYS_2016_18 = _dates("""2016-01-01 2016-01-18 2016-02-15 2016-03-25 2016-05-30 2016-07-04 2016-09-05 2016-11-24 2016-12-26
+2017-01-02 2017-01-16 2017-02-20 2017-04-14 2017-05-29 2017-07-04 2017-09-04 2017-11-23 2017-12-25 2018-01-01 2018-01-15
+2018-02-19 2018-03-30 2018-05-28 2018-07-04 2018-09-03 2018-11-22 2018-12-05 2018-12-25""")
+DT.HOLIDAYS |= HOLIDAYS_2016_18
+DT.day_type.cache_clear()
+
+EV_KEYS = ("fomc", "cpi", "jobs", "pce", "ppi", "retail_sales", "gdp", "jolts")
+EV: dict = {k: set() for k in EV_KEYS}        # the mentorship-owned event sets (claude_hf.daytypes is never mutated by the source switch); refilled IN PLACE by use()
+JOBS_SET = EV["jobs"]                          # (modules import the set object itself)
+TIMES: dict = {}                               # csv source: {date: {event: release minute ET}} from the file's time_et column
+CSV_DEFAULT = "data/mentorship/macro_risk_dates.csv"
+CSV_MAP = {"cpi": ("cpi",), "jobs": ("nfp",), "fomc": ("fomc",), "pce": ("pce",), "retail_sales": ("retail",), "jolts": ("jolts",), "ppi": ("ppi",)}
+_ACTIVE: list = [None]
+
+
+@lru_cache(maxsize=4)
+def load_csv(path: str) -> dict:
+    """macro_risk_dates.csv (columns date,time_et,event,tag,...; `#` lines skipped) -> {tag: {date: minute or None}} (a blank time = a date-only tag)."""
+    import csv
+    out: dict = {}
+    with open(path, newline="", encoding="utf8") as f:
+        rows = csv.DictReader(line for line in f if not line.startswith("#"))
+        for r in rows:
+            t = (r.get("time_et") or "").strip()
+            m = int(t[:2]) * 60 + int(t[3:5]) if (len(t) == 5 and t[2] == ":") else None     # ("notation" / "unscheduled" FOMC rows: no time)
+            out.setdefault(r["tag"].strip(), {})[D(r["date"].strip())] = m
+    return out
+
+
+def _clear_caches() -> None:
+    for f in (DT.day_type, is_jobless_claims, nfp_date, fomc_info, eve_of, two_drivers, day_type):
+        f.cache_clear()
+
+
+def use(source: str = "csv", path: str = CSV_DEFAULT, gdp_tags: tuple = ("gdp_adv",)) -> str:
+    """Select the event calendar (Params.news_cal): "csv" = macro_risk_dates.csv (2016 on; PPI adds the built 2019+ list; GDP = `gdp_tags`) /
+    "legacy" = the built 2019-2025 lists plus claude_hf 2026. Falls back to "legacy" (with a warning) when the file is missing. Returns the source in force."""
+    import os
+    if not os.path.isabs(path):
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), path)     # relative to the repository root
+    if source == "csv" and not os.path.exists(path):
+        import warnings
+        warnings.warn(f"news_cal='csv': {path} not found - the legacy calendar is used", stacklevel=2)
+        source = "legacy"
+    key = (source, path, tuple(gdp_tags))
+    if _ACTIVE[0] == key:
+        return source
+    if source == "legacy":
+        src = {"fomc": DT.FOMC, "cpi": DT.CPI, "jobs": DT.JOBS, "pce": DT.PCE, "ppi": DT.PPI, "retail_sales": DT.RETAIL, "gdp": DT.GDP, "jolts": DT.JOLTS}
+        times: dict = {}
+    else:
+        rows = load_csv(path)
+        tags = {**CSV_MAP, "gdp": tuple(gdp_tags)}
+        src = {k: set().union(*(rows.get(t, {}) for t in ts)) for k, ts in tags.items()}
+        src["ppi"] = src["ppi"] | set(DT.PPI)               # the file has PPI 2016-2018 only; the built list carries 2019 on
+        times = {}
+        for k, ts in tags.items():
+            for t in ts:
+                for d_, m in rows.get(t, {}).items():
+                    if m is not None:
+                        times.setdefault(d_, {})[k] = m
+    for k in EV_KEYS:
+        EV[k].clear()
+        EV[k].update(src[k])
+    TIMES.clear()
+    TIMES.update(times)
+    _ACTIVE[0] = key
+    if "FOMC_MINUTES" in globals():
+        FOMC_MINUTES.clear()
+        FOMC_MINUTES.update(_minutes_dates())
+    if "day_type" in globals():
+        _clear_caches()
+    return source
+
+
+def source() -> str:
+    return _ACTIVE[0][0] if _ACTIVE[0] else "legacy"
+
+
+def events(d: date) -> set:
+    """Every event on day d (claude_hf.daytypes.events on the mentorship-owned sets of the active source)."""
+    exp = DT.expiration(d.year, d.month)
+    tags = {k for k in EV_KEYS if d in EV[k]}
+    if d == exp:
+        tags.add("quad_witching" if d.month in (3, 6, 9, 12) else "opex")
+    if d == DT.nth_trading_day(d.year, d.month, 1):
+        tags.add("ism_manufacturing")
+    if d == DT.nth_trading_day(d.year, d.month, 3):
+        tags.add("ism_services")
+    if d == DT.second_friday(d.year, d.month):
+        tags.add("sentiment")
+    return tags
+
+
+@lru_cache(maxsize=None)
+def day_type(d: date) -> str:
+    """claude_hf.daytypes.day_type on this module's events."""
+    tags = events(d)
+    for e in DT.EVENTS:
+        if e in tags:
+            return e
+    exp = DT.expiration(d.year, d.month)
+    quarterly = d.month in (3, 6, 9, 12)
+    nxt, prv = DT._step(d, 1), DT._step(d, -1)
+    if nxt.month != d.month or DT._step(d, 2).month != d.month:
+        return "quarter_end" if quarterly else "month_end"
+    if prv.month != d.month or DT._step(d, -2).month != d.month:
+        return "quarter_start" if d.month in (1, 4, 7, 10) else "month_start"
+    if quarterly and exp - timedelta(days=11) <= d < exp:
+        return "roll_week"
+    return DT.WEEKDAYS[d.weekday()]
+
+
 # --- trading-day helpers (shared: day_week_context; used by news, targets, exits) ---------
 # claude_hf.daytypes.HOLIDAYS carries 2019-2025 (above) plus the 2026 NYSE list incl.
 # 2026-12-25 and 2027-01-01, so these helpers are exact through 2026.
@@ -146,7 +262,7 @@ def is_jobless_claims(d: date) -> bool:
 def _minutes_dates() -> set:
     # FOMC minutes: 14:00 on the Wednesday three weeks (21 days) after the decision; the
     # unscheduled 2020-03-03 cut has none (its follow-up is the 03-15 emergency meeting).
-    return {d + timedelta(days=21) for d in DT.FOMC if d != date(2020, 3, 3)
+    return {d + timedelta(days=21) for d in EV["fomc"] if d != date(2020, 3, 3)
             and (d + timedelta(days=21)) not in DT.HOLIDAYS}
 
 
@@ -213,9 +329,23 @@ def release_times(d: date, claims: bool = False, minutes: bool = False, pmi: boo
     """Scheduled release minutes (ET) on day d, sorted: 510 (08:30 data), 585 (09:45 PMI),
     600 (10:00 data), 840 (FOMC decision). claims adds the 08:30 jobless claims, minutes the
     14:00 FOMC minutes (both off by default - low impact); pmi=False drops the 09:45 PMI; conf adds the 10:00 Conference Board consumer confidence (off by default)."""
-    tags = DT.events(d) | pmi_events(d)
+    tags = events(d) | pmi_events(d)
     mn = minor_events(d)
     tags |= {t for t in mn if (t == "claims" and claims) or (t == "minutes" and minutes) or (t == "conf_board" and conf)}
+    if TIMES or source() == "csv":                  # coverage gap 1: the csv source - each release at its own time_et (PCE is 10:00 on some dates)
+        out_ = set()
+        t_ = TIMES.get(d, {})
+        for e in tags & (set(EV_KEYS) - {"fomc"}):
+            out_.add(t_.get(e) or (600 if e in NEWS_1000 else 510))
+        if "claims" in tags:
+            out_.add(510)
+        if pmi and tags & NEWS_0945:
+            out_.add(585)
+        if tags & (NEWS_1000 - set(EV_KEYS)):
+            out_.add(600)
+        if "fomc" in tags or "minutes" in tags:
+            out_.add(840)
+        return sorted(out_)
     out = []
     if tags & NEWS_0830 or "claims" in tags:
         out.append(510)
@@ -236,7 +366,7 @@ def nfp_date(d: date):
     mon = d - timedelta(days=d.weekday())
     for k in range(5):
         x = mon + timedelta(days=k)
-        if x in DT.JOBS:
+        if x in EV["jobs"]:
             return x
     return None
 
@@ -254,16 +384,16 @@ def nfp_shift(d: date) -> int:
 def fomc_info(d: date) -> dict:
     """FOMC context of d: fomc (the decision day), eve (the next trading day is one), after (the
     previous trading day was one), only (the decision is the day's only scheduled release)."""
-    fo = "fomc" in DT.events(d)
+    fo = "fomc" in events(d)
     nxt, prv = next_trading_day(d), prev_trading_day(d)
-    return dict(fomc=fo, eve="fomc" in DT.events(nxt), after="fomc" in DT.events(prv),
+    return dict(fomc=fo, eve="fomc" in events(nxt), after="fomc" in events(prv),
                 only=fo and release_times(d) == [840])
 
 
 @lru_cache(maxsize=None)
 def eve_of(d: date, tag: str) -> bool:
     """The next trading day carries event `tag` (cpi / jobs / fomc ...)."""
-    return tag in DT.events(next_trading_day(d))
+    return tag in events(next_trading_day(d))
 
 
 @lru_cache(maxsize=None)
@@ -406,7 +536,7 @@ def month_trading_day(d: date) -> int:
 
 # --- Caption-gap pass, package day_week_context#1/3 (digests/rulebook_gaps; dwc1.py) --------------------------------------------------
 # US presidential election days (N7-election, cc04_002 ~00:26:40; cc04_003 ~00:32:20: ICT's personal practice, not a stated rule).
-ELECTIONS = {date(2020, 11, 3), date(2024, 11, 5), date(2028, 11, 7)}
+ELECTIONS = {date(2016, 11, 8), date(2020, 11, 3), date(2024, 11, 5), date(2028, 11, 7)}
 
 
 def election_block(d: date, mode: str) -> bool:
@@ -449,7 +579,7 @@ RELEASES_LANDMINE = {"cpi", "jobs", "fomc", "pce", "ppi"}
 
 def landmine_count(d: date) -> int:
     """D20-landmine-week-monday (064 ~00:10:18): the high-impact release days among Tuesday-Friday of d's week."""
-    return sum(bool(DT.events(x) & RELEASES_LANDMINE) for x in week_dates(d)[1:])
+    return sum(bool(events(x) & RELEASES_LANDMINE) for x in week_dates(d)[1:])
 
 
 # B23 seasonal windows (tags only; 050 ~00:02:22; 074 ~00:18:21; cc10_015 ~00:02:03; cc10_016 ~00:02:11; cc10_017 ~00:01:54; cc10_018 ~00:23:16).
@@ -540,3 +670,6 @@ def season_quality(d: date, autumn_start: int = 9) -> str:
     if (m >= autumn_start and m <= 11) or (m == 12 and day <= 10):
         return "prime"
     return "off"
+
+
+use("csv")                                             # coverage gap 1 default (Params.news_cal="csv"); run / run_day re-select per Params

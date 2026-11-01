@@ -21,6 +21,14 @@ from dataclasses import dataclass as _oa_dc
 class Params(Params):   # OA1029: these tests were written for the pre-build engine and exercise other rules - every OA1029 default back at its old value
     __annotations__ = {k: object for k in __import__('mentorship.study', fromlist=['OA1029_OLD']).OA1029_OLD}
     locals().update(__import__('mentorship.study', fromlist=['OA1029_OLD']).OA1029_OLD)
+    news_cal: str = "legacy"                # coverage gap 1: these tests were written for the legacy news calendar
+
+
+@pytest.fixture(autouse=True)
+def _legacy_news_calendar():   # coverage gap 1: direct calendar calls in this file read the legacy calendar too
+    from mentorship import calendar as _C
+    _C.use("legacy")
+    yield
 
 from test_review_fixes import BASE, D0, frame, history  # noqa: E402  (shared scenario builders)
 from test_entries_stops import _no_look_ahead  # noqa: E402
