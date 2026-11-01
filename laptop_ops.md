@@ -5,7 +5,8 @@
 - Rule: one laptop writer at a time; check remote_control_status before starting another.
 - Laptop processes: PIDs 17224 and 516 = ict_fetch transcribe/prep jobs (since 10/25, idle at 0% CPU); the Silver Bullet paper bot is one instance (PIDs 10480, 3108, 13968, 17164). Leave all of them alone. Running two pytest runs at once maxes the CPU and memory; run one at a time.
 - MONITORING RULE (Mase, 17:29 UTC 2026-10-30): while laptop work runs, check it's moving every 15 min (restart if stalled) and give Mase a status update every 30 min. Laptop thread keeps this schedule; coordinator relays anything needing Mase.
-- LONG-WORK RULE (Mase 20:59 UTC 2026-11-01): >30 min work threads check in and commit+push at least every 30 min.
+- LONG-WORK RULE: see decisions.md ACTIVE RULES DIGEST item 3. Who is the current laptop writer: see threads.md.
+- RESTART of the backtest screen (laptop thread message cmsg_01FAHERC1Lsrg2bYtrKuRHmP9msWSsCnbp9Bc1ByG8AoG7): runs/laptop_shard.py / laptop_screen.py is resume-safe (skips jobs whose CSV already exists). Restart from a clean checkout of 229c1a5 with MENTORSHIP_SRC=databento, launched detached with Start-Process; leave PIDs 17224 and 516 alone. The backtest-results branch layout differs: cloud has its own layout, laptop uses laptop/shard_laptop/dec_jobs/.
 - Laptop Wi-Fi drops (2026-10-29/30); laptop never sleeps, plugged in, no Ethernet port. Thread's session safety rules block it copying files to the laptop, stopping some processes, and merging PRs; Mase does those by hand.
 - Cloud thread has 4 cores. cloud/setup.sh rebuilds CSVs from /mnt/project-files/mentorship/data/databento/.
 - Working copy on the laptop (branch mentorship). Repo: https://github.com/masonberger4/bottrading (private; branches master, claude-hf, mentorship); the repo can lag the laptop by a build stage.
