@@ -80,11 +80,20 @@ def sick_refs_053(c_, s_, k: int, tk):
     return broken, sorted(left)
 
 
+MEDIUM_HIGH_NEWS = {"fomc", "cpi", "jobs", "ppi", "pce", "retail_sales", "gdp"}      # medium / high impact releases [our interpretation]; ISM, sentiment and JOLTS are low impact
+
+
+def partial_active(ctx, p) -> bool:
+    """smt_partial replaces smt_bank / smt_bank_against_frac only when both sisters (NQ and YM) are present; otherwise the old banks stay."""
+    ps = getattr(ctx, "pside", None)
+    return p.smt_partial != "off" and ps is not None and ps[0] is not None and bool(getattr(ctx, "partner2", None))
+
+
 def consol_day(ctx, session: str, i: int) -> bool:
     """sick_consol_only: no medium / high impact news today (the calendar) and a consolidation NWOG regime (the table column nwog_regime); an absent column is unknown and allowed (hit sick_cons_unknown)."""
     S = _S()
     from . import bias_day as BD, calendar as CAL
-    if S.news(ctx.day) != "none" or "fomc" in CAL.events(ctx.day):
+    if CAL.events(ctx.day) & MEDIUM_HIGH_NEWS:
         hit("sick_news_day")
         return False
     row = BD.row_for(ctx, session, i)
@@ -118,6 +127,8 @@ def _partners(ctx, sd, pos, i: int):
 
 
 def _bank(S, sd, pos, tr, ts, c, p, frac: float, name: str) -> None:
+    if frac <= 0:
+        return
     q = min(pos["left"], max(p.lot, S._lots(pos["left"] * frac, p.lot)))
     if q <= 0:
         return
@@ -156,9 +167,11 @@ def smt_partial(ctx, sd, pos: dict, tr, i: int, ts, p) -> None:
                         break
     if p.smt_partial in ("b", "both") and not pos.get("smt_pb_done"):
         st = pos.get("smt_pb")
-        if st is None:
+        if pos.get("t1_done"):                              # the target was hit first: nothing left to warn about
+            pos["smt_pb_done"] = True
+        elif st is None:
             t1 = pos.get("t1")
-            if t1 is not None and not pos.get("t1_done") and t1 - c <= p.smt_partial_b_near * max(t1 - basis, 1e-9):    # near the target: arm
+            if t1 is not None and t1 - c <= p.smt_partial_b_near * max(t1 - basis, 1e-9):    # near the target: arm
                 st = pos["smt_pb"] = dict(armed=i, hs=[float(s_.h[jf:j].max()) for s_, j, jf in pr])
         else:
             if any(s_.h[j] > h0 + eps for (s_, j, jf), h0 in zip(pr, st["hs"])):   # a sister broke its earlier extreme: it confirms

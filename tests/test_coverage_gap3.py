@@ -277,3 +277,37 @@ def test_look_ahead_es(name):
         a = full[done][EXIT].reset_index(drop=True)
         b = part[part.entry_time.isin(full[done].entry_time)][EXIT].reset_index(drop=True)
         pd.testing.assert_frame_equal(a, b, check_dtype=False)
+
+
+# --- review fixes (second-agent review of 3b-3d) ---------------------------------------------------------------------------------------
+
+def test_partial_active_needs_both_sisters():
+    ctx2 = SimpleNamespace(pside=(object(), {}, None), partner2=(object(), {}, None))
+    assert cg1.partial_active(ctx2, Params(smt_partial="a"))
+    assert not cg1.partial_active(ctx2, Params())                                                  # off
+    assert not cg1.partial_active(SimpleNamespace(pside=(object(), {}, None), partner2=None), Params(smt_partial="a"))   # one sister: smt_bank stays
+    assert not cg1.partial_active(SimpleNamespace(pside=(None, None, None), partner2=(object(), {}, None)), Params(smt_partial="a"))
+
+
+def test_smt_partial_b_t1_hit_cancels_and_zero_frac():
+    es = [101, 104, 106, 108, 108, 108]
+    nq = [101, 104, 106, 105, 105, 105]
+    ctx, sd, pos, tr = _smt_fixture(es, nq, list(nq), t1=110.0)
+    sd.c[:] = es
+    pb = _p(smt_partial="b", smt_partial_b_bars=2)
+    cg1.smt_partial(ctx, sd, pos, tr, 3, ctx.idx[3], pb)                                           # armed
+    pos["t1_done"] = True
+    for i in (4, 5):
+        cg1.smt_partial(ctx, sd, pos, tr, i, ctx.idx[i], pb)
+    assert not tr.exits                                                                            # T1 was hit first: no partial
+    ctx, sd, pos, tr = _smt_fixture([101, 102, 103, 103, 103, 103], [101, 102, 103, 103, 103, 103], [101, 102, 103, 103, 103, 108])
+    sd.c[:] = [101, 102, 103, 103, 103, 103]
+    cg1.smt_partial(ctx, sd, pos, tr, 5, ctx.idx[5], _p(smt_partial="a", smt_partial_a_frac=0.0))
+    assert not tr.exits                                                                            # frac 0 banks nothing
+
+
+def test_consol_day_ignores_low_impact_news(monkeypatch):
+    from mentorship import bias_day as BD
+    monkeypatch.setattr(BD, "row_for", lambda c, s, i: {"nwog_regime": "cons"})
+    assert cg1.consol_day(SimpleNamespace(day=date(2026, 6, 12)), "AM", 0)                         # 2026-06-12 = the second Friday (sentiment only)
+    assert not cg1.consol_day(SimpleNamespace(day=date(2026, 6, 10)), "AM", 0)                     # CPI

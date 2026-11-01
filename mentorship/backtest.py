@@ -376,7 +376,7 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
     cf = None
     if confluence and ov:
         from .confluence import Confluence
-        cf = Confluence(df, tf, p.es_pt, vi=p.vi_arrays, breakers=p.conf_breakers, **htf_kw(p),
+        cf = Confluence(df, tf, p.es_pt, vi=p.vi_arrays, breakers=p.conf_breakers, **htf_kw(p), ndog_min_pts=p.ndog_min_pts, ndog_life=p.ndog_life,
                         **({"ob_anchor": "open"} if p.htf_ob_anchor == "open" else {}))      # (caption-gap A12-ob-anchor-level)
     ds = days(df, tf, partial_last, p.session_close)
     eth = None

@@ -3008,6 +3008,7 @@ _BH2_DECISIONS = {
     "CG3b-ndog_ce_filter": dict(ndog_ce_filter=True),
     "CG3c-sick_sister_old": dict(sick_sister=True, sick_count_at=570, sick_refs="built", sick_consol_only=False),
     "CG3c-sick_sister_new": dict(sick_sister=True),
+    "CG3c-sick_sister_new_nwog_regime": dict(sick_sister=True, nwog_regime="tag"),            # the table column nwog_regime exists only with this on: the converging-NWOG half of the gate
     "CG3c-sick_sister_new_anyday": dict(sick_sister=True, sick_consol_only=False),
     "CG3d-smt_partial_a": dict(smt_partial="a"),
     "CG3d-smt_partial_b": dict(smt_partial="b"),

@@ -1244,7 +1244,7 @@ def manage(ctx, sd, pos: dict, tr, i: int, ts, p, pctx, psides, ppos) -> None:
     from . import strategy as S
     h, c, t, tf = sd.h[i], sd.c[i], ctx.t[i], ctx.tf
     basis = pos["basis"] / pos["n"]
-    if p.smt_bank and p.smt_partial == "off" and not pos.get("smt_banked") and pos["left"] and pctx is not None and i > pos["fill_i"]:
+    if p.smt_bank and not S._CG1.partial_active(ctx, p) and not pos.get("smt_banked") and pos["left"] and pctx is not None and i > pos["fill_i"]:
         risk_s = abs(tr.entry - tr.stop)
         prev_hi = sd.h[pos["fill_i"]:i].max()
         if risk_s > 0 and h > prev_hi + 1e-9 and (c - basis) / risk_s >= p.smt_bank_min_r:
@@ -1256,7 +1256,7 @@ def manage(ctx, sd, pos: dict, tr, i: int, ts, p, pctx, psides, ppos) -> None:
                 tr.exits.append((ts, sd.x(c), q, "smt_bank"))
                 pos["left"] -= q
                 pos["smt_banked"] = True
-    if p.smt_bank_against_frac and p.smt_partial == "off" and not pos.get("smt_banked2") and pos["left"] and pctx is not None and i > pos["fill_i"]:
+    if p.smt_bank_against_frac and not S._CG1.partial_active(ctx, p) and not pos.get("smt_banked2") and pos["left"] and pctx is not None and i > pos["fill_i"]:
         risk_s = abs(tr.entry - tr.stop)
         if risk_s > 0 and (c - basis) / risk_s >= p.smt_bank_min_r:          # X3g: the sister breaks against the trade
             ps = psides[sd.sign]

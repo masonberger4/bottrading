@@ -7066,7 +7066,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 tr.exits.append((ts, sd.x(c), pos["left"], "htf_heavy")); pos["left"] = 0   # #7 Ep02 30m
             if pos["left"] and (p.smt_bank or p.smt_bank_against_frac or p.adr_early or p.wick_read != "off" or p.trail_breakaway):
                 _TP.manage(ctx, sd, pos, tr, i, ts, p, pctx, psides, ppos)      # X3g / L16 / A23 / A6 partials
-            if pos["left"] and p.smt_partial != "off":
+            if pos["left"] and _CG1.partial_active(ctx, p):
                 _CG1.smt_partial(ctx, sd, pos, tr, i, ts, p)                    # coverage gap 3d: the SMT partials with YM / NQ (smt_bank is skipped while this is on)
             if pos["left"] and p.second_break_partial:
                 _SM2.second_break_partial(ctx, sd, pos, tr, ts, i, p)            # caption-gap M12-second-takeout-turtle-soup: a failed shallow second break of a swept pool = a partial
