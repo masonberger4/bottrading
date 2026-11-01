@@ -18,6 +18,9 @@ from dataclasses import dataclass as _oa_dc
 @_oa_dc
 class Params(Params):   # OA1029 Q92: these tests exercise other rules; the order-block narrative gate (default on) leaves them no trades
     ob_need_narrative: bool = False
+    sick_count_at: int = 570                # coverage gap 3c: the pre-build sick sister (the 09:30 count, the built reference set, any day)
+    sick_refs: str = "built"
+    sick_consol_only: bool = False
 
 from test_levels_detectors import BASE, D0, NY, day, ctx_for, frame, history, prior_days, rth_day
 from test_caption_gap_sm1a import StubConf, hist_close, ib, mkctx, sd_of, stub
