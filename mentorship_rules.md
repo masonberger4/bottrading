@@ -2669,3 +2669,10 @@ Exits ("running down equity")
 - [added] Turtle soup plan: let price spike above an old high (buy stops), short the failure, target the next draw, add on new FVGs/breakers (~25:13, ~36:53).
 - [added] Multi-timeframe shift: price breaks below 5m equal lows on the 1m chart, then retraces into the 5m FVG to sell (~60:04-61:38).
 - [added] Stops about one tick beyond the level (~16:01). He wants ~10 handles of range before engaging fully (~75:10).
+
+## Coverage gaps (2026-11-01)
+
+- [coverage gap 1] News days come from the CFTC / BLS / BEA / Fed release calendar (`macro_risk_dates.csv`, 2016 on), each release at its own time; the old 2019-2025 lists are the switch `news_cal="legacy"`.
+- [coverage gap 3b, 031 / 052 / 025 / 092] An NDOG counts when it is over about one handle (0 = every gap); it lives through the end of its week (switches: the next morning only, five trading days). A short's entry belongs in the premium half of the current NDOG, a long's in the discount half (`ndog_ce_filter`, off).
+- [coverage gap 3c, 053 ~3:47] Sick sister, ICT's version: at 08:00 count which references each index has already broken (the prior afternoon's high and the latest overnight swing high); the index with the fewest is the sick one. Only on a consolidation day: no medium or high impact news and converging weekend gaps.
+- [coverage gap 3d, 037 ~33:44 / 046 ~1:09:15] SMT partials: a sister that alone makes a new extreme while ES and the other fail = take most of the position off and trail the rest; as the trade nears its target a sister that cannot break its earlier extreme = take half off. Neither is a reversal entry (`smt_partial`, off).

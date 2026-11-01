@@ -3808,3 +3808,18 @@ ES 5m, databento, default bias reading, trades by entry year (runner `runs/news_
 | 2019-2026 | NEWS-legacy | 325 | -16,062 | 0.71 | 0.258 | 17,003 |
 
 `NEWS-gdp-all` equals `NEWS-csv` in every window (the extra GDP estimates change no trade in this setup). The csv calendar removes 6 trades in 2016-2018 (it knows the CPI / NFP / FOMC days the legacy lists lack there) at no measurable profit difference, and adds 3 trades in 2019-2026 with -$1,031 net (stricter or different release times / the corrected PCE and retail dates). Differences are a handful of trades; no evidence either calendar is better. Default stays `news_cal="csv"` (correct dates).
+
+## Coverage gaps 1 and 3b-3d (coverage_build_2026-10-31.md, 2026-11-01)
+
+| gap | item | status | switch | default | notes |
+|---|---|---|---|---|---|
+| 1 | news calendar from macro_risk_dates.csv | done | `news_cal`, `news_cal_path`, `gdp_tags` | "csv", data/mentorship/macro_risk_dates.csv, ("gdp_adv",) | `calendar.load_csv` / `use()`; mentorship-owned event sets (claude_hf untouched); per-row release times; 2016-2018 holidays + 2016 election. Old value `news_cal="legacy"` (`study.COVERAGE_OLD`); variants NEWS-csv / NEWS-legacy / NEWS-gdp-all, result above. Tests: `tests/test_news_calendar_csv*.py`, conftest resets the source |
+| 3b | NDOG minimum size | done | `ndog_min_pts` | 1.0 | passed to `htf.opening_gaps` (backtest.run) and `htf.table` (`table_kw`, only when != 1.0); 0 = every NDOG, a zero-size gap uses the single price. `confluence.py` still builds its NDOG arrays with 1.0 (not switched) |
+| 3b | NDOG lifetime | done | `ndog_life` | "friday" | `htf.gaps_for_day(ndog_life=)`: "16h" = only the NDOG formed the evening before (snapshot at 09:30, so no intraday expiry at 10:00 [our interpretation]), "5d" = the last five trading days |
+| 3b | NDOG CE filter | done | `ndog_ce_filter` | False | `cg1.order_ok` (after `_DW.order_ok`): a short's entry at / above the latest NDOG's CE, a long's at / below; no NDOG = no filter. Funnel key `x_cg_ndog_ce`, tag `ndog_ce` |
+| 3c | sick sister count time | done | `sick_count_at` | 480 | AM count minute (PM stays 13:30); old 570 |
+| 3c | sick sister references | done | `sick_refs` | "053" | `cg1.sick_refs_053`: prior PM high + the latest confirmed 3-candle overnight swing high; "built" = old set |
+| 3c | sick sister consolidation gate | done | `sick_consol_only` | True | `cg1.consol_day`: no CPI/NFP/PPI/PCE/retail/GDP/ISM/FOMC day and `nwog_regime == "cons"` (absent column = allowed). Old values in `COVERAGE_OLD`. All three act only with `sick_sister=True` |
+| 3d | SMT partials with YM | done | `smt_partial`, `smt_partial_a_frac` 0.8, `smt_partial_b_frac` 0.5, `smt_partial_b_bars` 5, `smt_partial_b_near` 0.25 | "off" | `cg1.smt_partial` from the trade manager; skips `smt_bank` / `smt_bank_against_frac` while on; needs NQ and YM aligned. Case a: exactly one sister makes a new extreme since the fill, ES and the other fail -> bank, trail under the latest swing; case b: near T1 a sister fails to break its earlier extreme within N bars -> bank. `smt_partial_b_near` is ours [our interpretation] |
+
+Study variants: `CG3b-*`, `CG3c-sick_sister_old/new/new_anyday`, `CG3d-smt_partial_*` (not yet run). Tests: `tests/test_coverage_gap3.py` (unit tests, Params, full-vs-truncated ES runs for the three sets).
