@@ -275,7 +275,7 @@ OA1029_OLD = dict(bk_depth="ce", bk_bpr_ce=False, add_ladder="", htf_gap_final="
                   ifvg_targets_after="mss", qshift_broken="literal",
                   ifvg_sym_ym=False, dxy_filter="off")
 # coverage gap 1 (2026-10-31): the pre-build engine also used the legacy news calendar
-COVERAGE_OLD = dict(news_cal="legacy")
+COVERAGE_OLD = dict(news_cal="legacy", sick_count_at=570, sick_refs="built", sick_consol_only=False)         # (package 1 news calendar; package 3c sick sister: the 09:30 count, the built reference set, any day)
 PRE_OWNER.update(OA1029_OLD)
 PRE_OWNER.update(COVERAGE_OLD)
 CURRENT.update(OA1029_OLD)
@@ -3001,6 +3001,18 @@ _BH2_DECISIONS = {
     "TT-tug_post_raid_last2": dict(tier_regime_gate=True, tug_required=True, tug_mode="post_raid"),
     "TT-tug_spec_two_of_four": dict(tier_regime_gate=True, tug_required=True, tier_stl_mode="two_of_four"),
     "TT-tug_post_raid_two_of_four": dict(tier_regime_gate=True, tug_required=True, tier_stl_mode="two_of_four", tug_mode="post_raid"),
+    # coverage gap 3b / 3c / 3d (coverage_build_2026-10-31.md): study variants - one per switch, old values via COVERAGE_OLD
+    "CG3b-ndog_min0": dict(ndog_min_pts=0.0),
+    "CG3b-ndog_16h": dict(ndog_life="16h"),
+    "CG3b-ndog_5d": dict(ndog_life="5d"),
+    "CG3b-ndog_ce_filter": dict(ndog_ce_filter=True),
+    "CG3c-sick_sister_old": dict(sick_sister=True, sick_count_at=570, sick_refs="built", sick_consol_only=False),
+    "CG3c-sick_sister_new": dict(sick_sister=True),
+    "CG3c-sick_sister_new_anyday": dict(sick_sister=True, sick_consol_only=False),
+    "CG3d-smt_partial_a": dict(smt_partial="a"),
+    "CG3d-smt_partial_b": dict(smt_partial="b"),
+    "CG3d-smt_partial_both": dict(smt_partial="both"),
+    "CG3d-smt_partial_a_half": dict(smt_partial="a", smt_partial_a_frac=0.5),
     "BH2-base": dict(**BH2_BASE),                       # the common base of the bias_htf#2/7 variants, no rule on (comparison baseline)
     "B6-hrlr-lrlr-structure-regime": dict(tier_regime_gate=True, **BH2_BASE),
     "B6-hrlr-lrlr-structure-regime_two_of_four": dict(tier_regime_gate=True, tier_stl_mode="two_of_four", **BH2_BASE),

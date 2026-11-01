@@ -3529,6 +3529,20 @@ class Params:
     news_cal: str = "csv"                # "csv" = data/mentorship/macro_risk_dates.csv (CPI / NFP / FOMC / PPI / PCE / GDP / retail / JOLTS 2016 on, each release at its own time) / "legacy" = the built 2019-2025 lists + claude_hf 2026
     news_cal_path: str = "data/mentorship/macro_risk_dates.csv"   # (relative paths: from the repository root; a missing file falls back to "legacy" with a warning)
     gdp_tags: tuple = ("gdp_adv",)       # the GDP releases that count as "gdp" with news_cal="csv": advance only (as built); ("gdp_adv", "gdp_2nd", "gdp_3rd", "gdp_other") = every estimate
+    # coverage gap 3b (coverage_build_2026-10-31 package 3b): NDOG details (cg1.py)
+    ndog_min_pts: float = 1.0            # 031 ~13:32 vs 052: the smallest NDOG (ES points) that counts - 1.0 = only gaps over about one handle (052, as built); 0 = every NDOG, a one-tick gap uses the single price as its level (031)
+    ndog_life: str = "friday"            # 025 ~24:41: how long an NDOG is live - "friday" = through the end of its week (as built) / "16h" = overnight and the next NY AM only (the one formed the evening before) / "5d" = five trading days [our interpretation of "a few days"]
+    ndog_ce_filter: bool = False         # 092 ~45:52: a short's entry sits at / above the current NDOG's CE (premium half), a long's at / below it; no NDOG in force = no filter [our interpretation: the entry price stands for the retrace candle]
+    # coverage gap 3c (package 3c): sick sister, ICT's exact version (acts only with sick_sister=True; setups.sick_sister / cg1.py)
+    sick_count_at: int = 480             # 053 ~3:47 ("you have the high broken here at 8 am"): the minute of day of the AM count; 570 = the built 09:30 count (the PM count stays 13:30)
+    sick_refs: str = "053"               # 053 ~3:47: "053" = only the prior session's afternoon high (the prior PM range's high) and the most recent overnight swing high (the latest 3-candle swing high confirmed before the count, broken = a later bar traded above it) [our interpretation of "overnight swing high"]; "built" = PDH 1-3, the overnight high, London, prior PM
+    sick_consol_only: bool = True        # 053 ~3:47: the sick sister applies only on an expected consolidation day - no medium / high impact news today (calendar) and a consolidation NWOG regime (table column nwog_regime == "cons"; absent column = unknown = allowed, tag sick_cons_unknown)
+    # coverage gap 3d (package 3d): SMT partials with YM (cg1.smt_partial; replaces smt_bank / smt_bank_against_frac while on)
+    smt_partial: str = "off"             # 037 ~33:44 / 046 ~1:09:15: "a" = a sister (NQ or YM) makes a new extreme in the trade's direction while ES and the other sister fail -> bank smt_partial_a_frac and trail the rest under the latest short-term swing; "b" = as the trade nears its target a sister that already made its extreme since the fill fails to break it again within smt_partial_b_bars bars -> bank smt_partial_b_frac, keep the rest for the target; "both"; "off". Neither case is a reversal entry
+    smt_partial_a_frac: float = 0.8      # 037 "most of my position"; 0.5 (X3) is the switch
+    smt_partial_b_frac: float = 0.5      # 046
+    smt_partial_b_bars: int = 5          # [our interpretation] the bars the sister gets to break its earlier extreme once the trade is near the target
+    smt_partial_b_near: float = 0.25     # [our interpretation] "near the target": within this share of the entry-to-T1 distance
 
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
@@ -4078,6 +4092,13 @@ class Params:
         if self.htf_monthly:
             self.htf_monthly_arrays = True        # BH-A5-HTF-FVG-own-timeframe: the named alias of the built monthly arrays
         # caption-gap pass bias_htf#2/7 (bh2.py / bh2e.py)
+        if (self.smt_partial not in ("off", "a", "b", "both") or not 0 <= self.smt_partial_a_frac <= 1 or not 0 <= self.smt_partial_b_frac <= 1
+                or self.smt_partial_b_bars < 1 or not 0 < self.smt_partial_b_near <= 1):
+            raise ValueError("coverage gap 3d: smt_partial 'off' / 'a' / 'b' / 'both', fracs in [0, 1], smt_partial_b_bars >= 1, 0 < smt_partial_b_near <= 1")
+        if self.sick_refs not in ("053", "built") or not 0 <= self.sick_count_at < 1440:
+            raise ValueError("coverage gap 3c: sick_refs '053' / 'built', 0 <= sick_count_at < 1440")
+        if self.ndog_life not in ("friday", "16h", "5d") or self.ndog_min_pts < 0:
+            raise ValueError("coverage gap 3b: ndog_life 'friday' / '16h' / '5d', ndog_min_pts >= 0")
         if self.news_cal not in ("csv", "legacy") or not set(self.gdp_tags) <= {"gdp_adv", "gdp_2nd", "gdp_3rd", "gdp_other"}:
             raise ValueError("news_cal: 'csv' / 'legacy'; gdp_tags a subset of ('gdp_adv', 'gdp_2nd', 'gdp_3rd', 'gdp_other')")
         for name, ok in (("pd3_result", ("flip", "neutral")), ("ifvg_targets_after", ("cisd", "mss")), ("qshift_broken", ("leg", "literal")), ("consol_dir", ("off", "first_expansion", "prior_strongest")), ("htf_after_draw", ("neutral", "reverse")),
@@ -7045,6 +7066,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 tr.exits.append((ts, sd.x(c), pos["left"], "htf_heavy")); pos["left"] = 0   # #7 Ep02 30m
             if pos["left"] and (p.smt_bank or p.smt_bank_against_frac or p.adr_early or p.wick_read != "off" or p.trail_breakaway):
                 _TP.manage(ctx, sd, pos, tr, i, ts, p, pctx, psides, ppos)      # X3g / L16 / A23 / A6 partials
+            if pos["left"] and p.smt_partial != "off":
+                _CG1.smt_partial(ctx, sd, pos, tr, i, ts, p)                    # coverage gap 3d: the SMT partials with YM / NQ (smt_bank is skipped while this is on)
             if pos["left"] and p.second_break_partial:
                 _SM2.second_break_partial(ctx, sd, pos, tr, ts, i, p)            # caption-gap M12-second-takeout-turtle-soup: a failed shallow second break of a swept pool = a partial
             if pos["left"] and pos.get("sm3"):
@@ -7677,6 +7700,11 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     o_ = None
                     if why_ == "x_bh_fifty_fifty" and pending is not None and pending["session"] == session:
                         pending = None                # B17.1: 50/50 - the first side's armed order is cancelled too
+            if o_ is not None:
+                why_ = _CG1.order_ok(ctx, sd, o_, session, i, p)         # coverage gaps (cg1.py): per-order filters
+                if why_ is not None:
+                    _f(why_)
+                    o_ = None
             if o_ is not None:
                 if done_key.startswith("SB_"):
                     o_.update(done_key=done_key, setup="sb_" + session.lower())
@@ -10576,6 +10604,7 @@ from . import nct2 as _NCT  # noqa: E402  (caption-gap pass, news_calendar_times
 from . import dwc1 as _DWC  # noqa: E402  (caption-gap pass, day_week_context#1/3: engine glue)
 from . import dwc2 as _DWC2  # noqa: E402  (caption-gap pass, day_week_context#2/3: engine glue)
 from . import dwc3 as _DWC3  # noqa: E402  (caption-gap pass, day_week_context#3/3: engine glue)
+from . import cg1 as _CG1  # noqa: E402  (coverage gaps 3b-3d: engine glue)
 INDEX_SYMBOLS = _DWC3.INDEX_SYMBOLS   # OT-stocks-swing-only: the labels that are not individual stocks (the spec lists eight; the set is wider - owner question)
 from . import setups as _SM   # noqa: E402  (setups_models package; imports this module back)
 from . import entries as _EN  # noqa: E402  (entries_stops_sizing package; imports this module back)

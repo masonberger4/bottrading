@@ -911,8 +911,8 @@ def opening_gaps(df: pd.DataFrame, es_pt: float = 1.0, ndog_min_pts: float = 1.0
         weekend = (t[k] - t[k - 1]) > pd.Timedelta(hours=30)
         if weekend and src not in ("sunday_bars", "sunday_else_monday"):
             continue
-        if not weekend and abs(b - a) <= ndog_min_pts * es_pt:
-            continue
+        if not weekend and (abs(b - a) <= ndog_min_pts * es_pt if ndog_min_pts > 0 else False):
+            continue                                  # (ndog_min_pts 0 = every NDOG, a zero-size gap included: coverage gap 3b)
         pm = t[k - 1].hour * 60 + t[k - 1].minute
         if not weekend and not (960 <= pm < 1020):
             continue                                  # holiday early close: not a 17:00 close
@@ -1003,7 +1003,7 @@ class GapList(list):
 
 def gaps_for_day(g: pd.DataFrame, day, nwog_keep: int = 5, nwog_days: int = 0, skip_holiday: bool = False,
                  trading_days: bool = False, with_dir: bool = False, reb: dict | None = None,
-                 holiday_pick: str = "all", ref_px: float | None = None) -> list[tuple]:
+                 holiday_pick: str = "all", ref_px: float | None = None, ndog_life: str = "friday") -> list[tuple]:
     """Gaps in force at 09:30 of `day`: NWOGs (the last `nwog_keep`, or with `nwog_days` > 0
     every NWOG from the last that many trading days - ICT's 60-day maximum, 051 ~18:02,
     "60 market days", 065) and this week's NDOGs. Returns (kind, high, low, ce).
@@ -1057,7 +1057,16 @@ def gaps_for_day(g: pd.DataFrame, day, nwog_keep: int = 5, nwog_days: int = 0, s
         if len(both):
             best = min(both.itertuples(), key=dist)
             nw, nr = nw[(nw.week.values == best.week)], nr[(nr.week.values == best.week)]
-    nd = k[(k.kind == "ndog") & (k.week == wk)]
+    if ndog_life == "friday":
+        nd = k[(k.kind == "ndog") & (k.week == wk)]
+    elif ndog_life == "16h":                          # coverage gap 3b (025 ~24:41): only the NDOG formed the evening before (18:00 to the NY AM)
+        nd = k[(k.kind == "ndog") & (k.known >= cut - pd.Timedelta(hours=16))]
+    else:                                             # "5d": the NDOGs of the last five trading days
+        from .calendar import prev_trading_day
+        d0 = day
+        for _ in range(5):
+            d0 = prev_trading_day(d0)
+        nd = k[(k.kind == "ndog") & (k.known >= pd.Timestamp(d0, tz=NY_TZ) + pd.Timedelta(hours=17))]
     sel = pd.concat([nw, nr, nd])
     if with_dir:                      # caption-gap L5: (kind, high, low, ce, dir) - the labels as a tag, "up" / "down"
         return [(r.kind, r.high, r.low, r.ce, r.dir) for r in sel.itertuples()]
