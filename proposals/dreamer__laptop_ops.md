@@ -1,0 +1,5 @@
+<!-- proposal by dreamer at 2026-11-01 21:57:54Z; target: laptop_ops.md; reason: Remove duplicate rule, add thread registry pointer, fix runbook gap; link: Dream 2026-11-01: project chat + 5 threads, memory/dreams/dream_2026-11-01.md; status: open -->
+# Proposals for laptop_ops.md (dreamer, 2026-11-01)
+[O1 MED] Replace the LONG-WORK RULE bullet with "see decisions.md ACTIVE RULES DIGEST" (duplicate).
+[O2 HIGH] Add the restart one-liner now living only in the laptop thread's message (cmsg_01FAHERC1Lsrg2bYtrKuRHmP9msWSsCnbp9Bc1ByG8AoG7): runs/laptop_shard.py/laptop_screen.py is resume-safe (skips jobs whose CSV exists); restart from a clean checkout of 229c1a5 with MENTORSHIP_SRC=databento, Start-Process detached, leave PIDs 17224 and 516. Evidence: the command exists only in a thread reply; the next coordinator has to dig for it. Also note backtest-results branch layout differs between cloud (own layout) and laptop (laptop/shard_laptop/dec_jobs/).
+[O3 LOW] Add pointer to new threads.md (registry) for "who is the current laptop writer".
