@@ -275,7 +275,7 @@ OA1029_OLD = dict(bk_depth="ce", bk_bpr_ce=False, add_ladder="", htf_gap_final="
                   ifvg_targets_after="mss", qshift_broken="literal",
                   ifvg_sym_ym=False, dxy_filter="off")
 # coverage gap 1 (2026-10-31): the pre-build engine also used the legacy news calendar
-COVERAGE_OLD = dict(news_cal="legacy")
+COVERAGE_OLD = dict(news_cal="legacy", sick_count_at=570, sick_refs="built", sick_consol_only=False)         # (package 1 news calendar; package 3c sick sister: the 09:30 count, the built reference set, any day)
 PRE_OWNER.update(OA1029_OLD)
 PRE_OWNER.update(COVERAGE_OLD)
 CURRENT.update(OA1029_OLD)
@@ -2994,6 +2994,63 @@ _BH2_DECISIONS = {
     "A21-two-level-discount": dict(pd_two_level=True, **BH2_BASE),
     "B3-range-trading-without-bias": dict(range_no_bias=True, range_no_bias_pct=0.62, ob_entry="post_mss", htf_resist_cap=False),
     "B3-eq-recent-structure-break": dict(eq_tiebreak=True, eq_tie_frac=0.10, **BH2_BASE),
+    # tier_stl_mode / tug_required default choice (review Q260, 2026-11-01): the same switches on the default bias reading (BH2_BASE's htf_bias="combo" leaves ~12 trades in 2019-22, too few to bind the gate)
+    "TT-gate_last2": dict(tier_regime_gate=True),
+    "TT-gate_two_of_four": dict(tier_regime_gate=True, tier_stl_mode="two_of_four"),
+    "TT-tug_spec_last2": dict(tier_regime_gate=True, tug_required=True),
+    "TT-tug_post_raid_last2": dict(tier_regime_gate=True, tug_required=True, tug_mode="post_raid"),
+    "TT-tug_spec_two_of_four": dict(tier_regime_gate=True, tug_required=True, tier_stl_mode="two_of_four"),
+    "TT-tug_post_raid_two_of_four": dict(tier_regime_gate=True, tug_required=True, tier_stl_mode="two_of_four", tug_mode="post_raid"),
+    # coverage gap 3b / 3c / 3d (coverage_build_2026-10-31.md): study variants - one per switch, old values via COVERAGE_OLD
+    "CG3b-ndog_min0": dict(ndog_min_pts=0.0),
+    "CG3b-ndog_16h": dict(ndog_life="16h"),
+    "CG3b-ndog_5d": dict(ndog_life="5d"),
+    "CG3b-ndog_ce_filter": dict(ndog_ce_filter=True),
+    "CG3c-sick_sister_old": dict(sick_sister=True, sick_count_at=570, sick_refs="built", sick_consol_only=False),
+    "CG3c-sick_sister_new": dict(sick_sister=True),
+    "CG3c-sick_sister_new_nwog_regime": dict(sick_sister=True, nwog_regime="tag"),            # the table column nwog_regime exists only with this on: the converging-NWOG half of the gate
+    "CG3c-sick_sister_new_anyday": dict(sick_sister=True, sick_consol_only=False),
+    "CG3d-smt_partial_a": dict(smt_partial="a"),
+    "CG3d-smt_partial_b": dict(smt_partial="b"),
+    "CG3d-smt_partial_both": dict(smt_partial="both"),
+    "CG3d-smt_partial_a_half": dict(smt_partial="a", smt_partial_a_frac=0.5),
+    # coverage gap 2 / 3a (coverage_build_2026-10-31.md; dxy_intraday_spec_2026-10-31.md items 12-16): study variants - judge on 2019-2022, check 2023-2026 (the DX 1h series covers 2026)
+    "CG2-sym_gate_tag": dict(sym_gate="tag"),
+    "CG2-sym_gate_hold": dict(sym_gate="hold"),
+    "CG2-sym_gate_scalp": dict(sym_gate="scalp"),
+    "CG2-sym_gate_skip": dict(sym_gate="skip"),
+    "CG2-sym_gate_scalp_5m": dict(sym_gate="scalp", sym_tf=5),
+    "CG2-sym_gate_scalp_indices_only": dict(sym_gate="scalp", sym_dxy="off"),
+    "CG2-sym_crack_block_reversal": dict(sym_crack_block_reversal=True),
+    "CG3a-dxy_ts_raid_tag": dict(dxy_ts_raid="tag"),
+    "CG3a-dxy_ts_raid_filter": dict(dxy_ts_raid="filter"),
+    "CG3a-dxy_daily_mt_tag": dict(dxy_daily_mt="tag"),
+    "CG3a-dxy_daily_mt_scalp": dict(dxy_daily_mt="scalp"),
+    "CG3a-dxy_daily_mt_skip": dict(dxy_daily_mt="skip"),
+    "CG3a-dxy_week_done": dict(week_done_on_draw="skip", week_done_levels=("dxy_pwh", "dxy_pwl", "dxy_obj")),
+    "CG3a-dxy_end_day_block": dict(dxy_end_day="block"),
+    "CG3a-dxy_end_day_block_day": dict(dxy_end_day="block_day"),
+    # DXY intraday rules (dxy_intraday_spec_2026-10-31.md items 1-11): need the 1-minute spot file (2019-2025); judge on 2019-2022, check 2023-2025
+    "DXY1-states_tag": dict(dxy_states="tag"),
+    "DXY1-states_filter": dict(dxy_states="filter"),
+    "DXY1-states_soft": dict(dxy_states="soft"),
+    "DXY2-pool_run_cap": dict(dxy_pool_run="cap"),
+    "DXY3-smt_qualify": dict(dxy_smt="qualify"),
+    "DXY3-smt_need": dict(dxy_smt="need"),
+    "DXY4-session_gate_filter": dict(dxy_session_gate="filter"),
+    "DXY5-eq_gate_block": dict(dxy_eq_gate="block"),
+    "DXY5-eq_gate_block_0930": dict(dxy_eq_gate="block", dxy_range_from="0930"),
+    "DXY6-range_trigger_gate": dict(dxy_range_trigger="gate"),
+    "DXY6-range_trigger_break_only": dict(dxy_range_trigger="break_only"),
+    "DXY7-intrade_bank": dict(dxy_intrade="bank"),
+    "DXY8-unicorn_qualify": dict(dxy_unicorn="qualify"),
+    "DXY8-unicorn_need": dict(dxy_unicorn="need"),
+    "DXY9-target_partial": dict(dxy_target_partial="partial"),
+    "DXY10-nonconf_after_partial": dict(dxy_nonconf_exit="after_partial"),
+    "DXY10-nonconf_any": dict(dxy_nonconf_exit="any"),
+    "DXY10-staged_D3": dict(dxy_intrade="bank", dxy_nonconf_exit="after_partial"),
+    "DXY11-sym_swing_dxy": dict(sym_swing_ts=True, sym_swing_dxy=True),
+    "BH2-base": dict(**BH2_BASE),                       # the common base of the bias_htf#2/7 variants, no rule on (comparison baseline)
     "B6-hrlr-lrlr-structure-regime": dict(tier_regime_gate=True, **BH2_BASE),
     "B6-hrlr-lrlr-structure-regime_two_of_four": dict(tier_regime_gate=True, tier_stl_mode="two_of_four", **BH2_BASE),
     "B6-consolidation-raid-profile": dict(raid_profile_bias=True, raid_profile_n=2, **BH2_BASE),
@@ -3010,6 +3067,9 @@ _BH2_DECISIONS = {
     "X3-b22-shift-form-strong-trend": dict(qshift_bias=True, qshift_strong_consol=True, qshift_strong_pct=0.10, **BH2_BASE),
     "X3-shift-due-six-months": dict(shift_due_tag=True, **BH2_BASE),
     "X3-b6-tug-of-war-new-ground": dict(tier_regime_gate=True, tug_required=True, **BH2_BASE),
+    "X3-b6-tug-of-war-new-ground_post_raid": dict(tier_regime_gate=True, tug_required=True, tug_mode="post_raid", **BH2_BASE),
+    "X3-b6-tug-of-war-new-ground_two_of_four": dict(tier_regime_gate=True, tug_required=True, tier_stl_mode="two_of_four", **BH2_BASE),
+    "X3-b6-tug-of-war-new-ground_two_of_four_post_raid": dict(tier_regime_gate=True, tug_required=True, tier_stl_mode="two_of_four", tug_mode="post_raid", **BH2_BASE),
     "X3-one-sided-delivery-first-clue": dict(first_clue_neutral=True, **BH2_FLIP),
     "X3-60day-low-deep-discount-bounce": dict(ipda_extreme_pause=True, **BH2_BASE),
     "B19-four-asset-risk-map": dict(decoupled_scalp=True, **BH2_BASE),

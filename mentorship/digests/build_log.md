@@ -3779,3 +3779,88 @@ Effect note: Q92 removes most trades (ES 5m Dec 2022 - Jan 2023: 0 trades vs 20 
 Fixes found while testing: `Params()` raised inert-switch warnings for OA1029 defaults whose parent switch is off (the inert checks now fire only when the switch leaves its default); `pd3_result="neutral"` wrote the table config without flip_pd3; the 066 TGIF exits switched the target hooks on every day; the 631 ladder turned the mohawk add on with the pyramid off (`es3._ES2_fracs` returns () when `adds` is empty).
 
 Review Q260 (bias_htf#2/7 round-2 edits in f8e921b): no look-ahead; the `htf_after_draw="reverse"` inert warning was wrong (it acts without objective_neutral) and is removed. Owner questions: `tier_stl_mode` default "last2" (the spec) vs the old two-of-four; `tug_required` now reads `tug_spec` with no switch back to `tug`.
+
+## tier_stl_mode / tug_required defaults by profit (review Q260, 2026-11-01)
+
+New switch `tug_mode` ("spec" default = column `tug_spec`; "post_raid" = the older `tug` column) next to `tug_required`; `tier_stl_mode` keeps "last2" / "two_of_four". Chosen by net profit, ES 5m 2019-2022 (databento, default bias reading; variants `TT-*`, runner `runs/tier_tug_cmp.py`, trades in `runs/mentorship/tier_tug2/`):
+
+| variant | trades | net $ | PF |
+|---|---|---|---|
+| defaults (gate off) | 169 | -5,803 | 0.82 |
+| gate, last2 | 171 | -5,602 | 0.83 |
+| gate, two_of_four | 172 | -5,712 | 0.82 |
+| gate + tug spec, last2 | 171 | -5,602 | 0.83 |
+| gate + tug post_raid, last2 | 171 | -5,602 | 0.83 |
+| gate + tug spec, two_of_four | 171 | -5,602 | 0.83 |
+| gate + tug post_raid, two_of_four | 172 | -5,712 | 0.82 |
+
+Result: defaults stay `tier_stl_mode="last2"` and `tug_mode="spec"` (each is the best or tied-best row). The differences are 1-2 trades and about $110, i.e. noise; the whole gate moves the window by +$200 (3 trades) and every row loses money. Note: the study base `htf_bias="combo"` (BH2_BASE) leaves only ~12 trades in 2019-22 and the gate never bound there (all seven variants identical); the `TT-*` variants use the default bias reading instead.
+
+## NEWS-csv vs NEWS-legacy study (coverage gap 1, 2026-11-01)
+
+ES 5m, databento, default bias reading, trades by entry year (runner `runs/news_study.py`, trades in `runs/mentorship/news_study/`):
+
+| window | variant | trades | net $ | PF | win rate | max DD $ |
+|---|---|---|---|---|---|---|
+| 2016-2018 | NEWS-csv | 138 | +2,197 | 1.11 | 0.384 | 3,647 |
+| 2016-2018 | NEWS-legacy | 144 | +2,214 | 1.11 | 0.389 | 3,641 |
+| 2019-2026 | NEWS-csv | 328 | -17,093 | 0.70 | 0.256 | 18,182 |
+| 2019-2026 | NEWS-legacy | 325 | -16,062 | 0.71 | 0.258 | 17,003 |
+
+`NEWS-gdp-all` equals `NEWS-csv` in every window (the extra GDP estimates change no trade in this setup). The csv calendar removes 6 trades in 2016-2018 (it knows the CPI / NFP / FOMC days the legacy lists lack there) at no measurable profit difference, and adds 3 trades in 2019-2026 with -$1,031 net (stricter or different release times / the corrected PCE and retail dates). Differences are a handful of trades; no evidence either calendar is better. Default stays `news_cal="csv"` (correct dates).
+
+## Coverage gaps 1 and 3b-3d (coverage_build_2026-10-31.md, 2026-11-01)
+
+| gap | item | status | switch | default | notes |
+|---|---|---|---|---|---|
+| 1 | news calendar from macro_risk_dates.csv | done | `news_cal`, `news_cal_path`, `gdp_tags` | "csv", data/mentorship/macro_risk_dates.csv, ("gdp_adv",) | `calendar.load_csv` / `use()`; mentorship-owned event sets (claude_hf untouched); per-row release times; 2016-2018 holidays + 2016 election. Old value `news_cal="legacy"` (`study.COVERAGE_OLD`); variants NEWS-csv / NEWS-legacy / NEWS-gdp-all, result above. Tests: `tests/test_coverage_news_calendar.py`, conftest resets the source |
+| 3b | NDOG minimum size | done | `ndog_min_pts` | 1.0 | passed to `htf.opening_gaps` (backtest.run) and `htf.table` (`table_kw`, only when != 1.0); 0 = every NDOG, a zero-size gap uses the single price. `confluence.py` still builds its NDOG arrays with 1.0 (not switched) |
+| 3b | NDOG lifetime | done | `ndog_life` | "friday" | `htf.gaps_for_day(ndog_life=)`: "16h" = only the NDOG formed the evening before (snapshot at 09:30, so no intraday expiry at 10:00 [our interpretation]), "5d" = the last five trading days |
+| 3b | NDOG CE filter | done | `ndog_ce_filter` | False | `cg1.order_ok` (after `_DW.order_ok`): a short's entry at / above the latest NDOG's CE, a long's at / below; no NDOG = no filter. Funnel key `x_cg_ndog_ce`, tag `ndog_ce` |
+| 3c | sick sister count time | done | `sick_count_at` | 480 | AM count minute (PM stays 13:30); old 570 |
+| 3c | sick sister references | done | `sick_refs` | "053" | `cg1.sick_refs_053`: prior PM high + the latest confirmed 3-candle overnight swing high; "built" = old set |
+| 3c | sick sister consolidation gate | done | `sick_consol_only` | True | `cg1.consol_day`: no CPI/NFP/PPI/PCE/retail/GDP/ISM/FOMC day and `nwog_regime == "cons"` (absent column = allowed). Old values in `COVERAGE_OLD`. All three act only with `sick_sister=True` |
+| 3d | SMT partials with YM | done | `smt_partial`, `smt_partial_a_frac` 0.8, `smt_partial_b_frac` 0.5, `smt_partial_b_bars` 5, `smt_partial_b_near` 0.25 | "off" | `cg1.smt_partial` from the trade manager; skips `smt_bank` / `smt_bank_against_frac` while on; needs NQ and YM aligned. Case a: exactly one sister makes a new extreme since the fill, ES and the other fail -> bank, trail under the latest swing; case b: near T1 a sister fails to break its earlier extreme within N bars -> bank. `smt_partial_b_near` is ours [our interpretation] |
+
+Second-agent review (3b-3d) fixes: the Confluence daily arrays now follow `ndog_min_pts` / `ndog_life`; `sick_consol_only` counts only medium / high impact releases (not ISM / sentiment / JOLTS); `smt_partial` replaces `smt_bank` only when NQ and YM are both present; case b is cancelled once T1 is hit; a zero fraction banks nothing. Known limits (documented, not built): `ndog_life` does not reach `htf.table`'s own NDOG draws; `ndog_life="16h"` is a 09:30 snapshot (the gap stays in `ctx.gaps` after 10:00); `ndog_min_pts=0` can give zero-width zones; the converging-NWOG half of the sick-sister gate needs the table column `nwog_regime` (variant `CG3c-sick_sister_new_nwog_regime`, absent column = allowed); case a uses the `smt_bank_min_r` profit gate [our interpretation]; case b arms near T1 without checking that the sister ran ahead of ES [our interpretation].
+
+Study variants: `CG3b-*`, `CG3c-sick_sister_old/new/new_anyday/new_nwog_regime`, `CG3d-smt_partial_*` (not yet run). Tests: `tests/test_coverage_gap3.py` (unit tests, Params, full-vs-truncated ES runs for the three sets).
+
+## Coverage gap 2 and 3a (symmetrical-market gate, DXY daily / hourly rules; 2026-11-01)
+
+New modules: `dxy.py` (DXY bars: spot 1-minute closes when `data/dxy/spot_dxy_1m_close_2019-2025_NYtime.csv.gz` is on disk, Databento DX 1h otherwise and for 2026; closed-bar alignment `closed()`; session-labelled daily bars `daily()`; the 17 stale spot hours as `BAD_HOURS`) and `cg2.py` (rules). Spec: package 2 / 3a of `coverage_build_2026-10-31.md` plus items 12-16 and section 0 of `dxy_intraday_spec_2026-10-31.md` (the later text wins; parameter names of both specs are kept).
+
+| gap | item | switch | default | notes |
+|---|---|---|---|---|
+| 2 | symmetrical-market gate (spec item 12) | `sym_gate` | "off" | "tag" (sym_ok / sym_crack / sym_no_dxy), "hold" (a crack = T1 only), "scalp" (a crack = T1 only at `sym_scalp_risk` 0.5), "skip". ES, NQ and YM each post a higher high (lower low) within `sym_win` bars of each of the last `sym_lookback` ES swing extremes on `sym_tf`; DXY the opposite one (`sym_dxy` "1h" / "tf" / "off"; no DXY data for the date = off + tag). `sym_crack_block_reversal` drops an order against a confirmed trend. The conflict 093 vs 095 / 098 stays Mase's choice; D1 of the DXY spec (scalp as the mode when on) is the study's lead variant. Gold leg not built (`TODO(gold)`: no gold data) |
+| 3a | DXY turtle-soup raid (item 13) | `dxy_ts_raid`, `dxy_ts_back` 3, `dxy_ts_lookback` 20 | "off" | pierce of an old untaken daily swing low and a 1h close back above within N bars = ES longs blocked for the rest of the session (mirror at a high). "prefer" = "filter" (the bias half is not wired) |
+| 3a | DXY daily MT regime (item 14) | `dxy_daily_mt`, `dxy_mt_lookback` 60, `dxy_mt_mode` "body" | "off" | old daily OB candle (up-close then a close under its low; mirror) holding the last 1h close: on the wrong side of its MT = "chop" (scalp / skip), through it = "expand" (tag only) |
+| 3a | DXY weekly objective ends the week (item 15) | `week_done_levels` += "dxy_pwh", "dxy_pwl", "dxy_obj" with `week_done_on_draw="skip"` | unchanged | prior-week DXY high / low reached, or the nearest unfilled daily FVG beyond the week's open in the week's direction [our interpretation] |
+| 3a | ES + DXY at target end the day (item 16) | `dxy_end_day`, `dxy_end_win` 3, `dxy_obj_levels` | "off" | a same-direction trade hit its final target within the 1h bar (+ margin) in which DXY reached the first level of its ladder (rb / rb_ce / wick / fvg) = no same-direction orders until 15:00 ("block") or the close ("block_day"). The weekly-OB open level of 059 is NOT built (no weekly dollar arrays) |
+
+`dxy_htf_src` ("dx" default, "spot") picks the one DXY series of the 3a rules. Not built yet from the DXY spec: items 1-11 (the 1-minute spot rules: dxy_states, pool run, DXY SMT, session gate, EQ gate, range trigger, in-trade bank, unicorn, DXY-target partial, non-confirmation exit, symmetry crack) and the `udx_shape` highs / lows (HistData UDX is not on the laptop; only `line` bars are built). The spot file itself is not on the laptop yet.
+Study variants: `CG2-*`, `CG3a-*`. Tests: `tests/test_coverage_gap3.py` (synthetic DXY sessions for every rule incl. closed-bar checks; ES full-vs-truncated runs for the `sym` and `dxy` sets).
+
+Second-agent review of 2 / 3a, fixes: a DXY leg with no bars near the decision time (spot hole, end of the series, stale hour) is "no DXY" (tag sym_no_dxy), not a crack; the DXY / index swing windows no longer share a bar when two swings are close; `dxy_obj` week-done is sticky (fills are judged on the sessions before the week) and takes the nearest gap; every pierce of an old daily level counts for `dxy_ts_raid`; the spot-built bars no longer carry the previous close across the 17:00-18:00 break; `sym_dxy="off"` no longer adds the no-DXY tag; the hourly frame is sliced before labelling (speed). Known limits: the Silver Bullet and pre-open engines call `_DW.order_ok` / `scalp_now` without the new filters (sym_gate, dxy_ts_raid, dxy_daily_mt skip, dxy_end_day act on the main scan only; `dxy_daily_mt="scalp"` reaches them); `dxy_*` week-done levels act with `week_done_on_draw="skip"` only (no tag path, no `fed_testimony_week` / `nfp_week` tags); `sym_dxy="daily"` and `dxy_ts_tf` are not built; the dealing "none" state (ES without a run of new extremes) imposes nothing; the spot file's minute stamps are assumed to be bar-start labels.
+
+## DXY intraday rules (dxy_intraday_spec_2026-10-31.md items 1-11; 2026-11-01)
+
+New modules `cg3.py` (entry gates) and `cg4.py` (management, SMT, unicorn); `dxy.py` gained 1-minute spot bars (`line` highs / lows from closes, DST-safe flooring). They read ONLY the 1-minute spot file (`data/dxy/spot_dxy_1m_close_2019-2025_NYtime.csv.gz`); without it, or outside 2019-2025, every rule is "no information" (tag `dxy_na`, no block). Defaults all off; the spec's per-switch "default when on" is the default mode named below. Swings on the close-only file are taken on the CLOSE series (bar highs / lows tie at every close-peak).
+
+| item | switch (default off) | mode when on | notes |
+|---|---|---|---|
+| 1 | `dxy_states`, `dxy_state_from` "07:00" | "filter" (D2 hard block) | 5m state: rally = no ES longs, consolidating = scalp, falling = no ES shorts; "soft" = half-risk scalp |
+| 2 | `dxy_pool_run`, `dxy_expand_min` 0.05, `dxy_expand_bars` 3 | "cap" | failed run (pierce < min and a 5m close back) trims the ladder to its next rung (`cap_next_rung`); "hold_gate" = cap (no un-trim) |
+| 3 | `dxy_smt`, `dxy_smt_tf`, `dxy_smt_win` 2 | "qualify" | counts as one more SMT in `entry_extra`; "need" drops the order without it; "no_press" and `dxy_smt_need_all3` NOT built |
+| 4 | `dxy_session_gate` | "filter" | 09:30 key support / resistance + 15m FVG, states +1 / 0 / -1; "bias" = filter (day-bias feed not wired) |
+| 5 | `dxy_eq_gate`, `dxy_range_from` | "block" | EQ of the latest 5m swing leg; "block_short_model" = block (the ES short model arming not built) |
+| 6 | `dxy_range_trigger`, `dxy_range_win` | "gate" | AM only; the order is dropped each bar until armed (the engine re-scans, so it waits); 1m volume imbalances do not exist on line bars (FVG only) |
+| 7 | `dxy_intrade`, `_frac` 0.5, `_sister_frac` 0.8, `_tfs`, `_long` | "bank" | short ES: new extreme since the fill and the dollar has made no new Y extreme since the fill on every tf; D3: before the first partial; min-R gate `smt_bank_min_r` |
+| 8 | `dxy_unicorn`, `_exit`, `_kill` | "qualify" | 1m bearish breaker (swings on closes) + a bearish FVG inside the zone, not killed; exit when a 1m close vaults the FVG high; `breaker_high` kill not built |
+| 9 | `dxy_target_partial`, `_frac`, `dxy_ladder` | "partial" | each DXY ladder level reached (5m highs) banks a fraction of what is left; daily ladder from `cg2._ladder_all` |
+| 10 | `dxy_nonconf_exit` | "after_partial" (D3) | after the first partial ES makes a new extreme and the dollar's 5m has not confirmed = close the rest; "any" also before; `fx_nonconf_exit` NOT built (no EURUSD / GBPUSD) |
+| 11 | `sym_swing_dxy` | - | extends `sym_swing_ts`: the counter trade is dropped only if DXY also made the opposite session extreme; `sym_crack` = the package-2 `sym_gate` ("skip" is the no-continuation mode) |
+
+Tests (`tests/test_coverage_gap3.py`): synthetic DXY sessions / days for each rule, closed-bar and no-look-ahead checks, and `test_look_ahead_es[dxy1m]` (real ES / NQ / YM 2023-08-28 to 2023-11-10 with a stand-in DXY = the inverse of ES: gates and exits fire; cut runs equal the full run). NOT done: judging any of these on the real DXY (2019-2022 choose, 2023-2025 check) - the spot file is not on the laptop; study variants `DXY1-...` to `DXY11-...` are defined in `study.DECISIONS` (not run).
+
+Second-agent review of the DXY intraday rules, fixes: `dxy_smt` is mirrored correctly for shorts (the swept extreme is a low in side space for both directions; the compared swing must be one ES took out; the same trailing window for both swings); the D3 staging works (the bank no longer sets the exit's done flag); "unconfirmed" = no new Y extreme since the fill beyond the last confirmed swing of the tf bars before the fill, post-fill read from the closed 5m bars (so the 1h tf no longer blocks a 10:05 fill until 11:00); the intraday target ladder always uses the spot daily series and only levels still ahead of the dollar at the fill (one partial per level crossed); the unicorn exit works in "qualify" / "need" only, on the FVG in force at the fill; `sym_swing_dxy` looks at the window around the swing, not the order bar; a pending order is dropped when a DXY entry gate switches on before it fills; `cap_next_rung` also ends the runner. Known limits: `unicorn` does not check that DXY traded up into the overlap; a stale-hour hole in the spot bars acts as a data point for swing / FVG scans; `hit()` counters repeat per bar in tag modes; elapsed-time arithmetic is an hour off on the two DST-change Sundays.

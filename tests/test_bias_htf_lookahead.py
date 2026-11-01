@@ -53,7 +53,11 @@ ZERO_OK = {"OT-one-state-tool-pairing_retracement_void": dict(pairing="all", sta
            "A23-intraday-close-line-in-sand_15m": dict(sibi15_ce_cancel=False, wick_ce_60m=True),
            "BH-B6-intraday-iof_15": dict(iof_tf=0, bellwether_tf=15, htf_bias="combo"),
            "BH-B6-intraday-iof_60": dict(iof_tf=0, bellwether_tf=60, htf_bias="combo"),
-           "BH-B4-HTF-bias-minimum-criteria": dict(min_criteria=False, bisi60_draw=True, htf_bias="combo")}
+           "BH-B4-HTF-bias-minimum-criteria": dict(min_criteria=False, bisi60_draw=True, htf_bias="combo"),
+           # coverage gap 3c: sick_sister trades only the index with the fewest broken references, in the deep discount: no trade in these windows; the surrogate runs the base engine (the sick count has its own
+           # cut test in tests/test_coverage_gap3.py: sick_refs_053 and the ES full-vs-truncated run)
+           "CG3c-sick_sister_old": dict(sick_sister=False), "CG3c-sick_sister_new": dict(sick_sister=False),
+           "CG3c-sick_sister_new_nwog_regime": dict(sick_sister=False), "CG3c-sick_sister_new_anyday": dict(sick_sister=False)}
 RARE = ("B9_objective_neutral", "T13-judas-news-driver_require")
 LONG_HISTORY = ("wpr", "qshift", "mwd", "B22", "B20.3", "B10")
 LA_COLS = ["entry_time", "entry", "stop", "t1", "side", "day_tags", "dw_tags"]

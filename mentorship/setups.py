@@ -1455,13 +1455,18 @@ def sick_sister(ctx, sd, i, p, session, entry):
         sisters.append((ctx.partner2[0], ctx.partner2[1][sd.sign]))
     if not sisters:
         return None
-    m0 = 810 if session == "PM" else 570
+    m0 = 810 if session == "PM" else p.sick_count_at
+    if p.sick_consol_only and not S._CG1.consol_day(ctx, session, i):
+        S._f("x_sick_not_consol")
+        return None
 
     def refs(c_, s_):
         k = S._idx_at(c_, m0)
         if k <= c_.start or k > len(c_.t):
             return None
         tk = S._tick(p)
+        if p.sick_refs == "053":
+            return S._CG1.sick_refs_053(c_, s_, k, tk)
         hk = "pdh" if s_.sign > 0 else "pdl"
         lv = [s_.x(v) for kk, v in c_.pd.items() if kk.startswith(hk)]
         ok = "pmh" if s_.sign > 0 else "pml"

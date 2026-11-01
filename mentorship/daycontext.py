@@ -995,6 +995,10 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()) -> str | None:
     if p.week_done_on_draw == "skip":
         if objective_delivered(ctx, hist, d, p, getattr(ctx, "eth", None), i):
             return "x_dw_week_done"
+        if any(n.startswith("dxy_") for n in p.week_done_levels):      # coverage gap 3a (item 15, 038 ~3:57-6:08): the DXY weekly objective delivered
+            from . import cg2 as _CG2
+            if _CG2.dxy_week_delivered(ctx, d, i, p):
+                return "x_dw_week_done_dxy"
     # D20 Monday small range: the small range is made
     if P.info.get("monday_small") and p.monday_small_range:
         a = _adr(ctx, p)
@@ -1433,6 +1437,10 @@ def scalp_now(ctx, p, session: str, i: int | None = None, sign: int = 0) -> str:
         return why_
     from . import bh4e as _B4                        # caption-gap pass bias_htf#4/7
     why_ = _B4.scalp_now(ctx, p, session, i, sign)
+    if why_:
+        return why_
+    from . import cg2 as _CG2                        # coverage gap 2: the symmetrical-market gate (a crack = a scalp)
+    why_ = _CG2.scalp_now(ctx, p, session, i, sign)
     if why_:
         return why_
     from . import bias_day as _BD                    # bias_htf: neutral bias / no narrative / chop / consolidation-week scalps

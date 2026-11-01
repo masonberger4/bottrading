@@ -147,7 +147,8 @@ class Confluence:
                  breakers: bool = False, c2_dir: bool = False, vi_min_gap: float = 0.0,
                  vi_body_death: bool = False, vi_wick_overlap: bool = True, vi_multi: bool = False,
                  vi_dead_rule: str = "full_span", ipda_first20: bool = False, nwog_cfd_src: str = "auto",
-                 void_rt_ob: bool = False, tf_lookback: dict | None = None, ob_anchor: str = "extreme"):
+                 void_rt_ob: bool = False, tf_lookback: dict | None = None, ob_anchor: str = "extreme",
+                 ndog_min_pts: float = 1.0, ndog_life: str = "friday"):
         self.ob_anchor = ob_anchor            # caption-gap A12-ob-anchor-level (cc03_001 ~28:18; 072): the level of an HTF order block as a TARGET - its candle extreme (built) or its open (A12 2023)
         # caption-gap new-lookback-per-tf-topdown: tf_lookback {tf: trading days} replaces the array LIFE of that timeframe (calendar days = x 7 / 5)
         life = dict(LIFE)
@@ -207,7 +208,7 @@ class Confluence:
         # opening gaps as ICT defines them (htf.opening_gaps): NDOGs count on the daily
         # timeframe through the end of their week; NWOGs on the weekly for 60 trading days.
         # Neither is retired by a fill.
-        og = htf.opening_gaps(df, es_pt, 1.0, nwog_cfd_src)
+        og = htf.opening_gaps(df, es_pt, ndog_min_pts, nwog_cfd_src)         # (coverage gap 3b: ndog_min_pts)
         if len(og):
             known = pd.DatetimeIndex(og.known).as_unit("ns").asi8.astype(float)
             nd = (og.kind == "ndog").values
@@ -215,6 +216,10 @@ class Confluence:
                                          for w in og.week]).as_unit("ns").asi8.astype(float)
             # NWOGs stay in force for 60 trading days (~86 calendar days; 051 ~18:02, 065)
             nw_dead = known + float(pd.Timedelta(days=86).value)
+            if ndog_life == "16h":                 # coverage gap 3b: the NDOG's daily-array life (ndog_life) - the evening to the next morning / five trading days (7 calendar days)
+                week_end = np.where(nd, known + float(pd.Timedelta(hours=16).value), week_end)
+            elif ndog_life == "5d":
+                week_end = np.where(nd, known + float(pd.Timedelta(days=7).value), week_end)
             for tf, m, dead in (("D", nd, week_end), ("W", ~nd, nw_dead)):
                 if not m.any():
                     continue

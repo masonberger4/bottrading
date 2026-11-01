@@ -370,6 +370,8 @@ def size_mult(ctx, sd, sw, i, p, session, entry, htf_tag, sloppy: str, lvt: list
     m *= _DW.day_risk(ctx, p, lvt)               # day_week_context: August (N7.6) and roll-week (N7.5) risk
     from . import bias_day as _BD
     m *= _BD.size_mult(ctx, sd, i, p, lvt)       # bias_htf B22: qshift_size against the 252-session trend while a shift is due
+    from . import cg2 as _CG2
+    m *= _CG2.size_mult(ctx, sd, i, p, lvt)      # coverage gap 2: sym_gate "scalp" - a crack is a small scalp
     for r in p.size_up_rules:
         on = False
         if r == "bpr":

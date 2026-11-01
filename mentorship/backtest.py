@@ -321,6 +321,8 @@ def table_kw(p: Params, raw: pd.DataFrame | None = None, adj: pd.Series | None =
         kw["ob_reach"] = "body"         # caption-gap A12-ob-reached-body: htf.table only
     if raw is not None and adj is not None:
         kw["raw"], kw["adj"] = raw, adj   # caption-gap OT-htf-array-data-series (bias_htf#7/7): the unadjusted front-month series and its adj
+    if p.ndog_min_pts != 1.0:
+        kw["min_gap_pts"] = p.ndog_min_pts   # coverage gap 3b: htf.table only (the NDOG draws); unchanged keys at the default
     kw["balance_tf"] = p.balance_tf     # always explicit (review fix #75: the default is now "own", so the cache file of the old default must not be reused)
     return kw
 
@@ -366,7 +368,7 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
     bt = bias_table if bias_table is not None else (
         htf.table(df, p.es_pt, vi=p.vi_arrays, flip_triggers=p.flip_triggers, wk_joint=wk_joint, **table_kw(p, raw_, adj_)) if ov else None)
     cuts = lock_cuts if lock_cuts is not None else lock_tables(df, p, bt, wk_joint, raw_, adj_)
-    og = htf.opening_gaps(df, p.es_pt, 1.0, p.nwog_cfd_src, p.gap_views, p.org_close or p.session_close or 960) if ov else None   # (gap_views "both": + the RTH weekend gap)
+    og = htf.opening_gaps(df, p.es_pt, p.ndog_min_pts, p.nwog_cfd_src, p.gap_views, p.org_close or p.session_close or 960) if ov else None   # (gap_views "both": + the RTH weekend gap)
     reb = htf.nwog_rebalanced(df, og, p.tick) if (ov and p.nwog_rebalanced) else None       # caption-gap L5 nwog_rebalanced
     tt = df.index.hour * 60 + df.index.minute
     pre = df[(tt >= 570) & (tt < (p.org_close or p.session_close or 960))]   # L7: per symbol
@@ -374,7 +376,7 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
     cf = None
     if confluence and ov:
         from .confluence import Confluence
-        cf = Confluence(df, tf, p.es_pt, vi=p.vi_arrays, breakers=p.conf_breakers, **htf_kw(p),
+        cf = Confluence(df, tf, p.es_pt, vi=p.vi_arrays, breakers=p.conf_breakers, **htf_kw(p), ndog_min_pts=p.ndog_min_pts, ndog_life=p.ndog_life,
                         **({"ob_anchor": "open"} if p.htf_ob_anchor == "open" else {}))      # (caption-gap A12-ob-anchor-level)
     ds = days(df, tf, partial_last, p.session_close)
     eth = None
@@ -433,7 +435,7 @@ def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: d
                 conf=pr.cf,
                 gaps=htf.gaps_for_day(pr.og, d, p.nwog_keep, p.nwog_days, p.nwog_skip_holiday,
                                       p.nwog_trading_days, reb=pr.reb, holiday_pick=p.nwog_holiday_pick,
-                                      ref_px=float(g.open.iloc[0])) if pr.og is not None else None,
+                                      ref_px=float(g.open.iloc[0]), ndog_life=p.ndog_life) if pr.og is not None else None,
                 prev_full=pr.ds[k - 1] if (k > 0 and (p.prev_london_pool or p.london_lr_zone != "off" or p.prev_eq_long or p.entry_pd_frame != "leg")) else None,
                 eth=pr.eth,
                 closes=pr.closes, evening=_evening(pr.df, d) if p.globex_pool else None,

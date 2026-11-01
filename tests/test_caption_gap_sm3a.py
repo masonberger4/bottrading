@@ -19,6 +19,9 @@ from dataclasses import dataclass as _oa_dc
 class Params(Params):   # OA1029: these tests were written for the pre-build engine and exercise other rules - every OA1029 default back at its old value
     __annotations__ = {k: object for k in __import__('mentorship.study', fromlist=['OA1029_OLD']).OA1029_OLD}
     locals().update(__import__('mentorship.study', fromlist=['OA1029_OLD']).OA1029_OLD)
+    sick_count_at: int = 570                # coverage gap 3c: the pre-build sick sister (the 09:30 count, the built reference set, any day)
+    sick_refs: str = "built"
+    sick_consol_only: bool = False
 
 from test_levels_detectors import BASE, D0, NY, day, ctx_for, frame, history, prior_days, rth_day
 from test_caption_gap_sm1a import AFTER, StubConf, hist_close, ib, mkctx, sd_of, stub
