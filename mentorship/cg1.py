@@ -20,10 +20,10 @@ def _tag(o: dict, t: str) -> None:
     o["lv_tags"] = "|".join(x for x in (o.get("lv_tags", ""), t) if x) if isinstance(o.get("lv_tags", ""), str) else list(o.get("lv_tags") or []) + [t]
 
 
-def order_ok(ctx, sd, o: dict, session: str, i: int, p):
+def order_ok(ctx, sd, o: dict, session: str, i: int, p, trades=()):
     """A funnel key when the armed order `o` (side space) breaks a coverage-gap rule, else None."""
     from . import cg2 as _CG2
-    why = _CG2.order_ok(ctx, sd, o, session, i, p)
+    why = _CG2.order_ok(ctx, sd, o, session, i, p, trades)
     if why is not None:
         return why
     if not p.ndog_ce_filter:

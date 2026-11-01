@@ -995,6 +995,10 @@ def gate(ctx, p, session: str, i: int, t: int, trades=()) -> str | None:
     if p.week_done_on_draw == "skip":
         if objective_delivered(ctx, hist, d, p, getattr(ctx, "eth", None), i):
             return "x_dw_week_done"
+        if any(n.startswith("dxy_") for n in p.week_done_levels):      # coverage gap 3a (item 15, 038 ~3:57-6:08): the DXY weekly objective delivered
+            from . import cg2 as _CG2
+            if _CG2.dxy_week_delivered(ctx, d, i, p):
+                return "x_dw_week_done_dxy"
     # D20 Monday small range: the small range is made
     if P.info.get("monday_small") and p.monday_small_range:
         a = _adr(ctx, p)

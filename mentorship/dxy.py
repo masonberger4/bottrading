@@ -117,3 +117,24 @@ def closed(b: pd.DataFrame | None, t: pd.Timestamp) -> pd.DataFrame | None:
         return None
     n = int(b.end.searchsorted(t, side="right"))
     return b.iloc[:n]
+
+
+def session_label(idx: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """The trading date of a bar start: the 18:00 reopen belongs to the NEXT calendar date (a session is 18:00-17:00 NY), as the daily bars of the spec (0.3, `session_date`)."""
+    return (idx + pd.Timedelta(hours=6)).normalize().tz_localize(None)
+
+
+def daily(src: str = "dx") -> pd.DataFrame | None:
+    """DXY daily bars (session 18:00-17:00 NY) from the 1h bars of `src` ("dx" Databento DX 1h / "spot" the spot file), indexed by the naive session date, with `end` = 17:00 NY of that date.
+    One series per call: the levels of a comparison are never mixed across sources (spec 0.3)."""
+    key = ("daily", src, "df" in _SPOT, id(_SPOT.get("df")))
+    if key in _CACHE:
+        return _CACHE[key]
+    h = bars(60, src)
+    out = None
+    if h is not None and len(h):
+        g = h.groupby(session_label(h.index))
+        out = pd.DataFrame({"open": g.open.first(), "high": g.high.max(), "low": g.low.min(), "close": g.close.last()})
+        out["end"] = [pd.Timestamp(d, tz=NY) + pd.Timedelta(hours=17) for d in out.index]
+    _CACHE[key] = out
+    return out

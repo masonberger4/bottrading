@@ -3541,6 +3541,17 @@ class Params:
     sym_win: int = 2                     # [our interpretation] the bars around an ES swing in which a partner / DXY extreme counts as the same one
     sym_dxy: str = "1h"                  # "1h" = DXY 1h bars (spot-built 2019-2025, Databento DX after; the hour around each swing) / "tf" = DXY bars of sym_tf from the spot file / "off" = indices only; no DXY data for the date = off, tag sym_no_dxy
     sym_crack_block_reversal: bool = False   # 032 ~34:51: while all three indices (and DXY) confirm the trend, a counter-trend entry is dropped (the run beyond the short-term swing is a stop raid) [our interpretation: any order against a confirmed trend]
+    # coverage gap 3a (package 3a): DXY daily / hourly rules (cg2.py; dxy.py) - all read closed DXY bars only, Databento DX 1h by default so 2026 is covered; before 2019 they do nothing
+    dxy_htf_src: str = "dx"              # the DXY series of the 3a rules: "dx" (Databento DX 1h, back-adjusted, 2019-2026) / "spot" (the 1-minute spot file, 2019-2025); one series per comparison
+    dxy_ts_raid: str = "off"             # 030 ~39:00, ~1:37:28: DXY pierces an old daily low and closes back above it within dxy_ts_back 1h bars (a DXY turtle soup) = an ES buy-side run is a raid. "tag" / "filter" (no ES longs for the rest of the session) / "prefer" (= filter, tag dxy_ts_*). The mirror at an old daily high. Single example
+    dxy_ts_back: int = 3                 # [our interpretation] 1h bars the close back has
+    dxy_ts_lookback: int = 20            # [our interpretation; Feb 9 was 3 sessions back] sessions an old daily swing low / high is searched in
+    dxy_daily_mt: str = "off"            # 031 ~11:20-12:30: DXY trading into an old daily OB candle: through its mean threshold = fast ES expansion ("expand"), inside and on the wrong side of it = choppy ES ("chop"): "tag" / "scalp" (ES orders are scalps while chop) / "skip". Single example
+    dxy_mt_lookback: int = 60            # [our interpretation] sessions the old daily candle is searched in
+    dxy_mt_mode: str = "body"            # the candle's mean threshold: "body" (open / close midpoint, the engine's mt_mode default) / "range"
+    dxy_end_day: str = "off"             # 059 ~23:01: ES hit its final target and, at the same time, DXY reached the first level of its HTF ladder = the day's move is done. "tag" / "block" (no same-direction orders until 15:00; the last hour is left alone) / "block_day"
+    dxy_end_win: int = 3                 # [our interpretation of "at the same time"] 5-minute bars of margin around the DXY 1h bar
+    dxy_obj_levels: tuple = ("rb", "rb_ce", "wick", "fvg")   # the ladder of 035 ~24:19: rejection-block close, wick CE, wick extreme, the next daily FVG; the weekly OB open of 059 is not built (needs weekly dollar arrays)
     # coverage gap 3c (package 3c): sick sister, ICT's exact version (acts only with sick_sister=True; setups.sick_sister / cg1.py)
     sick_count_at: int = 480             # 053 ~3:47 ("you have the high broken here at 8 am"): the minute of day of the AM count; 570 = the built 09:30 count (the PM count stays 13:30)
     sick_refs: str = "053"               # 053 ~3:47: "053" = only the prior session's afternoon high (the prior PM range's high) and the most recent overnight swing high (the latest 3-candle swing high confirmed before the count, broken = a later bar traded above it) [our interpretation of "overnight swing high"]; "built" = PDH 1-3, the overnight high, London, prior PM
@@ -4009,7 +4020,7 @@ class Params:
                 or set(self.consol_pm_pools) - {"pd", "london", "on", "draw"}
                 or set(self.tgif_model_skip) - {"tgif", "tgif_zone", "tgif_htf_array", "tgif_week_sweep", "tgif_timing"}
                 or set(self.drr_tests) - {"range", "inside_bisi", "premium_run"}
-                or set(self.week_done_levels) - {"pwh", "pwl", "nwog_ce"} or set(self.tgif_htf_tfs) - set(CF_TFS)):
+                or set(self.week_done_levels) - {"pwh", "pwl", "nwog_ce", "dxy_obj", "dxy_pwh", "dxy_pwl"} or set(self.tgif_htf_tfs) - set(CF_TFS)):
             raise ValueError("day_week_context: nr_tags / trend_news / consol_predictors / week_done_levels / tgif_htf_tfs name an unknown item")
         if len(self.seasonal_map) != 12 or (self.seasonal_map_b and len(self.seasonal_map_b) != 12):
             raise ValueError("seasonal_map / seasonal_map_b: expected 12 entries, January first")
@@ -4106,6 +4117,11 @@ class Params:
         if (self.sym_gate not in ("off", "tag", "hold", "scalp", "skip") or self.sym_dxy not in ("off", "1h", "tf") or self.sym_tf not in (5, 15, 60)
                 or not 0 < self.sym_scalp_risk <= 1 or self.sym_lookback < 1 or self.sym_win < 0):
             raise ValueError("coverage gap 2: sym_gate off / tag / hold / scalp / skip, sym_dxy off / 1h / tf, sym_tf 5 / 15 / 60, 0 < sym_scalp_risk <= 1, sym_lookback >= 1, sym_win >= 0")
+        if (self.dxy_htf_src not in ("dx", "spot") or self.dxy_ts_raid not in ("off", "tag", "filter", "prefer") or self.dxy_daily_mt not in ("off", "tag", "scalp", "skip")
+                or self.dxy_mt_mode not in ("body", "range") or self.dxy_end_day not in ("off", "tag", "block", "block_day") or self.dxy_ts_back < 1 or self.dxy_ts_lookback < 3
+                or self.dxy_mt_lookback < 3 or self.dxy_end_win < 0 or set(self.dxy_obj_levels) - {"rb", "rb_ce", "wick", "fvg"}):
+            raise ValueError("coverage gap 3a: dxy_htf_src dx / spot, dxy_ts_raid off / tag / filter / prefer, dxy_daily_mt off / tag / scalp / skip, dxy_mt_mode body / range, dxy_end_day off / tag / block / block_day, "
+                             "dxy_ts_back >= 1, dxy_ts_lookback / dxy_mt_lookback >= 3, dxy_end_win >= 0, dxy_obj_levels a subset of (rb, rb_ce, wick, fvg)")
         if self.sick_refs not in ("053", "built") or not 0 <= self.sick_count_at < 1440:
             raise ValueError("coverage gap 3c: sick_refs '053' / 'built', 0 <= sick_count_at < 1440")
         if self.ndog_life not in ("friday", "16h", "5d") or self.ndog_min_pts < 0:
@@ -7712,7 +7728,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                     if why_ == "x_bh_fifty_fifty" and pending is not None and pending["session"] == session:
                         pending = None                # B17.1: 50/50 - the first side's armed order is cancelled too
             if o_ is not None:
-                why_ = _CG1.order_ok(ctx, sd, o_, session, i, p)         # coverage gaps (cg1.py): per-order filters
+                why_ = _CG1.order_ok(ctx, sd, o_, session, i, p, trades)         # coverage gaps (cg1.py): per-order filters
                 if why_ is not None:
                     _f(why_)
                     o_ = None

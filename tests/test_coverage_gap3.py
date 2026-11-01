@@ -252,13 +252,14 @@ def _run_cut(df, p, kw, cut_t=None):
 
 
 @pytest.mark.skipif(not ES, reason="no ES / NQ / YM data")
-@pytest.mark.parametrize("name", ["gaps", "sick", "smt", "sym"])
+@pytest.mark.parametrize("name", ["gaps", "sick", "smt", "sym", "dxy"])
 def test_look_ahead_es(name):
     es, nq, ym = _es3()
     kw = dict(partner=nq, partner2=ym)
     sets = {"gaps": dict(ndog_min_pts=0.0, ndog_life="16h", ndog_ce_filter=True),
             "sick": dict(sick_sister=True, sick_consol_only=False),
             "sym": dict(sym_gate="scalp", sym_crack_block_reversal=True),
+            "dxy": dict(dxy_ts_raid="filter", dxy_daily_mt="scalp", dxy_end_day="block", week_done_on_draw="skip", week_done_levels=("pwh", "pwl", "dxy_pwh", "dxy_pwl", "dxy_obj")),
             "smt": dict(smt_partial="both", smt_partial_b_bars=2, smt_partial_b_near=0.6, smt_bank_min_r=0.1)}
     from mentorship import study
     p = Params(**{**study.DEC_BASE, **sets[name]})
@@ -431,4 +432,125 @@ def test_dxy_bars_closed_only():
     c2 = dxy.closed(b, pd.Timestamp("2023-05-01 09:09", tz=NY))
     assert c2.index[-1] == pd.Timestamp("2023-05-01 09:00", tz=NY)
     assert (b.high >= b[["open", "close"]].max(axis=1) - 1e-12).all() and (b.low <= b[["open", "close"]].min(axis=1) + 1e-12).all()
+    dxy.set_spot(None)
+
+
+# --- package 3a: DXY daily / hourly rules (cg2.py) ---------------------------------------------------------------------------------
+
+def _sessions(specs):
+    """specs: {label date: [(hours after the 18:00 open, value), ...]} -> a 1-minute close frame; a session label L runs from L-1 18:00 to L 17:00 (23 h)."""
+    parts = []
+    for lab, anchors in sorted(specs.items()):
+        start = pd.Timestamp(lab, tz=NY) - pd.Timedelta(hours=6)
+        t = pd.date_range(start, periods=23 * 60, freq="1min")
+        xs = np.array([a[0] for a in anchors]) * 60.0
+        ys = np.array([a[1] for a in anchors])
+        parts.append(pd.DataFrame({"close": np.interp(np.arange(23 * 60), xs, ys)}, index=t))
+    return pd.concat(parts)
+
+
+def _plain(lab, lo=100.0, hi=101.0, o=100.5, c=100.5):
+    return [(0, o), (6, lo), (12, hi), (22.99, c)]
+
+
+def _es_ctx(day, start="00:00", end="16:00", tf=5):
+    idx = pd.date_range(pd.Timestamp(f"{day} {start}", tz=NY), pd.Timestamp(f"{day} {end}", tz=NY), freq=f"{tf}min")
+    return SimpleNamespace(idx=idx, t=(idx.hour * 60 + idx.minute).values, tf=tf, day=pd.Timestamp(day).date())
+
+
+def _at(ctx, hhmm):
+    return int(ctx.idx.get_loc(pd.Timestamp(f"{ctx.day} {hhmm}", tz=NY)))
+
+
+def _p3(**kw):
+    return Params(**{**dict(dxy_htf_src="spot"), **kw})
+
+
+WEEK1 = ["2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05"]
+WEEK2 = ["2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12"]
+
+
+def test_3a_params():
+    p = Params()
+    assert (p.dxy_ts_raid, p.dxy_daily_mt, p.dxy_end_day, p.dxy_htf_src, p.dxy_ts_back, p.dxy_ts_lookback) == ("off", "off", "off", "dx", 3, 20)
+    Params(week_done_levels=("pwh", "dxy_obj", "dxy_pwh", "dxy_pwl"))
+    for bad in (dict(dxy_ts_raid="x"), dict(dxy_daily_mt="x"), dict(dxy_end_day="x"), dict(dxy_htf_src="x"), dict(dxy_obj_levels=("x",)), dict(week_done_levels=("dxy_x",))):
+        with pytest.raises(ValueError):
+            Params(**bad)
+
+
+def test_dxy_ts_raid():
+    specs = {pd.Timestamp(d): _plain(d) for d in WEEK1 + WEEK2}
+    specs[pd.Timestamp("2026-06-03")] = _plain("2026-06-03", lo=99.0)                       # the old daily swing low
+    specs[pd.Timestamp("2026-06-15")] = [(0, 100.5), (6, 98.8), (9, 99.5), (12, 100.2), (22.99, 100.3)]       # pierces 99.0 at ~00:00 and closes back above within the hour
+    dxy.set_spot(_sessions(specs))
+    ctx = _es_ctx("2026-06-15")
+    p = _p3(dxy_ts_raid="filter")
+    assert cg2.dxy_ts_state(ctx, _at(ctx, "00:25"), p) == 0                                  # the 00:00 hour has not closed
+    assert cg2.dxy_ts_state(ctx, _at(ctx, "09:30"), p) == 1
+    o = dict(entry=1.0, lv_tags="")
+    assert cg2.order_ok(ctx, _sd(1), o, "AM", _at(ctx, "09:30"), p) == "x_cg_dxy_ts"          # ES longs are blocked: the buy-side run was a raid
+    o = dict(entry=1.0, lv_tags="")
+    assert cg2.order_ok(ctx, _sd(-1), o, "AM", _at(ctx, "09:30"), p) is None and "dxy_ts_up" in o["lv_tags"]
+    assert cg2.order_ok(ctx, _sd(1), dict(entry=1.0, lv_tags=""), "AM", _at(ctx, "09:30"), _p3(dxy_ts_raid="tag")) is None
+    # a taken low is not an old low: a lower daily low after it removes the level
+    specs[pd.Timestamp("2026-06-09")] = _plain("2026-06-09", lo=98.5)
+    dxy.set_spot(_sessions(specs))
+    ctx = _es_ctx("2026-06-15")
+    assert cg2.dxy_ts_state(ctx, _at(ctx, "09:30"), p) == 0
+    dxy.set_spot(None)
+
+
+def test_dxy_daily_mt():
+    specs = {pd.Timestamp(d): _plain(d, lo=100.0, hi=100.4, o=100.2, c=100.2) for d in WEEK1 + WEEK2}
+    specs[pd.Timestamp("2026-06-04")] = [(0, 100.0), (6, 99.8), (12, 102.0), (22.99, 101.5)]       # an up-close candle (OB) ...
+    specs[pd.Timestamp("2026-06-05")] = [(0, 101.5), (6, 99.0), (12, 101.0), (22.99, 99.0)]        # ... followed by a close under its low
+    specs[pd.Timestamp("2026-06-15")] = [(0, 100.2), (12, 100.3), (22.99, 100.3)]                  # DXY inside the candle, under its body MT (100.75)
+    dxy.set_spot(_sessions(specs))
+    ctx = _es_ctx("2026-06-15")
+    i = _at(ctx, "09:30")
+    assert cg2.dxy_mt_state(ctx, i, _p3(dxy_daily_mt="tag")) == "chop"
+    assert cg2.scalp_now(ctx, _p3(dxy_daily_mt="scalp"), "AM", i, 1) == "cg_dxy_mt" and cg2.scalp_now(ctx, _p3(dxy_daily_mt="tag"), "AM", i, 1) == ""
+    assert cg2.order_ok(ctx, _sd(-1), dict(entry=1.0, lv_tags=""), "AM", i, _p3(dxy_daily_mt="skip")) == "x_cg_dxy_mt"
+    specs[pd.Timestamp("2026-06-15")] = [(0, 101.2), (12, 101.3), (22.99, 101.3)]                   # through the MT: expansion
+    dxy.set_spot(_sessions(specs))
+    ctx = _es_ctx("2026-06-15")
+    assert cg2.dxy_mt_state(ctx, _at(ctx, "09:30"), _p3(dxy_daily_mt="tag")) == "expand"
+    dxy.set_spot(None)
+
+
+def test_week_done_dxy():
+    specs = {pd.Timestamp(d): _plain(d, hi=(101.0 if d in WEEK1 else 100.9)) for d in WEEK1 + WEEK2}
+    specs[pd.Timestamp("2026-06-10")] = [(0, 100.5), (6, 100.2), (12, 101.5), (22.99, 101.2)]      # Wednesday's high 101.5 > the prior week's high 101.0 at ~06:00 ET
+    dxy.set_spot(_sessions(specs))
+    p = _p3(week_done_on_draw="skip", week_done_levels=("dxy_pwh",))
+    wed, tue = _es_ctx("2026-06-10"), _es_ctx("2026-06-09")
+    assert not cg2.dxy_week_delivered(tue, date(2026, 6, 9), _at(tue, "09:30"), p)
+    assert not cg2.dxy_week_delivered(wed, date(2026, 6, 10), _at(wed, "00:25"), p)               # before the high is in
+    assert cg2.dxy_week_delivered(wed, date(2026, 6, 10), _at(wed, "09:30"), p)
+    assert not cg2.dxy_week_delivered(wed, date(2026, 6, 10), _at(wed, "09:30"), _p3(week_done_levels=("pwh",)))        # no dxy_ level asked
+    dxy.set_spot(None)
+
+
+def test_dxy_end_day():
+    specs = {pd.Timestamp(d): _plain(d) for d in WEEK1 + WEEK2}
+    specs[pd.Timestamp("2026-06-03")] = [(0, 100.5), (6, 100.0), (12, 103.0), (22.99, 102.0)]       # the old daily swing high 103.0, its close 102.0 = the rejection block
+    specs[pd.Timestamp("2026-06-15")] = [(0, 100.3), (16, 100.3), (17.5, 102.5), (22.99, 102.4)]    # DXY runs into 102.0 between 10:00 and 11:30 ET
+    dxy.set_spot(_sessions(specs))
+    ctx = _es_ctx("2026-06-15")
+    tx = pd.Timestamp("2026-06-15 11:05", tz=NY)
+    tr = SimpleNamespace(exits=[(tx, 1.0, 1, "t2")], final_hit=True, side="short")
+    p = _p3(dxy_end_day="block")
+    i1, i2, i3 = _at(ctx, "12:05"), _at(ctx, "15:05"), _at(ctx, "09:30")
+    assert cg2.order_ok(ctx, _sd(-1), dict(entry=1.0, lv_tags=""), "AM", i1, p, [tr]) == "x_cg_dxy_end_day"
+    assert cg2.order_ok(ctx, _sd(1), dict(entry=1.0, lv_tags=""), "AM", i1, p, [tr]) is None                      # the other direction is free
+    assert cg2.order_ok(ctx, _sd(-1), dict(entry=1.0, lv_tags=""), "LH", i2, p, [tr]) is None                     # the last hour is left alone
+    assert cg2.order_ok(ctx, _sd(-1), dict(entry=1.0, lv_tags=""), "LH", i2, _p3(dxy_end_day="block_day"), [tr]) == "x_cg_dxy_end_day"
+    assert cg2.order_ok(ctx, _sd(-1), dict(entry=1.0, lv_tags=""), "AM", i1, _p3(dxy_end_day="tag"), [tr]) is None
+    far = SimpleNamespace(exits=[(pd.Timestamp("2026-06-15 04:00", tz=NY), 1.0, 1, "t2")], final_hit=True, side="short")      # ES done long before DXY got there: not "at the same time"
+    assert cg2.order_ok(ctx, _sd(-1), dict(entry=1.0, lv_tags=""), "AM", i1, p, [far]) is None
+    assert cg2.order_ok(ctx, _sd(-1), dict(entry=1.0, lv_tags=""), "AM", _at(ctx, "11:30"), p, [tr]) is None        # the 11:00 hour (DXY reaches 102.0) has not closed yet
+    # look-ahead: DXY bars after the decision bar change nothing
+    base = cg2.dxy_end_day_block(ctx, _sd(-1), i3, p, [SimpleNamespace(exits=[(pd.Timestamp("2026-06-15 09:00", tz=NY), 1, 1, "t2")], final_hit=True, side="short")])
+    assert base is False
     dxy.set_spot(None)
