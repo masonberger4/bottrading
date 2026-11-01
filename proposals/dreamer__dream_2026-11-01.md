@@ -17,3 +17,5 @@ Ranking = expected future turns saved x likelihood. IDs refer to proposals/dream
 | 12 | R2 | One results heading for phase-1 screen so both halves land alike | branch layouts differ | LOW-MED |
 Structure notes: decisions.md (32 KB) and results.md (20 KB) mix current rules with verbatim old sections; after approvals, a follow-up dream should split into current.md (<8 KB) + archive/. Resolved items (no action): Oct 18 "where are the notes" is now in the index pointers.
 Apply: reply "apply S1,D1,D2,L1,L2" etc. A writer (ACL) merges with memsave save; next dream checks recurrence.
+
+<!-- MERGED 2026-11-01 ~22:05Z by Organize-memory thread, approved by Mase (cmsg_01FAHERC1Lsrg2bYtrKuRHmPPrC9s6KinzHyy3ztjALyks): S1-S3 v40, D1/D2/D3/D4 v36, L1-L4 v38, O1/O2/O3 v37, R1/R2 v39, T v42 + status.md v44, spec section 10 v41, dream skill v43. Not applied (index, coordinator only): I1, I2. -->
