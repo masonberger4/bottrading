@@ -1,11 +1,26 @@
 # decisions.md — owner answers and standing rules (who decided, when)
 
+## ACTIVE RULES DIGEST (read this first; grep the rest; this is the single home for these rules)
+1. One laptop writer at a time; call remote_control_status before touching the laptop; if another writer is active, stop and ask the coordinator.
+2. Laptop folder C:\Users\mason\bottrading only; NEVER C:\Users\mason\X; leave ict_fetch PIDs and the Silver Bullet paper bot alone; one pytest run at a time, launched detached.
+3. Long work (>30 min): check in and commit+push at least every 30 min; while laptop work runs, verify it is moving every 15 min and update Mase every 30.
+4. No workflows/helper agents unless Mase asks (except build-stage review); short replies.
+5. Models: threads Sonnet 5.5 at medium effort; rule-decision threads and audits Opus; coordinator Opus 5.5.
+6. Free downloads pre-approved; paid purchases need Mase's OK in the thread that buys.
+7. "Exactly what ICT says", full detail, experienced-trader version default, 2023 beats older videos; where ICT uses judgment label it "our interpretation".
+8. Every owner answer is a backtestable switch; defaults first, alternatives as switches.
+9. Report $ at $1k risk, by half and day type; choose on 2019-22, check on 2023-26.
+10. Silver Bullet is settled (no edge, off by default): don't re-propose.
+11. Don't re-offer: cloud video processing, cloud stage tests, a parallel laptop task.
+12. Mase-only actions (agents hand him the exact steps up front, don't try first): merge PRs, copy files to the laptop, run taskkill, edit GitHub rulesets/branch protection, one-time pushes from the laptop. Cloud sessions can push only to their designated branch (other pushes and GitHub API writes return 403).
+13. Only Mase and the coordinator write the project-memory index; threads don't call update_memory.
+
 Append new decisions at the bottom of the first section as `- (Mase, YYYY-MM-DD HH:MM UTC) decision`. Every owner-answer decision is a backtestable switch.
 
 ## Facts carried from the old MEMORY.md index
 - Q92 DECIDED (Mase 05:14 UTC 2026-11-01): non-narrative OB default, Q92 a switch. Every owner-answer decision is a backtestable switch.
-- SCREENING PLAN (Mase 21:08 UTC 2026-11-01): screen every variant on ONE year (2021), entry/stop/trade-count variants first; meaningful movers expand to 2019-22, winners checked on 2023-26; little-effect variants parked for later. Laptop holds current+defaults on all years as baseline.
-- LONG-WORK RULE (Mase 20:59 UTC 2026-11-01, in project instructions): threads with >30 min of work check in and commit+push at least every 30 min.
+- SCREENING PLAN (Mase 21:08 UTC 2026-11-01): screen every variant on ONE year (2021), entry/stop/trade-count variants first; meaningful movers expand to 2019-22, winners checked on 2023-26; little-effect variants parked for later. UPDATE (Mase 21:08-21:11 UTC 2026-11-01): also drop variants that are exact copies of defaults; movers expand in stages to 2019-22; winners checked on 2023-26; then combine winners one at a time; full combos later. Laptop holds current+defaults on all years as baseline.
+- LONG-WORK RULE (Mase 20:59 UTC 2026-11-01, in project instructions): see ACTIVE RULES DIGEST item 3.
 - DXY decisions D1-D4 FINAL (Mase 05:47 UTC 2026-10-31): scalp, hard block, staged, no purchase; other modes stay switches. See dxy-intraday-spec below.
 - Silver Bullet SETTLED: no edge as coded. OFF by default. Don't re-propose.
 - Guiding rules (Mase): "exactly what ICT says", full detail, never simplified; where ICT uses judgment, write the closest exact rule labelled "our interpretation". Experienced-trader version default, beginner a switch. 2023 beats older videos. Test defaults first, then alternatives as switches.
@@ -65,7 +80,7 @@ Claude HF now tags each day (FOMC, CPI, jobs report, monthly opex, quad witching
 Mase (09:22 UTC 2026-10-29), after a Haiku pass on the caption-gap owner questions: "redo this work with opus. we need more critical thinking for these decisions."
 
 **Why:** the Haiku pass sorted questions shallowly and cited the rulebook without reading the captions it referenced.
-**How to apply:** threads default to Haiku 5.5 at medium effort (see MEMORY.md), but any thread that settles rule conflicts, owner questions or default choices for the Mentorship bot should run on Opus and check the cited captions directly, not just rulebook summaries. Related: [[mentorship-standing-rules]].
+**How to apply:** threads default to Sonnet 5.5 at medium effort (updated 2026-11-01 per Mase 05:07 UTC 2026-10-31; was written as Haiku 5.5), but any thread that settles rule conflicts, owner questions or default choices for the Mentorship bot should run on Opus and check the cited captions directly, not just rulebook summaries. Related: [[mentorship-standing-rules]].
 
 ## mentorship-usage-preferences — How much multi-agent/Ultracode work Mase wants on the Mentorship bot, and the plan to split the long thread into fresh threads
 (source: mentorship-usage-preferences.md, modified 2026-10-18T21:39:52.213Z)
