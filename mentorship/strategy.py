@@ -3533,6 +3533,14 @@ class Params:
     ndog_min_pts: float = 1.0            # 031 ~13:32 vs 052: the smallest NDOG (ES points) that counts - 1.0 = only gaps over about one handle (052, as built); 0 = every NDOG, a one-tick gap uses the single price as its level (031)
     ndog_life: str = "friday"            # 025 ~24:41: how long an NDOG is live - "friday" = through the end of its week (as built) / "16h" = overnight and the next NY AM only (the one formed the evening before) / "5d" = five trading days [our interpretation of "a few days"]
     ndog_ce_filter: bool = False         # 092 ~45:52: a short's entry sits at / above the current NDOG's CE (premium half), a long's at / below it; no NDOG in force = no filter [our interpretation: the entry price stands for the retrace candle]
+    # coverage gap 2 (package 2): the symmetrical-market gate (cg2.py; DXY bars from dxy.py)
+    sym_gate: str = "off"                # B17.5 (031 ~50:02; 045 ~2:50:01; 048 ~13:02, ~41:01; 095 ~27:01; 098 ~55:06): ES, NQ and YM post the same swing extreme and DXY the opposite one. "tag" = sym_ok / sym_crack tags; "hold" = a crack is T1 only, no adds (a symmetrical market holds for the draw); "scalp" = a crack is T1 only at sym_scalp_risk size (the experienced version, 095); "skip" = a crack takes no order (048 ~13:02 for new students)
+    sym_scalp_risk: float = 0.5          # [our interpretation] ICT gives no size
+    sym_tf: int = 15                     # [our interpretation] the timeframe of the compared 3-candle swings (5 and 60 are switches; the DXY spec uses 5)
+    sym_lookback: int = 2                # how many of the latest swing extremes on the order's side all three indices must confirm
+    sym_win: int = 2                     # [our interpretation] the bars around an ES swing in which a partner / DXY extreme counts as the same one
+    sym_dxy: str = "1h"                  # "1h" = DXY 1h bars (spot-built 2019-2025, Databento DX after; the hour around each swing) / "tf" = DXY bars of sym_tf from the spot file / "off" = indices only; no DXY data for the date = off, tag sym_no_dxy
+    sym_crack_block_reversal: bool = False   # 032 ~34:51: while all three indices (and DXY) confirm the trend, a counter-trend entry is dropped (the run beyond the short-term swing is a stop raid) [our interpretation: any order against a confirmed trend]
     # coverage gap 3c (package 3c): sick sister, ICT's exact version (acts only with sick_sister=True; setups.sick_sister / cg1.py)
     sick_count_at: int = 480             # 053 ~3:47 ("you have the high broken here at 8 am"): the minute of day of the AM count; 570 = the built 09:30 count (the PM count stays 13:30)
     sick_refs: str = "053"               # 053 ~3:47: "053" = only the prior session's afternoon high (the prior PM range's high) and the most recent overnight swing high (the latest 3-candle swing high confirmed before the count, broken = a later bar traded above it) [our interpretation of "overnight swing high"]; "built" = PDH 1-3, the overnight high, London, prior PM
@@ -4095,6 +4103,9 @@ class Params:
         if (self.smt_partial not in ("off", "a", "b", "both") or not 0 <= self.smt_partial_a_frac <= 1 or not 0 <= self.smt_partial_b_frac <= 1
                 or self.smt_partial_b_bars < 1 or not 0 < self.smt_partial_b_near <= 1):
             raise ValueError("coverage gap 3d: smt_partial 'off' / 'a' / 'b' / 'both', fracs in [0, 1], smt_partial_b_bars >= 1, 0 < smt_partial_b_near <= 1")
+        if (self.sym_gate not in ("off", "tag", "hold", "scalp", "skip") or self.sym_dxy not in ("off", "1h", "tf") or self.sym_tf not in (5, 15, 60)
+                or not 0 < self.sym_scalp_risk <= 1 or self.sym_lookback < 1 or self.sym_win < 0):
+            raise ValueError("coverage gap 2: sym_gate off / tag / hold / scalp / skip, sym_dxy off / 1h / tf, sym_tf 5 / 15 / 60, 0 < sym_scalp_risk <= 1, sym_lookback >= 1, sym_win >= 0")
         if self.sick_refs not in ("053", "built") or not 0 <= self.sick_count_at < 1440:
             raise ValueError("coverage gap 3c: sick_refs '053' / 'built', 0 <= sick_count_at < 1440")
         if self.ndog_life not in ("friday", "16h", "5d") or self.ndog_min_pts < 0:

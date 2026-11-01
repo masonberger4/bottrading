@@ -1435,6 +1435,10 @@ def scalp_now(ctx, p, session: str, i: int | None = None, sign: int = 0) -> str:
     why_ = _B4.scalp_now(ctx, p, session, i, sign)
     if why_:
         return why_
+    from . import cg2 as _CG2                        # coverage gap 2: the symmetrical-market gate (a crack = a scalp)
+    why_ = _CG2.scalp_now(ctx, p, session, i, sign)
+    if why_:
+        return why_
     from . import bias_day as _BD                    # bias_htf: neutral bias / no narrative / chop / consolidation-week scalps
     return _BD.scalp_now(ctx, p, session, i)
 

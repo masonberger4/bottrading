@@ -252,12 +252,13 @@ def _run_cut(df, p, kw, cut_t=None):
 
 
 @pytest.mark.skipif(not ES, reason="no ES / NQ / YM data")
-@pytest.mark.parametrize("name", ["gaps", "sick", "smt"])
+@pytest.mark.parametrize("name", ["gaps", "sick", "smt", "sym"])
 def test_look_ahead_es(name):
     es, nq, ym = _es3()
     kw = dict(partner=nq, partner2=ym)
     sets = {"gaps": dict(ndog_min_pts=0.0, ndog_life="16h", ndog_ce_filter=True),
             "sick": dict(sick_sister=True, sick_consol_only=False),
+            "sym": dict(sym_gate="scalp", sym_crack_block_reversal=True),
             "smt": dict(smt_partial="both", smt_partial_b_bars=2, smt_partial_b_near=0.6, smt_bank_min_r=0.1)}
     from mentorship import study
     p = Params(**{**study.DEC_BASE, **sets[name]})
@@ -311,3 +312,123 @@ def test_consol_day_ignores_low_impact_news(monkeypatch):
     monkeypatch.setattr(BD, "row_for", lambda c, s, i: {"nwog_regime": "cons"})
     assert cg1.consol_day(SimpleNamespace(day=date(2026, 6, 12)), "AM", 0)                         # 2026-06-12 = the second Friday (sentiment only)
     assert not cg1.consol_day(SimpleNamespace(day=date(2026, 6, 10)), "AM", 0)                     # CPI
+
+
+# --- package 2: symmetrical-market gate (cg2.py / dxy.py) --------------------------------------------------------------------------
+
+from mentorship import cg2, dxy
+
+
+def _wave(n, drift, amp=3.0, per=8):
+    k = np.arange(n)
+    return 100.0 + drift * k + amp * np.sin(2 * np.pi * k / per)
+
+
+def _ctx_sym(es, nq, ym, tf=5):
+    n = len(es)
+    idx = pd.date_range("2026-06-24 09:30", periods=n, freq=f"{tf}min", tz=NY)
+    mk = lambda a: SimpleNamespace(idx=idx, h=np.asarray(a) + 0.5, l=np.asarray(a) - 0.5, tf=tf, start=0)
+    c = mk(es)
+    c.pside = (mk(nq), {}, None)
+    c.partner2 = (mk(ym), {}, None)
+    return c, idx
+
+
+def _spot_from(idx, vals):
+    one = pd.date_range(idx[0], idx[-1] + pd.Timedelta(minutes=5), freq="1min", tz=NY)
+    dxy.set_spot(pd.DataFrame({"close": np.interp(one.asi8, idx.asi8, vals)}, index=one))
+
+
+def _p5(**kw):
+    return Params(**{**dict(sym_gate="tag", sym_tf=5, sym_dxy="tf", sym_win=1), **kw})
+
+
+def test_sym_gate_params():
+    p = Params()
+    assert (p.sym_gate, p.sym_scalp_risk, p.sym_tf, p.sym_lookback, p.sym_dxy, p.sym_crack_block_reversal) == ("off", 0.5, 15, 2, "1h", False)
+    for bad in (dict(sym_gate="x"), dict(sym_dxy="x"), dict(sym_tf=7), dict(sym_scalp_risk=0.0), dict(sym_lookback=0)):
+        with pytest.raises(ValueError):
+            Params(**bad)
+
+
+def test_sym_state_ok_and_cracks():
+    n = 70
+    up = _wave(n, 0.4)
+    dn = _wave(n, -0.4)
+    ctx, idx = _ctx_sym(up, up, up)
+    _spot_from(idx, 100.0 + dn)
+    i = n - 3
+    assert cg2.sym_state(ctx, 1, i, _p5()) == ("ok", False)                       # all three confirm, DXY the other way
+    ctx, idx = _ctx_sym(up, up, _wave(n, -0.4))                                     # YM fails
+    _spot_from(idx, 100.0 + dn)
+    assert cg2.sym_state(ctx, 1, i, _p5()) == ("crack", False)
+    ctx, idx = _ctx_sym(up, up, up)                                                 # DXY also rising: a crack
+    _spot_from(idx, 100.0 + up)
+    assert cg2.sym_state(ctx, 1, i, _p5()) == ("crack", False)
+    _spot_from(idx, 100.0 + dn)
+    ctx, idx = _ctx_sym(up, up, up)
+    assert cg2.sym_state(ctx, 1, i, _p5(sym_dxy="off"))[0] == "ok" and cg2.sym_state(ctx, 1, i, _p5(sym_dxy="off"))[1] is True
+    # ES without new extremes: no information
+    ctx, idx = _ctx_sym(dn, up, up)
+    assert cg2.sym_state(ctx, 1, i, _p5())[0] == "none"
+    # the mirror: lower lows everywhere (short side) with a rising DXY
+    ctx, idx = _ctx_sym(dn, dn, dn)
+    _spot_from(idx, 100.0 + up)
+    assert cg2.sym_state(ctx, -1, i, _p5()) == ("ok", False)
+    dxy.set_spot(None)
+
+
+def test_sym_state_no_dxy_before_2019_and_hooks():
+    n = 70
+    up = _wave(n, 0.4)
+    ctx, idx = _ctx_sym(up, up, up)
+    dxy.set_spot(pd.DataFrame({"close": [1.0, 1.0]}, index=pd.DatetimeIndex(["2030-01-01", "2030-01-02"]).tz_localize(NY)))     # spot starts after the window
+    st = cg2.sym_state(ctx, 1, n - 3, _p5())
+    assert st == ("ok", True)                                                         # DXY leg not available = off, tagged
+    o = dict(entry=1.0, lv_tags="")
+    assert cg2.order_ok(ctx, _sd(1), o, "AM", n - 3, _p5()) is None and "sym_ok" in o["lv_tags"] and "sym_no_dxy" in o["lv_tags"]
+    # crack + modes
+    ctx, idx = _ctx_sym(up, up, _wave(n, -0.4))
+    _spot_from(idx, 100.0 - 0.4 * np.arange(n))
+    i = n - 3
+    assert cg2.order_ok(ctx, _sd(1), dict(entry=1.0, lv_tags=""), "AM", i, _p5(sym_gate="skip")) == "x_cg_sym_crack"
+    assert cg2.scalp_now(ctx, _p5(sym_gate="scalp"), "AM", i, 1) == "cg_sym_crack" and cg2.scalp_now(ctx, _p5(sym_gate="tag"), "AM", i, 1) == ""
+    lvt = []
+    assert cg2.size_mult(ctx, _sd(1), i, _p5(sym_gate="scalp"), lvt) == 0.5 and lvt == ["size_sym_crack"]
+    assert cg2.size_mult(ctx, _sd(1), i, _p5(sym_gate="hold"), []) == 1.0
+    # block reversal: a short against a confirmed up-trend is dropped
+    ctx, idx = _ctx_sym(up, up, up)
+    _spot_from(idx, 100.0 - 0.4 * np.arange(n))
+    assert cg2.order_ok(ctx, _sd(-1), dict(entry=1.0, lv_tags=""), "AM", i, Params(sym_tf=5, sym_dxy="tf", sym_win=1, sym_crack_block_reversal=True)) == "x_cg_sym_trend"
+    dxy.set_spot(None)
+
+
+def test_sym_state_no_lookahead():
+    """Bars at / after the decision bar do not change the answer."""
+    n = 70
+    up = _wave(n, 0.4)
+    i = 60
+    base = None
+    for tail in (0.0, 500.0):
+        a = up.copy()
+        a[i + 1:] += tail
+        ctx, idx = _ctx_sym(a, a, a)
+        d = 100.0 - 0.4 * np.arange(n)
+        d[i + 1:] += tail
+        _spot_from(idx, d)
+        r = cg2.sym_state(ctx, 1, i, _p5())
+        base = r if base is None else base
+        assert r == base
+    dxy.set_spot(None)
+
+
+def test_dxy_bars_closed_only():
+    idx = pd.date_range("2023-05-01 09:00", periods=180, freq="1min", tz=NY)
+    dxy.set_spot(pd.DataFrame({"close": np.linspace(100, 101, 180)}, index=idx))
+    b = dxy.bars(5, "spot")
+    c = dxy.closed(b, pd.Timestamp("2023-05-01 09:10", tz=NY))
+    assert c.index[-1] == pd.Timestamp("2023-05-01 09:05", tz=NY) and (c.end <= pd.Timestamp("2023-05-01 09:10", tz=NY)).all()      # the 09:05 bar closes at 09:10
+    c2 = dxy.closed(b, pd.Timestamp("2023-05-01 09:09", tz=NY))
+    assert c2.index[-1] == pd.Timestamp("2023-05-01 09:00", tz=NY)
+    assert (b.high >= b[["open", "close"]].max(axis=1) - 1e-12).all() and (b.low <= b[["open", "close"]].min(axis=1) + 1e-12).all()
+    dxy.set_spot(None)
