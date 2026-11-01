@@ -3779,3 +3779,19 @@ Effect note: Q92 removes most trades (ES 5m Dec 2022 - Jan 2023: 0 trades vs 20 
 Fixes found while testing: `Params()` raised inert-switch warnings for OA1029 defaults whose parent switch is off (the inert checks now fire only when the switch leaves its default); `pd3_result="neutral"` wrote the table config without flip_pd3; the 066 TGIF exits switched the target hooks on every day; the 631 ladder turned the mohawk add on with the pyramid off (`es3._ES2_fracs` returns () when `adds` is empty).
 
 Review Q260 (bias_htf#2/7 round-2 edits in f8e921b): no look-ahead; the `htf_after_draw="reverse"` inert warning was wrong (it acts without objective_neutral) and is removed. Owner questions: `tier_stl_mode` default "last2" (the spec) vs the old two-of-four; `tug_required` now reads `tug_spec` with no switch back to `tug`.
+
+## tier_stl_mode / tug_required defaults by profit (review Q260, 2026-11-01)
+
+New switch `tug_mode` ("spec" default = column `tug_spec`; "post_raid" = the older `tug` column) next to `tug_required`; `tier_stl_mode` keeps "last2" / "two_of_four". Chosen by net profit, ES 5m 2019-2022 (databento, default bias reading; variants `TT-*`, runner `runs/tier_tug_cmp.py`, trades in `runs/mentorship/tier_tug2/`):
+
+| variant | trades | net $ | PF |
+|---|---|---|---|
+| defaults (gate off) | 169 | -5,803 | 0.82 |
+| gate, last2 | 171 | -5,602 | 0.83 |
+| gate, two_of_four | 172 | -5,712 | 0.82 |
+| gate + tug spec, last2 | 171 | -5,602 | 0.83 |
+| gate + tug post_raid, last2 | 171 | -5,602 | 0.83 |
+| gate + tug spec, two_of_four | 171 | -5,602 | 0.83 |
+| gate + tug post_raid, two_of_four | 172 | -5,712 | 0.82 |
+
+Result: defaults stay `tier_stl_mode="last2"` and `tug_mode="spec"` (each is the best or tied-best row). The differences are 1-2 trades and about $110, i.e. noise; the whole gate moves the window by +$200 (3 trades) and every row loses money. Note: the study base `htf_bias="combo"` (BH2_BASE) leaves only ~12 trades in 2019-22 and the gate never bound there (all seven variants identical); the `TT-*` variants use the default bias reading instead.

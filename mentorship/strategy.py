@@ -3338,6 +3338,7 @@ class Params:
     raid_profile_n: int = 2              # B6-consolidation-raid-profile (cc02_008 ~14:28): "the last two" daily ranges
     htf_bias_tf: str = "D"               # B5-monthly-first-hierarchy (cc04_003 ~14:07; cc04_002 ~29:38): "D" (built) / "W" (weekly draw) / "M" (monthly draw, else weekly, else none - monthly arrays are built)
     htf_bias_pools: bool = True         # ... [our interpretation, owner question] the monthly / weekly bias reading also counts the previous month's / week's high and low as draws (like htf.table's PWH / PWL); off = the literal spec (FVGs of that timeframe only)
+    tug_mode: str = "spec"               # X3-b6-tug-of-war-new-ground (review Q260): the tug reading tug_required uses - "spec" (column tug_spec = no new ground AND the same-side tier regime) / "post_raid" (the older post_raid column tug, no new ground AND lower ITHs)
     tier_stl_mode: str = "last2"         # B6-hrlr-lrlr-structure-regime (cc01_007 ~19:48): the short-term lows (highs) being run - "last2" (the spec: each of the last two was broken) / "two_of_four" [our interpretation, owner question]
     htf_rank_tf: bool = False            # ... array rungs at the same level are labelled with the highest timeframe and ranked M > W > D (table columns rk_<tf>_up / _dn; bh2e.rung_tf)
     flip_terminus: bool = False          # B17-hold-bias-most-recent-htf-setup (cc03_001 ~21:17; cc05_002 ~22:06): the flip state ends (0) when the draw it was set with trades, or after flip_max_days sessions
@@ -4080,7 +4081,7 @@ class Params:
         if self.news_cal not in ("csv", "legacy") or not set(self.gdp_tags) <= {"gdp_adv", "gdp_2nd", "gdp_3rd", "gdp_other"}:
             raise ValueError("news_cal: 'csv' / 'legacy'; gdp_tags a subset of ('gdp_adv', 'gdp_2nd', 'gdp_3rd', 'gdp_other')")
         for name, ok in (("pd3_result", ("flip", "neutral")), ("ifvg_targets_after", ("cisd", "mss")), ("qshift_broken", ("leg", "literal")), ("consol_dir", ("off", "first_expansion", "prior_strongest")), ("htf_after_draw", ("neutral", "reverse")),
-                         ("htf_bias_tf", ("D", "W", "M")), ("tier_stl_mode", ("last2", "two_of_four"))):
+                         ("htf_bias_tf", ("D", "W", "M")), ("tier_stl_mode", ("last2", "two_of_four")), ("tug_mode", ("spec", "post_raid"))):
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
         if (not 0 < self.scalp_week_risk <= 1 or self.q_window_size <= 0 or not 0 < self.soft_carry_risk <= 1 or not 0 < self.iof_w_risk <= 1 or self.q_window_lo < 0 or self.q_window_hi < self.q_window_lo
@@ -4224,6 +4225,8 @@ class Params:
         # (review Q260: htf_after_draw='reverse' is NOT inert without objective_neutral - it still rewrites the flip column and reverses the PM lock - no warning)
         if nd("htf_bias_pools") and self.htf_bias_tf == "D":
             inert.append("htf_bias_pools shapes the monthly / weekly bias reading: set htf_bias_tf to 'W' or 'M'")
+        if self.tug_mode != "spec" and not self.tug_required:
+            inert.append("tug_mode picks the reading tug_required uses: set tug_required")
         if self.tier_stl_mode != "last2" and not self.tier_regime_gate:
             inert.append("tier_stl_mode acts on the tier regime: set tier_regime_gate")
         if (self.pause_on_hold or self.pd_needs_iof or self.fall_low_bias or self.htf_bias in ("week_pre", "week_check", "wd_check")) and self.htf_bias == "off":     # caption-gap pass bias_htf#3/7: the documented couplings

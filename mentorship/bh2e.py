@@ -63,6 +63,11 @@ def wk_unset(row) -> bool:
     return bool(_f(row, "wk_draw_up") != _f(row, "wk_draw_up") and _f(row, "wk_draw_dn") != _f(row, "wk_draw_dn"))
 
 
+def _tug_ok(p, row, reg) -> bool:
+    """X3-b6-tug-of-war-new-ground: the tug-of-war reading equals the regime. tug_mode 'spec' = column tug_spec (no new ground AND the same-side tier regime), 'post_raid' = the older post_raid column tug."""
+    return _n(row, "tug" if p.tug_mode == "post_raid" else "tug_spec") == reg
+
+
 def want_on(p) -> bool:
     return bool(p.qshift_bias or p.dsmt_bias or p.raid_profile_bias or p.eq_tiebreak)
 
@@ -396,9 +401,9 @@ def order_ok(ctx, sd, o: dict, session: str, i: int, p):
             reg = _n(row, "tier_regime")
             if reg:
                 sw("tier_regime_gate")
-                if p.tug_required and _n(row, "tug_spec") == reg:
+                if p.tug_required and _tug_ok(p, row, reg):
                     sw("tug_required")
-            if reg == -sd.sign and (not p.tug_required or _n(row, "tug_spec") == reg):
+            if reg == -sd.sign and (not p.tug_required or _tug_ok(p, row, reg)):
                 ith = _f(row, "tier_ith")
                 if ith == ith and o["t1"] > sd.x(ith) + 1e-9:
                     return "x_bh2_tier_regime"
@@ -556,7 +561,7 @@ def targets_post(ctx, sd, i: int, p, above: float, lv: list) -> list:
         return lv
     if p.tier_regime_gate:
         reg = _n(row, "tier_regime")
-        if reg == -sd.sign and (not p.tug_required or _n(row, "tug_spec") == reg):
+        if reg == -sd.sign and (not p.tug_required or _tug_ok(p, row, reg)):
             ith = _f(row, "tier_ith")
             if ith == ith:
                 sw("tier_regime_gate")
@@ -652,7 +657,7 @@ def lock_post(ctx, p, row, t_lock: int, session: str, kl: int, px: float, lock: 
         # item 109 / 135
         if p.tier_regime_gate:
             reg = _n(row, "tier_regime")
-            if reg and (not p.tug_required or _n(row, "tug_spec") == reg):
+            if reg and (not p.tug_required or _tug_ok(p, row, reg)):
                 if B1._force(lock, reg, px, mn, "tier_regime"):
                     lock.setdefault("bh2", []).append("tier_regime")
                     sw("tier_regime_gate")
