@@ -1,0 +1,15 @@
+variant,trades,d_trades,usd_1k,d_usd,avg_R,win,exact_copy,same_entries,changed
+CG3d-smt_partial_a,36,0,-12855,-10237,-0.357,0.306,False,True,0
+TT-gate_two_of_four,38,2,-4911,-2293,-0.129,0.289,False,False,2
+TT-tug_post_raid_two_of_four,38,2,-4911,-2293,-0.129,0.289,False,False,2
+CG3b-ndog_min0,35,-1,-4635,-2017,-0.132,0.286,False,False,1
+CG3c-sick_sister_new_anyday,2,-34,-604,2014,-0.302,0.5,False,False,34
+CG3c-sick_sister_old,4,-32,-4275,-1657,-1.069,0.0,False,False,34
+CG3c-sick_sister_new,1,-35,-1044,1574,-1.044,0.0,False,False,35
+TT-gate_last2,37,1,-3751,-1133,-0.101,0.297,False,False,1
+TT-tug_spec_last2,37,1,-3751,-1133,-0.101,0.297,False,False,1
+TT-tug_post_raid_last2,37,1,-3751,-1133,-0.101,0.297,False,False,1
+TT-tug_spec_two_of_four,37,1,-3751,-1133,-0.101,0.297,False,False,1
+CG3b-ndog_5d,35,-1,-1929,689,-0.055,0.314,False,False,1
+CG3b-ndog_ce_filter,34,-2,-2590,28,-0.076,0.294,False,False,2
+CG3b-ndog_16h,36,0,-2618,0,-0.073,0.306,True,True,0
