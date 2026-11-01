@@ -252,7 +252,7 @@ def _run_cut(df, p, kw, cut_t=None):
 
 
 @pytest.mark.skipif(not ES, reason="no ES / NQ / YM data")
-@pytest.mark.parametrize("name", ["gaps", "sick", "smt", "sym", "dxy"])
+@pytest.mark.parametrize("name", ["gaps", "sick", "smt", "sym", "dxy", "dxy1m"])
 def test_look_ahead_es(name):
     es, nq, ym = _es3()
     kw = dict(partner=nq, partner2=ym)
@@ -260,14 +260,20 @@ def test_look_ahead_es(name):
             "sick": dict(sick_sister=True, sick_consol_only=False),
             "sym": dict(sym_gate="scalp", sym_crack_block_reversal=True),
             "dxy": dict(dxy_ts_raid="filter", dxy_daily_mt="scalp", dxy_end_day="block", week_done_on_draw="skip", week_done_levels=("pwh", "pwl", "dxy_pwh", "dxy_pwl", "dxy_obj")),
+            "dxy1m": dict(dxy_states="filter", dxy_session_gate="filter", dxy_eq_gate="block", dxy_range_trigger="gate", dxy_pool_run="cap", dxy_smt="qualify", dxy_intrade="bank",
+                          dxy_intrade_tfs=("5m",), dxy_unicorn="qualify", dxy_target_partial="partial", dxy_nonconf_exit="any", sym_gate="scalp", sym_dxy="tf", sym_tf=5, dxy_htf_src="spot"),
             "smt": dict(smt_partial="both", smt_partial_b_bars=2, smt_partial_b_near=0.6, smt_bank_min_r=0.1)}
     from mentorship import study
     p = Params(**{**study.DEC_BASE, **sets[name]})
+    if name == "dxy1m":                                   # a stand-in spot DXY (the real file is not on every machine): the inverse of ES, 1-minute, covering the whole window
+        one = pd.date_range(es.index[0], es.index[-1] + pd.Timedelta(minutes=5), freq="1min")
+        dxy.set_spot(pd.DataFrame({"close": 100.0 - 0.01 * es.close.reindex(one, method="ffill").values}, index=one))
     full = _run_cut(es, p, kw)
     base = _run_cut(es, replace(p, **{k: getattr(Params(), k) for k in sets[name]}), kw)
     assert len(base)
     assert len(full) or name == "sick"          # (sick_sister alone trades one index only, in the deep discount: a short window may hold none; sick_refs_053 has its own cut test)
     if not len(full):
+        dxy.set_spot(None)
         return
     cuts = sorted(set(full.entry_time.iloc[::7]) | set(full.exit_time.dropna().iloc[::7]))
     for cut_t in cuts[:12]:
@@ -279,6 +285,7 @@ def test_look_ahead_es(name):
         a = full[done][EXIT].reset_index(drop=True)
         b = part[part.entry_time.isin(full[done].entry_time)][EXIT].reset_index(drop=True)
         pd.testing.assert_frame_equal(a, b, check_dtype=False)
+    dxy.set_spot(None)
 
 
 # --- review fixes (second-agent review of 3b-3d) ---------------------------------------------------------------------------------------
@@ -737,4 +744,232 @@ def test_sym_swing_dxy_confirms():
     assert cg3.dxy_confirms(ctx, _sd(-1), _at(ctx, "09:25"), p) is False
     dxy.set_spot(_spot_day("2026-06-01", [("00:00", 100.0), ("16:00", 100.0)]))
     assert cg3.dxy_confirms(_ctx_day(), _sd(1), _at(ctx, "09:25"), p) is True                    # no data: the extra condition is not applied
+    dxy.set_spot(None)
+
+
+# --- DXY intraday management / SMT rules (cg4.py): items 2, 3, 7, 8, 9, 10 -----------------------------------------------------------------
+
+from mentorship import cg4
+
+
+def test_cg4_params_off_by_default():
+    p = Params()
+    assert (p.dxy_pool_run, p.dxy_smt, p.dxy_intrade, p.dxy_unicorn, p.dxy_target_partial, p.dxy_nonconf_exit) == ("off",) * 6
+    assert (p.dxy_expand_min, p.dxy_expand_bars, p.dxy_intrade_frac, p.dxy_intrade_sister_frac, p.dxy_target_frac) == (0.05, 3, 0.5, 0.8, 0.5)
+    for bad in (dict(dxy_pool_run="x"), dict(dxy_smt="x"), dict(dxy_intrade="x"), dict(dxy_unicorn="x"), dict(dxy_target_partial="x"), dict(dxy_nonconf_exit="x"),
+                dict(dxy_intrade_tfs=("2m",)), dict(dxy_intrade_frac=1.5)):
+        with pytest.raises(ValueError):
+            Params(**bad)
+    assert not cg4.active(Params()) and cg4.active(Params(dxy_intrade="bank"))
+
+
+def _closes_day(day, base_anchors, extra=None):
+    """A 1-minute close frame for `day` from 00:00 to 16:00: anchors for the day, or explicit per-minute values starting at a clock time (extra = (hh:mm, [closes]))."""
+    df = _spot_day(day, base_anchors)
+    if extra:
+        t0 = pd.Timestamp(f"{day} {extra[0]}", tz=NY)
+        idx = pd.date_range(t0, periods=len(extra[1]), freq="1min")
+        df.loc[idx, "close"] = np.asarray(extra[1], float)
+    return df
+
+
+def _short_fixture(es_h, nq_h=None, ym_h=None, left=10, exits=()):
+    """A short ES trade (side space: favorable = up) filled at bar 0 of the 09:30 grid; es_h are the side-space highs."""
+    n = len(es_h)
+    idx = pd.date_range(f"{DAY} 09:30", periods=n, freq="5min", tz=NY)
+    mk = lambda a: SimpleNamespace(start=0, idx=idx, h=np.asarray(a, float), l=np.asarray(a, float) - 1.0)
+    ctx = SimpleNamespace(idx=idx, t=(idx.hour * 60 + idx.minute).values, tf=5, day=pd.Timestamp(DAY).date(), start=0)
+    if nq_h is not None:
+        ctx.pside = (mk(nq_h), {-1: mk(nq_h)}, pd.Series(np.arange(n), index=idx))
+        ctx.partner2 = (mk(ym_h), {-1: mk(ym_h)}, pd.Series(np.arange(n), index=idx))
+    sd = SimpleNamespace(sign=-1, h=np.asarray(es_h, float), l=np.asarray(es_h, float) - 1.0, c=np.asarray(es_h, float) - 0.2, x=lambda v: v)
+    pos = dict(fill_i=0, basis=100.0, n=1, left=left, k=0, levels=[103.0, 105.0, 108.0], level_kinds=["array"] * 3, t2=108.0, final_T=True, t1_done=False, t1=103.0)
+    tr = SimpleNamespace(entry=100.0, stop=95.0, exits=list(exits), lv_tags="")
+    return ctx, sd, pos, tr, idx
+
+
+def _dxy_flat_after_swing():
+    """DXY (spot) 07:00-09:55: a swing high near 08:00, then lower highs: the dollar does not confirm a new ES low (for a short Y = the high)."""
+    return _spot_day(DAY, [("00:00", 100.0), ("07:00", 100.0), ("08:00", 100.6), ("08:30", 100.3), ("09:00", 100.5), ("10:00", 100.4), ("16:00", 100.4)])
+
+
+def _dxy_confirming():
+    return _spot_day(DAY, [("00:00", 100.0), ("07:00", 100.0), ("08:00", 100.6), ("08:30", 100.3), ("09:00", 100.5), ("09:40", 100.9), ("16:00", 100.9)])
+
+
+def test_dxy_unconfirmed():
+    dxy.set_spot(_dxy_flat_after_swing())
+    ctx = _ctx_day()
+    i = _at(ctx, "09:50")
+    assert cg4.dxy_unconfirmed(ctx, -1, i, 5, pd.Timestamp(f"{DAY} 09:35", tz=NY)) is True                     # no new Y high after the last swing high
+    dxy.set_spot(_dxy_confirming())
+    ctx = _ctx_day()
+    assert cg4.dxy_unconfirmed(ctx, -1, i, 5, pd.Timestamp(f"{DAY} 09:35", tz=NY)) is False                    # the dollar made a higher high: it confirms
+    dxy.set_spot(_spot_day("2026-06-01", [("00:00", 100.0), ("16:00", 100.0)]))
+    assert cg4.dxy_unconfirmed(_ctx_day(), -1, i, 5, pd.Timestamp(f"{DAY} 09:35", tz=NY)) is None              # no data
+    dxy.set_spot(None)
+
+
+def test_dxy_intrade_bank_and_nonconf_exit():
+    es = [100, 101, 102, 104, 103, 103.5, 104.5, 104.4, 104.2, 104.3, 104.1, 105.5]          # bar 11 (10:25) = a new high since the fill
+    dxy.set_spot(_dxy_flat_after_swing())
+    ctx, sd, pos, tr, idx = _short_fixture(es)
+    ctx.day = pd.Timestamp(DAY).date()
+    p = _p4(dxy_intrade="bank", dxy_intrade_tfs=("5m",))
+    i = 11
+    cg4.manage(ctx, sd, pos, tr, i, idx[i], p)
+    assert [e[3] for e in tr.exits] == ["dxy_intrade"] and tr.exits[0][2] == 5 and pos["left"] == 5               # half of what was left, once
+    cg4.manage(ctx, sd, pos, tr, i, idx[i], p)
+    assert len(tr.exits) == 1
+    # a sister index diverges (makes the new extreme where ES does not): 80 %
+    es2 = es[:-1] + [104.2]
+    nq = list(es2[:-1]) + [106.0]
+    ctx, sd, pos, tr, idx = _short_fixture(es2, nq, nq)
+    cg4.manage(ctx, sd, pos, tr, i, idx[i], p)
+    assert tr.exits and tr.exits[0][2] == 8
+    # the dollar confirms: nothing
+    dxy.set_spot(_dxy_confirming())
+    ctx, sd, pos, tr, idx = _short_fixture(es)
+    cg4.manage(ctx, sd, pos, tr, i, idx[i], p)
+    assert not tr.exits
+    # the non-confirmation exit: after a partial the rest closes (staged); before it only with "any"
+    dxy.set_spot(_dxy_flat_after_swing())
+    ctx, sd, pos, tr, idx = _short_fixture(es, left=5, exits=[(idx[5], 103.0, 5, "t1")])
+    cg4.manage(ctx, sd, pos, tr, i, idx[i], _p4(dxy_nonconf_exit="after_partial"))
+    assert tr.exits[-1][3] == "dxy_nonconf" and pos["left"] == 0
+    ctx, sd, pos, tr, idx = _short_fixture(es)
+    cg4.manage(ctx, sd, pos, tr, i, idx[i], _p4(dxy_nonconf_exit="after_partial"))
+    assert not tr.exits                                                    # no partial yet: nothing
+    cg4.manage(ctx, sd, pos, tr, i, idx[i], _p4(dxy_nonconf_exit="any"))
+    assert tr.exits and tr.exits[-1][3] == "dxy_nonconf"
+    # long trades are not touched by the in-trade bank unless dxy_intrade_long
+    ctx, sd, pos, tr, idx = _short_fixture(es)
+    sd.sign = 1
+    cg4.manage(ctx, sd, pos, tr, i, idx[i], p)
+    assert not tr.exits
+    dxy.set_spot(None)
+
+
+def test_dxy_manage_no_lookahead():
+    es = [100, 101, 102, 104, 103, 103.5, 104.5, 104.4, 104.2, 104.3, 104.1, 105.5]
+    out = []
+    for tail in (100.4, 105.0):                                            # DXY closes after the decision bar differ
+        d = _spot_day(DAY, [("00:00", 100.0), ("07:00", 100.0), ("08:00", 100.6), ("08:30", 100.3), ("09:00", 100.5), ("10:30", 100.4), ("10:31", tail), ("16:00", tail)])
+        dxy.set_spot(d)
+        ctx, sd, pos, tr, idx = _short_fixture(es)
+        cg4.manage(ctx, sd, pos, tr, 11, idx[11], _p4(dxy_intrade="bank", dxy_intrade_tfs=("5m",)))
+        out.append(list(tr.exits))
+    assert out[0] == out[1] and out[0]
+    dxy.set_spot(None)
+
+
+def test_dxy_pool_run():
+    # ES long (sd.sign +1); the dollar's pool = its latest 5m swing low under price at the fill; failed run = pierce < 0.05 and a close back above
+    def run(path):
+        dxy.set_spot(_spot_day(DAY, path))
+        ctx = _ctx_day()
+        n = 40
+        idx = ctx.idx[_at(ctx, "09:30"):_at(ctx, "09:30") + n]
+        ctx2 = SimpleNamespace(idx=ctx.idx, t=ctx.t, tf=5, day=ctx.day, start=0)
+        f = _at(ctx, "09:35")
+        h = np.linspace(100, 110, len(ctx.idx))
+        sd = SimpleNamespace(sign=1, h=h, l=h - 1.0, c=h - 0.2, x=lambda v: v)
+        pos = dict(fill_i=f, basis=100.0, n=1, left=10, k=0, levels=[103.0, 105.0, 108.0], level_kinds=["array"] * 3, t2=108.0, final_T=True, t1_done=False, t1=103.0)
+        tr = SimpleNamespace(entry=100.0, stop=95.0, exits=[], lv_tags="")
+        for i in range(f + 1, f + 14):
+            cg4.manage(ctx2, sd, pos, tr, i, ctx.idx[i], _p4(dxy_pool_run="cap"))
+        return pos
+    base = [("00:00", 101.0), ("07:00", 101.0), ("08:00", 100.5), ("08:30", 100.8), ("09:00", 101.0)]
+    failed = run(base + [("09:35", 101.0), ("09:40", 100.47), ("09:50", 100.9), ("16:00", 100.9)])           # pierces 100.5 by 0.03 and closes back above
+    assert failed["levels"] == [103.0] and failed["t2"] == 103.0 and failed["final_T"] is False
+    confirmed = run(base + [("09:35", 101.0), ("09:40", 100.3), ("10:00", 100.2), ("16:00", 100.2)])         # runs 0.2 through and stays under
+    assert confirmed["levels"] == [103.0, 105.0, 108.0]
+    dxy.set_spot(None)
+
+
+def test_cap_next_rung_edge():
+    pos = dict(k=0, levels=[103.0], t2=None, final_T=True)
+    assert cg4.cap_next_rung(pos) is False                                 # nothing beyond the next rung to drop
+    pos = dict(k=1, levels=[103.0, 105.0, 108.0], t2=108.0, final_T=True, level_kinds=["a", "b", "c"])
+    assert cg4.cap_next_rung(pos) and pos["levels"] == [103.0, 105.0] and pos["t2"] == 105.0 and pos["level_kinds"] == ["a", "b"]
+
+
+def test_dxy_target_partial(monkeypatch):
+    dxy.set_spot(_spot_day(DAY, [("00:00", 100.0), ("08:00", 100.0), ("09:50", 100.0), ("10:30", 101.3), ("11:30", 102.4), ("16:00", 102.4)]))
+    monkeypatch.setattr(cg4, "_ladder_levels", lambda ctx, sg, p: [101.0, 102.0, 103.0])
+    ctx = _ctx_day()
+    n = len(ctx.idx)
+    f = _at(ctx, "09:35")
+    h = np.linspace(100, 90, n)
+    sd = SimpleNamespace(sign=-1, h=h, l=h - 1.0, c=h - 0.2, x=lambda v: v)
+    pos = dict(fill_i=f, basis=100.0, n=1, left=8, k=0, levels=[103.0], level_kinds=["a"], t2=None, final_T=True, t1_done=False, t1=103.0)
+    tr = SimpleNamespace(entry=100.0, stop=95.0, exits=[], lv_tags="")
+    p = _p4(dxy_target_partial="partial", dxy_htf_src="spot")
+    for t in ("10:00", "10:40", "11:00", "11:40"):
+        i = _at(ctx, t)
+        cg4.manage(ctx, sd, pos, tr, i, ctx.idx[i], p)
+    assert [e[3] for e in tr.exits] == ["dxy_target", "dxy_target"] and [e[2] for e in tr.exits] == [4, 2] and pos["dxy_ladder_n"] == 2        # 101.0 then 102.0 reached; half of what was left each time
+    dxy.set_spot(None)
+
+
+def test_dxy_smt():
+    # ES long after a new low at bar j1; the previous swing low at j0; the dollar's high near j1 is not above its high near j0 = SMT
+    n = 40
+    idx = pd.date_range(f"{DAY} 09:30", periods=n, freq="1min", tz=NY)
+    l = np.full(n, 100.0)
+    l[8], l[20] = 99.0, 98.0
+    l[7], l[9], l[19], l[21] = 99.5, 99.5, 98.5, 98.5
+    h = l + 0.5
+    ctx = SimpleNamespace(idx=idx, t=(idx.hour * 60 + idx.minute).values, tf=1, day=pd.Timestamp(DAY).date(), start=0)
+    sd = SimpleNamespace(sign=1, h=h, l=l, c=l + 0.2, x=lambda v: v)
+    sw = dict(ext_i=20, ext=98.0)
+    p = _p4(dxy_smt="qualify")
+    dxy.set_spot(_spot_day(DAY, [("00:00", 100.0), ("09:38", 100.4), ("09:50", 100.2), ("16:00", 100.2)]))        # DXY high 100.4 near the first low, 100.2 near the new low
+    assert cg4.dxy_smt(ctx, sd, 25, sw, p) is True
+    dxy.set_spot(_spot_day(DAY, [("00:00", 100.0), ("09:38", 100.2), ("09:50", 100.6), ("16:00", 100.6)]))        # the dollar made a higher high: no SMT
+    assert cg4.dxy_smt(ctx, sd, 25, sw, p) is False
+    lvt = []
+    assert cg4.entry_extra(ctx, sd, sw, 25, p, lvt) == (0, None) and lvt == []
+    dxy.set_spot(_spot_day(DAY, [("00:00", 100.0), ("09:38", 100.4), ("09:50", 100.2), ("16:00", 100.2)]))
+    assert cg4.entry_extra(ctx, sd, sw, 25, p, lvt) == (1, None) and lvt == ["smt_dxy"]
+    assert cg4.entry_extra(ctx, sd, sw, 25, _p4(dxy_smt="tag"), []) == (0, None)
+    dxy.set_spot(_spot_day(DAY, [("00:00", 100.0), ("09:38", 100.2), ("09:50", 100.6), ("16:00", 100.6)]))
+    assert cg4.entry_extra(ctx, sd, sw, 25, _p4(dxy_smt="need"), []) == (0, "x_no_dxy_smt")
+    # look-ahead: the answer at bar 25 does not see DXY after it
+    out = []
+    for tail in (100.2, 105.0):
+        dxy.set_spot(_spot_day(DAY, [("00:00", 100.0), ("09:38", 100.4), ("09:50", 100.2), ("09:55", 100.2), ("09:56", tail), ("16:00", tail)]))
+        out.append(cg4.dxy_smt(ctx, sd, 25, sw, p))
+    assert out[0] == out[1] is True
+    dxy.set_spot(None)
+
+
+def _unicorn_closes(kill=False):
+    pre = [100.0, 100.3, 100.6, 100.9, 101.0, 100.8, 100.5, 100.3, 100.2, 100.4, 100.7, 101.2, 101.1, 100.9, 100.5, 100.1, 100.15, 100.25,
+           100.29, 100.28, 100.26, 100.24]
+    if kill:
+        pre += [100.27, 100.35]
+    return pre
+
+
+def test_dxy_unicorn():
+    dxy.set_spot(_closes_day(DAY, [("00:00", 100.0), ("09:00", 100.0), ("09:29", 100.0)], ("09:30", _unicorn_closes())))
+    ctx = _ctx_day()
+    sd = SimpleNamespace(sign=1, x=lambda v: v)
+    i = _at(ctx, "09:55")
+    u = cg4.dxy_unicorn(ctx, sd, i, _p4())
+    assert u is not None and not u["killed"] and abs(u["fvg_high"] - 100.28) < 1e-9 and abs(u["fvg_low"] - 100.26) < 1e-9
+    assert cg4.unicorn_ok(ctx, sd, i, _p4()) is True
+    lvt = []
+    assert cg4.entry_extra(ctx, sd, None, i, _p4(dxy_unicorn="qualify"), lvt) == (1, None) and lvt == ["dxy_unicorn"]
+    dxy.set_spot(_closes_day(DAY, [("00:00", 100.0), ("09:00", 100.0), ("09:29", 100.0)], ("09:30", _unicorn_closes(kill=True))))
+    ctx = _ctx_day()
+    assert cg4.dxy_unicorn(ctx, sd, _at(ctx, "09:55"), _p4())["killed"] is True
+    assert cg4.entry_extra(ctx, sd, None, _at(ctx, "09:55"), _p4(dxy_unicorn="need"), []) == (0, "x_no_dxy_unicorn")
+    # the vault exit closes a filled long tagged dxy_unicorn
+    pos = dict(left=4)
+    tr = SimpleNamespace(exits=[], lv_tags="a|dxy_unicorn")
+    sd2 = SimpleNamespace(sign=1, c=np.full(len(ctx.idx), 100.0), x=lambda v: v)
+    cg4.unicorn_exit(ctx, sd2, pos, tr, _at(ctx, "09:55"), ctx.idx[_at(ctx, "09:55")], _p4(dxy_unicorn="qualify"))
+    assert tr.exits and tr.exits[0][3] == "dxy_unicorn" and pos["left"] == 0
     dxy.set_spot(None)

@@ -3561,6 +3561,25 @@ class Params:
     dxy_range_trigger: str = "off"       # 042 ~19:00, ~23:30, ~41:41: an AM ES short waits for DXY to trade above its 09:15-09:30 range high and to hold its nearest bullish 1m FVG after 09:30 (a 1m body close under it cancels); the long mirrors. "tag" / "gate" / "break_only" (no FVG hold)
     dxy_range_win: tuple = ("09:15", "09:30")
     sym_swing_dxy: bool = False          # 032 ~34:51 (extends sym_swing_ts): the counter trade is dropped only when DXY also made the opposite session extreme (5m, within sym_win bars)
+    # DXY intraday management and SMT rules (cg4.py; dxy_intraday_spec_2026-10-31.md items 2, 3, 7, 8, 9, 10) - need the 1-minute spot file (2019-2025), otherwise no information; all off
+    dxy_pool_run: str = "off"            # 036 ~59:42; 045 ~13:01, ~22:01: the nearest DXY 5m pool at the ES fill must be run (>= dxy_expand_min through, no 5m close back within dxy_expand_bars); a failed run ends the ladder at its next rung (no runner). "tag" / "cap" / "hold_gate" (= cap; the un-trim on a later confirmed run is not built)
+    dxy_expand_min: float = 0.05         # [our interpretation: 045 calls 0.01 "very small" and wants 0.10-0.15] DXY points
+    dxy_expand_bars: int = 3             # [our interpretation of "no interest in going back above it"] 5m bars
+    dxy_smt: str = "off"                 # 031 ~48:51, ~58:28; 032 ~34:21; 035 ~1:06:35: ES makes a new extreme the dollar does not confirm (its twin extreme around the ES swing is not beyond the one at the previous ES swing). "tag" / "qualify" (counts as one more SMT) / "need" (the entry needs it); "no_press" is not built
+    dxy_smt_tf: str = "1m"               # "1m" / "5m" DXY bars
+    dxy_smt_win: int = 2                 # [our interpretation] ES bars around each ES swing bar in which the DXY twin extreme is taken
+    dxy_intrade: str = "off"             # 037 ~32:37: after the fill ES makes a new extreme and the dollar has not confirmed on dxy_intrade_tfs = bank part (D3: before the first partial; after it dxy_nonconf_exit closes the rest). "tag" / "bank"
+    dxy_intrade_frac: float = 0.5        # [our interpretation; ICT gives no size]
+    dxy_intrade_sister_frac: float = 0.8 # [our interpretation, the 80 % of smt_bank_against_frac from 037 ~32:56] when a sister index also diverges (makes the new extreme where ES has not)
+    dxy_intrade_tfs: tuple = ("5m", "15m", "1h")
+    dxy_intrade_long: bool = False       # the long mirror is inferred only (037 shows a short)
+    dxy_unicorn: str = "off"             # 037 ~44:40-47:41: the DXY 1m bearish breaker with a bearish FVG inside it, price retracing up into the overlap = the dollar's last line of defence (ES long qualified; the short mirrors). "tag" / "qualify" / "need"
+    dxy_unicorn_exit: bool = True        # a DXY 1m close above the FVG high closes the filled long (037 ~49:48)
+    dxy_unicorn_kill: str = "fvg_high"   # "fvg_high" (built) / "breaker_high" (not built: reads as fvg_high)
+    dxy_target_partial: str = "off"      # 035 ~24:19: each time the dollar trades into the next level of its daily HTF ladder (dxy_ladder) take dxy_target_frac of an ES short. "tag" / "partial"
+    dxy_target_frac: float = 0.5         # [our interpretation; ICT gives no size]
+    dxy_ladder: tuple = ("rb", "rb_ce", "wick", "fvg")
+    dxy_nonconf_exit: str = "off"        # 036 ~1:27:18; 045 ~1:12:00: after the first partial ES makes a new extreme and the dollar's 5m has not confirmed = close the rest. "tag" / "after_partial" (D3) / "any" (also before any partial). fx_nonconf_exit (EURUSD / GBPUSD) is not built: no pair data
     # coverage gap 3c (package 3c): sick sister, ICT's exact version (acts only with sick_sister=True; setups.sick_sister / cg1.py)
     sick_count_at: int = 480             # 053 ~3:47 ("you have the high broken here at 8 am"): the minute of day of the AM count; 570 = the built 09:30 count (the PM count stays 13:30)
     sick_refs: str = "053"               # 053 ~3:47: "053" = only the prior session's afternoon high (the prior PM range's high) and the most recent overnight swing high (the latest 3-candle swing high confirmed before the count, broken = a later bar traded above it) [our interpretation of "overnight swing high"]; "built" = PDH 1-3, the overnight high, London, prior PM
@@ -4135,6 +4154,14 @@ class Params:
                 or self.dxy_range_from not in ("swings", "0830", "0930") or self.dxy_range_trigger not in ("off", "tag", "gate", "break_only") or len(self.dxy_range_win) != 2):
             raise ValueError("DXY intraday: dxy_states off / tag / filter / soft, dxy_session_gate off / tag / filter / bias, dxy_eq_gate off / tag / block / block_short_model, dxy_range_from swings / 0830 / 0930, "
                              "dxy_range_trigger off / tag / gate / break_only, dxy_range_win (start, end)")
+        if (self.dxy_pool_run not in ("off", "tag", "cap", "hold_gate") or self.dxy_smt not in ("off", "tag", "qualify", "need") or self.dxy_smt_tf not in ("1m", "5m")
+                or self.dxy_intrade not in ("off", "tag", "bank") or self.dxy_unicorn not in ("off", "tag", "qualify", "need") or self.dxy_unicorn_kill not in ("fvg_high", "breaker_high")
+                or self.dxy_target_partial not in ("off", "tag", "partial") or self.dxy_nonconf_exit not in ("off", "tag", "after_partial", "any")
+                or set(self.dxy_intrade_tfs) - {"1m", "5m", "15m", "1h"} or not self.dxy_intrade_tfs or set(self.dxy_ladder) - {"rb", "rb_ce", "wick", "fvg"}
+                or self.dxy_expand_min < 0 or self.dxy_expand_bars < 1 or self.dxy_smt_win < 0 or not 0 <= self.dxy_intrade_frac <= 1 or not 0 <= self.dxy_intrade_sister_frac <= 1
+                or not 0 <= self.dxy_target_frac <= 1):
+            raise ValueError("DXY management: dxy_pool_run off / tag / cap / hold_gate, dxy_smt off / tag / qualify / need, dxy_smt_tf 1m / 5m, dxy_intrade off / tag / bank, dxy_unicorn off / tag / qualify / need, "
+                             "dxy_target_partial off / tag / partial, dxy_nonconf_exit off / tag / after_partial / any, tfs a subset of (1m, 5m, 15m, 1h), fractions in [0, 1]")
         if self.sick_refs not in ("053", "built") or not 0 <= self.sick_count_at < 1440:
             raise ValueError("coverage gap 3c: sick_refs '053' / 'built', 0 <= sick_count_at < 1440")
         if self.ndog_life not in ("friday", "16h", "5d") or self.ndog_min_pts < 0:
@@ -7106,6 +7133,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 tr.exits.append((ts, sd.x(c), pos["left"], "htf_heavy")); pos["left"] = 0   # #7 Ep02 30m
             if pos["left"] and (p.smt_bank or p.smt_bank_against_frac or p.adr_early or p.wick_read != "off" or p.trail_breakaway):
                 _TP.manage(ctx, sd, pos, tr, i, ts, p, pctx, psides, ppos)      # X3g / L16 / A23 / A6 partials
+            if pos["left"] and _CG4.active(p):
+                _CG4.manage(ctx, sd, pos, tr, i, ts, p)                          # DXY intraday rules items 2, 7, 8 (exit), 9, 10
             if pos["left"] and _CG1.partial_active(ctx, p):
                 _CG1.smt_partial(ctx, sd, pos, tr, i, ts, p)                    # coverage gap 3d: the SMT partials with YM / NQ (smt_bank is skipped while this is on)
             if pos["left"] and p.second_break_partial:
@@ -10389,6 +10418,12 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
             _cap = min(entry + (p.chop_scalp_pts if (p.chop_scalp_pts > 0 and sl and p.sloppy_mode == "scalp") else (p.fri_t1_pts if (dws == "fri_one_sided" or "fri_one_sided" in _dsc) else p.sloppy_scalp_pts)) * p.es_pt, lv[0])
         lv, kinds, scalp, final_T = [_cap], [kinds[0]], True, False
     smt_n = int(sw["smt"] is True) + int(sw.get("smt2") is True)
+    if p.dxy_smt != "off" or p.dxy_unicorn != "off":
+        extra_, key_ = _CG4.entry_extra(ctx, sd, sw, i, p, lvt)          # DXY intraday rules items 3 and 8: the dollar's SMT / unicorn
+        if key_:
+            _f(key_)
+            return None
+        smt_n += extra_
     if smt_n < p.smt_min:
         _f("x_no_smt")
         return None
@@ -10646,6 +10681,7 @@ from . import dwc2 as _DWC2  # noqa: E402  (caption-gap pass, day_week_context#2
 from . import dwc3 as _DWC3  # noqa: E402  (caption-gap pass, day_week_context#3/3: engine glue)
 from . import cg1 as _CG1  # noqa: E402  (coverage gaps 3b-3d: engine glue)
 from . import cg3 as _CG3  # noqa: E402  (DXY intraday entry rules)
+from . import cg4 as _CG4  # noqa: E402  (DXY intraday management / SMT rules)
 INDEX_SYMBOLS = _DWC3.INDEX_SYMBOLS   # OT-stocks-swing-only: the labels that are not individual stocks (the spec lists eight; the set is wider - owner question)
 from . import setups as _SM   # noqa: E402  (setups_models package; imports this module back)
 from . import entries as _EN  # noqa: E402  (entries_stops_sizing package; imports this module back)

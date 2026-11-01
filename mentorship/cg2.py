@@ -308,9 +308,9 @@ def dxy_week_delivered(ctx, d, i: int, p) -> bool:
     return res
 
 
-def _ladder_first(d: pd.DataFrame, up: bool, px: float, names, lookback: int = 60):
-    """Item 9 / 16 ladder (035 ~24:19): the first level of the dollar's HTF target ladder in its direction `up`, from the completed daily bars: "rb" = the close of the nearest old swing-high candle above price
-    (the rejection block; below price for `up` False), "rb_ce" = the CE of its wick, "wick" = its extreme, "fvg" = the near edge of the nearest unfilled daily FVG beyond price. None when none exists.
+def _ladder_all(d: pd.DataFrame, up: bool, px: float, names, lookback: int = 60) -> list:
+    """Item 9 / 16 ladder (035 ~24:19): the levels of the dollar's HTF target ladder in its direction `up`, nearest first, from the completed daily bars: "rb" = the close of the nearest old swing-high candle above
+    price (the rejection block; below price for `up` False), "rb_ce" = the CE of its wick, "wick" = its extreme, "fvg" = the near edge of the nearest unfilled daily FVG beyond price.
     ("wk_ob_open" - the weekly bearish OB's opening price of 059 - needs the weekly arrays of the dollar and is not built.)"""
     lv = []
     kind = "high" if up else "low"
@@ -331,9 +331,13 @@ def _ladder_first(d: pd.DataFrame, up: bool, px: float, names, lookback: int = 6
             if not up and a.low > b.high and b.high < px and (j + 1 >= len(x) or float(x.low.iloc[j + 1:].min()) > b.high):
                 lv.append(float(b.high))
                 break
-    if not lv:
-        return None
-    return min(lv) if up else max(lv)
+    return sorted(lv) if up else sorted(lv, reverse=True)
+
+
+def _ladder_first(d: pd.DataFrame, up: bool, px: float, names, lookback: int = 60):
+    """The first (nearest) level of `_ladder_all`, or None."""
+    lv = _ladder_all(d, up, px, names, lookback)
+    return lv[0] if lv else None
 
 
 def dxy_end_day_block(ctx, sd, i: int, p, trades) -> bool:

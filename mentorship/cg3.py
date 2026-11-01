@@ -48,6 +48,8 @@ def _day_bars(ctx, i: int, tf: int, from_min: int = 0):
 
 
 def _swing_idx(x: np.ndarray, high: bool) -> list:
+    """3-candle swings, confirmed by the right-hand bar. The DXY file is close-only: its `line` bars open at the previous close, so bar highs / lows tie at every close-peak. The callers therefore find swings
+    on the CLOSE series (spec 0.2: closes are close enough at 5m and up) and read the levels from it."""
     if high:
         return [j for j in range(1, len(x) - 1) if x[j] > x[j - 1] and x[j] > x[j + 1]]
     return [j for j in range(1, len(x) - 1) if x[j] < x[j - 1] and x[j] < x[j + 1]]
@@ -65,12 +67,12 @@ def dxy_state(ctx, i: int, p) -> int | None:
     b = _day_bars(ctx, i, 5, _hhmm(p.dxy_state_from))
     res = None
     if b is not None and len(b) >= 3:
-        h, l, c = b.high.values, b.low.values, b.close.values
-        sh, sl = _swing_idx(h, True), _swing_idx(l, False)
+        c = b.close.values
+        sh, sl = _swing_idx(c, True), _swing_idx(c, False)
         res = 0
-        if sh and c[-1] > h[sh[-1]] and not (sl and (c[sl[-1] + 1:] < l[sl[-1]]).any()):
+        if sh and c[-1] > c[sh[-1]] and not (sl and (c[sl[-1] + 1:] < c[sl[-1]]).any()):
             res = 1
-        elif sl and c[-1] < l[sl[-1]] and not (sh and (c[sh[-1] + 1:] > h[sh[-1]]).any()):
+        elif sl and c[-1] < c[sl[-1]] and not (sh and (c[sh[-1] + 1:] > c[sh[-1]]).any()):
             res = -1
     cache[key] = res
     return res
@@ -97,16 +99,16 @@ def dxy_sess_state(ctx, i: int, p) -> int | None:
                 h, l, c = pre.high.values, pre.low.values, pre.close.values
                 px = c[-1]
                 cases = []
-                sl = _swing_idx(l, False)
+                sl = _swing_idx(c, False)
                 if sl:
-                    s_ = float(l[sl[-1]])
+                    s_ = float(c[sl[-1]])
                     for j in range(len(pre) - 1, 1, -1):               # the nearest unfilled bullish FVG below price
                         if h[j - 2] < l[j] and h[j - 2] < px and (j + 1 >= len(pre) or float(l[j + 1:].min()) > h[j - 2]):
                             cases.append((px - float(l[j]), 1, s_, float(h[j - 2])))
                             break
-                sh = _swing_idx(h, True)
+                sh = _swing_idx(c, True)
                 if sh:
-                    r_ = float(h[sh[-1]])
+                    r_ = float(c[sh[-1]])
                     for j in range(len(pre) - 1, 1, -1):               # the nearest unfilled bearish FVG above price
                         if l[j - 2] > h[j] and l[j - 2] > px and (j + 1 >= len(pre) or float(h[j + 1:].max()) < l[j - 2]):
                             cases.append((float(h[j]) - px, -1, r_, float(l[j - 2])))
@@ -147,10 +149,10 @@ def dxy_eq_state(ctx, i: int, p) -> int | None:
     if b is not None and len(b) >= 4:
         h, l, c = b.high.values, b.low.values, b.close.values
         if p.dxy_range_from == "swings":
-            sh, sl = _swing_idx(h, True), _swing_idx(l, False)
+            sh, sl = _swing_idx(c, True), _swing_idx(c, False)
             if sh and sl:
                 down = sl[-1] > sh[-1]
-                top, bot = float(h[sh[-1]]), float(l[sl[-1]])
+                top, bot = float(c[sh[-1]]), float(c[sl[-1]])
                 if top > bot:
                     eq = (top + bot) / 2
                     res = 1 if (down and c[-1] > eq) else (-1 if (not down and c[-1] < eq) else 0)
