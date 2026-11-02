@@ -30,3 +30,12 @@ Update 16:45Z
 - Core Content Month 01 IDs appear in mentorship/digests/rulebook_gaps, so it's covered.
 - No-commentary videos (Mase): ICT sometimes posts silent chart videos. Before whisper on the 7 caption-less videos, check for speech (ffmpeg silencedetect, or a near-empty whisper result). For silent ones, keep all frames and write a NO_COMMENTARY marker so the rulebook uses them as chart examples, not rules. Also flag any captioned video whose .vtt is near-empty.
 - Empty captions (7-byte .vtt) = no commentary: 41 of 66 Trade Executions + 2023 Mentorship 083, 088, 097. List: data/ict_no_commentary.txt. Frames are their only content; never clear them without the frames saved.
+
+State at 19:45Z (handoff to fresh thread)
+- Laptop lost power ~19:06Z; no damage. ICT Fetch auto-restarted (PIDs changed; check tasklist). Prep: 4 pending of 147.
+- Auto-ack (runs/ict_autoack.py --loop 10) is running in Mase's PowerShell window and logs to runs/ict_autoack.log (UTF-16; read with iconv -f UTF-16LE). First pass is still saving (~1 min/video). It acks in one batch at the end of the pass, so out\ is still ~8.7 GB unsynced until that pass ends. Two leftover *.tmp dirs in data/ict_frames from the power loss are harmless (overwritten).
+- Speech check done: all 44 empty-caption videos have no speech (data/ict_speech_check.csv). keep_hours is temporarily 336 in ict_fetch/prep_config.json; set it back to 48 (auto-ack deletes keep\ copies itself).
+- The 7 caption-less folders were deleted by Mase; the fetcher re-downloads them. They need local whisper (transcribe.py handles NEEDS_TRANSCRIPT) plus a speech check.
+- Still to fetch: 2023 Mentorship 005, 016, 017 (not in the laptop's mt23 list; need adding).
+- Fetcher BACKOFF: YouTube "Sign in to confirm you're not a bot" on 2024 video LMi_mO3AP08, still failing after 3 retries. Likely fix: yt-dlp --cookies-from-browser in fetch_win.py (needs Mase's OK; uses his browser login). It also warns about no JS runtime (deno).
+- Open with Mase: keep the 2026 SMC lecture playlist (143)? Unconfirmed.
