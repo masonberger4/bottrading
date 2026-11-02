@@ -1,0 +1,309 @@
+r"""prep_win.py (deploy v5) - mechanical per-video prep on MB-Laptop so the box gets frames instead of video.
+Worker (child of run_all.py):  python prep_win.py
+  For every out\<pl>\<NN_id>\ with DONE (not SYNCED/PREPPED/PREP_FAILED): build prep\ next to it, byte-for-byte the same
+  recipe as the box prep (kbw1/build.py via mt23prep/mXXprep; kbte/extract.py for ICT Trade Executions; laptop-split
+  .partNN files are first rejoined with the same ffmpeg concat + duration check the box sync.py v4 uses):
+    prep\frames\tHHMMSS.S.jpg   prep\words.json   prep\transcript.txt   prep\PREP.json
+  verify it (ffmpeg rc 0, every jpg non-empty JPEG, last frame within floor+2s of the end, gap <= floor+1s), write PREPPED,
+  then move the video to keep\<pl>\<NN_id>\ (deleted after keep_hours=48, sooner if C: free < min_free_gb).
+  On a prep error the video stays in the folder and PREP_FAILED is written -> sync_tool ships the video as before (box preps it).
+One-off (also how the box verifies this file):  python prep_win.py one <src_dir> <media_dir> <out_dir> [profile] [scene floor]
+No YouTube calls, no network."""
+import json, os, re, sys, glob, shutil, subprocess, time
+from datetime import datetime, timezone
+
+ROOT = os.path.dirname(os.path.abspath(__file__))
+OUT = os.path.join(ROOT, "out"); KEEP = os.path.join(ROOT, "keep")
+CFG = os.path.join(ROOT, "prep_config.json"); PSTATUS = os.path.join(ROOT, "prep_status.json"); PLOG = os.path.join(ROOT, "prep.log")
+WIN = os.name == "nt"
+VEXT = (".webm", ".mp4", ".mkv", ".m4v")
+DEFAULT_CFG = {"default_profile": "build",
+               "profiles": {"PLVgHx4Z63paYhYt0DTyeBBxQomkeCEIq1": {"profile": "te", "scene": "0.02", "floor": "3"},
+                            "PLVgHx4Z63pabpjlduWBaEsn8VMtALhjGV": {"profile": "mt23parts"}},
+               "keep_hours": 48, "min_free_gb": 6, "ship_media": "verify", "verify_n": 2}
+# ship_media: "verify" = ship the video too for the first verify_n prepped items (box diffs its own prep against ours),
+#             "all" = always ship video as well (fallback if the box ever reports a mismatch), "none" = frames only.
+
+def find_ff():
+    if WIN:
+        try:
+            from fetch_win import FFMPEG, FFPROBE; return FFMPEG, FFPROBE
+        except Exception: pass
+    return shutil.which("ffmpeg") or "ffmpeg", shutil.which("ffprobe") or "ffprobe"
+FFMPEG, FFPROBE = find_ff()
+FLAGS = (0x00004000 | 0x08000000) if WIN else 0     # BELOW_NORMAL_PRIORITY_CLASS | CREATE_NO_WINDOW (box uses `nice`)
+NICE = [] if WIN else ["nice"]
+
+def now(): return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+def log(m):
+    line = f"[{now()}] {m}"; print(line, flush=True)
+    try: open(PLOG, "a", encoding="utf-8").write(line + "\n")
+    except Exception: pass
+def cfg():
+    c = dict(DEFAULT_CFG)
+    try: c.update(json.load(open(CFG, encoding="utf-8")))
+    except Exception: pass
+    return c
+def pstat(**kw):
+    try: st = json.load(open(PSTATUS, encoding="utf-8"))
+    except Exception: st = {}
+    st.update(kw); st["updated"] = now(); st["pid"] = os.getpid()
+    json.dump(st, open(PSTATUS + ".tmp", "w", encoding="utf-8"), indent=1); os.replace(PSTATUS + ".tmp", PSTATUS)
+
+# ---------- transcript: verbatim logic of /workspace/kbw1/build.py ----------
+def t2s(t):
+    h, m, s = t.split(':'); return int(h)*3600+int(m)*60+float(s)
+def words_transcript(sd, kd):
+    vtt = (glob.glob(os.path.join(sd, '*.en.vtt')) + glob.glob(os.path.join(sd, '*.vtt')))
+    words = []
+    if not vtt: return None
+    cue = None
+    for line in open(vtt[0], encoding='utf-8'):
+        line = line.rstrip('\n')
+        m = re.match(r'(\d\d:\d\d:\d\d\.\d+) -->', line)
+        if m: cue = t2s(m.group(1)); continue
+        if '<c>' in line or re.search(r'<\d\d:\d\d:\d\d\.\d+>', line):
+            parts = re.split(r'<(\d\d:\d\d:\d\d\.\d+)>', line)
+            t = cue
+            for i, p in enumerate(parts):
+                if i % 2 == 1: t = t2s(p); continue
+                txt = re.sub(r'</?c[^>]*>', '', p).strip()
+                for w in txt.split():
+                    words.append((round(t, 2), w))
+    if not words:  # manual captions: no word timing; take cue text dedup
+        cue = None; last = None
+        for line in open(vtt[0], encoding='utf-8'):
+            line = line.strip()
+            m = re.match(r'(\d\d:\d\d:\d\d\.\d+) -->', line)
+            if m: cue = t2s(m.group(1)); continue
+            if not line or cue is None or line.startswith(('WEBVTT','Kind:','Language:')): continue
+            txt = re.sub(r'<[^>]+>', '', line)
+            if txt == last: continue
+            last = txt
+            for w in txt.split(): words.append((round(cue, 2), w))
+    json.dump(words, open(os.path.join(kd, 'words.json'), 'w'))
+    def mmss(s): s = int(s); return f"{s//3600}:{s%3600//60:02d}:{s%60:02d}" if s >= 3600 else f"{s//60:02d}:{s%60:02d}"
+    out = [f"# source: YouTube auto-captions (.vtt via throttled fetch), real timestamps [mm:ss]", ""]
+    cur = []; start = None
+    for t, w in words:
+        if start is None: start = t
+        cur.append(w)
+        if len(cur) >= 14:
+            out.append(f"[{mmss(start)}] " + ' '.join(cur)); cur = []; start = None
+    if cur: out.append(f"[{mmss(start)}] " + ' '.join(cur))
+    # newline='\n' so the Windows file is byte-identical to the box one
+    open(os.path.join(kd, 'transcript.txt'), 'w', newline='\n').write('\n'.join(out) + '\n')
+    return len(words)
+
+def tname(s):
+    h = int(s//3600); m = int(s%3600//60); sec = s % 60
+    return f"t{h:02d}{m:02d}{sec:04.1f}.jpg"
+
+# ---------- frames: profile "build" = kbw1/build.py (single file) ----------
+def frames_build(video, fd):
+    tmp = fd + "_tmp"; shutil.rmtree(tmp, ignore_errors=True); os.makedirs(tmp)
+    vf = "select='isnan(prev_selected_t)+gt(scene\\,0.08)+gte(t-prev_selected_t\\,10)',settb=1/10,setpts=PTS"
+    r = subprocess.run(NICE + [FFMPEG, '-nostdin', '-loglevel', 'error', '-threads', '2', '-i', video, '-vf', vf,
+                        '-vsync', 'vfr', '-frame_pts', '1', '-q:v', '3', os.path.join(tmp, '%d.jpg')], creationflags=FLAGS)
+    if r.returncode != 0 or not os.listdir(tmp): shutil.rmtree(tmp, ignore_errors=True); raise RuntimeError(f"ffmpeg rc={r.returncode}")
+    shutil.rmtree(fd, ignore_errors=True); os.makedirs(fd)
+    for f in os.listdir(tmp):
+        os.rename(os.path.join(tmp, f), os.path.join(fd, tname(int(f.split('.')[0])/10)))
+    shutil.rmtree(tmp)
+    return "video <=720p (height %s), ffmpeg scene>0.08 + 10s floor", 10.0
+
+# ---------- profile "mt23parts": _w3/mt23parts.py (the live mt23 builder since item 022): 720p scale BEFORE select, per-file start_time offset ----------
+def probe_start(f):
+    x = subprocess.run([FFPROBE, '-v', 'error', '-show_entries', 'format=start_time', '-of', 'default=nw=1:nk=1', f],
+                       capture_output=True, text=True, creationflags=FLAGS).stdout.strip()
+    return float(x or 0)
+
+def frames_mt23parts(videos, fd):
+    res = []
+    for i, p in enumerate(videos):          # mt23parts runs these in a 4-thread pool; output does not depend on order
+        st = probe_start(p)
+        t = fd + "_tmp%d" % i; shutil.rmtree(t, ignore_errors=True); os.makedirs(t)
+        vf = "scale=-2:'min(720,ih)',select='isnan(prev_selected_t)+gt(scene\\,0.08)+gte(t-prev_selected_t\\,10)',settb=1/10,setpts=PTS"
+        rr = subprocess.run(NICE + [FFMPEG, '-nostdin', '-loglevel', 'error', '-threads', '2', '-i', p, '-vf', vf, '-vsync', 'vfr',
+                                    '-frame_pts', '1', '-q:v', '3', t + '/%d.jpg'], creationflags=FLAGS)
+        out = []
+        for f in os.listdir(t):
+            s_ = int(f.split('.')[0]) / 10 + st
+            h = int(s_ // 3600); mm = int(s_ % 3600 // 60); sec = s_ % 60            # exact mt23parts.py arithmetic
+            out.append((os.path.join(t, f), f"t{h:02d}{mm:02d}{sec:04.1f}.jpg"))
+        res.append((rr.returncode, out, t))
+    if not all(r[0] == 0 and r[1] for r in res):
+        for r in res: shutil.rmtree(r[2], ignore_errors=True)
+        raise RuntimeError("ffmpeg failed: " + str([(r[0], len(r[1])) for r in res]))
+    shutil.rmtree(fd, ignore_errors=True); os.makedirs(fd)
+    for rc, out, t in res:
+        for a, b in out: os.replace(a, os.path.join(fd, b))
+        shutil.rmtree(t)
+    return "video <=720p (height %%s), ffmpeg scene>0.08 + 10s floor; %d parts processed in order, part start_time offsets applied" % len(videos), 10.0
+
+# ---------- split files: rejoin exactly like box sync.py join_parts (v4), then profile "build" on the single file ----------
+def expected_join_dur(info_json, parts, got):
+    """Same rule as box sync.py: parts are cut with -reset_timestamps 0, so a later part's ffprobe 'duration' is its END time and summing
+    part durations is wrong. Expect the <id>.json duration (+-2 s); without it, the last part's end time. Returns (want, ok)."""
+    try: jd = float(json.load(open(info_json, encoding="utf-8")).get("duration") or 0) if os.path.exists(info_json) else 0
+    except Exception: jd = 0
+    if not got: return (jd or None), False
+    if jd > 0: return jd, abs(got - jd) <= 2.0
+    ld = probe_dur(parts[-1]) or 0; ls = probe_start(parts[-1])
+    cands = [ld, ls + ld] if ld > 0 else []
+    return (cands[0] if cands else None), any(abs(got - c) <= max(2.0, 0.002 * c) for c in cands)
+
+def join_parts(md, parts):
+    vid = os.path.basename(parts[0]).split(".part")[0]; ext = parts[0].rsplit(".", 1)[-1]
+    out = os.path.join(md, f"{vid}.{ext}"); lst = os.path.join(md, "_concat.txt"); tmp = out + ".tmp." + ext
+    fwd = [p.replace(chr(92), "/") for p in parts]
+    open(lst, "w").write("".join("file '%s'\n" % p for p in fwd))
+    r = subprocess.run([FFMPEG, "-nostdin", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", tmp],
+                       capture_output=True, text=True, creationflags=FLAGS)
+    os.remove(lst)
+    got = probe_dur(tmp) if r.returncode == 0 and os.path.exists(tmp) else None
+    want, ok = expected_join_dur(os.path.join(md, vid + ".json"), parts, got)
+    if ok:
+        os.replace(tmp, out)
+        for p in parts: os.remove(p)
+        return out
+    if os.path.exists(tmp): os.remove(tmp)
+    raise RuntimeError(f"rejoin failed rc={r.returncode} dur {got} vs {want}")
+
+# ---------- profile "te" = /workspace/kbte/extract.py (silent screen recordings: scene 0.02, 3 s floor, showinfo pts) ----------
+def frames_te(vids, fd, scene="0.02", floor="3"):
+    os.makedirs(fd, exist_ok=True)
+    for f in glob.glob(fd + '/*'): os.remove(f)
+    offset = 0.0
+    for vf in vids:
+        tmpd = fd + '_te_' + os.path.basename(vf); shutil.rmtree(tmpd, ignore_errors=True); os.makedirs(tmpd)
+        sel = f"scale=-2:'min(720,ih)',select='isnan(prev_selected_t)+gt(scene\\,{scene})+gte(t-prev_selected_t\\,{floor})',showinfo"
+        p = subprocess.run(NICE + [FFMPEG, '-hide_banner', '-threads', '4', '-i', vf, '-vf', sel, '-vsync', 'vfr', '-q:v', '3', tmpd + '/f%06d.jpg'],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", creationflags=FLAGS)
+        if p.returncode != 0: shutil.rmtree(tmpd, ignore_errors=True); raise RuntimeError(f"ffmpeg rc={p.returncode}: {p.stderr[-200:]}")
+        times = [float(x) for x in re.findall(r'pts_time:([\d.]+)', p.stderr)]
+        for fn, t in zip(sorted(os.listdir(tmpd)), times):
+            t += offset; h, r = divmod(t, 3600); mm, s = divmod(r, 60)          # exact kbte/extract.py arithmetic
+            shutil.move(tmpd + '/' + fn, os.path.join(fd, f"t{int(h):02d}{int(mm):02d}{s:04.1f}.jpg"))
+        shutil.rmtree(tmpd, ignore_errors=True)
+    return f"video <=720p (height %s), ffmpeg scene>{scene} + {floor}s floor, showinfo pts", float(floor)
+
+def probe_dur(f):
+    x = subprocess.run([FFPROBE, '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', f],
+                       capture_output=True, text=True, creationflags=FLAGS).stdout.strip()
+    try: return float(x)
+    except ValueError: return None
+
+def fsec(n):  # tHHMMSS.S.jpg -> seconds
+    return int(n[1:3])*3600 + int(n[3:5])*60 + float(n[5:-4])
+
+def prep_one(sd, md, out, profile="build", scene="0.02", floor="3"):
+    """sd: folder with <id>.json/.en.vtt; md: folder with the media; out: prep dir. Returns PREP.json dict."""
+    t0 = time.time(); os.makedirs(out, exist_ok=True)
+    vids = sorted(f for f in glob.glob(os.path.join(md, '*')) if f.lower().endswith(VEXT))
+    parts = [f for f in vids if '.part' in os.path.basename(f)]
+    nwords = words_transcript(sd, out)
+    fd = os.path.join(out, 'frames')
+    if parts and profile != "te":
+        vids = [join_parts(md, parts)]; used_join = True
+    if profile == "te": src, fl = frames_te(vids, fd, scene, floor); used = vids
+    elif profile == "mt23parts": src, fl = frames_mt23parts(vids, fd); used = vids
+    else: src, fl = frames_build(vids[0], fd); used = vids[:1]
+    names = sorted(os.listdir(fd), key=fsec)
+    info = {}
+    for j in glob.glob(os.path.join(sd, '*.json')):
+        try: info = json.load(open(j, encoding='utf-8')); break
+        except Exception: pass
+    # video length: <id>.json duration; else the last file's ffprobe duration (parts keep original timestamps, so a later part's 'duration' is its end time; never sum)
+    dur = float(info.get('duration') or 0) or (probe_dur(used[-1]) or 0 if used else 0)
+    # verify
+    bad = [n for n in names if os.path.getsize(os.path.join(fd, n)) == 0 or open(os.path.join(fd, n), 'rb').read(2) != b'\xff\xd8']
+    ts = [fsec(n) for n in names]
+    gap = max([b - a for a, b in zip(ts, ts[1:])] or [0])
+    errs = []
+    if not names: errs.append("no frames")
+    if bad: errs.append(f"{len(bad)} bad jpgs")
+    if dur and ts and ts[-1] < dur - fl - 2: errs.append(f"last frame {ts[-1]:.1f}s < duration {dur:.1f}s - floor")
+    if gap > fl + 1.05: errs.append(f"max gap {gap:.1f}s > floor {fl}s")
+    try: ffv = subprocess.run([FFMPEG, '-version'], capture_output=True, text=True, creationflags=FLAGS).stdout.split('\n')[0]
+    except Exception: ffv = None
+    p = {"profile": profile, "n_frames": len(names), "height": info.get("height"), "frames_source": src % info.get("height"),
+         "words": nwords, "media": [os.path.basename(v) for v in used], "media_bytes": sum(os.path.getsize(v) for v in used),
+         "media_duration": round(dur, 2), "last_frame_s": ts[-1] if ts else None, "max_gap_s": round(gap, 1),
+         "frames_bytes": sum(os.path.getsize(os.path.join(fd, n)) for n in names), "ffmpeg": ffv,
+         "scene": scene if profile == "te" else "0.08", "floor": fl, "secs": round(time.time() - t0, 1), "built": now(),
+         "ok": not errs, "errors": errs}
+    json.dump(p, open(os.path.join(out, 'PREP.json'), 'w', newline='\n'), indent=1)
+    return p
+
+# ---------- laptop worker ----------
+def free_gb(): return shutil.disk_usage(ROOT).free / 1e9
+def purge_keep(c=None):
+    """Delete kept videos older than keep_hours; oldest-first early if C: free < min_free_gb."""
+    c = c or cfg(); n = 0
+    ent = sorted((os.path.getmtime(os.path.join(d, "KEPT")), d) for d in glob.glob(os.path.join(KEEP, "*", "*_*")) if os.path.exists(os.path.join(d, "KEPT")))
+    for t, d in ent:
+        if time.time() - t > c["keep_hours"] * 3600 or free_gb() < c["min_free_gb"]:
+            shutil.rmtree(d, ignore_errors=True); n += 1; log(f"purged kept video {os.path.relpath(d, KEEP)}")
+    return n
+
+def candidates():
+    out = []
+    for d in sorted(glob.glob(os.path.join(OUT, "*", "*_*"))):
+        if not os.path.exists(os.path.join(d, "DONE")): continue
+        if any(os.path.exists(os.path.join(d, m)) for m in ("SYNCED", "PREPPED", "PREP_FAILED")): continue
+        if not [f for f in os.listdir(d) if f.lower().endswith(VEXT)]: continue
+        out.append(d)
+    return out
+
+def do_folder(d, c):
+    pl = os.path.basename(os.path.dirname(d)); b = os.path.basename(d)
+    pc = c["profiles"].get(pl, {}); prof = pc.get("profile", c["default_profile"])
+    out = os.path.join(d, "prep"); shutil.rmtree(out, ignore_errors=True)
+    pstat(state="PREPPING", current=f"{pl}/{b}", profile=prof)
+    try:
+        p = prep_one(d, d, out, prof, pc.get("scene", "0.02"), pc.get("floor", "3"))
+    except Exception as e:
+        p = {"ok": False, "errors": [f"{type(e).__name__}: {e}"[:300]]}
+    if not p.get("ok"):
+        shutil.rmtree(out, ignore_errors=True)
+        open(os.path.join(d, "PREP_FAILED"), "w").write("; ".join(p["errors"]) + "\n")
+        log(f"PREP_FAILED {pl}/{b}: {p['errors']} (video stays; it ships as before)"); return False
+    # frames verified -> video to keep\ (48 h), folder ships frames only
+    kd = os.path.join(KEEP, pl, b); os.makedirs(kd, exist_ok=True)
+    for f in os.listdir(d):
+        if f.lower().endswith(VEXT): shutil.move(os.path.join(d, f), os.path.join(kd, f))
+    open(os.path.join(kd, "KEPT"), "w").write(now() + "\n")
+    st = {}
+    try: st = json.load(open(PSTATUS, encoding="utf-8"))
+    except Exception: pass
+    nver = st.get("shipped_for_verify", 0)
+    if c["ship_media"] == "all" or (c["ship_media"] == "verify" and nver < c["verify_n"]):
+        open(os.path.join(d, "SHIP_MEDIA"), "w").write(c["ship_media"] + "\n"); pstat(shipped_for_verify=nver + 1)
+    open(os.path.join(d, "PREPPED"), "w").write(now() + "\n")
+    log(f"PREPPED {pl}/{b} {p['profile']} frames={p['n_frames']} ({p['frames_bytes']/1e6:.1f} MB vs video {p['media_bytes']/1e6:.1f} MB) in {p['secs']}s")
+    pstat(done=st.get("done", 0) + 1, last=f"{pl}/{b}")
+    return True
+
+def main():
+    pstat(state="STARTING", current=None)
+    while True:
+        c = cfg(); purge_keep(c)
+        todo = candidates()
+        if not todo:
+            try: fs = json.load(open(os.path.join(ROOT, "status.json"), encoding="utf-8")).get("state")
+            except Exception: fs = None
+            busy_w = [x for x in glob.glob(os.path.join(OUT, "*", "*_*")) if os.path.exists(os.path.join(x, "NEEDS_TRANSCRIPT"))]
+            if fs in ("ALL_DONE", "STOPPED_BLOCKED") and not busy_w: pstat(state="ALL_DONE", current=None); return
+            pstat(state="IDLE", current=None, pending=0); time.sleep(60); continue
+        pstat(pending=len(todo)); do_folder(todo[0], c)
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "one":
+        a = sys.argv[2:]
+        print(json.dumps(prep_one(a[0], a[1], a[2], *(a[3:6])), indent=1))
+    else:
+        try: main()
+        except SystemExit: raise
+        except BaseException as e:
+            pstat(state="CRASHED", reason=f"{type(e).__name__}: {e}"[:300]); raise
