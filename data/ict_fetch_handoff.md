@@ -23,3 +23,8 @@ Pending decisions (Mase)
 - Local auto-ack (copy verified frames and captions into the repo, then clear the folder) vs cloud processing. Recommended: auto-ack. Show the diff before enabling it.
 - Keep the 2026 SMC lecture playlist (143 videos)?
 - Add Core Content Month 01 if it's not in the rulebook.
+
+Update 16:45Z
+- Captions re-pulled from YouTube for 11 of the 18 box-acked videos (in data/ict_captions). 7 have no YouTube captions, so they need a video re-download and local whisper: Trade Executions 01-05 (o5NP6VOfNnI TqECSMsuswI 779jcCqyldY qW0_Mxfp_Z4 7IttD8JmDIo) and 2023 Mentorship 004 (AUbdCTzc19k) and 023 (wyqayqwoIhA). Their out\ folders hold DONE+SYNCED, so the fetcher skips them; to re-fetch, delete those 7 folders (Mase) and the fetcher redownloads.
+- The 2023 Mentorship playlist has 105 videos. The box did 001-049 except 004 and 023; the laptop has 004, 023 and 050-105 (58). README says 005, 016, 017 are missing from the rulebook's 102, so those 3 also need fetching.
+- Core Content Month 01 IDs appear in mentorship/digests/rulebook_gaps, so it's covered.
