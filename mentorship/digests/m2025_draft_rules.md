@@ -9,7 +9,7 @@ Built 2026-11-03 from the per-lecture notes in `mentorship/notes_2025/` (caption
 - Lecture refs = `notes_2025/NN_*.md`. Times New York local.
 
 ## Coverage (lower-usage, core-only option chosen by Mase 2026-11-03)
-- **Read in full and noted (33):** 01 (live sample), 83, 82, 80, 78, 77, 76, 75, 74, 73, 72, 70, 66, 65, 64, 62, 58, 57, 51, 34, 32, 31, 29, 27, 26, 23, 22, 21. (58, 62, 64, 70 were re-read in full in part 6; the originals were accurate, addenda added.)
+- **Read in full and noted (28 lectures):** 01 (live sample), 83, 82, 80, 78, 77, 76, 75, 74, 73, 72, 70, 66, 65, 64, 62, 58, 57, 51, 34, 32, 31, 29, 27, 26, 23, 22, 21. (58, 62, 64, 70 were re-read in full in part 6; the originals were accurate, addenda added.)
 - **Pending (not read, ~38 lectures):** daily/live NQ and forex reviews 02-20, 24, 28, 30, 33, 36-50, 52-56, 60, 61, 63, 68. These are applications of the same rules; 02 and 04 (24-36k-word live streams on market maker models and 20-day lookback grading) are probably worth a later read.
 - **Missing captions:** 25, 35, 46, 59, 67, 69, 71, 79, 81.
 - **Caption 29 is truncated** (ends mid-sentence "then I'll touch"); 27 and 26/23/22 end only in sign-offs, but 27 also ends mid-sentence ("the last time we look at this particular"). Use as partial.
@@ -23,7 +23,7 @@ Built 2026-11-03 from the per-lecture notes in `mentorship/notes_2025/` (caption
 - DRAFT: Pre-market equities session opens 07:00; ETH 08:00-09:30 is the 90-minute window whose high = buy side, low = sell side for the open (Venom frame). (L22, L51) [new]
 - DRAFT: Wait for the 09:30 open before acting on a daily bias; if premarket ignores the levels, sit out and trade the 10:00 Silver Bullet as fallback (L26, L77; Silver Bullet kept off, project says no edge).
 - DRAFT: Midnight OR projections -0.5 / -1 give "a rough idea" of the day's high, weaker on NFP/FOMC/CPI days. Opening range high-low projected -1.5 SD targeted London/Asia liquidity (L80, L77, L34). [new]
-- DRAFT: PM opening range 13:30-14:00 (also quoted 13:30-14:00 first FVG; L34 says 1:30-2:00 and L51 PM macro 22:50-03:10 typo-prone). (L34, L51) [new]
+- DRAFT: PM opening range 13:30-14:00. (L34, L51) [new]
 
 ### A2. Opening range gap (ORG) and new week opening gap (NWOG)
 - DRAFT: ORG = prior RTH settlement (16:14/16:15 close) to 09:30 open on RTH data; fib 0/0.25/0.5 (CE)/0.75/1. Premium if gap up. (L78, L82, L70) [in rulebook]
