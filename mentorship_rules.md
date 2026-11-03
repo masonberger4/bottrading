@@ -1,5 +1,9 @@
 # ICT Mentorship bot: consolidated rulebook
 
+> **DRAFT, not in force (2026-11-03):** 2024 Mentorship lectures 01-13 rules for owner review are in
+> `mentorship/digests/m2024_draft_rules.md` (notes: `mentorship/notes_2024/`). Nothing there
+> overrides this file until Mase accepts it.
+
 > **Owner corrections 2026-10-18** (`mentorship/digests/owner_directives.md`,
 > `owner_directive_specs.md`) override this file where they differ: last hour 15:00-15:50 and the
 > 16:15 PM close (#1); 5 handles = minimum room (#2); year end from December's direction (#3,
