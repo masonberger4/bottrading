@@ -50,3 +50,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v44 | 2026-11-01 22:00:46Z | thread: Organize project memory into folder | status.md | edit | Merged dream proposals approved by Mase (status.md) | Mase approved all dream proposals msg cmsg_01FAHERC1Lsrg2bYtrKuRHmPPrC9s6KinzHyy3ztjALyks; proposals/dreamer__dream_2026-11-01.md | ABSENT -> 4dd3ff2a82 |
 | v45 | 2026-11-01 22:00:54Z | Organize project memory into folder | proposals/dreamer__dream_2026-11-01.md | append | Mark dream proposals merged | l | 2a6ca71258 -> 474f64c1d5 |
 | v46 | 2026-11-01 22:02:13Z | coordinator | INDEX.md | edit | Sync INDEX.md to index with dream I1/I2, DREAMING section (coordinator-supplied text) | project coordinator relay 22:02Z | 6b2c92c926 -> b334a9d6ef |
+| v47 | 2026-11-03 06:05:53Z | dreamer | proposals/dreamer__threads.md | proposal | Registry stale: 11-02 changes | cmsg_01FAHERC1Lsrg2bYtrKuRHmPCAimDmkpeAVgYXFLKo5Bej | f08d3d356c -> be6da93b98 |
