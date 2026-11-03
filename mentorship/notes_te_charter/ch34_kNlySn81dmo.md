@@ -13,8 +13,8 @@ Model 13 = the 2022 YouTube mentorship model, amplified for index futures: trade
 - Bullish setup: sell-side raid, rapid MSS above a recent 5m-1m high with displacement + FVG ~3:48-4:22
 - FVG ideally at or above equilibrium of the displacement leg (bearish) / at or below (bullish) ~4:22
 - Bearish entry: sell limit at the high of the FVG's lowest candle (near edge), not above it, to ensure a fill ~4:22-5:52
-- Bearish stop: at the high of the FVG's first (upper) candle - not one tick above ~5:52-6:27
-- Bullish entry: buy limit at the low of the FVG's upper candle; stop at the high... [ICT: "stop at the high of the discount low"] i.e. far edge of the gap (low of the first candle) ~6:27-7:04, ~12:21-12:55
+- Bearish stop: slide says "at the low of the premium high" of the FVG (= candle 1 low = far edge of the gap), no tick added; the audio then says "that candle's high" - ambiguous, flagged ~5:52-6:27
+- Bullish entry: buy limit at the low of the FVG's premium-high candle (near/top edge); stop at the high of the discount-low candle (far/bottom edge of the gap) ~6:27-7:04, ~12:21-12:55
 - Use the FVG that forms first going down 5m -> 4m -> 3m -> 2m -> 1m ~7:04-7:40
 - Risk 2% max, ideally 1% or 0.5% (frequent setups) ~7:40-8:11
 - Drawdown: after a full loss halve risk until 50% recovered; keep halving on further losses (2, 1, 0.5, 0.25...) ~8:11-9:42
@@ -34,7 +34,7 @@ Model 13 = the 2022 YouTube mentorship model, amplified for index futures: trade
 
 ## Open questions
 - Entry at near edge vs 2023 entry location: [conflict check] switch `m13_entry_edge = {near_edge, ce}`
-- Stop exactly at FVG far edge (no tick) vs 2023 stop placement: [conflict check] switch `m13_stop = {fvg_far_edge, swing}`
+- Stop exactly at FVG far edge (no tick) vs candle-1 extreme (audio) vs 2023 stop placement: [conflict check] switch `m13_stop = {fvg_far_edge, swing}`
 - First FVG from 5m down to 1m: switch `m13_tf_cascade` [new]
 - Timing ladder (08:30/09:30/10:00/10:30/11:00 Thu-Fri/13:30/14:00/14:30/15:00/15:30): compare with 2023 macros
 - PM raid of AM/lunch highs/lows: switch `pm_raid_source = {am_eqh_first, lunch}`
