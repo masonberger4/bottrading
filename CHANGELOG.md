@@ -56,3 +56,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v50 | 2026-11-03 06:05:58Z | dreamer | proposals/dreamer__dream_2026-11-03.md | proposal | Second dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmPCAimDmkpeAVgYXFLKo5Bej | ABSENT -> 6e59e803d8 |
 | v51 | 2026-11-03 06:55:25Z | coordinator | ACL.json | edit | add curator thread (Mase approved) | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8aqCmj86QWKDE98eZGnKek | ac6be684bf -> 9331d5ae72 |
 | v52 | 2026-11-03 06:55:28Z | Run memory curator | status.md | edit | apply approved X2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8aqCmj86QWKDE98eZGnKek | 4dd3ff2a82 -> ce345c65d2 |
+| v53 | 2026-11-03 06:55:29Z | Run memory curator | decisions.md | append | apply approved X3 | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8aqCmj86QWKDE98eZGnKek | 9f1f9177a5 -> c3c449dad8 |

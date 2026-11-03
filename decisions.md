@@ -199,3 +199,9 @@ First result (2026-10-15): built on a local `claude-hf` branch in bottrading wit
 **Why:** later sessions should extend this, not restart it.
 **How to apply:** see [[silver-bullet-bot]] for the Schwab setup; never use the X folder ([[no-x-folder]]).
 hack
+Append to Active Rules Digest / decisions:
+- (Mase 2026-11-02 04:46 UTC) Stop all backtesting until all four ict_fetch playlists (Trade Executions 71, Charter Content 34, Core Content 58, 2024 Mentorship 51) are downloaded and transcribed; engine is built from all of them. Download work gets its own thread and is the single laptop writer.
+- (Mase 2026-11-02) Browser cookies for yt-dlp: ONLY from a spare Google account in a fresh Chrome profile, never the main profile; use as fallback if slow pacing + backoff does not clear the bot check.
+- (Mase 2026-11-02) Keep the 2026 SMC playlist (143 videos) in the download set.
+- (Mase 2026-11-02 04:5x UTC) Set each thread's model/effort to fit its work; idle laptop-ops threads use Sonnet 5.5 low.
+Facts for data.md/laptop_ops.md: ict_fetch pipeline = fetch_win.py -> prep_win.py -> manifest.json -> cloud box /workspace/yt_fetch acks -> sync_tool.py deletes all but DONE and writes SYNCED; fetcher pauses at >8 GB un-acked or low disk; supervisor run_all.py, scheduled task "ICT Fetch" (start.ps1); state in data/ict_fetch_handoff.md. C: 107 GB, ~13 GB free; ict_fetch/out 8.1 GB; stash@{0} is only a little in .git (18 MB).
