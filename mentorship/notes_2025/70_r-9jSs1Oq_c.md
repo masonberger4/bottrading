@@ -9,3 +9,8 @@ Full read (2.2k words). 15-min / 5-min / 1-min / 15-sec charts. Real trade, 3 co
 - Minor sell-side liquidity pool 20,980 as the downside level if no rip higher. Sizing smaller in high volatility.
 ## Interpretation
 - Both gaps as draws; inversion FVG entry at CE after failure. [off] orgap_nwog_blend_fib; failure_then_inversion_fvg_long; vol_scaled_size.
+
+## Full re-read addendum (part 6, 2,166-word caption read in full)
+- Original note accurate and fairly complete. Extras: contract is March 2025 NQ, 15m/5m charts first, NWOG drop to a morning low then slow grind back into gap closure; "waiting for them to set the snare" = "something in my PD arrays fail" then recovery above the 9:31 first presented FVG; a breakaway gap (small separation between candle high and candle low) after entry; entry "as close as I can to that midpoint" (CE of the inversion FVG), manual entry, 3 contracts, "a little bit of heat", stop set only after the candle that retraced to the CE ("I felt confident that it would not come back down here because this would be a breakaway gap"); stop ~20 handles "a little bit higher than I normally have", so leverage is lower.
+- Leverage rule: "I usually like 10 contracts, 15 contracts but when the volatility is this high ... you have to scale it back."
+- Watch the extra trap: bearish PD array overtaken to the upside = "the bait has been taken", manipulation done. If no rip higher he would not go short; 20,980 sell-side pool was his short-side level. Tariff/trade-war volatility; forex review planned the next morning. "That's what a 20 handle scalp looks like."

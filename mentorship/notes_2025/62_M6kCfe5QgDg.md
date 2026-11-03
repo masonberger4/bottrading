@@ -9,3 +9,9 @@ Full read (1.3k words). Mostly philosophy; the Venom model details are withheld 
 - New trading day starts 6 pm Eastern.
 ## Interpretation
 - No testable entry rule beyond FPFVG + obvious draw + bias. [off] single_model_no_daily_trade_required; partials_at_turning_candles. Venom details pending (revisit if a later lecture such as 51 gives them). No conflicts.
+
+## Full re-read addendum (part 6, 1,259-word caption read in full)
+- Original note confirmed accurate. Extra: the Venom model "is very very powerful ... think of it as a venomous predator ... when it injects its venom it starts to break down the tissues" (a "balanced price range" is shown at the start); full exposé promised for later.
+- The trade: a limit order for a first partial ("first of two getting filled") above a bought imbalance; partials taken "in the candles that make the turning points at the highs"; "close enough for government work"; he took the Asian-session partial near the 9:00 15-min area under "the assumption that I could be wrong it might not go to my limit order"; five contracts off then went to bed with stop and limit resting. Trade ended with stop tripped but profitable overall.
+- "Trade in the direction of the liquidity I was identifying": bias given the day before was only long.
+- Mindset: people who sell "every day is a trading day" are not profitable; permission not to trade every price run.
