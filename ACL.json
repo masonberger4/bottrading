@@ -1,4 +1,12 @@
 {
   "_doc": "writers may edit top-level memory (index topic files, README, ACL, tools). Everyone else: read-only there; free in scratch/<their-slug>/; may create proposals/<their-slug>__*. Names are matched by slug (lowercase, non-alphanumerics -> '-', 'thread:' prefix ignored). Identity is self-declared via --agent: this is guardrails, not security.",
-  "writers": ["Mase", "coordinator", "Organize project memory into folder"]
+  "writers": [
+    "Mase",
+    "coordinator",
+    "Organize project memory into folder",
+    "Run memory curator"
+  ],
+  "notes": {
+    "Run memory curator": "role: curator; applies only changes Mase approves in chat; Mase 2026-11-03"
+  }
 }

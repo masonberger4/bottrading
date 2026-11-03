@@ -50,3 +50,11 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v44 | 2026-11-01 22:00:46Z | thread: Organize project memory into folder | status.md | edit | Merged dream proposals approved by Mase (status.md) | Mase approved all dream proposals msg cmsg_01FAHERC1Lsrg2bYtrKuRHmPPrC9s6KinzHyy3ztjALyks; proposals/dreamer__dream_2026-11-01.md | ABSENT -> 4dd3ff2a82 |
 | v45 | 2026-11-01 22:00:54Z | Organize project memory into folder | proposals/dreamer__dream_2026-11-01.md | append | Mark dream proposals merged | l | 2a6ca71258 -> 474f64c1d5 |
 | v46 | 2026-11-01 22:02:13Z | coordinator | INDEX.md | edit | Sync INDEX.md to index with dream I1/I2, DREAMING section (coordinator-supplied text) | project coordinator relay 22:02Z | 6b2c92c926 -> b334a9d6ef |
+| v47 | 2026-11-03 06:05:53Z | dreamer | proposals/dreamer__threads.md | proposal | Registry stale: 11-02 changes | cmsg_01FAHERC1Lsrg2bYtrKuRHmPCAimDmkpeAVgYXFLKo5Bej | f08d3d356c -> be6da93b98 |
+| v48 | 2026-11-03 06:05:56Z | dreamer | proposals/dreamer__status.md | proposal | status says backtests running; Mase stopped them | cmsg_01FAHERC1Lsrg2bYtrKuRHmPW41pamSAZM4yTt7SNgu3pC | ABSENT -> 4fcc4e8a0e |
+| v49 | 2026-11-03 06:05:57Z | dreamer | proposals/dreamer__decisions.md | proposal | New owner decisions 11-02 not in decisions.md | cmsg_01FAHERC1Lsrg2bYtrKuRHmPNSfh1xBKq7XDhxpBrZr27L,cmsg_01FAHERC1Lsrg2bYtrKuRHmPEzWvejvViDpHxee7hgDjZC | bfb2620988 -> 98670f950c |
+| v50 | 2026-11-03 06:05:58Z | dreamer | proposals/dreamer__dream_2026-11-03.md | proposal | Second dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmPCAimDmkpeAVgYXFLKo5Bej | ABSENT -> 6e59e803d8 |
+| v51 | 2026-11-03 06:55:25Z | coordinator | ACL.json | edit | add curator thread (Mase approved) | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8aqCmj86QWKDE98eZGnKek | ac6be684bf -> 9331d5ae72 |
+| v52 | 2026-11-03 06:55:28Z | Run memory curator | status.md | edit | apply approved X2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8aqCmj86QWKDE98eZGnKek | 4dd3ff2a82 -> ce345c65d2 |
+| v53 | 2026-11-03 06:55:29Z | Run memory curator | decisions.md | append | apply approved X3 | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8aqCmj86QWKDE98eZGnKek | 9f1f9177a5 -> c3c449dad8 |
+| v54 | 2026-11-03 06:55:30Z | Run memory curator | threads.md | edit | apply approved X4 | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8aqCmj86QWKDE98eZGnKek | 409bdde108 -> 8c88bfcf80 |
