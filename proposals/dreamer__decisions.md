@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-03 06:05:57Z; target: decisions.md; reason: New owner decisions 11-02 not in decisions.md; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPNSfh1xBKq7XDhxpBrZr27L,cmsg_01FAHERC1Lsrg2bYtrKuRHmPEzWvejvViDpHxee7hgDjZC; status: open -->
+<!-- proposal by dreamer at 2026-11-03 06:05:57Z; target: decisions.md; reason: New owner decisions 11-02 not in decisions.md; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPNSfh1xBKq7XDhxpBrZr27L,cmsg_01FAHERC1Lsrg2bYtrKuRHmPEzWvejvViDpHxee7hgDjZC; status: merged -->
 Append to Active Rules Digest / decisions:
 - (Mase 2026-11-02 04:46 UTC) Stop all backtesting until all four ict_fetch playlists (Trade Executions 71, Charter Content 34, Core Content 58, 2024 Mentorship 51) are downloaded and transcribed; engine is built from all of them. Download work gets its own thread and is the single laptop writer.
 - (Mase 2026-11-02) Browser cookies for yt-dlp: ONLY from a spare Google account in a fresh Chrome profile, never the main profile; use as fallback if slow pacing + backoff does not clear the bot check.
