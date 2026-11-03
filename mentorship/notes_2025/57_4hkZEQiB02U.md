@@ -1,0 +1,20 @@
+# 2025 Lecture 57 (4hkZEQiB02U): NY launch macro and session, lunch macro rules, market maker sell model (Mar-Apr 2025)
+Full read (4.6k words). Gives the lunch macro rules and the PM session carry-over.
+## Rules in ICT's wording
+- 2025 series goal: use intraday profiles (where the high, low, open and close nest in the daily range).
+- After a very large down day, "I teach my students to avoid the morning session": for index futures nothing from 9:30 to 10:30 ("you can't take any trades"). Reason: stagnant, difficult.
+- Opening range gap (RTH, previous settlement = last RTH candle close to 9:30 open): price opened above, ran relative equal highs, went back into the gap, 50% retrace to the gap midpoint ("always a 70% likelihood"), traded to the gap low, back to midpoint, then waterfall lower past 10:00. Measure on your own chart and journal.
+- New York lunch macro rules: when a move runs one-directionally from the open with NO short-term high taken (no run on minor buy-side pool), set up a retracement. Time filter 10:00 a.m.: draw a vertical line at 10:00, walk right candle by candle: the FIRST (highest immediate) high that forms after 10:00 is the target. On a day rallying up from the open, reverse: the first swing low after 10:00 is the low it reprices to. Needs: the low (intraday swing low after 10:00) must fail to be broken on the next pass lower ("real important"); if it takes that low, use a different strategy or only trade the afternoon. Wait for a premium array / reaction.
+- 10:00 closes the opening range: the algorithm now has a frame of reference: the first presented FVG, liquidity minor and sell side, minor buy side, from 9:30-10:00.
+- Gimmicks: algorithm has no respect for VWAP, Wyckoff, Elliott, supply and demand.
+- Rejection block: the swing low's closing price after 10:00 is a rejection block (2016 ICT mentorship month 4). Market structure shift does NOT require a close above/below ("go back and listen to 2022, 2024").
+- Immediate rebalance: next candle opens, trades down into the previous candle's high = low of the buyside-imbalance sell-side-inefficiency; buy there; confluence of two price points, "extremely likely scenario that it's going to go higher."
+- Order block: with a wick above the candle, the change in state of delivery can be the wick high, not the open ("when do you use the wicks when the opening price: because the wicks are there you have to use that information").
+- Macros are "little scripts in the algorithm": time of day where the functions usually come in.
+- PM session as market maker sell model ("pseudo market maker sell model"): aiming for relative equal lows (21,436.25 area) if price fails to make a new high by 1:30 pm. All morning bullish PD arrays (blue) invert and become sell-side references carried into the afternoon: price leaves the upper half and never comes back; bodies stay in the lower half = heaviness. PM opening range = 1:30-2:00 pm; first presented FVG there; the inversion FVG used as premium.
+- Last hour (rest of RTH): entered a bearish FVG short inside a volume imbalance and the immediate rebalance below its CE; bearish order block (two up-close candles): anything inside that range is "not chasing." Took out sell side below the intraday low formed after 10:00; exits scaling two contracts at a time.
+- Notepad: writes the PD array levels high to low with abbreviation and formation time.
+- He says tape reading is not a signal service; do not send him results.
+## Interpretation
+- Conflict check with 2023: morning avoidance after big down day is new (2023 had no such filter); lunch macro in 2023 was 10:50-11:10 time-window only. [off] avoid_morning_after_large_range_day; lunch_macro_first_high_after_1000_target; lunch_macro_requires_no_buyside_run_in_am; swing_low_must_hold; pm_inversion_of_am_arrays; pm_opening_range_1330_1400; order_block_wick_open_choice.
+- Questions (not asked now): what counts as a "very large" day (point range threshold); whether the 9:30-10:30 ban also holds after large up days.
