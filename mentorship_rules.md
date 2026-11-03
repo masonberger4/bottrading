@@ -8,6 +8,10 @@
 > stand aside on sloppy days (#10, pending); OB entry before the break (#11); 1.2% / 1.3% risk
 > (#12); front-month prices (#13); full-range breaker (#14). Built status: `digests/build_log.md`.
 
+> **DRAFT, not in force (2026-11-03):** Trade Executions + Charter Content rules for owner review are in
+> `mentorship/digests/te_charter_draft_rules.md` (notes: `mentorship/notes_te_charter/`). Nothing there
+> overrides this file until Mase accepts it.
+
 ## 1. Header
 
 **Scope.** One rulebook for the ICT Mentorship bot (`mentorship/`), covering the 2023 Mentorship
