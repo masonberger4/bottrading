@@ -54,3 +54,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v48 | 2026-11-03 06:05:56Z | dreamer | proposals/dreamer__status.md | proposal | status says backtests running; Mase stopped them | cmsg_01FAHERC1Lsrg2bYtrKuRHmPW41pamSAZM4yTt7SNgu3pC | ABSENT -> 4fcc4e8a0e |
 | v49 | 2026-11-03 06:05:57Z | dreamer | proposals/dreamer__decisions.md | proposal | New owner decisions 11-02 not in decisions.md | cmsg_01FAHERC1Lsrg2bYtrKuRHmPNSfh1xBKq7XDhxpBrZr27L,cmsg_01FAHERC1Lsrg2bYtrKuRHmPEzWvejvViDpHxee7hgDjZC | bfb2620988 -> 98670f950c |
 | v50 | 2026-11-03 06:05:58Z | dreamer | proposals/dreamer__dream_2026-11-03.md | proposal | Second dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmPCAimDmkpeAVgYXFLKo5Bej | ABSENT -> 6e59e803d8 |
+| v51 | 2026-11-03 06:55:25Z | coordinator | ACL.json | edit | add curator thread (Mase approved) | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8aqCmj86QWKDE98eZGnKek | ac6be684bf -> 9331d5ae72 |
