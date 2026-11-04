@@ -58,3 +58,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v52 | 2026-11-03 06:55:28Z | Run memory curator | status.md | edit | apply approved X2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8aqCmj86QWKDE98eZGnKek | 4dd3ff2a82 -> ce345c65d2 |
 | v53 | 2026-11-03 06:55:29Z | Run memory curator | decisions.md | append | apply approved X3 | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8aqCmj86QWKDE98eZGnKek | 9f1f9177a5 -> c3c449dad8 |
 | v54 | 2026-11-03 06:55:30Z | Run memory curator | threads.md | edit | apply approved X4 | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8aqCmj86QWKDE98eZGnKek | 409bdde108 -> 8c88bfcf80 |
+| v55 | 2026-11-04 06:05:30Z | dreamer | proposals/dreamer__status.md | proposal | status as of 11-04 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPKn2PDMvHgV8ZkLXDVLwnbP | 96e2fc76d7 -> 2c8452236d |
