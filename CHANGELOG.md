@@ -66,3 +66,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v60 | 2026-11-04 22:15:48Z | Run memory curator | decisions.md | edit | apply approved Z1,Z2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPENR5zxrbFCiX7ZQnoEV9vu | c3c449dad8 -> e21cb53ae9 |
 | v61 | 2026-11-04 22:15:51Z | Run memory curator | laptop_ops.md | append | apply approved Z3 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPENR5zxrbFCiX7ZQnoEV9vu | 4dabcdb7b9 -> fafa4fa14c |
 | v62 | 2026-11-04 22:15:51Z | Run memory curator | status.md | append | apply approved Y (status) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPENR5zxrbFCiX7ZQnoEV9vu | ce345c65d2 -> 9135245014 |
+| v63 | 2026-11-04 22:15:52Z | Run memory curator | lessons.md | append | apply approved Y (lessons) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPENR5zxrbFCiX7ZQnoEV9vu | a5ad42a19e -> 4b45cdcc68 |
