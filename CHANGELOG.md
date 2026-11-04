@@ -61,3 +61,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v55 | 2026-11-04 06:05:30Z | dreamer | proposals/dreamer__status.md | proposal | status as of 11-04 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPKn2PDMvHgV8ZkLXDVLwnbP | 96e2fc76d7 -> 2c8452236d |
 | v56 | 2026-11-04 06:05:35Z | dreamer | proposals/dreamer__lessons.md | proposal | YouTube bot-block lesson | cmsg_01FAHERC1Lsrg2bYtrKuRHmPGYVcxB6YY9GzPFr6woFtuC | 16bb9c48c3 -> ae62d152d6 |
 | v57 | 2026-11-04 06:05:36Z | dreamer | proposals/dreamer__threads.md | proposal | thread registry 11-04 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPCAimDmkpeAVgYXFLKo5Bej | a9f916ee0c -> 9b4bfd65ce |
+| v58 | 2026-11-04 06:05:36Z | dreamer | proposals/dreamer__dream_2026-11-04.md | proposal | Third dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmPCAimDmkpeAVgYXFLKo5Bej | ABSENT -> 1243108270 |
