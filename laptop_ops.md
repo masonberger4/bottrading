@@ -44,3 +44,6 @@ Don't use C:\Users\mason\X on Mase's laptop (MB-Laptop) for this project. Mase s
 
 **Why:** Mase said so directly. They chose C:\Users\mason\bottrading instead.
 **How to apply:** Only start a laptop session when Mase asks for one, and don't pass the X folder. Point laptop sessions at C:\Users\mason\bottrading. See [[silver-bullet-bot]].
+
+## ict_fetch pipeline facts (moved from decisions.md; dream Z3, Mase approved 2026-11-04)
+ict_fetch pipeline = fetch_win.py -> prep_win.py -> manifest.json -> cloud box /workspace/yt_fetch acks -> sync_tool.py deletes all but DONE and writes SYNCED; fetcher pauses at >8 GB un-acked or low disk; supervisor run_all.py, scheduled task "ICT Fetch" (start.ps1); state in data/ict_fetch_handoff.md. C: 107 GB, ~13 GB free; ict_fetch/out 8.1 GB. .git is 18 MB, so dropping stash@{0} frees little (the earlier 3.4 GB estimate was wrong).
