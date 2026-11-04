@@ -58,3 +58,13 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v52 | 2026-11-03 06:55:28Z | Run memory curator | status.md | edit | apply approved X2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8aqCmj86QWKDE98eZGnKek | 4dd3ff2a82 -> ce345c65d2 |
 | v53 | 2026-11-03 06:55:29Z | Run memory curator | decisions.md | append | apply approved X3 | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8aqCmj86QWKDE98eZGnKek | 9f1f9177a5 -> c3c449dad8 |
 | v54 | 2026-11-03 06:55:30Z | Run memory curator | threads.md | edit | apply approved X4 | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8aqCmj86QWKDE98eZGnKek | 409bdde108 -> 8c88bfcf80 |
+| v55 | 2026-11-04 06:05:30Z | dreamer | proposals/dreamer__status.md | proposal | status as of 11-04 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPKn2PDMvHgV8ZkLXDVLwnbP | 96e2fc76d7 -> 2c8452236d |
+| v56 | 2026-11-04 06:05:35Z | dreamer | proposals/dreamer__lessons.md | proposal | YouTube bot-block lesson | cmsg_01FAHERC1Lsrg2bYtrKuRHmPGYVcxB6YY9GzPFr6woFtuC | 16bb9c48c3 -> ae62d152d6 |
+| v57 | 2026-11-04 06:05:36Z | dreamer | proposals/dreamer__threads.md | proposal | thread registry 11-04 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPCAimDmkpeAVgYXFLKo5Bej | a9f916ee0c -> 9b4bfd65ce |
+| v58 | 2026-11-04 06:05:36Z | dreamer | proposals/dreamer__dream_2026-11-04.md | proposal | Third dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmPCAimDmkpeAVgYXFLKo5Bej | ABSENT -> 1243108270 |
+| v59 | 2026-11-04 22:09:24Z | dreamer | proposals/dreamer__decisions_fix.md | proposal | Corrections to merged X3 (dream review, Mase asked 11-04 22:08) | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8cnmec1zG2YBfXWwSK9Nmk | ABSENT -> 4332b47f9a |
+| v60 | 2026-11-04 22:15:48Z | Run memory curator | decisions.md | edit | apply approved Z1,Z2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPENR5zxrbFCiX7ZQnoEV9vu | c3c449dad8 -> e21cb53ae9 |
+| v61 | 2026-11-04 22:15:51Z | Run memory curator | laptop_ops.md | append | apply approved Z3 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPENR5zxrbFCiX7ZQnoEV9vu | 4dabcdb7b9 -> fafa4fa14c |
+| v62 | 2026-11-04 22:15:51Z | Run memory curator | status.md | append | apply approved Y (status) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPENR5zxrbFCiX7ZQnoEV9vu | ce345c65d2 -> 9135245014 |
+| v63 | 2026-11-04 22:15:52Z | Run memory curator | lessons.md | append | apply approved Y (lessons) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPENR5zxrbFCiX7ZQnoEV9vu | a5ad42a19e -> 4b45cdcc68 |
+| v64 | 2026-11-04 22:15:53Z | Run memory curator | threads.md | append | apply approved Y (threads) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPENR5zxrbFCiX7ZQnoEV9vu | 8c88bfcf80 -> fdf269a894 |

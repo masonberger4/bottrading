@@ -6,3 +6,5 @@ Rows (as of 2026-11-03 06:05 UTC, from list_threads):
 | Find Trade Executions 01-05 in project files | ...P22tCfrA37ss8UdK4yJWehd | answered: not in project files, re-download | cloud | done |
 | Daily memory dreaming pass | cmsg_01FAHERC1Lsrg2bYtrKuRHmPKCMW7kWk22AF8gP9oPxCsb | dreamer routine | cloud | working |
 Closed 11-01/02: Organize project memory, Build memory dreaming pass, Find free 1-minute DXY data, Build coverage gaps and DXY rules, Run full backtests in cloud.
+
+Update rows: Finish downloading ICT videos, part 2 = blocked, waiting on cookies.txt, still the only laptop writer. Add closed 11-03: Run memory curator (writer, applied X2-X4, PR #8 merged), Draft Trade Executions and Charter rules (PR #9 merged), Draft 2024 Mentorship rules (01-13), Draft 2025 Lecture rules part 6 (PR #11 open).
