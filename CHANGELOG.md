@@ -65,3 +65,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v59 | 2026-11-04 22:09:24Z | dreamer | proposals/dreamer__decisions_fix.md | proposal | Corrections to merged X3 (dream review, Mase asked 11-04 22:08) | cmsg_01FAHERC1Lsrg2bYtrKuRHmP8cnmec1zG2YBfXWwSK9Nmk | ABSENT -> 4332b47f9a |
 | v60 | 2026-11-04 22:15:48Z | Run memory curator | decisions.md | edit | apply approved Z1,Z2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPENR5zxrbFCiX7ZQnoEV9vu | c3c449dad8 -> e21cb53ae9 |
 | v61 | 2026-11-04 22:15:51Z | Run memory curator | laptop_ops.md | append | apply approved Z3 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPENR5zxrbFCiX7ZQnoEV9vu | 4dabcdb7b9 -> fafa4fa14c |
+| v62 | 2026-11-04 22:15:51Z | Run memory curator | status.md | append | apply approved Y (status) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPENR5zxrbFCiX7ZQnoEV9vu | ce345c65d2 -> 9135245014 |
