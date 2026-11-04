@@ -68,3 +68,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v62 | 2026-11-04 22:15:51Z | Run memory curator | status.md | append | apply approved Y (status) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPENR5zxrbFCiX7ZQnoEV9vu | ce345c65d2 -> 9135245014 |
 | v63 | 2026-11-04 22:15:52Z | Run memory curator | lessons.md | append | apply approved Y (lessons) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPENR5zxrbFCiX7ZQnoEV9vu | a5ad42a19e -> 4b45cdcc68 |
 | v64 | 2026-11-04 22:15:53Z | Run memory curator | threads.md | append | apply approved Y (threads) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPENR5zxrbFCiX7ZQnoEV9vu | 8c88bfcf80 -> fdf269a894 |
+| v65 | 2026-11-04 22:24:11Z | Run memory curator | decisions.md | edit | fix curator application of X3/Y1-Y3: move decisions into digest, drop pasted instruction text and stray test line, rewrite thread rows | cmsg_01FAHERC1Lsrg2bYtrKuRHmPFrW1DALDpU5hTuDt2Dfqyi | e21cb53ae9 -> 05db696b2a |
