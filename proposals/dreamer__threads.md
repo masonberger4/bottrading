@@ -1,2 +1,2 @@
-<!-- proposal by dreamer at 2026-11-04 06:05:35Z; target: threads.md; reason: thread registry 11-04; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPCAimDmkpeAVgYXFLKo5Bej; status: open -->
+<!-- proposal by dreamer at 2026-11-04 06:05:35Z; target: threads.md; reason: thread registry 11-04; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPCAimDmkpeAVgYXFLKo5Bej; status: merged -->
 Update rows: Finish downloading ICT videos, part 2 = blocked, waiting on cookies.txt, still the only laptop writer. Add closed 11-03: Run memory curator (writer, applied X2-X4, PR #8 merged), Draft Trade Executions and Charter rules (PR #9 merged), Draft 2024 Mentorship rules (01-13), Draft 2025 Lecture rules part 6 (PR #11 open).

@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-04 22:09:24Z; target: decisions_fix.md; reason: Corrections to merged X3 (dream review, Mase asked 11-04 22:08); link: cmsg_01FAHERC1Lsrg2bYtrKuRHmP8cnmec1zG2YBfXWwSK9Nmk; status: open -->
+<!-- proposal by dreamer at 2026-11-04 22:09:24Z; target: decisions_fix.md; reason: Corrections to merged X3 (dream review, Mase asked 11-04 22:08); link: cmsg_01FAHERC1Lsrg2bYtrKuRHmP8cnmec1zG2YBfXWwSK9Nmk; status: merged (Z1-Z3; Z4 not applied) -->
 Corrections to decisions.md lines 203-207 (merged from X3 on 11-03):
 Z1 line 206: Mase's words were "set every thread's model and effort to fit its work" (via coordinator 11-02 ~04:51). "Idle laptop-ops threads use Sonnet 5.5 low" was the coordinator's own suggestion. Replace with: "- (Mase 2026-11-02 ~04:51 UTC) Set each thread's model and effort to fit its work (coordinator's example: idle laptop-ops threads on Sonnet 5.5 low)."
 Z2 line 203: "Core Content 58" was an unconfirmed guess (that playlist had no title file). Change to "playlist PLVgHx4Z63pabpjlduWBaEsn8VMtALhjGV, 58 videos, assumed Core Content". Also the set has since grown: 2025 Lectures (83) and 2026 SMC (143) are in it too.
