@@ -1,0 +1,22 @@
+# 2026 SMC 100: Friday 08:25 pre-session review of Thursday; ORG exploration to -0.5 SD in a bullish market; time distortion; Thursday's high called to the tick (a Friday, the same day as 099, probably Apr 17 2026; MNQ Thu high 26,562.75)
+Full read (~4.5k words). Clean caption. Frames laptop-only. About half is rant (market makers vs "dealers", critics, "it's rigged"); skipped. Same Friday 099 reviews later. ICT names the ATH target "September 30th of 2025" here, while 098 says "October 30th 2025" for what looks like the same 26,859 high; check the daily chart frame.
+## Summary
+Thursday recap: Thursday's RTH ORG (Wed 16:14 to Thu 09:30) hit CE in the first minute, then explored below the ORG low to the -0.5 SD of the gap (slight overshoot), came back to the ORG low and CE, sat in the bodies of a pre-session FVG ("time distortion"), then rallied to the called 26,562.75 to the tick. Friday plan: next objective 26,859 ATH (back-adjust on), intraday event horizon 26,711 (Thursday high to ATH midpoint). TGIF not called "because I don't want to stand in front of this freight train." Friday RTH-close caveat. Dow target 49,439.
+## Rules in ICT's wording
+- **ORG CE 70% by 10:00**: "Consequent encroachment is here. 70% chance it's going to go to that by 10:00. It did it in the first 1-minute candle." [repeats B1]
+- **Bullish ORG exploration below the gap to -0.5 SD**: "when we're anticipating an exploration outside of the opening range gap while underlying market is bullish. This is the part where you write [it] down ... If we're looking for longer term higher prices ... It can explore below that opening range gap and go to a standard deviation of negative 0.5." Then back to the ORG low, then the ORG CE. The ORG low is not just touched: "I need to see it trade down there and that's to it then through it." [new; refines B4 ORG SD projection (088); conflict check #34]
+- **Pre-session FVGs as the anchor**: the prominent FVGs formed before 09:30 both got used; the low of the pre-session FVG held the move. [refines B3 pre-session arrays]
+- **Time distortion**: "They wicked down in here, but the full mini contract didn't do that. But look at the bodies ... They stayed inside that pre-session fair value gap ... So, if this is time distortion, you go up one time frame, go up to your 5-minute chart, go up to your 10-minute chart, and you'll see everything." Wicks may do damage; bodies show "real order flow" = accumulation. [new term; refines B4 bodies]
+- **Bodies respect the 09:30 opening price** on the pullback after accumulation: "That's algorithmic." [refines B1 opening price]
+- **Wick = gap (premium/discount sensitivity)**: on the Dow, "The opening price is the high of that wick ... Think of this as like a fair value gap ... It's trading right down to the top of it." Premium sensitivity = lower half when bearish; discount sensitivity = upper half when bullish. [repeats B4 / 098]
+- **Event horizon from two pools**: "the all-time high here, and ... this high here ... take the high here and drop it on that high there. We don't need any of the standard deviations. We just want the half point." How price trades to the CE "is indicative of when and how we trade to that high." Discount-sensitive treatment above it = support. [repeats 099]
+- **Friday RTH vs ETH caveat**: on Fridays, price "can run up here and get real close to taking that level and then close on the regular trading hours. But, during electronic trading hours, they send it through it." [new; opinion-level filter]
+- **TGIF held back in a strong trend**: not called when the daily trend is aggressive. [refines 098 TGIF]
+- **Live calls without execution**: when the platform lags he calls entry limit/market, stop, first partial and terminus instead of trading. [noted]
+- **Index choice for new students**: micros, not minis, for volatility. [noted]
+## Our interpretation / switches (all off)
+- [off] org_bullish_exploration_minus_0_5_sd (bullish day: allow a run below the ORG low to -0.5 SD of the gap, then buy back toward the ORG low/CE) [new; backtestable]
+- [off] org_low_through_not_touch (require a trade through the ORG low, not a touch, before the reversal) [new]
+- [off] time_distortion_body_filter (ignore wicks, require bodies inside the pre-session FVG; confirm on 5m/10m) [new]
+- [off] friday_rth_close_skip_late_target (don't hold for a late Friday target that might only come in ETH) [new]
+- Not for the engine: market maker vs dealer rant, critics, "rigged" talk, livestream visits.

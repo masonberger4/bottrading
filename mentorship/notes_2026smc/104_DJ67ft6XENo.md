@@ -1,0 +1,23 @@
+# 2026 SMC 104: Evening review of a lunch-macro short; lunch macro can start at 10:30; 10:50-11:10 turtle soup; target the trailed lows after 10:00; the wick to the left of an FVG; the last BISI before the high as the IFVG (an evening, probably Tue Apr 14 2026; 7 up-close days; MNQ 09:30 open 25,656.25, close near 26,000)
+Full read (~4k words). Clean caption ("consequent correction" = CE). Frames laptop-only. The live recording of the trade failed, so this is a recap. Order inside this batch: 104 (Tue) > 102's Asian short (Tue evening) > 103 (Wed) > 101 (Thu) > 100 (Fri 08:25) > 099 (Fri review) > 098 (Mon).
+## Summary
+Daily: price held at 30% of last week's range (TGIF) and rallied; upside levels on the continuous contract 26,399.5, 26,112, then with back-adjust 26,562.75 and the ATH 26,859. Intraday: after a one-way rally from 09:30, price ran minor buy-side inside the 10:50-11:10 macro (turtle soup); he shorted the BISI that formed just before that high once it failed as discount support, added at the up-close candle's open (bearish OB) and the IFVG's lower half, and covered at the low below the trailed short-term low, next to the CE of a wick inside a BISI.
+## Rules in ICT's wording
+- **Lunch macro timing**: "lunch time is 11:30 to 1:30 Eastern time. But I taught that the macro can start pulling back into the range earlier. And it can happen as early as 10:30." Reason: "first hour dealing range for trading is done from 9:30 to 10:30 ... Once that's fulfilled then we could start looking for ... a pullback" and 10:30 halves the 10:00-11:00 hour, like the forex London close ("the profit-taking time of day"). Still needs "something rather technical to spur" it. [new; see conflict 33]
+- **Macro window 10:50-11:10** is where the buy-side run (failure swing) should happen. [refines B1/B3 macros]
+- **Lunch macro definition and target**: "It's a pulling back or a retracement back inside of whatever the range has been since the 9:30 opening"; "It's defined by time going back to 10:00 ... start looking back for the lows." In a strong bullish buy program, "I'm only looking for one or two short-term lows that have been trailed up for anyone that's long"; in a bearish context, "the lowest low that formed right after 10:00." [refines B4 lunch target (088); see conflict 33]
+- **Retracement must take a low first**: a pullback that doesn't take the prior low "isn't enough of a criteria"; he needed the run to overtake the SIBI and take the high before shorting. [new]
+- **Targets as external range liquidity** of each dealing range (09:30-to-high range, then the swing range). [repeats 2023 ERL]
+- **Wick to the left of an FVG**: "if there's a buy side imbalance sell side inefficiency, it's the gap that takes precedence. So, if the gap's low is here ... that's as bad as low as it could reasonably reach for ... Ideally, you want to see it trade to or just above consequent encroachment" of the wick. "Higher tier understanding where it may not be the actual fair value gap if there's a wick to the left of it ... use the lower half of the wick ... That'll be your actual first presentation." [refines 098 wick = gap; refines B1 first presented FVG]
+- **Not every FVG becomes an IFVG**: the easy, high-probability one is "the only inefficiency right before this high is taken"; "If it isn't obvious, it's probably not there." [new; refines B3/B4 IFVG selection]
+- **Cancel the bullish read first**: the drop into the up-close BISI "needs to give up the ghost. It needs to go through it"; then premium sensitivity on the return (bodies in the lower half, wicks to CE allowed; best when bodies stay outside). [repeats B4]
+- **Bearish OB activation**: trading back down through the up-close candle's open "activates this candlestick as a order block, a bearish order block"; its range = entry or pyramid point. [refines 2023 OB]
+- **Sizing note**: 10 + 10 + 10 MNQ (~3 minis); market orders; covered at the low rather than wick CE + 1 tick for liquidity. [noted]
+- **Bullish days**: the lunch macro often "create[s] a new buying opportunity". [refines B4 lunch]
+## Our interpretation / switches (all off)
+- [off] lunch_macro_from_1030 (allow the lunch retracement from 10:30, after the first-hour dealing range) [new; conflict 33]
+- [off] macro_1050_1110_turtle_soup [refines B1/B3]
+- [off] lunch_target_trailed_lows_bull / lunch_target_lowest_after_1000_bear [refines B4]
+- [off] last_bisi_before_high_ifvg (IFVG candidate = the only gap formed right before the high was taken) [new; backtestable]
+- [off] wick_left_of_fvg_refines_entry (use wick low to CE as the first presented array) [new]
+- Not for the engine: Street Smarts history, recording failure, student shout-out.

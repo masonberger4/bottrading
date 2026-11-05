@@ -24,3 +24,11 @@ Done (notes NNN_<id>.md): all 8. 090 and 094 not in the caption folder; 061 and 
 Digest: mentorship/digests/m2026smc_b4_draft_rules.md (conflicts numbered 31-40, continuing batches 1-3).
 Chronology inferred: mid-April 2026 (097 Tue AM > 096 Tue PM > 095 likely Wed); late April (093 a Friday, Apr 24 or May 1; 092 ~Tue Apr 28 > 091 Wed Apr 29 FOMC); 088 and 089 later (NQ ~29,300-29,600, likely late May/June; frame check).
 Main theme: the last three RTH opening range gaps graded in octants as the intraday framework; ORG SD projections x time; the ICT gray pool (probably 038's unclear "gray pole").
+
+# Batch 5 (videos 098-105), 2026-11-05
+Branch claude/project-thread-uhdbhy (off mentorship). PR into mentorship, never merge.
+Done (notes NNN_<id>.md): all 8. 061, 083, 090 and 094 still not in the caption folder.
+Digest: mentorship/digests/m2026smc_b5_draft_rules.md (conflicts numbered 41-49, continuing batches 1-4).
+Chronology inferred: one mid-April 2026 week: 105 (Tue Apr 14 AM, PPI) > 104 (Tue PM) > 103 (Wed, drills) > 102 (Thu AM recap of the Tue-evening Asian short) > 101 (Thu live) > 100 (Fri 08:25) > 099 (Fri review, ATH 26,859 back-adjusted) > 098 (Mon Apr 20). Batch 4's 095-097 probably follow 098.
+Main theme: ORG direction as bias, CE/75%/full fill then -0.5 SD beyond the gap; back-adjusted continuous contract at ATHs; TGIF 20-30% (deferred to Monday); lunch macro from 10:30; BOLO introduced (099).
+Open items: ATH date "Sep 30" (100) vs "Oct 30 2025" (098); 102's "9:50-10:10 macro" during an Asian-session trade (like 084).
