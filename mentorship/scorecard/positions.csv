@@ -115,3 +115,24 @@ TGIF-TIMING,C,"If Friday doesn't deliver it, expect it Sunday 18:00/Monday; drop
 WEEK-PROFILE,A,Tuesday/Wednesday forms the low (high) of the week
 WEEK-PROFILE,B,"Wednesday (""hump day"") midweek retracement or reversal"
 WEEK-PROFILE,C,Thursday tends to create an intermediate-term high
+WICK-PRIORITY,A,The FVG/VI itself; the adjacent wick is not graded
+WICK-PRIORITY,B,"The wick takes precedence: grade it (CE, quadrants) and set the stop beyond the wick"
+EXIT-DEPTH,A,Hold for the full target at the draw (with partials)
+EXIT-DEPTH,B,Lower exit threshold: close or trail tight from 75% of the projection; don't demand the exact target
+SHORT-LOCATION,A,"No: one-sided day already deep in the RTH range (esp. Friday, near lunch) is a poor short"
+SHORT-LOCATION,B,Yes if a swing low of the larger run broke: the range resets and its new EQ is a short-term premium
+PARTIAL-TRIGGER,A,"At targets/liquidity only: half off by T2, one runner"
+PARTIAL-TRIGGER,B,"On a warning candle: a body closes in the wrong half of the entry array, peel one of two"
+PARTIAL-TRIGGER,C,"Ladder: below each intermediate low, 25% at the event horizon of two pools, leave a 20% runner"
+TWO-SIDED,A,Stand aside (low probability); in rollover week trade very light and expect to be wrong
+TWO-SIDED,B,"Pick a side (gun to head), small size, scratch fast if wrong"
+TF-CHOP,A,"Go up (5m, 15m, then 1h/4h) to find the array the chop is working toward"
+TF-CHOP,B,Drop to a lower timeframe (15s/sub-1m) for the entry inside the higher-timeframe array
+OB-VALID,A,Any OB in the draw's direction after displacement
+OB-VALID,B,Only an OB sitting on an ORG gradient level (quadrant/octant); a propulsion block inherits from that parent
+STOP-MGMT,C,Cut or close when three supporting PD arrays are lost (the third gone = walk away)
+STOP-MGMT,D,Trail above the last three candles' extreme (or strangle on 15s) once the target looks unlikely
+FVG-VALID,C,"On a trending day, only the first FVG after the first-hour dealing range breaks"
+FVG-VALID,D,An FVG that holds more than 1-2 candles inside it is not valid
+GAP-LIFE,C,RTH opening range gaps: carry the last five
+NEWS-WAIT,E,"Fade the release's first leg once the range forms (after ~10:00), only on range-bound days"
