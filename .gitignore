@@ -26,3 +26,6 @@ paper_log.txt
 
 # temporary git worktrees for parallel builds
 .worktrees/
+
+# ICT video frames stay on the laptop
+data/ict_frames/
