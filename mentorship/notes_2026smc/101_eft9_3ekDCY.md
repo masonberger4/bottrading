@@ -1,0 +1,25 @@
+# 2026 SMC 101: Thursday live tape read, "one month in" student pantomime; premium ORG = shorts only in the first 30 minutes; through the ORG low to the -0.5 SD projection; 1:1 model (a Thursday, probably Apr 16 2026, the day 100 reviews; after 9 up-close daily candles; MNQ ORG CE 26,370.75)
+Full read (~9k words). Clean caption. Frames laptop-only. About a third is TradingView lag complaints (late fill on the short, could not set stop/target), a "mentor challenge" rant and study-habit advice; skipped. Yesterday's stream (Wednesday) was the brand-new-student entry drill that 098 mentions.
+## Summary
+Premise: a student about 4 weeks in, now adding the RTH ORG. Market opened above the prior 16:14 settlement (premium gap) after 9 straight up-close days, so the bias is short toward the gap. Price hit the ORG CE quickly, used a pre-session (07:00-09:30) FVG as an inversion, consolidated ("fill" = manual intervention), then traded through the ORG low to the -0.5 SD projection of the gap (wick a bit beyond it) and returned to the ORG CE, where it becomes 50/50. Matches 100's Friday recap of this Thursday.
+## Rules in ICT's wording
+- **Premium ORG sets the morning bias**: "If we open up higher at 9:30 than where we settled at 4:14 p.m. Eastern time previous day, that sets the bias bearish. We only want to look for shorts." "70% of the time it makes an attempt to trade to half gap." [refines B1 ORG; conflict check: 2023 HTF bias first, see #38]
+- **Student progression (after ~4 weeks)**: "I'm going to only look for shorts in premium gaps in the first 30 minutes of trading. I'm going to aim for the half gap, and best-case scenario would be 3/4 gap closure or full gap closure." Next stage: projections beyond the gap. [new; a clean beginner model]
+- **Through the ORG low -> -0.5 SD**: "what happens when it takes its retracement all the way to the low of the gap and then goes through it? ... I'll have the whole entire opening range gap ... toggle negative 0.5 ... it'll give you a projection outside of that gap where you can aim for." "That right there, that's an algorithmic run utilizing the opening price at 9:30 and whatever the regular trading hours opening range gap low is." Often "the body will be right on that level or just above it, and the wick might go just a tad bit below it." [new; mirror of 100's bullish -0.5 SD; refines B4 SD projection]
+- **"To it and through it"**: after pausing, "it needs to go to it and through it now"; a close below the pause low (not just a wick) makes that wick's CE "the new line in the sand for the bears"; bodies must stay below it. [refines B3 wick CE]
+- **Back at the ORG CE after the target = 50/50**; contrarian: target just below the CE from below, then done for the session. [new]
+- **Pre-session FVG preferred over an opening-range FVG**: "this one here I tried to teach you not to use that one so much ... In this case, we used ... a pre-session fair value gap ... We're inside of the 7:00 to 9:30." [refines 100]
+- **Tight shared-body consolidation = wait**: "this is disorganization. There's nothing in here that I can frame an execution or enter on. So, what do you do? You sit still." If no FVG forms after the bell, "just wait till 10:00." Stop would be above the consolidation high, and "If I were making the market, I'd run that high before I took it lower." [refines B4 slop = stop]
+- **9:30 opening price** "is always a price level that can be re-traded to." [repeats B1]
+- **Up-close streak**: after 9 up-close days and new ATHs, "a measurement of retracement lower absolutely welcomed ... could be a short-term or intermediate-term high." [refines B4 up_close_streak (096: 11 days)]
+- **Opening range = 30 minutes**: "Not 15-minute opening range, not the orb ... 5-minute orb. It's 30 minutes ... That first 30 minutes is going to give you the rhyme and reason for the entire morning session"; daily range calculations promised later in 2026. [refines B1 opening range]
+- **1:1 model**: beginner drill = FVG entry, a draw, target = risk; "someone that's more skilled ... a one to one will allow them to be profitable ... But you have to prevent yourself from overtrading." [new; conflict check: 2023 minimum R]
+- **Learning method**: first 4 weeks lots of executions; then compare winners vs losers for repeating signatures. [study advice]
+- **SMT/decoupling**: Dow trying higher while NQ is not = decoupling; MES IFVG noted. [repeats B2/B3]
+## Our interpretation / switches (all off)
+- [off] premium_org_short_only_first_30 (premium ORG: shorts only 09:30-10:00, targets CE, 75%, full gap) [new; backtestable]
+- [off] org_through_low_minus_0_5_sd (after full gap fill, project -0.5 SD of the gap as the next target) [new; pairs with 100]
+- [off] org_ce_return_50_50_stop (after the projection, a return to the ORG CE ends the session) [new]
+- [off] prefer_presession_fvg (07:00-09:30 FVGs over opening-range FVGs as the entry anchor) [new]
+- [off] fixed_1r_target (target = initial risk) [new; conflict check]
+- Not for the engine: TradingView/NinjaTrader complaints, mentor challenge, word searches, reticular activating system talk.
