@@ -1,0 +1,101 @@
+digest,num,scorecard,note
+te_charter,1,MSS-CLOSE,
+te_charter,2,,Not scored: Charter 04:00/06:00 "platform opens" are most likely MT4 server-time clocks (00:00 NY shows as 04:00; times.md A). Check frames.
+te_charter,3,CONTRACT,
+te_charter,4,,Not scored: Model 1 trade-plan rules (flat by 10:00 and no Fridays) are internal to one Charter FX model.
+te_charter,5,,Not scored: Model 2 vs Model 3 on Mondays is internal to the Charter models.
+te_charter,6,,Not scored: COT look-back 6 vs 12 months applies to swing/position models only (engine is intraday; rulebook = 12 months).
+te_charter,7,,Not scored: Model 7's own MSS definition (highest reaccumulation low); single model.
+te_charter,8,BREAKER-ZONE,
+te_charter,9,,Not scored: Model 13 entry/stop edge is a slide-vs-audio question; needs the frames.
+te_charter,10,NFP-THU-FRI,
+te_charter,11,LUNCH-TRADE MACRO-GRID LAST-HOUR,
+te_charter,12,PREMARKET-ENTRY,
+te_charter,13,ASIA,
+te_charter,14,REENTRY,
+te_charter,15,PYRAMID-WHERE,
+te_charter,16,ORG-CE-WINDOW,
+m2024,1,GAP-LIFE,
+m2024,2,PREMARKET-RANGE,
+m2024,3,OPEN-RANGE-TRADE,
+m2024,4,LUNCH-WINDOW LUNCH-TARGET,
+m2024,5,LAST-HOUR,
+m2024,6,MIN-ROOM,
+m2024,7,TGIF-DEPTH TGIF-TIMING,
+m2024,8,SMT-USE,
+m2024,9,MONDAY,
+m2024,10,ASIA,
+m2024,11,PREMARKET-ENTRY,
+m2024,12,,Not scored yet: OB entry on an uptick at the open / stop at the mean threshold vs owner #11 and owner #6 (MT belongs to the breaker). Candidate for a later OB-STOP card.
+m2024,13,BREAKER-ZONE,
+m2024,14,OB-CLOSE,
+m2024,15,ORG-SIZE,
+m2024,16,,Not scored: beginner risk rules (1% / one trade / stop after a loss); the standing rule is the experienced version (owner #12 risk 1.2%). Re-entry part is in REENTRY.
+m2024,17,NEWS-WAIT,
+m2024,18,PYRAMID-SIZES,
+m2024,19,,Not scored: stand aside until the 10:00 Silver Bullet; Silver Bullet is settled off.
+m2025,1,ORG-SIZE,
+m2025,2,LONDON-MACRO,Midnight opening range 00:00-00:30 (L80) is a new range with no 2023 counterpart; not scored.
+m2025,3,OPEN-RANGE-TRADE FPFVG-DEF,
+m2025,4,LUNCH-WINDOW LUNCH-TRADE LUNCH-TARGET,
+m2025,5,FOMC-DAY NFP-THU-FRI,
+m2025,6,,Not scored: reclaimed FVG vs inversion FVG wording; 2026 (106) and 2023 (026/030/091) agree a reclaimed FVG holds after a break. IFVG confirmation is in IFVG-CONFIRM.
+m2025,7,MIN-ROOM,
+m2025,8,AFTER-BIG-DAY,
+m2025,9,PREMARKET-RANGE,
+m2025,10,ATH-RULE,
+m2026smc,1,ORG-CLOSE,
+m2026smc,2,MACRO-GRID,
+m2026smc,3,PYRAMID-WHERE,
+m2026smc,4,TGIF-DEPTH,
+m2026smc,5,NEWS-WAIT,
+m2026smc,6,,Not scored: session alternation (025/029: a trending session is followed by consolidation; rarely three trend in a row) has no opposing 2023 statement; it is a new rule.
+m2026smc,7,PREMARKET-RANGE,
+m2026smc,8,BREAKER-ZONE,Breaker anchor "lowest close down candle" (053/067) matches 2023 candle choice (081 lowest close; pd_arrays 1.9); only body-vs-range is scored.
+m2026smc,9,IFVG-CONFIRM,
+m2026smc,10,BIAS-SOURCE,
+m2026smc,11,RANGE-ANCHOR,
+m2026smc,12,,Not scored: partial ladder at grade levels (050) refines the 2023 partial rules (scale out at each pool) rather than opposing them.
+m2026smc,13,FPFVG-DEF,
+m2026smc,14,NEWS-WAIT NEWS-HOLD,
+m2026smc,15,LUNCH-TRADE LUNCH-TARGET,
+m2026smc,16,OB-CANDLE OB-CLOSE,
+m2026smc,17,,Not scored: IOFED entry depth (partial short of CE vs 1 tick past candle 1) is internal to 2026 and has one source each.
+m2026smc,18,MONDAY CPI-WEEK,
+m2026smc,19,,Not scored: HRLR/LRLR "candles sharing a range" needs a numeric threshold before it can be compared.
+m2026smc,20,,Not a conflict: the 15m bellwether is already the 2023 rule (bias.md B4: 013; 065B; 092).
+m2026smc,21,UNICORN,
+m2026smc,22,OB-CANDLE OB-CLOSE,
+m2026smc,23,IFVG-CONFIRM,
+m2026smc,24,MACRO-GRID LAST-HOUR,
+m2026smc,25,LUNCH-WINDOW LUNCH-TARGET,
+m2026smc,26,PREMARKET-RANGE,
+m2026smc,27,FVG-VALID,
+m2026smc,28,,Not scored: wick precedence over the OB (074) is one source; compare with 2023 PD-array priority in the full review.
+m2026smc,29,RANGE-ANCHOR,Projection multiples (1.25 open-to-low; fulcrum -2 SD) are single-source and not scored separately.
+m2026smc,30,,Not scored: previous-day range half rule (075) is one source with no opposing 2023 statement.
+m2026smc,31,OB-CANDLE,
+m2026smc,32,IFVG-CONFIRM,
+m2026smc,33,LUNCH-WINDOW LUNCH-TARGET,
+m2026smc,34,ORG-CE-WINDOW ORG-AFTER-CE,
+m2026smc,35,LIQ-LOCATION,
+m2026smc,36,REENTRY,
+m2026smc,37,FOMC-DAY,
+m2026smc,38,BIAS-SOURCE,
+m2026smc,39,WEEK-PROFILE,
+m2026smc,40,,Not a conflict: "strong 07:00 push = skip the AM" (093) agrees with 029's alternation rule; nothing opposes it.
+m2026smc,41,CONTRACT,
+m2026smc,42,LUNCH-WINDOW,
+m2026smc,43,ORG-AFTER-CE,
+m2026smc,44,BIAS-SOURCE,
+m2026smc,45,FIXED-RR,
+m2026smc,46,TGIF-TIMING,
+m2026smc,47,SMT-USE,
+m2026smc,48,FPFVG-DEF,
+m2026smc,49,,Not scored yet: OB tolerance (wick may reach the OB quadrant while bodies hold the mean threshold; propulsion block bound) is one source (099).
+m2026smc,50,ORG-CE-WINDOW,
+m2026smc,51,SMT-SET SMT-USE,
+m2026smc,52,SMT-USE,
+m2026smc,53,STOP-MGMT,
+m2026smc,54,ORG-AFTER-CE,
+m2026smc,55,PYRAMID-WHERE,

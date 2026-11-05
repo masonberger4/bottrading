@@ -1,0 +1,117 @@
+conflict,pos,position
+MONDAY,A,Trade Mondays like any other day (he shows many Monday trades)
+MONDAY,B,"Skip Mondays (accumulation/manipulation), except NFP-week Mondays or an obvious setup"
+CPI-WEEK,A,"Day before CPI: quiet, small risk, bread-and-butter only, then stop"
+CPI-WEEK,B,"Mon-Wed are difficult/range-bound in RTH (ETH trends); after Wednesday's PM it gets easy, expansion Thu/Fri"
+AFTER-BIG-DAY,A,"Large ORG / large prior range: chop for 30-45 min, run near 11:00, prefer the PM"
+AFTER-BIG-DAY,B,After a very large down day avoid the whole morning session (no trades 09:30-10:30)
+LUNCH-WINDOW,A,12:00-13:00
+LUNCH-WINDOW,B,12:00-13:30 (90 minutes)
+LUNCH-WINDOW,C,11:30-13:30 (2 hours); setup forms in the first hour
+LUNCH-WINDOW,D,The lunch retracement can start as early as 10:30
+LUNCH-TRADE,A,Avoid / consolidation: lunch is a stop run against the AM; trade only if you know its rules
+LUNCH-TRADE,B,Trade it: lunch macro is a setup with its own target (short or long against the morning)
+LUNCH-TARGET,A,The liquidity protecting the AM move (AM winners' trailed stops; most recent AM high/low)
+LUNCH-TARGET,B,"The FIRST swing low (bull day) / high (bear day) that formed after 10:00, looking left from 11:30"
+LUNCH-TARGET,C,The low (high) made in the 09:50-10:10 macro / the 10:00 low
+MACRO-GRID,A,"Fixed named macros only (09:50-10:10, 10:50-11:10, lunch, 14:50-15:10, 15:15-15:45); don't invent others"
+MACRO-GRID,B,"Every hour: the last 10 minutes of an hour and the first 10 of the next (:50-:10), incl. 07:50-08:10, 08:50-09:10, 13:50-14:10"
+LAST-HOUR,A,"One final-hour macro 15:15-15:45; after the HTF target is hit 15:45-16:00 only ""sputters""; flat by 15:50-16:00"
+LAST-HOUR,B,"Several last-hour macros (14:50-15:10, 15:15-15:45, then MOC 15:45/15:50-16:00 ""supercharge""); hold runners into them"
+LONDON-MACRO,A,London macro is exactly 03:30
+LONDON-MACRO,B,"No single London macro time (2023: London kill zone; :50-:10 grid in 2026 would give 02:50-03:10, 03:50-04:10)"
+PYRAMID-WHERE,A,Only on the favourable side of equilibrium of the leg/range; no adds past EQ or after partials
+PYRAMID-WHERE,B,Add in drawdown (toward the wick/VI low) or keep adding into an IFVG
+PYRAMID-WHERE,C,Don't add above your average; re-add partials only after a retrace far (~20-30 handles) from the exit
+PYRAMID-SIZES,A,"Decreasing: largest first (6,3,1 / 6,3,2,1 / 5,4,3,2,1)"
+PYRAMID-SIZES,B,"6 then 4 (= 10), or 6/4/5 by levels"
+REENTRY,A,"Yes, same narrative and same (full) size"
+REENTRY,B,"Yes, but at half size (halve after a loss)"
+REENTRY,C,"No re-entry on the same leg (""There has to be rules""); one chance, then stop"
+MIN-ROOM,A,~10 handles of room to take 5 (ES); experienced may take 5-handle moves
+MIN-ROOM,B,NQ 10 / ES 5 minimum move; setup needs ~20 NQ handles of room
+MIN-ROOM,C,"At least 15 NQ handles net of spread, or no trade"
+FIXED-RR,A,"Targets at liquidity / PD arrays (the draw), not a fixed multiple"
+FIXED-RR,B,A fixed 1:1 can be profitable for a skilled trader (and is the beginner drill)
+STOP-MGMT,A,"Keep the initial stop (day trade) and pay yourself with partials; trail only to structure, not early"
+STOP-MGMT,B,Protect/exit at the CE of the last opposing wick before the stop is challenged
+SMT-USE,A,Qualifier only: confirms a turn at a PD array with time and draw
+SMT-USE,B,Act on it: take a partial when NQ makes a higher high and ES doesn't; down-weight on headline days
+SMT-USE,C,Use relative strength to choose the market: short the weakest index / the one nearest its old ATH
+SMT-USE,D,"Use it to pick the lagging market's target: the ""sick sister"" still has clean highs to run (long the lagger)"
+SMT-SET,A,"ES, NQ and YM all count"
+SMT-SET,B,"NQ vs ES only; the Dow is down-weighted (""only 30 stocks"")"
+ASIA,A,No: Asia moves too little to trade indices
+ASIA,B,Yes: Asia protocol around the 18:00 NDOG / bread-and-butter liquidity
+BIAS-SOURCE,A,"Top-down: weekly, then daily draw; intraday trades follow it"
+BIAS-SOURCE,B,"The ORG alone: premium ORG = shorts only, discount ORG = longs (first 30-60 min)"
+BIAS-SOURCE,C,"The last three RTH ORGs graded, ""without a hard line higher time frame bias"""
+BIAS-SOURCE,D,Weekly draw = the nearest higher-timeframe pool (path of least resistance) in the primary trend
+ATH-RULE,A,"Near all-time highs, don't pick the top: daily bias stays long; shorts only intraday and only when seasoned"
+ATH-RULE,B,No special rule: follow the draw both ways
+CONTRACT,A,Front month / delivery contract (or the largest open interest contract)
+CONTRACT,B,"Back-adjusted continuous contract: for old highs/lows at ATHs, and (107) only to reveal volume imbalances"
+CONTRACT,C,Compute targets on both delivery and continuous; take the one closest to market price
+NEWS-WAIT,A,Wait at least 30 minutes after a high/medium-impact release
+NEWS-WAIT,B,15-30 minutes after the release is fine (even NFP)
+NEWS-WAIT,C,Only skip the 08:30/08:31 news candles; enter from ~08:32 if there is a setup
+NEWS-WAIT,D,"Trade off the release itself: 08:30 open/wick CE, the 08:30 candle's extreme as the draw, the release as the Judas"
+NEWS-HOLD,A,No: square positions ahead of CPI/PPI; don't trade the numbers
+NEWS-HOLD,B,Yes: a pre-market trade can let the 08:30 release run into its target
+FOMC-DAY,A,"Trade only to 10:30 with no hard bias, then sit until after 14:00/14:30"
+FOMC-DAY,B,"Trade the afternoon two-stage delivery: first FVG after 14:00, second wave from 14:30 (often the opposite way)"
+FOMC-DAY,C,Don't trade the 14:00 release; 14:00-14:45 observation only; normal routine after 14:45
+NFP-THU-FRI,A,No: NFP week = trade Mon-Wed to 11:00 (new traders done by 07:00 Wed); NFP Friday no live trading
+NFP-THU-FRI,B,Yes: experienced traders trade NFP Thursday and Friday (after the initial volatility)
+OPEN-RANGE-TRADE,A,"No: 09:30-10:00 is erratic ""amateur hour""; wait, then trade from 10:00"
+OPEN-RANGE-TRADE,B,"Yes: trade at or right after the open toward the ORG CE, or the first presented FVG"
+FPFVG-DEF,A,"By time: the first FVG on the 1m between 09:31 and 10:00 (09:31 middle candle), used all week"
+FPFVG-DEF,B,"By context: the first FVG made by displacement through a swing; not the 09:30 candle on gap days; can be a later, more prominent one"
+FPFVG-DEF,C,The wick to the left of an FVG (low to CE) takes precedence as the first presented array
+ORG-CLOSE,A,16:14 last RTH 1m print / 16:15 settlement
+ORG-CLOSE,B,"16:00 close (the ""bell"")"
+ORG-CE-WINDOW,A,"By 10:00 (first 30 minutes), ~70% of the time"
+ORG-CE-WINDOW,B,Valid through the first hour (to 10:30)
+ORG-AFTER-CE,A,"Continue: through CE to full gap closure, then beyond (-0.5 SD; 6.5-8 SD on one-sided days)"
+ORG-AFTER-CE,B,"Done or fade: CE hit = ""done ... relax""; if the next octant fails it is not bullish; back at CE after target = 50/50"
+ORG-SIZE,A,"Every gap the same: grade CE and quarters, expect a reprice into it (large gap = chop, prefer PM)"
+ORG-SIZE,B,"Size buckets: 20-75 handles likes CE; 75-120 gray; extreme (>120) gaps only reach the near quadrant, then ""gap and go"""
+ORG-SIZE,C,Quadrants only on gaps of 20+ handles; smaller ones just eyeball the CE
+GAP-LIFE,A,Keep NWOGs for months (every NWOG in the last 60 days; they work 6-9 months)
+GAP-LIFE,B,"NWOGs 5 weeks, NDOGs 5 days"
+MSS-CLOSE,A,Wick / 1-tick trade-through is enough
+MSS-CLOSE,B,A close/body beyond the swing is required
+OB-CANDLE,A,The series is one block; use the open of the first (highest/lowest) candle
+OB-CANDLE,B,The candle with the largest body in the series
+OB-CANDLE,C,"""Book definition"": the last candle if it is the largest or the smallest; the first if uniform"
+OB-CLOSE,A,No close needed: trading through the OB open is the change in state
+OB-CLOSE,B,A later candle must trade above the OB's high (Core Content validation)
+IFVG-CONFIRM,A,"One candle close beyond the gap, then a new candle returns to it"
+IFVG-CONFIRM,B,Close beyond plus a second confirmation (retest close / body outside then return / next candle refuses / body past CE)
+IFVG-CONFIRM,C,Price must pass through the gap twice
+BREAKER-ZONE,A,Body of the breaker candle
+BREAKER-ZONE,B,Full candle range incl. wicks
+UNICORN,A,An FVG inside a breaker (same location)
+UNICORN,B,Second-stage redistribution of a market maker model
+FVG-VALID,A,Any FVG in the draw's direction (with quality filters)
+FVG-VALID,B,"Only first-presented FVGs, or FVGs anchored to (touching) an octant/quadrant grade level"
+RANGE-ANCHOR,A,Wicks (swing extremes)
+RANGE-ANCHOR,B,"Bodies (""the bodies tell you the real narrative"")"
+LIQ-LOCATION,A,"Beyond wick extremes: old highs/lows, relative equal highs/lows"
+LIQ-LOCATION,B,Below/above clusters of candle bodies
+PREMARKET-ENTRY,A,Wait for 09:30 (no 08:30 news = wait for the open; act on bias only after 09:30)
+PREMARKET-ENTRY,B,"Trade pre-market (07:00-09:00, or 07:00-08:30 into a release) when the setup is there"
+PREMARKET-RANGE,A,07:00-09:00 pre-market session as one range (ends 08:30 on 08:30-news days)
+PREMARKET-RANGE,B,First 30 minutes (07:00-07:30) on news weeks; the whole first hour 07:00-08:00 otherwise
+PREMARKET-RANGE,C,"07:00-08:29/08:30 pre-release range on 08:30 news days (graded, SD-projected)"
+PREMARKET-RANGE,D,"First 30 min of 07:00, 08:00 or 09:00 (07:00-07:30 / 08:00-08:30 / 09:00-09:30); opening range = the next 30 min"
+PREMARKET-RANGE,E,"08:00-09:30 ETH 90-minute window (Venom): its high = buy side, low = sell side"
+PREMARKET-RANGE,F,Runs are trustworthy from 06:00 (05:00-06:00 dead time); 06:00-09:00 on NFP weeks
+TGIF-DEPTH,A,20-30% (25% the midpoint); 40%+ is reversal talk outside the model
+TGIF-DEPTH,B,"20-30% usually, up to 40% in extreme/rare cases (still TGIF)"
+TGIF-TIMING,A,Friday only (PM-leaning or London close)
+TGIF-TIMING,B,From Thursday 13:00 through Friday's close (measure from the high formed after Thursday 13:00)
+TGIF-TIMING,C,"If Friday doesn't deliver it, expect it Sunday 18:00/Monday; drop it after Tuesday"
+WEEK-PROFILE,A,Tuesday/Wednesday forms the low (high) of the week
+WEEK-PROFILE,B,"Wednesday (""hump day"") midweek retracement or reversal"
+WEEK-PROFILE,C,Thursday tends to create an intermediate-term high

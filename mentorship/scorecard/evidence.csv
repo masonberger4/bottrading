@@ -1,0 +1,422 @@
+conflict,pos,lecture,quote,ts
+MONDAY,A,M2023:018,Mon Jan 30 2023 (no-news day) ES long 09:21-09:28 (his own fill),
+MONDAY,A,M2023:069,Monday opened below Friday's RTH close ... he shorted the 10:00-11:00 window,
+MONDAY,A,TE:te43,NQ Premarket Short Live Execution (Monday 2024-05-13),
+MONDAY,A,TE:te47,"June 24, 2024 NQ Turtle Soup Short (Monday, AM session)",
+MONDAY,A,L2025:L01,"live NQ, Mon 2025-11-24: maps the 09:30 run up through four stated targets",
+MONDAY,A,L2025:L82,"series intro + first worked trade, Mon 2025-01-06",
+MONDAY,A,SMC2026:050,"Monday short from a daily volume imbalance, partials on daily octants",
+MONDAY,B,M2023:065,New students don't trade Mondays; study them (filters.md),~4:12
+MONDAY,B,M2023:101,"Outside NFP and FOMC weeks he skips Monday (an accumulation day) unless the setup is obvious, or trades only the Monday PM (filters.md)",~30:53
+MONDAY,B,CC:cc12_003,"He usually ""lets Monday go"" (filters.md)",~15:40
+MONDAY,B,M2024:L06,"Mondays in general: ICT usually not interested, EXCEPT Mondays of NFP week (trades every one of those)",~24:00
+MONDAY,B,L2025:L31,"""Strive to look for setups on Monday of NFP week."" Beginners avoid Mondays otherwise",
+MONDAY,B,SMC2026:066,"new traders ""try not to trade on Mondays ... the manipulation and accumulation part of the week,"" except NFP week (""the cleanest price action tends to be on the Monday of non-farm payroll week"")",
+CPI-WEEK,A,M2023:028,"Day before CPI: don't trade ahead of it; quiet ""high resistance"" day: small risk, bread-and-butter only, then stop (filters.md)",~3:40
+CPI-WEEK,A,M2023:029,"Day before CPI: quiet ""high resistance"" day (filters.md)","~5:22, ~1:03:57"
+CPI-WEEK,A,M2024:L06,"NO-NEWS MONDAY BEFORE BIG NEWS (CPI/PPI Tue/Wed): ... give yourself ONE chance early; if stopped, don't re-enter",
+CPI-WEEK,A,SMC2026:066,"No-news Monday before big news: ""it's a 50/50 whether or not we're going to have a nice price run.""",
+CPI-WEEK,B,TE:te60,"High-impact news (CPI/PPI) on Wed/Thu -> Mon/Tue RTH reserved/range-bound, HRLR likely; ETH (London, premarket to 09:30) more likely to trend",~2:01-5:32
+CPI-WEEK,B,SMC2026:058,"""Monday, Tuesday, and Wednesday is going to be a little bit more difficult ... after Wednesday's PM session, things should get really easy, which means it's low resistance liquidity run conditions""",
+AFTER-BIG-DAY,A,M2023:033,Large ORG or a very large prior-day range: the first 30-45 min chop; a run often starts near 11:00; the PM (13:30-16:00) is better. Sacrifice the AM,~13:27
+AFTER-BIG-DAY,B,L2025:L57,"After a very large down day, ""I teach my students to avoid the morning session"": for index futures nothing from 9:30 to 10:30",
+AFTER-BIG-DAY,B,L2025:L58,After a large down day he avoids the next morning session,
+LUNCH-WINDOW,A,M2023:015,Lunch 12:00-13:00 is usually consolidation,~29:06
+LUNCH-WINDOW,A,M2023:025,Lunch (12:00-13:00) after a morning drop runs the buy stops above the AM session's most recent high,~1:00:20
+LUNCH-WINDOW,A,M2023:056,"New York lunch, 12:00-13:00: price builds relative equal lows (retail ""support"")",~0:13:09
+LUNCH-WINDOW,B,M2023:064,Lunch: between 12:00 and 13:30 price often runs stops below the low formed before 11:00/noon,~1:45:41
+LUNCH-WINDOW,B,M2023:067,"New York lunch 12:00-13:30 (""90 minutes"")",~0:40:40
+LUNCH-WINDOW,B,M2023:068,"NY lunch 12:00-13:30: if bias points to a HTF level, expect lunch to run the opposite liquidity",~00:12:42
+LUNCH-WINDOW,C,M2024:L10,LUNCH MACRO: lunch = 11:30-13:30 ET,~30:01
+LUNCH-WINDOW,C,M2024:L12,"at 11:30, look backward ... it can last until 13:30; after 13:30 price is free to resume the morning direction",~28:00-34:00
+LUNCH-WINDOW,C,L2025:L51,11:30-1:30 New York lunch period (2 hours),
+LUNCH-WINDOW,C,SMC2026:068,"lunch 11:30-13:30; ""The setup usually forms in the first hour""",
+LUNCH-WINDOW,C,SMC2026:081,"""11:30 a.m. to 1:30 p.m. ... The setup forms in the first hour. It can deliver to target in the first hour, but generally ... hold during 12:30 to 1:30.""",
+LUNCH-WINDOW,C,SMC2026:088,"""11:30 starts the New York lunch hour technically it's a 2-hour period ... it ends at 1:30.""",
+LUNCH-WINDOW,D,SMC2026:104,"""lunch time is 11:30 to 1:30 Eastern time. But I taught that the macro can start pulling back into the range earlier. And it can happen as early as 10:30.""",
+LUNCH-TRADE,A,M2023:015,"If the move to the daily objective completes before lunch, skip it (lion's share already delivered); lunch is usually consolidation","~16:22, ~29:06"
+LUNCH-TRADE,A,M2023:046,Lunch trading is possible only if you know its rules; otherwise it is a stop run against the AM,~0:32:02
+LUNCH-TRADE,B,M2023:075,"NY lunch macro (CPI day lunch macro long): after an AM run up, expect a run on the first post-news swing low",~1:10:00
+LUNCH-TRADE,B,TE:te46,NQ 2024-06-10 lunch macro short (live execution),~0:01-10:59
+LUNCH-TRADE,B,M2024:L12,the lunch macro seeks the stops under [the first low after 10:00],~28:00-34:00
+LUNCH-TRADE,B,L2025:L57,New York lunch macro rules: when a move runs one-directionally from the open with NO short-term high taken ... set up a retracement,
+LUNCH-TRADE,B,L2025:L58,"Trade: New York lunch macro ... ""a very strong setup for my lunch macro""",
+LUNCH-TRADE,B,L2025:L51,walks the lunch macro ... the market gravitates to [the target] from 11:30,
+LUNCH-TRADE,B,SMC2026:068,"buy side taken ""during the 11:50 a.m. to 12:10 macro. That's when the algorithm will start to do its work""",
+LUNCH-TRADE,B,SMC2026:088,He shorted the IFVG that formed there [8 SD inside the first lunch hour],
+LUNCH-TRADE,B,SMC2026:104,"Evening review of a lunch-macro short; on bullish days the lunch macro often ""create[s] a new buying opportunity""",
+LUNCH-TARGET,A,M2023:046,"Lunch macro 11:50-12:10: a run starts ... toward the liquidity that protected the AM move, i.e. against the morning's profitable side",~2:03:21
+LUNCH-TARGET,A,M2023:025,"runs the buy stops above the AM session's most recent high (where shorts trailed stops), not the highest high",~1:00:20
+LUNCH-TARGET,A,M2023:064,price often runs stops below the low formed before 11:00/noon. Trailed stops in the AM get hit there,~1:45:41
+LUNCH-TARGET,B,M2023:075,"after an AM run up, expect a run on the first post-news swing low (sell stops of the 8:30 longs)",~1:10:00
+LUNCH-TARGET,B,M2024:L12,"at 11:30, look backward for the FIRST low (bullish morning) that formed AFTER 10:00 (e.g., 11:17); the lunch macro seeks the stops under it",~28:00-34:00
+LUNCH-TARGET,B,L2025:L57,"draw a vertical line at 10:00, walk right candle by candle: the FIRST (highest immediate) high that forms after 10:00 is the target",
+LUNCH-TARGET,B,L2025:L58,the high that forms after 10:00 up to the first high is the target for the lunch macro,
+LUNCH-TARGET,B,L2025:L22,"""find 10:00 in the morning and walk forward until you see a prominent swing low ... lunch macro will seek sellside formed after 10:00 a.m.""",
+LUNCH-TARGET,B,L2025:L51,"""At 10 o'clock start walking forward, where's the high that forms when you're bearish"": that high is the lunch macro target",
+LUNCH-TARGET,B,SMC2026:088,"""if you at 11:30 go to the left from there, towards 10:00, where's the first low you come to? This one."" The deeper post-10:00 low is the ""best case"", not used",
+LUNCH-TARGET,B,SMC2026:104,"""It's defined by time going back to 10:00 ... start looking back for the lows."" Bull: ""one or two short-term lows that have been trailed up""",
+LUNCH-TARGET,C,SMC2026:060,"""pulling back down into ... a 10:00 low ... lunch macro is going to target this low.""",
+LUNCH-TARGET,C,SMC2026:068,target the 10:00 low,
+LUNCH-TARGET,C,SMC2026:081,"""lunch macro low as a draw on liquidity"": lows formed at the start of the 09:50-10:10 macro (and 10:01)",
+MACRO-GRID,A,M2023:073,"Two macros are named with exact times: 09:50-10:10 and 10:50-11:10 ET. A macro gives timing only, never direction","~19:41, ~27:57"
+MACRO-GRID,A,M2023:009,Macro 09:50-10:10 drives a run to liquidity or an inefficiency,~18:24
+MACRO-GRID,A,M2023:046,Lunch macro 11:50-12:10: a run starts in that 20-minute window,~2:03:21
+MACRO-GRID,A,M2023:014,Final hour macro 15:15-15:45 (box on chart),~05:19
+MACRO-GRID,A,SMC2026:087,"""the last hour we have a 3:15, 3:45 ... And we have 2:50 3:10."" Macros are fixed times; don't invent ones like 10:40",
+MACRO-GRID,B,SMC2026:021,"""the last 10 minutes of an hour and first 10 minutes of the new hour""; ""macro gives you no direction, only the time price should become active.""",
+MACRO-GRID,B,SMC2026:039,"Macro 07:50-08:10: price hit the IFVG ""in the last minute of the macro"" then sold off",
+MACRO-GRID,B,SMC2026:045,"SIBI touched in the 07:50-08:10 macro then dropped: ""You got the right price ... But it's just simply not time."" 08:50-09:10 macro low then breakaway gap",
+MACRO-GRID,B,SMC2026:084,"evening/Asia 21:50-22:10 short ""after the evening session settles"" (time ambiguous in caption)",
+LAST-HOUR,A,M2023:014,Final hour macro 15:15-15:45 ... bulk of volume is done by 16:00,~05:19-05:56
+LAST-HOUR,A,M2023:030,Last-hour macro 15:15-15:45 ... Flat by the 16:00 candle,~20:06
+LAST-HOUR,A,M2023:027,"""Before 10 minutes to 4"": hard cutoff 15:50 (the 15:45-15:50 macro can extend)",~40:10
+LAST-HOUR,B,M2023:022,"15:00-16:00 has three macros. Usually two occur, and at least one always does",~3:16:42
+LAST-HOUR,B,M2023:069,the 15:45 market-on-close run delivers the HTF target,~19:52
+LAST-HOUR,B,M2023:075,"chart label ""2:50 To 3:10 Macro""",~1:45:00
+LAST-HOUR,B,TE:te25,MOC macro: price spools higher/lower between ~15:50 and ~15:57; last minutes retrace,~0:57-2:35
+LAST-HOUR,B,M2024:L11,"hold till ~15:15, which starts the last-hour macros (four macros in 15:00-16:00)",~58:01
+LAST-HOUR,B,M2024:L12,"hold to at least 15:15 ... 15:15-15:45 macro; 15:45-16:00 = market on close (15 min, not 10)","~34:00, ~42:00"
+LAST-HOUR,B,SMC2026:023,"""the 2:50 to 3:10 macro for final hour"", then 3:15 through 3:45, then last 10 minutes = market on close (MOC) ""supercharge""",
+LAST-HOUR,B,SMC2026:087,"""Notice the time it's happening at 3:30. It's algorithmic. Sweet spot between 3:15 and 3:45's macro.""",
+LONDON-MACRO,A,L2025:L80,"London macro at 3:30 (forex sweet spot 3:30; he calls it ""exactly 3:30""; a 3:29 reaction is seen in GBPUSD)",
+PYRAMID-WHERE,A,M2023:022,stop adding once price passes the 25% line of the displacement leg (execution D5),~49:26
+PYRAMID-WHERE,A,M2023:025,no pyramiding past halfway of the discount half (execution D5),~47:56
+PYRAMID-WHERE,A,M2023:092,no adds below EQ of the implied dealing range (execution D5),~1:15:24
+PYRAMID-WHERE,A,M2023:045,no adds above EQ of the anticipated range near target (execution D5),~1:51:09
+PYRAMID-WHERE,A,M2023:058,adds only while not yet in premium (execution D5),~43:12
+PYRAMID-WHERE,A,M2023:060,shorts only above EQ of the leg (execution D5),~1:23:00
+PYRAMID-WHERE,A,M2023:006,No adds after partials have been taken (execution D4),~53:53
+PYRAMID-WHERE,A,SMC2026:023,"""if I'm long it needs to be at consequent encroachment or equilibrium of the range that you're trading in or lower ... once it goes beyond equilibrium, I'm not permitted to add more.""",
+PYRAMID-WHERE,B,SMC2026:043,pyramid in drawdown (to wick/VI low) (B1 digest #3),
+PYRAMID-WHERE,B,SMC2026:108,"""if we're going to get above it ... treat it as inversion. So, accumulated that, added to it, added to it.""",
+PYRAMID-WHERE,C,SMC2026:099,"""because I've already fortified a new long down here, I don't want to add to it here because then it would raise my average price""",
+PYRAMID-WHERE,C,SMC2026:098,"""If this would have been say another 20 to 30 handles lower and then we retrace ... I would have added them back.""",
+PYRAMID-SIZES,A,M2023:006,"Sizes decrease: largest first, smaller adds, never a larger add: 6,3,2,1 (execution D1)",~51:52
+PYRAMID-SIZES,A,M2023:021,"6,3,1, aggressive 6-4-2-1 (execution D1)",~20:03
+PYRAMID-SIZES,A,M2023:050,"6,3,1 (execution D1)",~50:05
+PYRAMID-SIZES,A,M2023:026,"6 at VI, 3 at next VI, 1 at wick CE (execution D1)",~1:44:04
+PYRAMID-SIZES,A,M2023:083,"5,4,3,2,1 (chart) (execution D1)",
+PYRAMID-SIZES,B,M2023:076,standard 6 + up to 4 = 10 (execution C6),~27:54
+PYRAMID-SIZES,B,M2024:L03,"SIX-AND-FOUR: 6 contracts first entry, 4 contracts pyramid",~1:50:30
+PYRAMID-SIZES,B,M2024:L07,"6 lots at IOFED, +4 at CE/upper quadrant, +5 one tick below CE",~2:28:00-2:30:00
+PYRAMID-SIZES,B,SMC2026:023,Position: 6 initial + 4 pyramid = 10,
+REENTRY,A,M2023:085,same size at the IFVG CE (execution K2),~27:21
+REENTRY,A,M2023:060,next sub-1m signal (execution K2),~1:22:30
+REENTRY,A,M2023:104,short again at the FVG bottom with stop above the high (execution K2),~45:41
+REENTRY,A,SMC2026:023,"If stopped, ""I would have went back in immediately ... the full position back on again.""",
+REENTRY,A,SMC2026:089,"""If I get stopped out and we take out that low, I'm going to look for this as an inversion fair value gap, the good long one, and then look for the same ideas""",
+REENTRY,B,M2023:070,Re-entry after a stop at half size (execution C7/K2),~38:41
+REENTRY,B,M2023:061,"After a loss: halve size, aim to win back ~50%, then step back up (execution C7)",~2:26:40
+REENTRY,B,CC:cc02_005,"2% -> 1% -> 0.5%, keep halving per loss (execution C7)",~5:20
+REENTRY,C,SMC2026:072,"""Even if this thing drops ... I can't reenter it. There has to be rules.""",
+REENTRY,C,M2024:L06,"give yourself ONE chance early; if stopped, don't re-enter",
+REENTRY,C,M2023:021,FOMC: don't re-enter if stopped (execution K2),~43:56
+MIN-ROOM,A,M2023:024,the setup needs ~10 handles of room to the draw while aiming to take 5 (execution G1),~25:26
+MIN-ROOM,A,M2023:046,10-handle filter (execution G1),~32:40
+MIN-ROOM,A,M2023:058,~10 handles room / 5 taken (execution G1),~37:16
+MIN-ROOM,A,M2023:059,~10 handles room / 5 taken (execution G1),~10:36
+MIN-ROOM,A,M2023:060,~10 handles room / 5 taken (execution G1),~50:00
+MIN-ROOM,A,M2023:065,trade only with ~10 handles of room (aim for 5) after a release,~04:07:00
+MIN-ROOM,B,M2024:L10,"MINIMUM MOVE: NQ 10 handles (ICT prefers 15, so the setup needs ~20 handles of room); ES 5 handles","~1:14:01, ~2:26:15"
+MIN-ROOM,B,M2024:L07,Minimum range: needs ~20 handles of obvious draw so you can take 10-15; otherwise no trade,~3:10:00
+MIN-ROOM,C,L2025:L27,"""if there is a setup that I can be getting short in I afford myself at least 15 handles in the NASDAQ. If I can't get comfortably 15 handles out of it with spread considered on both sides, then I'm not going to take the trade""",
+MIN-ROOM,C,SMC2026:103,"drill: ""10 minimum, no more than 15"" handles, one micro, 1:1",
+FIXED-RR,A,M2023:054,"""framework"" = best-case delivery, not entry-to-exit (execution G1)",~0:36
+FIXED-RR,B,SMC2026:101,"""someone that's more skilled ... a one to one will allow them to be profitable ... But you have to prevent yourself from overtrading.""",
+FIXED-RR,B,SMC2026:103,enter each FVG with a stop and a 1:1 target of 10-15 MNQ handles (drill),
+STOP-MGMT,A,M2023:064,a day trade keeps its initial stop (below the 08:30 open / 08:30 wick CE) untrailed and pays itself with partials (execution F5),~1:38:44
+STOP-MGMT,A,M2023:085,never trail into or just under an FVG created right after an MSS; trailing too soon is the main error (execution F4),"~19:59, ~26:46"
+STOP-MGMT,A,M2023:029,Don't trail early: a new FVG may be revisited (execution F4),~43:40
+STOP-MGMT,A,SMC2026:099,"""my stop will rest here"" fixed stop (B6 digest #53)",
+STOP-MGMT,B,SMC2026:110,"""bearishness should remain intact as long as we're below the midpoint ... of this wick ... A run into this and above would collapse my position. I would not let the stop loss at that high b[e challenged]""",
+STOP-MGMT,B,TE:te43,"stop just above the CE of the raid wick, later moved above the iFVG",
+STOP-MGMT,B,TE:te51,Rolls the stop above the CE of the raid wick,
+SMT-USE,A,M2023:031,"Index SMT: a qualifier only, useless without time of day and a draw (bias.md B51)",~0:44:53
+SMT-USE,A,M2023:065,"Index SMT qualifier: ""line on the chart"" (bias.md B51)","~03:08, ~05:04"
+SMT-USE,A,M2023:090,"SMT both ways at once with no bias = do not trade; with a bias, a crack at a key level is tradable (bias.md B52)",~41:00-43:00
+SMT-USE,A,SMC2026:081,"""short ... within the context and narrative of looking for lower prices because of SMT because we traded above Monday's old all-time high.""",
+SMT-USE,B,M2024:L05,"SMT: if long and NQ makes a higher high but ES doesn't, take a partial (more valid); Dow divergence alone, caution only, not a full close",~1:41:00-1:42:00
+SMT-USE,B,M2023:046,uses the Dow's refusal to break a low to justify 50% partials on ES/NQ shorts,
+SMT-USE,B,SMC2026:112,"""SMT divergence there. I don't want to put too much weight on that this morning because of the tone of the market.""",
+SMT-USE,C,SMC2026:098,"""ES is stronger relatively ... trust that NQ or MNQ is going to lead the market lower""; trade the weaker index",
+SMT-USE,C,SMC2026:105,"""you're looking for ideally shorting in the weakest one because ... it's going to have very little retracements against you""",
+SMT-USE,D,SMC2026:111,"""pound dollar is the sick sister. So, it's going to be lagging behind ... permit cable to find its way up and eventually get to this relative equal h[ighs]""",
+SMT-SET,A,M2023:031,Index SMT (ES/NQ/YM) (bias.md B51),~0:44:53
+SMT-SET,A,SMC2026:105,"Breadth check: all three averages confirming higher = ""still good""",
+SMT-SET,B,SMC2026:108,"""I don't like to place a whole lot of emphasis on the divergence between the Dow because there's only 30 stocks.""",
+SMT-SET,B,M2024:L05,"Dow divergence alone: caution only, not a full close; Dow not traded",~1:41:00
+ASIA,A,M2023:095,Asia moves too little to trade indices; the trading day starts at midnight NY (times.md),~20:23
+ASIA,A,CC:cc07_001,Asian scalps (20:00-00:00) are only for JPY/AUD/NZD (times.md),~30:15
+ASIA,B,M2023:052,NDOG Asian repricing scalp 18:00-21:00 toward the NDOG,~8:18
+ASIA,B,M2024:L05,"ASIA PROTOCOL (18:00 NDOG; key window 19:00-21:00 NY), ""for those who can only trade the evening"" (ICT's least favourite session)",~32:00-55:00
+ASIA,B,TE:te70,"Asian-session long from an iFVG anchored to an octant of Tuesday's RTH ORG; ""Asia: slow, subdued unless event-driven; look for easy nearby liquidity""","~0:08, ~7:44"
+ASIA,B,SMC2026:084,"Pre-open review of a short ICT took ""last night"" in the Asian session",
+BIAS-SOURCE,A,M2023:064,"weekly direction first, daily is where most analysis is done (bias.md B3)",~1:44:34
+BIAS-SOURCE,A,M2023:084,weekly direction first (bias.md B3),~0:18
+BIAS-SOURCE,A,M2023:095,intraday dips in a bullish week are buys (bias.md B3),~12:52
+BIAS-SOURCE,A,M2023:075,weekly direction first (bias.md B3),~31:00
+BIAS-SOURCE,A,M2023:065,weekend work: weekly then daily (bias.md B3),~46:30
+BIAS-SOURCE,B,SMC2026:101,"""If we open up higher at 9:30 than where we settled at 4:14 p.m. Eastern time previous day, that sets the bias bearish. We only want to look for shorts.""",
+BIAS-SOURCE,B,SMC2026:054,"Gap up above settlement = ""start the session off looking for shorts. It's just that simple."" It ""doesn't require a whole lot of thought process.""",
+BIAS-SOURCE,B,SMC2026:107,"Discount ORG (CE above the open) = look for buy-side; premium ORG = sell-side. ""Session bias.""",
+BIAS-SOURCE,C,SMC2026:096,"""You only need three of these. And you have all the information you'll ever need to do intraday trading""",
+BIAS-SOURCE,D,SMC2026:034,draw = nearest higher-timeframe pool (path of least resistance) in the primary trend,
+ATH-RULE,A,L2025:L23,"""try to avoid trying to pick the top. ... once you're seasoned ... you can look for shorts, but they have to be intraday""",
+ATH-RULE,A,L2025:L27,ATH rule (shorts only intraday) (2025 digest C10),
+ATH-RULE,A,L2025:L22,Rule of the week for all-time highs: grade every recent premium and discount wick,
+CONTRACT,A,CH:ch18,Futures contract choice: trade the contract with the largest open interest,~13:27-14:43
+CONTRACT,B,SMC2026:107,"""If you're looking for something prior to that low ... you have to look at a continuous contract""; back-adjust ONLY to reveal volume imbalances, ""not to find a fair value gap""",
+CONTRACT,B,SMC2026:098,"""When we toggle it on notice what happens. It brings price back down into a range where we can use it.""",
+CONTRACT,B,SMC2026:099,"""when prices are trading at all-time highs or if they're trading at contract highs, I'm always using the continuous contract to look at highs or lows that you may not be seeing reflected in the front month.""",
+CONTRACT,C,SMC2026:105,"""you're going to cycle through continuous contract and your delivery month contract. And if I'm teaching you low hanging fruit, which one are you going to side with?"" (the nearer one)",
+NEWS-WAIT,A,M2023:065,"""CPI: never trade before or at the release ... Any high/medium-impact release: wait at least 30 min, then trade if there is a range with ~10 handles of room""",~04:07:00
+NEWS-WAIT,B,M2024:L08,NEWS DAYS (CPI/PPI/FOMC/NFP): manually intervened ... don't trade at the release; trading 15-30 minutes after (even NFP) is fine; afternoon is fine,~3:12:00-3:16:00
+NEWS-WAIT,C,SMC2026:036,"""You can't participate in this candle ... If you see someone that got filled on an 8:30 candle for CPI/PPI, guaranteed it was a demo account."" Wait one or two candles (08:30, 08:31), then around 08:32-08:33 look",
+NEWS-WAIT,D,M2023:064,"After a release, bodies in the retracement stop at the 08:30 opening price; day-trade stop below the 08:30 open / CE of the 08:30 1m wick; post-release long ~08:35","~0:55:13, ~1:38:44"
+NEWS-WAIT,D,M2023:100,Long at the 08:30 wick CE (~08:35-09:00),
+NEWS-WAIT,D,M2023:105,NFP Judas long 45-60 s after 08:30 into a 4h FVG (as a demo for students),
+NEWS-WAIT,D,M2023:050,Short at a 5m VI under a 15m bearish OB ~08:45-09:05 (claims spike),
+NEWS-WAIT,D,TE:te09,"Live long on NQ after the 8:30 employment data: sell-side raid below a low at 8:30, then breaker",
+NEWS-WAIT,D,TE:te66,Short at the intraday high where price tapped the NWOG low after 08:30 employment data,~0:02
+NEWS-WAIT,D,SMC2026:062,08:30 release as a Judas swing into a premium array; relative equal low formed at the release = high-probability target,
+NEWS-WAIT,D,SMC2026:089,"""this 8:30 high is where the economic calendar was implemented to send price lower to build in a bearish narrative. So, I'm fading that""",
+NEWS-HOLD,A,M2023:065,"CPI: never trade before or at the release. Brokers pull liquidity, fills are worst case",~04:07:00
+NEWS-HOLD,A,SMC2026:065,"""squaring positions ahead of CPI is warranted ... managing risk impeccably does not entail trading CPI and PPI numbers."" Don't hold open profit through the release",
+NEWS-HOLD,B,M2023:032,"trade pre-market 07:00-08:30, let the 08:30 release run price into your target, then stop for the day",~5:46-7:05
+NEWS-HOLD,B,TE:te58,"long at the CE of a BISI before 8:30, partial just above halfway to the target (NFP day)",~1:35-3:21
+FOMC-DAY,A,SMC2026:091,"""We got FOMC today. So protocol is you want to be trading by 10:30 or sooner. And then let the rest of the day cook until ... 2:30."" ""I'm trading with no bias today""",
+FOMC-DAY,B,M2024:L11,"FOMC: two-stage delivery: the move into 14:00, then 14:00-14:30; ~70% of the time the 14:30 move goes the OPPOSITE way and is more exaggerated; hold till ~15:15",~58:01-1:00:00
+FOMC-DAY,B,L2025:L23,"""Price trades up into the first presented fair value gap post 2 p.m.""; second stage from 2:30: ""usually there's another wave of price action that begins at 2:30""",
+FOMC-DAY,B,M2023:065,He traded NQ from ~14:25 on FOMC day (filters.md Conflict 3),
+FOMC-DAY,C,M2023:021,"Don't trade the 14:00 release. 14:00-14:45 is observation only. The 14:00 move is usually fake and the real move starts 14:25-14:30; after 14:45 ""the normal routine kicks in""","~2:40-6:18, ~5:55"
+FOMC-DAY,C,M2023:003,Don't trade the 14:00 FOMC release (filters.md),~4:02
+NFP-THU-FRI,A,M2023:003,"NFP week: trade Mon, Tue and Wed up to 11:00. No trades Wed PM, Thu or Fri (training-wheels rule) (filters.md)",~2:44
+NFP-THU-FRI,A,M2023:038,NFP week: no trades Thu/Fri (filters.md),~8:05-9:15
+NFP-THU-FRI,A,M2023:050,NFP week: no trades Thu/Fri (filters.md),~20:35
+NFP-THU-FRI,A,M2023:006,NFP Friday: no live trading; nobody trades the first hour after 08:30 (filters.md),~8:35
+NFP-THU-FRI,A,M2023:061,NFP Friday: one of his two weakest days of the month (with NFP Thursday) (filters.md),~2:49:35
+NFP-THU-FRI,A,L2025:L29,"""try to avoid trading this week after Wednesday London session going into Wednesday New York session. You want to be basically done all your trading by 7 a.m. Eastern time"" (new trader)",
+NFP-THU-FRI,A,L2025:L31,"""Strive to look for setups on Monday of NFP week."" Wednesday afternoon/Thursday hit-or-miss",
+NFP-THU-FRI,B,M2023:101,Veterans may trade NFP Thu/Fri (filters.md),~25:12-39:39
+NFP-THU-FRI,B,M2023:041,He traded NFP Thursday (Mar 9 long) (filters.md),
+NFP-THU-FRI,B,M2023:050,"NFP Thursday May 4: four shorts, +$19.9k (filters.md)",
+NFP-THU-FRI,B,M2023:089,NFP Friday NQ short 09:33 (~$15.4k) (filters.md),
+NFP-THU-FRI,B,M2023:105,NFP Friday ES long 45-60 s after 08:30 (as a demo),
+NFP-THU-FRI,B,TE:te09,"NQ Employment Number Live Execution (Thursday of NFP week, 2023-12-07)",
+NFP-THU-FRI,B,TE:te57,"Premarket NQ long, Thursday of NFP week (2026-08-06)",
+NFP-THU-FRI,B,TE:te58,NFP-day case study: long at the CE of a BISI before 8:30,
+NFP-THU-FRI,B,TE:te66,NFP Thursday - High Resistance Liquidity Run (short after 08:30 employment data),
+NFP-THU-FRI,B,TE:te67,My Model on NQ NFP Friday,
+OPEN-RANGE-TRADE,A,M2023:031,Opening range = first 30 minutes after 09:30. Watch how price delivers there and do not trade it; it can be erratic,~0:04:52
+OPEN-RANGE-TRADE,A,M2023:092,"09:30-10:00 is ""amateur hour""; wait to see what liquidity/inefficiency the first 30 min leaves before choosing a side",~1:45:24
+OPEN-RANGE-TRADE,A,M2023:067,Opening range = 9:30-10:00. Wait it out; then expect the 10:00 displacement,~0:26:00
+OPEN-RANGE-TRADE,A,M2023:073,Opening range: first 30 min after 09:30 but can be useful after 20 min,~25:00
+OPEN-RANGE-TRADE,A,M2023:029,OR 09:30-10:00: do not trade it (times.md D),~11:44
+OPEN-RANGE-TRADE,A,M2023:036,OR 09:30-10:00: do not trade it (times.md D),~0:27:30
+OPEN-RANGE-TRADE,A,M2023:042,OR 09:30-10:00: do not trade it (times.md D),~4:29
+OPEN-RANGE-TRADE,A,M2023:044,OR 09:30-10:00: do not trade it (times.md D),~0:04:54
+OPEN-RANGE-TRADE,A,M2023:090,OR 09:30-10:00: do not trade it (times.md D),~49:00
+OPEN-RANGE-TRADE,A,L2025:L77,"If premarket is ""not paying any mind"" to the levels, sit out, let the opening range finish",
+OPEN-RANGE-TRADE,B,M2024:L13,"GAP-DOWN OPEN: the ORG CE is the highest-probability target; ICT often buys right at the open if there's room to the ORG CE (""you don't even need to be right on the bias"")","~38:01, ~48:00"
+OPEN-RANGE-TRADE,B,L2025:L34,"The FVG that forms on the 1-minute chart between 9:31 and 10:00 (first presented) ... ""model taught my son Caleb""",
+OPEN-RANGE-TRADE,B,SMC2026:054,"ICT shorted at the 09:30 open ... Gap up above settlement = ""start the session off looking for shorts. It's just that simple.""",
+OPEN-RANGE-TRADE,B,SMC2026:060,At 09:30 price ran up (Judas swing) exactly into the lower quadrant of a daily suspension block = high of the day; ICT would have shorted first touch,
+OPEN-RANGE-TRADE,B,SMC2026:101,"""I'm going to only look for shorts in premium gaps in the first 30 minutes of trading. I'm going to aim for the half gap""",
+OPEN-RANGE-TRADE,B,SMC2026:107,"""If you're trading at any time during that first hour of trading, if you do not know [the half-gap level] you are absolutely guessing.""",
+FPFVG-DEF,A,L2025:L34,"The FVG that forms on the 1-minute chart between 9:31 and 10:00 (first presented). Extend it right through the day and week; it is used ""over and over and over.""",
+FPFVG-DEF,A,L2025:L77,"In the 9:30-10:00 opening range, take the first FVG formed (not one formed on the 9:30 candle itself: ""can't be the gap if it forms on the 9:30 candle, you have to wait"")",
+FPFVG-DEF,A,SMC2026:025,FPFVG uses the 09:31 middle candle (B1 digest A3),
+FPFVG-DEF,A,SMC2026:049,FPFVG uses the 09:31 middle candle (B1 digest A3),
+FPFVG-DEF,A,SMC2026:053,Short from Tuesday's FPFVG (09:31 middle candle; B1 digest A3),
+FPFVG-DEF,B,SMC2026:054,"""He can't use the 9:30 candlestick if there's a gap there like this."" The first presented FVG is the first one formed by displacement through a swing low after the open",
+FPFVG-DEF,B,SMC2026:081,"""this one here is doing something that this one and this one doesn't do ... There's a displacement right there. So, first presented fair value gap within the context and narrative""",
+FPFVG-DEF,B,SMC2026:073,"09:35 gap preferred over an earlier one ""because look how much more prominent that run is.""",
+FPFVG-DEF,C,SMC2026:104,"""if there's a buy side imbalance sell side inefficiency, it's the gap that takes precedence ... Ideally, you want to see it trade to or just above consequent encroachment"" of the wick",
+FPFVG-DEF,C,SMC2026:107,CPI-day review: wick as first-presented FVG,
+ORG-CLOSE,A,M2023:044,the prior settlement (16:15 close) = gap low; he toggles ETH/RTH to read the settlement,"~0:07:12, ~0:08:20"
+ORG-CLOSE,A,M2023:033,ES close = 16:15 settlement (levels.md ORG),~0:11:36
+ORG-CLOSE,A,M2023:043,ES close = 16:15 settlement (levels.md ORG),~11:47
+ORG-CLOSE,A,M2023:059,ES close = 16:15 settlement (levels.md ORG),~0:13:46
+ORG-CLOSE,A,M2023:060,ES close = 16:15 settlement (levels.md ORG),~30:20
+ORG-CLOSE,A,M2023:069,ES close = 16:15 settlement (levels.md ORG),~10:06
+ORG-CLOSE,A,M2023:092,ES close = 16:15 settlement (levels.md ORG),~1:55:54
+ORG-CLOSE,A,M2024:L10,OPENING RANGE GAP (ORG) = prior RTH settlement (16:15) to the 09:30 first print,~8:04
+ORG-CLOSE,A,M2024:L13,ORG: prior RTH settlement (16:15) to the 09:30 first print,~0:30
+ORG-CLOSE,A,L2025:L78,"the previous day's RTH settlement (last 1-minute candle close, 4:14 p.m. ET)",
+ORG-CLOSE,A,L2025:L77,"anchor at the 4:14 RTH close, to the 9:30 open",
+ORG-CLOSE,A,SMC2026:049,"the 09:30 candle's open to ""the last print ... on regular trading hours"" (16:14 Friday)",
+ORG-CLOSE,A,SMC2026:088,"""we opened lower than where we settled at the previous day at quarter after 4:00.""",
+ORG-CLOSE,A,SMC2026:101,"""If we open up higher at 9:30 than where we settled at 4:14 p.m. Eastern time previous day""",
+ORG-CLOSE,B,M2023:068,"ORG = gap between the previous RTH settlement (16:00/16:15 close) and the next 09:30 open; he says the ""bell"" close",~00:08:31
+ORG-CE-WINDOW,A,TE:te64,OPENING GAP RULE: half of the RTH opening range gap (CE) is reached by 10:00 in ~70% of cases; full fill then possible,~95:42-101:59
+ORG-CE-WINDOW,A,SMC2026:045,"ORG CE ""70% likely"" by 10:00 hit",
+ORG-CE-WINDOW,A,SMC2026:066,"70% to the ORG CE ""about 10:00. That's usually the statistics.""",
+ORG-CE-WINDOW,A,SMC2026:101,"""70% of the time it makes an attempt to trade to half gap""; shorts only in the first 30 minutes",
+ORG-CE-WINDOW,A,L2025:L51,"consequent encroachment (normally ""generally a 70% likelihood"" within the first 30 minutes)",
+ORG-CE-WINDOW,B,SMC2026:107,"""70% of the time ... If you're trading at any time during that first hour of trading, if you do not know [the half-gap level] you are absolutely guessing.""",
+ORG-CE-WINDOW,B,SMC2026:054,Caleb's ORG model (first hour): gap above settlement = shorts for 09:30-10:30 toward ORG CE,
+ORG-AFTER-CE,A,SMC2026:106,"""if we get to that consequent encroachment level ... and go through it, full gap closure obviously would be the next expectation, but I would expect it to then go through all the way.""",
+ORG-AFTER-CE,A,SMC2026:101,"""what happens when it takes its retracement all the way to the low of the gap and then goes through it? ... toggle negative 0.5 ... it'll give you a projection outside of that gap""",
+ORG-AFTER-CE,A,SMC2026:100,"Thursday's ORG hit CE in the first minute, then explored below the ORG low to the -0.5 SD of the gap",
+ORG-AFTER-CE,A,SMC2026:088,"ORG standard deviations ... ""Watch what happens when we do eight. There we go."" (8 SD = the daily high)",
+ORG-AFTER-CE,A,TE:te64,CE by 10:00 ... full fill then possible,~95:42
+ORG-AFTER-CE,B,SMC2026:107,"After an instant ORG CE hit: ""Done ... relax"" (B6 digest #54)",
+ORG-AFTER-CE,B,SMC2026:112,"""one candlestick shoots up and goes to that 70% likelihood of half gap ... Goes a little bit above it but fails to get to the next octant level. So, is that bullish or bearish? It's not bullish.""",
+ORG-AFTER-CE,B,SMC2026:101,"Back at the ORG CE after the target = 50/50; contrarian: target just below the CE from below, then done for the session",
+ORG-SIZE,A,M2023:033,Large ORG or a very large prior-day range: the first 30-45 min chop; a run often starts near 11:00; the PM (13:30-16:00) is better,~13:27
+ORG-SIZE,A,M2023:044,Opening range gap ... mark 25/50/75% of it (25-handle gap),~0:07:12
+ORG-SIZE,A,M2023:022,09:30 volatility seeks to reprice to the prior close; expect price to trade back into the ORG unless it acts as a breakaway gap (levels.md),~1:25:02
+ORG-SIZE,A,M2023:055,Bullish + gap up: expect a fill then higher; bearish + gap up: fill is a false run (levels.md),~17:50
+ORG-SIZE,B,L2025:L78,Over ~120 handles (extreme gap): probably keeps going in the gap direction ... 20 to 75 handles: likes the odds of trading to mid-gap (CE) ... 75 to 120 handles: gray area,
+ORG-SIZE,B,L2025:L77,"ORG over 120 handles = not likely to fill (""go back to the logic"")",
+ORG-SIZE,B,L2025:L51,"after an extreme gap lower (here ~1,100 points) price likely will NOT even trade back to consequent encroachment",
+ORG-SIZE,B,SMC2026:091,"""When we see that extreme gap like that chances are it's going to open trade up to about a quarter which would be the lower quadrant of the gap ... And then ... gap and go.""",
+ORG-SIZE,C,M2024:L04,Quadrants (0.25/0.75) on an opening gap only when it's large; < ~20 handles just eyeball the CE. NWOG same,~14:00-18:00
+ORG-SIZE,C,M2024:L05,NDOG CE: annotate if the gap > 20 handles; < 20 eyeball,"~20:00, ~32:00"
+ORG-SIZE,C,M2024:L11,no CE marked [on the NWOG] because it is under 20 handles,
+GAP-LIFE,A,M2023:050,Keep at least 4-5 most recent; maximum = every NWOG in the last 60 days; never discard after a fill (levels.md),~16:01
+GAP-LIFE,A,M2023:051,Keep at least 4-5 most recent; maximum = every NWOG in the last 60 days (levels.md),~18:00
+GAP-LIFE,A,M2023:039,Never discard after a fill; old NWOGs stay magnets for weeks/months (levels.md),~5:26
+GAP-LIFE,A,M2023:037,old NWOGs stay magnets for weeks/months (levels.md),~22:17
+GAP-LIFE,A,M2024:L03,NWOG kept 5 weeks here ... ICT also says they work 6-9 months,
+GAP-LIFE,B,M2024:L03,NWOG kept 5 weeks here vs rulebook 60 trading days,
+GAP-LIFE,B,M2024:L08,keep NWOGs (5 weeks) and NDOGs (5 days) on the chart as the baseline,~2:22:00
+GAP-LIFE,B,M2024:L13,"NDOGs up to 5 days old, NWOGs up to 5 weeks",~6:00
+GAP-LIFE,B,L2025:L01,Keep it on the chart for the whole week and for about five weeks (older ones also usable),
+MSS-CLOSE,A,M2023:012,"a wick/1-tick pierce counts, no close needed (pd_arrays C3)",~30:30
+MSS-CLOSE,A,M2023:026,wick/1-tick break shown (pd_arrays C3),~1:31:22
+MSS-CLOSE,A,M2023:030,Last-hour macro: bullish MSS = one tick through the short-term high,~20:06
+MSS-CLOSE,A,M2023:035,wick/1-tick break (pd_arrays C3),~20:15
+MSS-CLOSE,A,M2023:075,wick/1-tick break (pd_arrays C3),~33:20
+MSS-CLOSE,A,CH:ch02,Model 1 amplified: wick break counts as MSS (TE digest C1),
+MSS-CLOSE,B,M2023:001,close/body break (rules) (pd_arrays C3),
+MSS-CLOSE,B,M2023:035,"""close below = breaker"" (pd_arrays C3)",~42:44
+OB-CANDLE,A,M2023:029,Series = one OB: consecutive same-colour candles blend into one block (pd_arrays 1.8),~29:28
+OB-CANDLE,A,M2023:032,Series = one OB; reference = open of the first candle (pd_arrays 1.8),"~23:06, ~52:45"
+OB-CANDLE,A,M2023:033,Series = one OB (pd_arrays 1.8),~1:03:02
+OB-CANDLE,A,M2023:071,Series = one OB (pd_arrays 1.8),~35:30
+OB-CANDLE,A,CC:cc03_004,Series = one OB (pd_arrays 1.8),~4:46
+OB-CANDLE,A,CC:cc04_003,Series = one OB (pd_arrays 1.8),~31:02
+OB-CANDLE,A,CC:cc04_008,Series = one OB (pd_arrays 1.8),~2:39
+OB-CANDLE,A,CC:cc05_015,"highest open, or last open for a tighter stop (pd_arrays 1.8)",~16:46
+OB-CANDLE,A,M2024:L08,the opening price of the first of consecutive up-close candles = change in state of delivery,~1:18:00
+OB-CANDLE,B,SMC2026:067,"""the last up close candle, if it's the largest one, consecutive candles make one order block.""",
+OB-CANDLE,B,SMC2026:073,the OB is the down-close candle with the largest body in the series (PM 14:06 example),
+OB-CANDLE,B,SMC2026:059,"consecutive up candles make one block, use the largest (B2 digest #16)",
+OB-CANDLE,C,SMC2026:097,"""If it's a series of candlesticks that are up close, if the last candlestick is the smallest, I'm going to use the opening price on that one. If it's the largest of the series, I'm going to use the opening price on that one.""",
+OB-CLOSE,A,M2023:032,first trade through the open of the first down-close candle = change in state of delivery (CISD) (pd_arrays 1.8),~52:45
+OB-CLOSE,A,M2023:075,CISD = trade through the open (pd_arrays 1.8),~1:16:40
+OB-CLOSE,A,M2023:078,CISD = trade through the open (pd_arrays 1.8),~53:53
+OB-CLOSE,A,M2024:L08,"crossing it is enough: ""I don't need to see it close below it""",~1:18:00
+OB-CLOSE,A,SMC2026:059,"""Once it passes through it right on that candle it need not ... close below it. ... they're saying it's got to get a close. No, it does not.""",
+OB-CLOSE,A,SMC2026:073,"""It trades above that opening price ... Once it trades above, it does not need to close above it.""",
+OB-CLOSE,A,SMC2026:082,"""Order block does not require close. Inversion fair value gap [does]""",
+OB-CLOSE,B,CC:cc04_003,Validation: a later candle trades above the bullish OB's high (pd_arrays 1.8),~0:35
+OB-CLOSE,B,CC:cc03_004,Validation: a later candle trades above the OB's high (pd_arrays 1.8),~14:13
+OB-CLOSE,B,CC:cc02_002,Validation: a later candle trades above the OB's high (pd_arrays 1.8),~6:13
+OB-CLOSE,B,CC:cc03_007,Validation: a later candle trades above the OB's high (pd_arrays 1.8),~22:13
+IFVG-CONFIRM,A,M2023:015,"IFVG = an FVG that price trades through and closes beyond, then acts in the opposite role (pd_arrays 1.2)",~21:00
+IFVG-CONFIRM,A,M2023:045,IFVG definition: close beyond (pd_arrays 1.2),~2:35:15
+IFVG-CONFIRM,A,M2023:059,IFVG definition: close beyond (pd_arrays 1.2),~3:47
+IFVG-CONFIRM,A,M2023:061,IFVG definition: close beyond (pd_arrays 1.2),~19:42
+IFVG-CONFIRM,A,M2023:067,IFVG definition: close beyond (pd_arrays 1.2),~1:18
+IFVG-CONFIRM,A,M2023:072,IFVG definition: close beyond (pd_arrays 1.2),~8:31
+IFVG-CONFIRM,A,M2023:078,IFVG definition: close beyond (pd_arrays 1.2),~53:07
+IFVG-CONFIRM,A,M2023:102,IFVG definition: close beyond (pd_arrays 1.2),~1:02:03
+IFVG-CONFIRM,A,M2023:048,IFVG protocol: one close + new-candle return (pd_arrays C15),
+IFVG-CONFIRM,A,SMC2026:082,"""a candlestick close outside of this buy side imbalance sell side inefficiency ... validates this becoming an inversion fair value gap. This is not validating it. It's just wicking down through it""",
+IFVG-CONFIRM,B,SMC2026:040,"""two qualifications ... before you anticipate utilizing it for entries"": close above it, then trades back into it and closes above again",
+IFVG-CONFIRM,B,SMC2026:078,"""It trades open here, trades above it, fails to leave a body up [there] and closes down below it. That validates this as an inversion fair value gap."" Next candle ""should give you immediate feedback""",
+IFVG-CONFIRM,B,SMC2026:088,IFVG confirmed when the next candle refuses the prior candle's high,
+IFVG-CONFIRM,B,SMC2026:097,"""It's got to go outside of it and then come back in ... It's got to leave a body outside of it.""",
+IFVG-CONFIRM,B,SMC2026:106,"""It's the wick. It's not the body. And then where's the body close? Above midpoint ... The next candle ... Can't even touch the consequent encroachment""",
+IFVG-CONFIRM,C,M2023:058,"IFVG = ""passed through twice"" (pd_arrays C15)",~4:51
+BREAKER-ZONE,A,M2023:001,breaker zone drawn on bodies (pd_arrays C2),~44:00
+BREAKER-ZONE,A,M2023:012,bodies (pd_arrays C2),~11:07
+BREAKER-ZONE,A,M2023:029,bodies (pd_arrays C2),~22:34
+BREAKER-ZONE,A,M2023:048,bodies (pd_arrays C2),~1:06:07
+BREAKER-ZONE,A,M2023:060,bodies (pd_arrays C2),~26:40
+BREAKER-ZONE,A,M2023:063,bodies (pd_arrays C2),~3:49
+BREAKER-ZONE,A,M2023:081,bodies (pd_arrays C2),~11:48
+BREAKER-ZONE,A,CC:cc09_008,bodies (pd_arrays C2),~9:59
+BREAKER-ZONE,A,SMC2026:067,"""why am I not using this one? Because it has a wick. And I want to use the body that goes the lowest.""",
+BREAKER-ZONE,A,SMC2026:053,"""high, low, higher high. Down close candle with the lowest close"" = the real breaker",
+BREAKER-ZONE,B,M2023:031,full candle incl. wicks (pd_arrays C2),~59:25
+BREAKER-ZONE,B,M2023:032,full candle incl. wicks (pd_arrays C2),~39:52
+BREAKER-ZONE,B,CC:cc04_005,full candle incl. wicks (pd_arrays C2),~9:16
+BREAKER-ZONE,B,M2023:070,box drawn to B's wick (pd_arrays C2),
+BREAKER-ZONE,B,M2024:L02,Breaker stop at the highest high (2024 digest C13),
+UNICORN,A,M2023:007,Unicorn = FVG forming inside the range of a bullish breaker's up-close candle,~22:39-23:24
+UNICORN,A,M2023:101,FVG inside breaker = unicorn (pd_arrays 1.9),~84:31
+UNICORN,A,SMC2026:065,"""it has a fair value gap at the same location that the breaker forms ... Super strong.""",
+UNICORN,A,SMC2026:067,Confluence stack: MMSM + macro + breaker + daily bearish OB + unicorn,
+UNICORN,B,M2023:104,Unicorn = 2nd-stage redistribution (pd_arrays C11),~41:02
+FVG-VALID,B,SMC2026:073,"""The fair value gaps are either first presentation, and if they're not first presented, then they are always anchored to a octant or a quadrant. Period.""",
+FVG-VALID,B,SMC2026:084,"""I'm going to look at a candlestick that just so happens to lay over top of one of these gradient levels""",
+FVG-VALID,B,SMC2026:049,every intraday FVG/IFVG whose candle 2 touches a grade level gave the shorts down to full gap closure,
+FVG-VALID,B,SMC2026:041,"""Every one of these ranges [FVGs] are qualified with the key levels that make up the individual range""",
+FVG-VALID,B,SMC2026:044,every PD array after 09:00 must be tethered to that range's levels,
+RANGE-ANCHOR,A,CC:cc01_004,equilibrium anchored on wicks (chart) (pd_arrays C16),
+RANGE-ANCHOR,A,M2023:014,wicks (pd_arrays C16): fib on the down-swing into each low,
+RANGE-ANCHOR,A,M2023:044,wicks (pd_arrays C16),
+RANGE-ANCHOR,B,CC:cc01_001,bodies (pd_arrays C16),~17:20
+RANGE-ANCHOR,B,CC:cc07_005,bodies (pd_arrays C16),
+RANGE-ANCHOR,B,M2023:058,bodies (pd_arrays C16),~41:54
+RANGE-ANCHOR,B,M2023:063,bodies (pd_arrays C16),~3:49
+RANGE-ANCHOR,B,SMC2026:051,"""I can't use the high of the wick because that's allowed to do the damage. The bodies tell you the real narrative.""",
+RANGE-ANCHOR,B,SMC2026:049,"use the *higher* of open/close when the array's edge is a body, ""the higher one is what it's going to reach down for.""",
+RANGE-ANCHOR,B,SMC2026:074,unrealized dealing range projection: 1.25 of the power-three open-to-low (body vs VI),
+LIQ-LOCATION,A,M2023:025,ICT shorted after a run on smooth relative equal highs (pools beyond the extremes),
+LIQ-LOCATION,A,M2024:L01,"Smooth (equal) side gets raided; jagged side has already been ""attacked""",~1:53:00
+LIQ-LOCATION,A,M2023:015,sell stops under lunch relative equal lows,~29:22
+LIQ-LOCATION,B,SMC2026:097,"""sell side is below this block of price action here because the body, see all those bodies? That's the real liquidity pool. It's not so much the wicks""",
+LIQ-LOCATION,B,SMC2026:096,where liquidity sits: below body clusters (B4 digest #35),
+PREMARKET-ENTRY,A,M2023:007,"""there really wasn't any news driver today so you have to wait until 9 30""",~11:14
+PREMARKET-ENTRY,A,M2023:019,"No 08:30 news, wait for 09:30 (soft-bias day)",~7:57
+PREMARKET-ENTRY,A,L2025:L26,"""I am not interested in doing anything until 9:30 open.""",
+PREMARKET-ENTRY,A,L2025:L77,"If premarket is ""not paying any mind"" to the levels, sit out, let the opening range finish",
+PREMARKET-ENTRY,B,M2023:032,"Choppy/range-bound day expected: trade pre-market 07:00-08:30, let the 08:30 release run price into your target, then stop for the day",~5:46-7:05
+PREMARKET-ENTRY,B,M2023:096,"Breaker/OB long ~07:47-08:01 (his own fill, pre-market)",~0:15
+PREMARKET-ENTRY,B,M2023:022,2022 model short ~07:20 (overnight),~0:56
+PREMARKET-ENTRY,B,TE:te43,"Premarket NQ short from a 15m SIBI (live, 2024-05-13 ~07:30-08:00)",~0:00-10:57
+PREMARKET-ENTRY,B,TE:te51,Premarket NQ short in a bearish OB ... target the NDOG in discount (live),~0:02-3:51
+PREMARKET-ENTRY,B,TE:te57,Premarket NQ long ... entry exactly at the CE of a 1m suspension block (window 07:00-09:00),~3:33-4:18
+PREMARKET-ENTRY,B,TE:te58,long at the CE of a BISI before 8:30 (NFP day),~1:35-3:21
+PREMARKET-ENTRY,B,M2024:L06,"With big news the next day, take trades EARLY (07:00-09:30 window) rather than at 09:30/10:00",~48:00
+PREMARKET-ENTRY,B,L2025:L22,short before 8:30 at a pre-market buy side raid inside a reclaimed bearish FVG,
+PREMARKET-ENTRY,B,SMC2026:027,"Live pre-market short 07:00-09:00, NQ",
+PREMARKET-ENTRY,B,SMC2026:044,"""You can make the entirety of your career just focus on that little time window of 2 hours [07:00-09:00] ... You don't need to do anything else.""",
+PREMARKET-ENTRY,B,SMC2026:082,"""Early bird"" 06:00-07:00 short on an NFP week (phone execution)",
+PREMARKET-RANGE,A,SMC2026:029,"The 07:00-09:00 ""pre-market session"" rule; ""When there is a report due at 8:30, you go up to 8:30, not 9:00""",
+PREMARKET-RANGE,A,SMC2026:044,"the 07:00-09:00 ""time-based range"" is the data set; its -0.5 projection gave the projected daily high",
+PREMARKET-RANGE,A,SMC2026:027,"London trended -> 07:00-09:00 ""likely to be boxy, not trending""",
+PREMARKET-RANGE,B,TE:te60,Premarket first 30 min 07:00-07:30 = dealing range ... On CPI/PPI-week days use the first 30 min; on normal days use the entire first hour 07:00-08:00,"~6:23-8:23, ~14:35"
+PREMARKET-RANGE,C,TE:te58,"On high-impact 8:30 news days, define the dealing range from 07:00 to 08:29 (highest high, lowest low) before the release",~1:35-3:21
+PREMARKET-RANGE,C,M2023:032,pre-market 07:00-08:30 window into the release,~5:46
+PREMARKET-RANGE,D,M2024:L01,"PRE-MARKET RANGE (ICT's definition): first 30 minutes of 07:00, 08:00 or 09:00 ... OPENING RANGE: the 30 minutes AFTER ... ""There is no 15-minute opening range""",~1:51:00-1:52:00
+PREMARKET-RANGE,D,M2024:L02,07:00 rule clarified: beginners don't look at anything before 07:00 (London),~49:00-54:00
+PREMARKET-RANGE,E,L2025:L51,"""8:00 to 9:30 ET, a ""very specific 90-minute window"" ... Where's the high and where's the low inside that range of time."" ""It's not ambiguous.""",
+PREMARKET-RANGE,F,SMC2026:082,"""At 5:00 a.m., we roll over into dead time between 5:00 a.m. and 6:00 a.m. ... 6:00 a.m. is the earliest that the ... higher probability price runs can be trusted.""",
+TGIF-DEPTH,A,M2023:066,"20-30% is the ""sweet spot""; 25% is the midpoint. A retrace to 40%+ belongs to reversal/market-top talk, outside this model","~0:18:04, ~0:25:34"
+TGIF-DEPTH,A,M2023:074,Friday retraces 20-30% of the weekly range (models.md 1.11),~24:04
+TGIF-DEPTH,A,M2023:084,retraces ~20-30% of the weekly range (high to lowest low),~15:45
+TGIF-DEPTH,A,M2023:075,TGIF 20-30% (filters.md),~1:40
+TGIF-DEPTH,A,M2023:089,TGIF 20-30% (filters.md),~0:41
+TGIF-DEPTH,A,M2024:L10,expect 20-30% retracement from the highest high formed at/after Thursday 13:00,~2:00:00
+TGIF-DEPTH,B,M2024:L05,"Friday tends to retrace 20-30% of the week's range (some rules allow 40%, not taught)",~1:36:30
+TGIF-DEPTH,B,SMC2026:034,"""usually the market trades off from the high intra-week and settles somewhere around the 20 to 30% of the weekly range""; ""in extremes it can go down to 40%""",
+TGIF-DEPTH,B,SMC2026:098,"""I look for measurements to 20 30% of the week range"" (up to 40% sometimes)",
+TGIF-DEPTH,B,SMC2026:105,"""Generally you'll get a retracement up to 20% to 30%. On extreme cases it can go to 40% ... look at that as an outlier.""",
+TGIF-TIMING,A,M2023:066,"TGIF: Friday only, PM-leaning (times.md Conflict 13)",~0:01:38
+TGIF-TIMING,A,M2023:074,"Context: Friday only, after a trending, one-sided week (models.md 1.11)",~24:04
+TGIF-TIMING,B,M2023:084,"in a down week, Thursday into Friday ... timing often London close 10:00-12:00, otherwise the PM session",~15:45-16:33
+TGIF-TIMING,B,M2024:L10,TGIF can form from 13:00 Thursday (after the noon-13:00 lunch hour) through Friday's close,~2:00:00
+TGIF-TIMING,B,SMC2026:098,measure from Thursday 13:00 and keep re-reading,
+TGIF-TIMING,B,SMC2026:105,"from Thursday 13:00, track the weekly high and the low so far",
+TGIF-TIMING,C,M2024:L06,"TGIF DEFERRED: if Friday did NOT retrace 20-30% of a one-sided week's range, expect that retracement on Monday",~1:06:30-1:09:00
+TGIF-TIMING,C,SMC2026:098,"""If it doesn't form on Friday ... I'm always looking for the potential for [it Monday]""",
+TGIF-TIMING,C,SMC2026:105,"TGIF deferred to Monday: if no 20-30% retrace by Friday close, target it Sun 18:00-Mon; drop after Tuesday",
+WEEK-PROFILE,A,M2023:048,Supercharge: align with the weekly profile (Tue/Wed low of week when bullish) (times.md E),~2:02:12
+WEEK-PROFILE,B,SMC2026:074,"""we're on hump day, Wednesday, and we could see a midweek retracement or reversal.""",
+WEEK-PROFILE,C,SMC2026:093,"""Thursdays tend to create a intermediate term high ... through ... weekly profiles.""",
