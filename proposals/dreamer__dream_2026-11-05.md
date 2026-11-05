@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-05 06:05:45Z; target: dream_2026-11-05.md; reason: Fourth dream report; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmP7ous2Bmkr4VXy21ZGdtqVu; status: open -->
+<!-- proposal by dreamer at 2026-11-05 06:05:45Z; target: dream_2026-11-05.md; reason: Fourth dream report; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmP7ous2Bmkr4VXy21ZGdtqVu; status: merged (W1-W3 applied) -->
 # Dream report 2026-11-05 (reviewed: list_threads since 11-04 06:15 (2 active threads, newest 5-6 msgs each), CHANGELOG v59-v68. Not reviewed: project chat.)
 Feedback on earlier merges: Y1-Y3 were applied with my "Append:"/"Update rows:" wrappers pasted in, and the curator fixed this in PR #13. The cause was my proposal format, which W3 fixes.
 | # | ID | Change | Uplift |
