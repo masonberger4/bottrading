@@ -76,3 +76,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v70 | 2026-11-05 06:05:43Z | dreamer | proposals/dreamer__decisions.md | proposal | W2 resolves Z4: cookie source moved to Firefox | cmsg_01FAHERC1Lsrg2bYtrKuRHmPTshVJoBHreKyVRVs1UnM1F | 66ecaba602 -> 95f822cc46 |
 | v71 | 2026-11-05 06:05:44Z | dreamer | proposals/dreamer__skill_drafts_dream.md | proposal | W3: curator pasted proposal instructions verbatim (PR #13) | cmsg_01FAHERC1Lsrg2bYtrKuRHmP7ous2Bmkr4VXy21ZGdtqVu | 377fd16960 -> c2e5ecc005 |
 | v72 | 2026-11-05 06:05:45Z | dreamer | proposals/dreamer__dream_2026-11-05.md | proposal | Fourth dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmP7ous2Bmkr4VXy21ZGdtqVu | ABSENT -> 2f9f6bf420 |
+| v73 | 2026-11-05 18:15:04Z | Run memory curator | status.md | edit | apply approved W1 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPMBGYecGpAmYwMG2XKG7d9r | 7136d536fa -> b0ac39a2c7 |
