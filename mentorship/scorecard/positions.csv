@@ -115,3 +115,7 @@ TGIF-TIMING,C,"If Friday doesn't deliver it, expect it Sunday 18:00/Monday; drop
 WEEK-PROFILE,A,Tuesday/Wednesday forms the low (high) of the week
 WEEK-PROFILE,B,"Wednesday (""hump day"") midweek retracement or reversal"
 WEEK-PROFILE,C,Thursday tends to create an intermediate-term high
+EXIT-STYLE,A,"One full exit at the first pool (+1 tick), e.g. counter-bias or post-holiday trades"
+EXIT-STYLE,B,"Staggered partials (chest/head, each new low) with a runner to the terminus or an extreme limit"
+STOP-MGMT,C,"Lock a small profit early (""steak dinner"") after the first target, then trail stepwise beyond defensive arrays / new lows"
+GAP-LIFE,C,NDOGs (Mon 18:00 and Friday) and Mon/Fri ORGs kept for the last two weeks
