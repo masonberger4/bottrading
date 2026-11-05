@@ -1,0 +1,21 @@
+# 2026 SMC 112: Tuesday AM live before the 20:00 "deadline": neutral, discount ORG CE in one candle then fails the next octant; buy-side first on an engineered-bearish day, then sell-side; yesterday's ORG gradients as the framework (Tue Apr 7 2026, ICT back from a week's vacation; earliest of batch 6, the morning before 111)
+Full read (~5k words). Clean caption ("consequent correction" = CE, "jump street" = the open). Frames laptop-only. Leaves at 10:00 by plan. About a third is coaching (no trades on danger days, two months of tape reading first); kept only the rules.
+## Summary
+Neutral at the open; risk very high ahead of the 20:00 strike deadline ("consider it lottery" if you make money today). Overnight price worked inside Monday's RTH ORG gradients and bounced off its lower quadrant. Today = discount ORG (09:30 below the 16:14 settle); first candle shot straight to the ORG CE, a little above it, but failed the next octant = "not bullish." Buy-side taken first (stops out shorts positioned on the bearish sentiment, traps breakout buyers), then minor sell-sides; bodies held at Monday's ORG low, wicks inside the overhead wick; ran to sell-side by 10:00. Difficulty "about an eight." No setups taken.
+## Rules in ICT's wording
+- **Danger days: observe only**: "losing on a day where it's really designed for people to get hurt, it's nonsense. Don't do it." "Everybody that participates today and they make money, consider it lottery." [refines B4/B5 event filter; see 111]
+- **Yesterday's ORG gradients as today's levels**: price "worked inside of the regular trading hours opening range gap [from yesterday] and then finally sent it higher off the lower quadrant of yesterday's opening range gap." Bodies "stayed at the low of yesterday's regular trading hours opening range gap." [repeats B4 last three ORGs live]
+- **ORG CE hit in one candle, then the next octant fails = not bullish**: "one candlestick shoots up and goes to that 70% likelihood of half gap ... Goes a little bit above it but fails to get to the next octant level. So, is that bullish or bearish? It's not bullish." [refines B4 octants; B5 back at CE = 50/50]
+- **Engineered sentiment + clear both sides = neutral, then the real move**: bearish headlines -> "They take the stops for anyone that's short by running that high ... Anyone that wants to ... buy a breakout, they are trapped long ... So now, market's neutral. So now, it's more prone to show you the real move." Preferred sequence: buy-side, then sell-side, "then come railroading back over top." [new as a narrative rule; conflict check vs 106 stop hunt -> opposing liquidity]
+- **Wick-half filter**: "unless it can trade above on a body basis half of this candlestick's wick, the weight of it is sell side." [repeats B5 wick CE]
+- **Shallow sweep warning**: one handle below the low = "A little too shallow. I would have been more excited to see it try to make a deeper penetration." [repeats B5 REQ shallow peek (103)]
+- **"Do it in the next two candles"**: "If it wants this, it needs to do it in the next two candles." [repeats 106/108 must-do-it timing]
+- **Stop placement test**: "where's your stop loss going to be? ... If you were trying to short that, where is it going to be and you feel comfortable with it? I wouldn't be ... So, you just got to sit and watch." [repeats 106]
+- **SMT down-weighted on news-risk days**: "SMT divergence there. I don't want to put too much weight on that this morning because of the tone of the market." [refines 108 decoupling]
+- **Two months of tape reading before any demo** (beginner). [not for the engine]
+## Our interpretation / switches (all off)
+- [off] prior_org_gradients (add the previous session's ORG quadrants/octants as levels) [repeats B4]
+- [off] org_ce_then_octant_fail_fade (if the ORG CE is hit within the first 1-2 minutes and the next octant is not reached by body, flip to the opposite pool) [new]
+- [off] both_sides_cleared_then_trade (no entry until both the nearest buy-side and sell-side are swept; then trade the displacement) [new; conflict check]
+- [off] headline_deadline_skip (skip sessions with a scheduled geopolitical deadline or known event that evening) [new; hard to backtest]
+- Not for the engine: war-deadline talk, texting complaints, coaching.

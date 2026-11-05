@@ -32,3 +32,10 @@ Digest: mentorship/digests/m2026smc_b5_draft_rules.md (conflicts numbered 41-49,
 Chronology inferred: one mid-April 2026 week: 105 (Tue Apr 14 AM, PPI) > 104 (Tue PM) > 103 (Wed, drills) > 102 (Thu AM recap of the Tue-evening Asian short) > 101 (Thu live) > 100 (Fri 08:25) > 099 (Fri review, ATH 26,859 back-adjusted) > 098 (Mon Apr 20). Batch 4's 095-097 probably follow 098.
 Main theme: ORG direction as bias, CE/75%/full fill then -0.5 SD beyond the gap; back-adjusted continuous contract at ATHs; TGIF 20-30% (deferred to Monday); lunch macro from 10:30; BOLO introduced (099).
 Open items: ATH date "Sep 30" (100) vs "Oct 30 2025" (098); 102's "9:50-10:10 macro" during an Asian-session trade (like 084).
+
+# Batch 6 (videos 106-112), 2026-11-05
+Branch claude/project-thread-c5h1hu (off mentorship). PR into mentorship, never merge.
+Done (notes NNN_<id>.md): all 7. 061, 083, 090 and 094 still not in the caption folder.
+Digest: mentorship/digests/m2026smc_b6_draft_rules.md (conflicts numbered 50-55, continuing batches 1-5).
+Chronology inferred: the week before batch 5: 112 (Tue Apr 7 AM) > 111 (Tue Apr 7 20:20, ceasefire headline) > 110 (Wed Apr 8 AM) > 109 (Wed PM review) > 108 (Fri Apr 10 CPI) > 107 (Sat Apr 11 lecture) > 106 (Mon Apr 13) > B5's 105 (Tue Apr 14).
+Main theme: MNQ daily suspension block quadrants as the HTF frame; back-adjust toggle for volume imbalances only (107); reluctance and must-do-it timing; event-day management (one HTF target, protect at the wick CE).
