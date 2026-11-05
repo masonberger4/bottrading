@@ -23,4 +23,4 @@ Branch claude/project-thread-bnsf7t (off mentorship). PR into mentorship, never 
 Done (notes NNN_<id>.md): all 8. 090 and 094 not in the caption folder; 061 and 083 still missing.
 Digest: mentorship/digests/m2026smc_b4_draft_rules.md (conflicts numbered 31-40, continuing batches 1-3).
 Chronology inferred: mid-April 2026 (097 Tue AM > 096 Tue PM > 095 likely Wed); late April (093 a Friday, Apr 24 or May 1; 092 ~Tue Apr 28 > 091 Wed Apr 29 FOMC); 088 and 089 later (NQ ~29,300-29,600, likely late May/June; frame check).
-Main theme: the last three RTH opening range gaps graded in octants as the intraday framework; ORG SD projections x time; the ICT gray pool (resolves 038's "gray pole").
+Main theme: the last three RTH opening range gaps graded in octants as the intraday framework; ORG SD projections x time; the ICT gray pool (probably 038's unclear "gray pole").

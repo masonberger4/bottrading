@@ -35,7 +35,7 @@ Built 2026-11-05 from the per-lecture notes in `mentorship/notes_2026smc/` (088-
 - DRAFT: **Measuring gap** left open on the way, without requiring the measured move (092). [new]
 
 ### A3. Wicks, the gray pool and defensive arrays
-- DRAFT: **ICT gray pool.** The zone between the CEs of two adjacent wicks; "split that in half"; "No bodies are allowed to be in there" (092). Resolves the unclear "gray pole" in batch 1 (038). [new]
+- DRAFT: **ICT gray pool.** The zone between the CEs of two adjacent wicks; "split that in half"; "No bodies are allowed to be in there" (092). Probably the "gray pole" batch 1 flagged as unclear (038); check 038 against this definition. [new]
 - DRAFT: **Longest wick in a cluster** is the one to measure "as a gap" (091); a wick beside a small SIBI with a break to the left: "the wick is what you want to use" (093). Stops under wick CEs (089). [refines B3 A1]
 - DRAFT: **Defensive arrays.** "Bolo's not part of the 81. 81 are entry models ... balanced price ranges, their utilization are defensive"; put the stop behind them; when they fail, "something on the other direction is underway ... take the next PD array" (096). [new; conflict check: 2023 BPR]
 - DRAFT: **Three PD arrays supporting a run; stop below the lowest** (rejection block) (091). Footholds/handholds analogy (091, 097). [refines B3 footholds]
