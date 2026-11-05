@@ -39,3 +39,10 @@ Done (notes NNN_<id>.md): all 7. 061, 083, 090 and 094 still not in the caption 
 Digest: mentorship/digests/m2026smc_b6_draft_rules.md (conflicts numbered 50-55, continuing batches 1-5).
 Chronology inferred: the week before batch 5: 112 (Tue Apr 7 AM) > 111 (Tue Apr 7 20:20, ceasefire headline) > 110 (Wed Apr 8 AM) > 109 (Wed PM review) > 108 (Fri Apr 10 CPI) > 107 (Sat Apr 11 lecture) > 106 (Mon Apr 13) > B5's 105 (Tue Apr 14).
 Main theme: MNQ daily suspension block quadrants as the HTF frame; back-adjust toggle for volume imbalances only (107); reluctance and must-do-it timing; event-day management (one HTF target, protect at the wick CE).
+
+# Batch 8 (videos 001-020), 2026-11-05
+Branch claude/project-thread-m9ri9s (off mentorship). PR into mentorship, never merge.
+Done (notes NNN_<id>.md): all 17 available. 003, 009, 010 not in the caption folder (nor 061, 083, 090, 094).
+Digest: mentorship/digests/m2026smc_b8_draft_rules.md (conflicts numbered 73-89, continuing batch 7's 56-72 in PR #31).
+Chronology: these are the NEWEST lectures (021 = Mon Aug 31 2026; 001 = Wed Oct 28 2026, week before the midterms). 020 Tue Sep 1 > 019 Wed Sep 2 > 018/017 Fri Sep 4 NFP > 016 ~Sep 4 > 015 Sat Sep 5 > 014/013 Tue Sep 8 > 012 ~Wed Sep 9 > 011 Thu Sep 17 (FOMC) > 008 Mon Sep 28 > 005 Wed Sep 30 > 004 Fri Oct 2 (NFP, inferred) > 002 Mon Oct 19 > 001 Wed Oct 28. 006/007 date uncertain (holiday-week Tuesday; Thanksgiving Nov 24 fits).
+Main theme: back-to-basics series for new students (three pillars: 07:00-09:00 range, ORG CE, 10:00 first FVG; five data layouts), NFP/FOMC/holiday handling, carried FPFVG/NWOG/NDOG/ORG matrices, reflection FVG (013).
