@@ -16,7 +16,7 @@
 13. Only Mase and the coordinator write the project-memory index; threads don't call update_memory.
 
 - (Mase 2026-11-02 04:46 UTC) Stop all backtesting until all four ict_fetch playlists (Trade Executions 71, Charter Content 34, playlist PLVgHx4Z63pabpjlduWBaEsn8VMtALhjGV, 58 videos, assumed Core Content, 2024 Mentorship 51) are downloaded and transcribed; engine is built from all of them. Download work gets its own thread and is the single laptop writer. (Set has since grown: 2025 Lectures 83 and 2026 SMC 143 are in it too.)
-- (Mase 2026-11-02) Browser cookies for yt-dlp: ONLY from a spare Google account in a fresh Chrome profile, never the main profile; use as fallback if slow pacing + backoff does not clear the bot check.
+- (Mase 2026-11-02, updated 11-04 22:32 UTC) Browser cookies for yt-dlp: ONLY from a spare Google account, never the main one. The current route is the spare account signed in to YouTube in Firefox on the laptop (Mase agreed to do this at home). The Chrome-profile and Edge-extension routes were dropped because the extension is blocked on the work PC. Use cookies only when slow pacing and backoff do not clear the bot check.
 - (Mase 2026-11-02) Keep the 2026 SMC playlist (143 videos) in the download set.
 - (Mase 2026-11-02 ~04:51 UTC) Set each thread's model and effort to fit its work (coordinator's example: idle laptop-ops threads on Sonnet 5.5 low).
 
