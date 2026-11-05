@@ -10,3 +10,10 @@ Branch claude/project-thread-w1jkq7 (off mentorship). PR into mentorship, never 
 Done (notes NNN_<id>.md): all 16. 061 skipped (no captions; whisper pending).
 Digest: mentorship/digests/m2026smc_b2_draft_rules.md (conflicts numbered 13-21, continuing batch 1).
 Chronology inferred: 070 > 069 > 068 (early Jul); 066 > 065 > 064 > 063 > 062 > 060 > 059 > 058 (CPI/PPI + Fed week); 057 > 056 > 054 > 055 (next week); 067 undated Wednesday.
+
+# Batch 3 (videos 071-082, 084-087), 2026-11-05
+Branch claude/project-thread-f6yimo (off mentorship). PR into mentorship, never merge.
+Done (notes NNN_<id>.md): all 16. 083 not in the caption folder; 061 and 090 skipped (whisper pending).
+Digest: mentorship/digests/m2026smc_b3_draft_rules.md (conflicts numbered 22-30, continuing batches 1-2).
+Chronology inferred (late May to early July 2026, before batch 2): 087 > 086 > 085 (May 27, on screen) > 084 > 082 > 081 (NFP week) > 080 (Sun Jun 7 outlook) > 079 > 078 > 077 > 076 (Jun 22) > 075 > 074 > 073 (Jul 1) > 072 (Jul 2) > 071 (Jul 6).
+Open item: 084's "7:00-10:00" and "9:50-10:10 macro" look like evening (Asia) times; check frames on the laptop.
