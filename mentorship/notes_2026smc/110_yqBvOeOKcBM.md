@@ -1,0 +1,21 @@
+# 2026 SMC 110: Wednesday AM live on a huge premium ORG (ceasefire gap): one HTF target only (daily suspension block low), stepped partials, protect the stop at the wick CE, retracement capped at the block's lower quadrant (Wed Apr 8 2026, FOMC minutes in the afternoon; 109 is the same day's review)
+Full read (~6k words). Clean caption ("consequent curvature/encasement" = CE, "anti-plus handles" ~ 80-plus?). Frames laptop-only. Last ~40% is tape-reading coaching and psychology (inner child, Jekyll/Hyde, no plan B); kept only the progression rule.
+## Summary
+Enormous premium RTH ORG on ceasefire/Hormuz headlines. The daily MNQ suspension block's CE matched relative equal highs; price got through it. Plan: one target only for the morning, the block low, ignore exact ORG CE ("only looking for an attempt to get down into the lower quadrant of that daily"). Four sell-side targets hit in sequence; retrace to the CE of a wick ("consequent curvature") = protect, go flat. Lower quadrant 25,155.75 as the retracement cap; bodies never touched it; final run below the block low (~150 handles).
+## Rules in ICT's wording
+- **One HTF target in event-driven markets**: "just because of the economic climate, the geopolitical mess, the only objective I would personally have for the morning session would be to see it get down to this shaded area." "That's enough. If you don't think 150 handles or so is enough, I don't know." [refines B5 stop after target]
+- **Big gap = expect commitment to the downside**: "You never want to see it just like fishing below the old lows. You want to see it ... accelerate with range expansion. With a very large gap like this you want to see a little more commitment." [new; backtestable: ORG size vs expected first-hour range]
+- **Stepped partials**: "Theoretically, you should have half of your position off if you're short" by the second target; keep "one contract running and the majority of the position would be closed." Targets "here, here, and here," the best case "unrealized." [refines B4/B5 partials]
+- **Trail = wick CE, don't let the stop be challenged**: "bearishness should remain intact as long as we're below the midpoint ... of this wick ... A run into this and above would collapse my position. I would not let the stop loss at that high be challenged." "See how much giveback took place just by getting to this [CE] of that wick? ... it's not healthy." Shorts are "trailed just above this high." [new as a management rule; conflict check vs 099 "my stop will rest here" fixed]
+- **Event horizon partial**: between the last sell-side pool and the block low, price stalled at the event horizon; bodies stayed away from it. [repeats 106/107/109]
+- **Retracement cap after breaking a HTF block low**: "If we trade below the gray box, any retracement back in needs to be at this level here, 25,155 3/4 [lower quadrant] or less. Anything climbing back above after we leave this sets the stage for a run for intraday high." Back to the block CE = invalid. [repeats 109; same day]
+- **No re-entry after protecting in this climate**: "I would have had to re-enter ... in a given situation like today, I most likely not would have." [refines B5 re-entry rules]
+- **Knowing the draw is rule one**: "the first rule of engagement that I teach you all is to know where it's likely to go to." [repeats]
+- **Progression**: tape-read live (or screen-record, not market replay) 6-8 weeks until the draw is usually right, then paper-trade a minimum 6-8 weeks. [beginner process; not for the engine]
+- **FOMC minutes "usually a dud"**. [context]
+## Our interpretation / switches (all off)
+- [off] single_htf_target_event_days (on gap days above X handles or headline days, one target = the nearest daily block extreme; flat after) [new]
+- [off] wick_ce_protective_exit (exit the runner if price trades to the CE of the last opposing wick before the stop is touched) [new; conflict check vs fixed stop]
+- [off] big_gap_requires_expansion (if the ORG exceeds N handles and price only "fishes" 1-2 ticks below old lows, no continuation entry) [new; needs N]
+- [off] stepped_partials_half_by_t2 (50% off by the second target, one unit to the best case) [refines]
+- Not for the engine: ceasefire and government talk, market-replay complaint, inner-child and no-plan-B coaching.
