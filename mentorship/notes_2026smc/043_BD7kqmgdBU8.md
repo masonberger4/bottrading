@@ -1,5 +1,5 @@
-# 2026 SMC 043: Opening range gap short plan, gradients, projections (Sat review of a Friday, ~late Jul 2026, NQ ~28,300-28,600)
-Full read (8.1k words; caption starts mid-lecture). Clean caption. Frames laptop-only.
+# 2026 SMC 043: Opening range gap short plan, gradients, projections (Sat Aug 1 2026 review of Fri Jul 31; part 2 of 044)
+Full read (8.1k words; continues 044 word-for-word from "34 years this November"). Clean caption. Frames laptop-only.
 ## Summary
 Study how session highs/lows form (daily chart is the source); ORG graded in octants drives every PD array that day; first-hour dealing range; breakaway gap above ORG CE; IFVG "prior to relative equal highs being taken"; immediate rebalance; ORG -0.2/-0.5/-1 projections; fulcrum; and a simple, explicit "shortcut" ORG short plan with partials.
 ## Rules in ICT's wording
