@@ -1,5 +1,5 @@
-# 2026 SMC 064: Live short at 10:00 during the Fed chair's talk, from the prior day's ORG CE to event horizon (live execution)
-Full read (3.4k words). Clean caption. Frames laptop-only. Date unclear: the day after a CPI day with the Fed chair speaking at 10:00 "today and then tomorrow"; targets near 29,545 match the 058 week, but sizes (3 lots) and narrative differ from 062. Treat as an undated mid-week of a CPI week.
+# 2026 SMC 064: Live short at 10:00 during the Fed chair's talk, from the prior day's ORG CE to event horizon (Tuesday live execution, CPI day)
+Full read (3.4k words). Clean caption. Frames laptop-only. Most likely Tuesday of the 058 week: CPI at 08:30, Fed chair at 10:00 "today and then tomorrow" (066 says Fed speaks Tue and Wed), price ran into the CE of Monday's ORG as 065 forecast, and 063 recaps this short (last contract stopped near the 29,545 target). "Yesterday's ORG" = Monday's.
 ## Summary
 ICT waited until 10:00 (Fed chair speaking) and shorted after price ran buy side above relative equal highs at the lower quadrant of the prior day's ORG and into its CE. Adds were inside an IFVG laid over a suspension block. Targets: the 08:30 low, event horizon between two old lows, then the 29,545 pool. Partials below the 08:30 low and at event horizon; stop trailed; final contract stopped. Heavy emphasis on not strangling a position in Fed-driven delivery.
 ## Rules in ICT's wording
