@@ -1,5 +1,5 @@
-# 2026 SMC 087: ES last-hour long into relative equal highs using the 15:15-15:45 macro; footholds; twin-candle highs (summer 2026, likely July, live)
-Full read (1.1k words). Clean caption (fragmentary live narration). Frames laptop-only. ES ("This used to be my market when I was a younger guy"); "I hope this summer is not going to be like this"; the day before 086. Inferred July 2026.
+# 2026 SMC 087: ES last-hour long into relative equal highs using the 15:15-15:45 macro; footholds; twin-candle highs (likely Tue May 26 2026, live)
+Full read (1.1k words). Clean caption (fragmentary live narration). Frames laptop-only. ES ("This used to be my market when I was a younger guy"); "I hope this summer is not going to be like this"; the day before 086 (Wed May 27). First trading day back after ICT's week away and the Memorial Day weekend.
 ## Summary
 On a slow, ugly day ICT went long in the last hour targeting smooth relative equal highs (stops of earlier shorts) above, building at a BISI that would become an IFVG, adding inside a gap plus order block, raising the stop as footholds formed. The run came alive at 15:30 inside the 15:15-15:45 macro and cleared the highs.
 ## Rules in ICT's wording

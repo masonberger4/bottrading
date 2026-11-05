@@ -1,5 +1,5 @@
-# 2026 SMC 086: Crude short from a 15m BISI-turned-IFVG at an octant into relative equal lows; dollar-pair dormancy (summer 2026, likely July, review)
-Full read (1.2k words). Clean caption. Frames laptop-only. "I messed around with ES yesterday" (087) and "still feeling a little disjointed ... rust" place it the day after 087; BTC near the 49,677 target set in June; inferred July 2026. Mostly crude, DXY, gold, silver, BTC (non-index; examples only).
+# 2026 SMC 086: Crude short from a 15m BISI-turned-IFVG at an octant into relative equal lows; dollar-pair dormancy (Wed May 27 2026, morning review)
+Full read (1.2k words). Clean caption. Frames laptop-only. "I messed around with ES yesterday" (087) and "still feeling a little disjointed ... rust" place it the day after 087; 085 (same afternoon, dated May 27 2026 on screen) says he missed crude yesterday, traded ES, and "covered that [crude] this morning." Mostly crude, DXY, gold, silver, BTC (non-index; examples only).
 ## Summary
 Crude gapped down; price retraced into a 15m gap, stopped at an octant, then the 15m BISI was cleared and became a bearish IFVG; the 1m short filled at the high of a volume imbalance with the stop above the high, target relative equal lows (hit). DXY range-bound so USD majors idle. Metals and BTC: "mania" then capitulation.
 ## Rules in ICT's wording
