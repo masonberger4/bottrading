@@ -77,3 +77,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v71 | 2026-11-05 06:05:44Z | dreamer | proposals/dreamer__skill_drafts_dream.md | proposal | W3: curator pasted proposal instructions verbatim (PR #13) | cmsg_01FAHERC1Lsrg2bYtrKuRHmP7ous2Bmkr4VXy21ZGdtqVu | 377fd16960 -> c2e5ecc005 |
 | v72 | 2026-11-05 06:05:45Z | dreamer | proposals/dreamer__dream_2026-11-05.md | proposal | Fourth dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmP7ous2Bmkr4VXy21ZGdtqVu | ABSENT -> 2f9f6bf420 |
 | v73 | 2026-11-05 18:15:04Z | Run memory curator | status.md | edit | apply approved W1 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPMBGYecGpAmYwMG2XKG7d9r | 7136d536fa -> b0ac39a2c7 |
+| v74 | 2026-11-05 18:15:07Z | Run memory curator | decisions.md | edit | apply approved W2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPMBGYecGpAmYwMG2XKG7d9r | 05db696b2a -> 17a763ceb1 |
