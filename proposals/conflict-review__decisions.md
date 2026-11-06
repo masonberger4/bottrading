@@ -1,0 +1,2 @@
+<!-- proposal by conflict-review at 2026-11-06 16:36:14Z; target: decisions.md; reason: Mase picked Most videos wins on the precedence card; link: -; status: open -->
+- (Mase, 2026-11-06 16:35 UTC) Conflict review precedence: when videos disagree (incl. 2024-26 vs 2023), the position backed by the MOST distinct videos (scorecard count) is the default, whatever the year; the others become switches. Proposed working tie-break (not yet confirmed by Mase): more 2023 videos, then newest date. Earlier explicit owner answers stand unless Mase overturns them card by card.

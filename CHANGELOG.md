@@ -86,3 +86,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v80 | 2026-11-06 15:40:29Z | Run memory curator | status.md | edit | apply approved V1 (edited per coordinator: downloads finished, all drafted) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVedqKwMm3QE5Pq34iByXUR | b0ac39a2c7 -> 72c50c1738 |
 | v81 | 2026-11-06 15:40:32Z | Run memory curator | decisions.md | edit | apply approved V2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVedqKwMm3QE5Pq34iByXUR | 17a763ceb1 -> 6720752a73 |
 | v82 | 2026-11-06 15:40:33Z | Run memory curator | lessons.md | edit | apply approved V3 (conflict-ID clash point dropped) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVedqKwMm3QE5Pq34iByXUR | cadf814736 -> 29260f1a07 |
+| v83 | 2026-11-06 16:36:14Z | conflict-review | proposals/conflict-review__decisions.md | proposal | Mase picked Most videos wins on the precedence card | - | ABSENT -> 279aab05d6 |
