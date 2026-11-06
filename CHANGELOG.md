@@ -88,3 +88,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v82 | 2026-11-06 15:40:33Z | Run memory curator | lessons.md | edit | apply approved V3 (conflict-ID clash point dropped) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVedqKwMm3QE5Pq34iByXUR | cadf814736 -> 29260f1a07 |
 | v83 | 2026-11-06 16:36:14Z | conflict-review | proposals/conflict-review__decisions.md | proposal | Mase picked Most videos wins on the precedence card | - | ABSENT -> 279aab05d6 |
 | v84 | 2026-11-06 17:56:14Z | conflict-review-2 | proposals/conflict-review-2__decisions.md | proposal | Mase card answer | - | ABSENT -> 57d457e3b1 |
+| v85 | 2026-11-06 17:57:32Z | conflict-review-3 | proposals/conflict-review-3__decisions.md | proposal | Mase card answer | - | ABSENT -> 1c208b56e3 |
