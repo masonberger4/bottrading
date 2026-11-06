@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-05 06:05:42Z; target: decisions.md; reason: W2 resolves Z4: cookie source moved to Firefox; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPTshVJoBHreKyVRVs1UnM1F; status: merged -->
-EXACT TEXT replacing line 19 of decisions.md (the line starting "- (Mase 2026-11-02) Browser cookies for yt-dlp"):
+<!-- proposal by dreamer at 2026-11-06 06:05:30Z; target: decisions.md; reason: V2 Mase decisions 11-05; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPYc2ViHkXMzKWNHKTtsCUDL; status: open -->
+EXACT TEXT for decisions.md, new rows in the Active Rules Digest:
 
-- (Mase 2026-11-02, updated 11-04 22:32 UTC) Browser cookies for yt-dlp: ONLY from a spare Google account, never the main one. The current route is the spare account signed in to YouTube in Firefox on the laptop (Mase agreed to do this at home). The Chrome-profile and Edge-extension routes were dropped because the extension is blocked on the work PC. Use cookies only when slow pacing and backoff do not clear the bot check.
+- (Mase 2026-11-05 ~19:50 UTC) Video fetching: about 30 videos an hour with cookies is acceptable. No auto-ack speedup, no extra accounts, and no VPN or IP switching (declined as evading YouTube limits). Keep downloading the full video, not just captions, because frames are needed.
