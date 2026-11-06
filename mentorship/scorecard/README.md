@@ -67,3 +67,8 @@ rows on seventeen cards; 30 and 39-43 are "not scored". 55 cards in all (with ba
 2024 Mentorship L26-L29, L31-L33, L35-L39 append (2026-11-06): `m2024_draft_rules.md` conflicts 44-66. One new card
 (STOP-PLACE, which also scores 2024 C12 and C39), new positions on STOP-MGMT (G), ORG-SIZE (E), FPFVG-DEF (E), FOMC-DAY (D),
 and evidence rows on twenty existing cards; 65 and 66 are "not scored". 56 cards in all.
+
+2024 Mentorship L15, L40-L49 append (2026-11-06): `m2024_draft_rules.md` conflicts 67-93. One new card (RESISTANCE-DAY:
+stand aside / adapt / forecast the high vs low resistance condition, with L36), new positions on MONDAY (C), NEWS-WAIT (F),
+ORG-CE-WINDOW (C), FPFVG-DEF (F), STOP-MGMT (H), and evidence rows on nineteen existing cards; 83 and 88-93 are "not scored"
+(one source each). 57 cards in all.

@@ -157,3 +157,11 @@ STOP-PLACE,D,One tick beyond the order block open/high inside the entry leg
 STOP-PLACE,E,"Tight: one tick past a wick CE or the gap CE (low resistance days, small ranges)"
 STOP-PLACE,F,Condition-based wide: entry gap range added again beyond the gap (2x) on high resistance days
 STOP-PLACE,G,"Beyond every nearby inefficiency: with two stacked FVGs, beyond the higher one / its CE"
+MONDAY,C,"Trade Mondays with rules: NFP-week Monday always; a no-news Monday only in pre-market (07:00-09:30), not after the open"
+NEWS-WAIT,F,Several 08:30 reports or split 08:30 + 10:00 news: wait for both sides to be taken; the first run can be fake (like FOMC)
+ORG-CE-WINDOW,C,Drop the 70% expectation on low resistance run days with unfinished liquidity beyond: expect a dash to the draw instead
+FPFVG-DEF,F,On RTH charts the first RTH FVG may be the second on ETH: watch the gap that bridges both sessions
+STOP-MGMT,H,"By condition: high resistance = no trailing, cover costs only; low resistance = relaxed stop, limits at targets, walk away"
+RESISTANCE-DAY,A,Beginner: stand aside on high resistance days; trade only low resistance runs
+RESISTANCE-DAY,B,"Trade both, but in high resistance frame nearer arrays, use wider stops, one contract, no trailing"
+RESISTANCE-DAY,C,Forecast it before the open: news at 08:30/first hour + not Monday + clear draws + ORG 45/75 = low resistance; large range days ~90% low resistance

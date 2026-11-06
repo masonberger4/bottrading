@@ -180,3 +180,30 @@ m2024,63,TGIF-DEPTH,
 m2024,64,SMT-USE,
 m2024,65,,Not scored yet: opening inside the previous day's first presented FVG makes that gap the day's reference (L32); one source.
 m2024,66,,Not scored yet: Fed chair speech = no trading during it and 15 min after; speech in the 09:00-10:00 hour = trade before 08:00 (L37); one source.
+m2024,67,NFP-THU-FRI,
+m2024,68,MONDAY,New position C (L49).
+m2024,69,NEWS-WAIT,"New position F (L46, L48)."
+m2024,70,ORG-SIZE,
+m2024,71,ORG-CE-WINDOW,New position C (L48).
+m2024,72,OPEN-RANGE-TRADE,
+m2024,73,FPFVG-DEF,New position F (L15).
+m2024,74,STOP-PLACE,
+m2024,75,STOP-MGMT,"New position H (L42, L48, L49)."
+m2024,76,SMT-USE,
+m2024,77,FVG-VALID,
+m2024,78,OB-VALID,
+m2024,79,OB-CANDLE,
+m2024,80,EXIT-STYLE,
+m2024,81,AFTER-BIG-DAY,
+m2024,82,PREMARKET-ENTRY,
+m2024,83,,"Not scored yet: clustered (overlapping) NWOGs/NDOGs as the day's draw, target the near extreme of the cluster (L49); one source."
+m2024,84,ASIA,
+m2024,85,MIN-ROOM,
+m2024,86,MACRO-GRID,
+m2024,87,RESISTANCE-DAY,"New card (L36, L43, L48, L49)."
+m2024,88,,"Not scored yet: overnight range 00:01-04:59 graded with quadrants, arrays just below levels when bullish, only on consolidating nights (L44); one source."
+m2024,89,,Not scored yet: London 02:00-05:00 high/low as the AM session draw (L47); one source.
+m2024,90,,Not scored yet: ORG turtle-soup buy stop at the open of the candle that pierced the low (L40); one source.
+m2024,91,,Not scored yet: entries only in the premium/discount of the inception-to-terminus range (L40); one source.
+m2024,92,,Not scored yet: inside day / smallest range of 7 days precedes expansion; large range day = range above the 3-day average (L48); one source.
+m2024,93,,Not scored yet: no 15-minute opening range; first 30 and 60 minutes frame the day (L49); one source.
