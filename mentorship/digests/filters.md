@@ -160,6 +160,7 @@ Source: all 218 notes in `mentorship/notes/` plus `mentorship_rules.md`, `mentor
   - Friday after a week whose targets were all met: don't trade (100 ~7:05).
   - Don't buy Friday after a strong Thursday (cc09_008 ~41:53).
   - Friday after a trending week: chop and profit taking (cc04_011 ~17:59).
+  - Friday after a strong one-sided (down) week: be nimble, expect a small daily range; he sat the day out (023 captions, added 2026-11-06). [2023] **New 2023 evidence**: the earlier 023 notes were chart-only.
   [both]
 - No positions over the weekend or across 17:00-18:00. Late in the week, get flat rather than carry a net loss into the weekend (065A ~2:30:30; 101 ~4:27; 103 ~9:31; cc02_005 ~8:05). [both]
 - Weekly open filter:
