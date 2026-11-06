@@ -72,3 +72,7 @@ and evidence rows on twenty existing cards; 65 and 66 are "not scored". 56 cards
 stand aside / adapt / forecast the high vs low resistance condition, with L36), new positions on MONDAY (C), NEWS-WAIT (F),
 ORG-CE-WINDOW (C), FPFVG-DEF (F), STOP-MGMT (H), and evidence rows on nineteen existing cards; 83 and 88-93 are "not scored"
 (one source each). 57 cards in all.
+
+2024 Mentorship L34, L50-L51 append (2026-11-06): `m2024_draft_rules.md` conflicts 94-106 (playlist complete). One new card
+(NDOG-DEF: 17:00 -> 18:00 only vs also the 16:14 RTH settlement -> 18:00 NDOG), and evidence rows on ORG-CLOSE, FVG-VALID,
+ATH-RULE, NFP-THU-FRI, EXIT-STYLE, STOP-PLACE; 97-99 and 102-104 are "not scored". 58 cards in all. Next m2024 number: 107.
