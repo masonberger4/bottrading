@@ -54,3 +54,8 @@ Sources used for the first build (2026-11-05): the Part C conflict lists of
 rulebook topic digests (`times.md`, `levels.md`, `pd_arrays.md`, `execution.md`, `filters.md`,
 `bias.md`, `models.md`, `pre_open_entries.md`, `owner_directives.md`); per-lecture notes for the
 quotes.
+
+Batch 7 append (2026-11-05): 2026 SMC 113-124 (`m2026smc_b7_draft_rules.md`, conflicts 56-72). Seven new
+cards (WICK-PRIORITY, EXIT-DEPTH, SHORT-LOCATION, PARTIAL-TRIGGER, TWO-SIDED, TF-CHOP, OB-VALID), new
+positions on STOP-MGMT, FVG-VALID, GAP-LIFE, NEWS-WAIT, and evidence rows on ten existing cards; 67 and 72
+are "not scored" (one source each). 53 cards in all.

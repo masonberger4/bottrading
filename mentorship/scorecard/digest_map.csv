@@ -1,6 +1,6 @@
 digest,num,scorecard,note
 te_charter,1,MSS-CLOSE,
-te_charter,2,,Not scored: Charter 04:00/06:00 "platform opens" are most likely MT4 server-time clocks (00:00 NY shows as 04:00; times.md A). Check frames.
+te_charter,2,,"Not scored: Charter 04:00/06:00 ""platform opens"" are most likely MT4 server-time clocks (00:00 NY shows as 04:00; times.md A). Check frames."
 te_charter,3,CONTRACT,
 te_charter,4,,Not scored: Model 1 trade-plan rules (flat by 10:00 and no Fridays) are internal to one Charter FX model.
 te_charter,5,,Not scored: Model 2 vs Model 3 on Mondays is internal to the Charter models.
@@ -51,7 +51,7 @@ m2026smc,4,TGIF-DEPTH,
 m2026smc,5,NEWS-WAIT,
 m2026smc,6,,Not scored: session alternation (025/029: a trending session is followed by consolidation; rarely three trend in a row) has no opposing 2023 statement; it is a new rule.
 m2026smc,7,PREMARKET-RANGE,
-m2026smc,8,BREAKER-ZONE,Breaker anchor "lowest close down candle" (053/067) matches 2023 candle choice (081 lowest close; pd_arrays 1.9); only body-vs-range is scored.
+m2026smc,8,BREAKER-ZONE,"Breaker anchor ""lowest close down candle"" (053/067) matches 2023 candle choice (081 lowest close; pd_arrays 1.9); only body-vs-range is scored."
 m2026smc,9,IFVG-CONFIRM,
 m2026smc,10,BIAS-SOURCE,
 m2026smc,11,RANGE-ANCHOR,
@@ -62,7 +62,7 @@ m2026smc,15,LUNCH-TRADE LUNCH-TARGET,
 m2026smc,16,OB-CANDLE OB-CLOSE,
 m2026smc,17,,Not scored: IOFED entry depth (partial short of CE vs 1 tick past candle 1) is internal to 2026 and has one source each.
 m2026smc,18,MONDAY CPI-WEEK,
-m2026smc,19,,Not scored: HRLR/LRLR "candles sharing a range" needs a numeric threshold before it can be compared.
+m2026smc,19,,"Not scored: HRLR/LRLR ""candles sharing a range"" needs a numeric threshold before it can be compared."
 m2026smc,20,,Not a conflict: the 15m bellwether is already the 2023 rule (bias.md B4: 013; 065B; 092).
 m2026smc,21,UNICORN,
 m2026smc,22,OB-CANDLE OB-CLOSE,
@@ -83,7 +83,7 @@ m2026smc,36,REENTRY,
 m2026smc,37,FOMC-DAY,
 m2026smc,38,BIAS-SOURCE,
 m2026smc,39,WEEK-PROFILE,
-m2026smc,40,,Not a conflict: "strong 07:00 push = skip the AM" (093) agrees with 029's alternation rule; nothing opposes it.
+m2026smc,40,,"Not a conflict: ""strong 07:00 push = skip the AM"" (093) agrees with 029's alternation rule; nothing opposes it."
 m2026smc,41,CONTRACT,
 m2026smc,42,LUNCH-WINDOW,
 m2026smc,43,ORG-AFTER-CE,
@@ -99,6 +99,23 @@ m2026smc,52,SMT-USE,
 m2026smc,53,STOP-MGMT,
 m2026smc,54,ORG-AFTER-CE,
 m2026smc,55,PYRAMID-WHERE,
+m2026smc,56,WICK-PRIORITY,
+m2026smc,57,STOP-MGMT,
+m2026smc,58,RANGE-ANCHOR,
+m2026smc,59,LUNCH-WINDOW LUNCH-TARGET,
+m2026smc,60,FVG-VALID,
+m2026smc,61,EXIT-DEPTH,
+m2026smc,62,SHORT-LOCATION,
+m2026smc,63,PARTIAL-TRIGGER,
+m2026smc,64,TWO-SIDED,
+m2026smc,65,TF-CHOP,
+m2026smc,66,PARTIAL-TRIGGER,
+m2026smc,67,,"Not scored yet: immediate rebalance timing (same or next day; day-2 failure = complex reversal) is one source (121, 122); no opposing statement found."
+m2026smc,68,OB-VALID,
+m2026smc,69,GAP-LIFE,
+m2026smc,70,FPFVG-DEF,
+m2026smc,71,NEWS-WAIT,
+m2026smc,72,,Not scored yet: the gap-fill target gate (last opposing FVG stays open = target taken; fills = not taken) is one source (124).
 m2026smc,73,PREMARKET-RANGE,
 m2026smc,74,EXIT-STYLE,
 m2026smc,75,TGIF-TIMING TGIF-DEPTH,

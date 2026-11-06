@@ -8,6 +8,7 @@ See also batch 3 (071-082, 084-087): `m2026smc_b3_draft_rules.md`.
 See also batch 4 (088, 089, 091-093, 095-097): `m2026smc_b4_draft_rules.md`.
 See also batch 5 (098-105): `m2026smc_b5_draft_rules.md`.
 See also batch 6 (106-112): `m2026smc_b6_draft_rules.md`.
+See also batch 7 (113-124): `m2026smc_b7_draft_rules.md`.
 See also batch 8 (001-020, the newest lectures, Aug 31 - Oct 28 2026): `m2026smc_b8_draft_rules.md`.
 
 ## How to read this

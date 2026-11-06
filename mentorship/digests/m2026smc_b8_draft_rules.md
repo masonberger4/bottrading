@@ -5,7 +5,7 @@ Built 2026-11-05 from the per-lecture notes in `mentorship/notes_2026smc/` (001-
 
 ## How to read this
 - **Source tier: 2023 Mentorship wins on every conflict.** This batch sits in the same non-2023 tier as batches 1-7. Experienced-trader version stays the default; beginner material (study schedule, journaling, paper trading after holidays) is noted only.
-- Tags: **[new]**, **[refines]**, **[repeats]**, **[conflict: X]**, **[conflict check]**. "B7" = batch 7 digest (PR #31, not merged when this was written); "B1-B6" = earlier digests.
+- Tags: **[new]**, **[refines]**, **[repeats]**, **[conflict: X]**, **[conflict check]**. "B7" = batch 7 digest (`m2026smc_b7_draft_rules.md`); "B1-B6" = earlier digests.
 - All switches default OFF. Times are New York local.
 - Deferred per Mase (2026-11-03): conflict and priority questions wait for one full review. Nothing here was asked.
 

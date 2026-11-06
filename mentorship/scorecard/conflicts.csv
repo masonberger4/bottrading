@@ -2,9 +2,9 @@ id,topic,question,in_force,digest_refs
 MONDAY,Day filters,Should Mondays be traded outside NFP week?,Engine: Mondays traded (experienced default).,2024 C9; SMC 18; TE C5; SMC 81
 CPI-WEEK,Day filters,"On a week with CPI/PPI midweek, which days are worth trading?","2023: day before CPI is quiet ""high resistance"": small risk, bread-and-butter only, then stop (filters.md).",SMC 18; TE (te60)
 AFTER-BIG-DAY,Day filters,"After a very large prior day, skip the next morning?",Owner #10: stand aside only on days meeting the sloppy definition (big prior range + chop).,2025 C8
-LUNCH-WINDOW,Times,When is the New York lunch window?,"Engine: no new entries 12:00-13:30 (times.md Conflict 4 default; bot AM ends 11:00, PM starts 13:30).","TE C11; 2024 C4; 2025 C4; SMC 15, 25, 33, 42"
+LUNCH-WINDOW,Times,When is the New York lunch window?,"Engine: no new entries 12:00-13:30 (times.md Conflict 4 default; bot AM ends 11:00, PM starts 13:30).","TE C11; 2024 C4; 2025 C4; SMC 15, 25, 33, 42, 59"
 LUNCH-TRADE,Times,"Is the lunch macro a tradable setup, or a window to stay out of?",Engine: lunch is avoided (no entries 12:00-13:30); 2023 lunch macro 11:50-12:10 is a time window only.,"TE C11; 2024 C4; 2025 C4; SMC 15, 25, 33, 42"
-LUNCH-TARGET,Times,What liquidity does the lunch macro target?,"2023: runs the liquidity protecting the AM move (stops of AM winners); no fixed ""after 10:00"" rule.","2024 C4; 2025 C4; SMC 15, 25, 33; SMC 87"
+LUNCH-TARGET,Times,What liquidity does the lunch macro target?,"2023: runs the liquidity protecting the AM move (stops of AM winners); no fixed ""after 10:00"" rule.","2024 C4; 2025 C4; SMC 15, 25, 33, 59; SMC 87"
 MACRO-GRID,Times,"Do macros run every hour at :50-:10, or only at the fixed list of named times?","Engine: fixed 2023 list (09:50-10:10, 10:50-11:10, 11:50-12:10, 13:10-13:40, 14:50-15:10, 15:15-15:45). times.md F.","SMC 2, 24; TE C11; SMC 78"
 LAST-HOUR,Times,"Which last-hour windows matter, and does trading run past 15:50 into the 15:45-16:00 market-on-close?",Owner #1: last-hour entries 15:00-15:50; 15:15-15:45 is the sweet spot (tag).,2024 C5; SMC 24; TE C11
 LONDON-MACRO,Times,When is the London macro?,2023 notes show no single exact London macro time; London kill zone 02:00-05:00.,2025 C2; SMC 24
@@ -13,36 +13,43 @@ PYRAMID-SIZES,Management,What size ladder do adds follow?,"Rulebook E11/E12, add
 REENTRY,Management,"After a stop-out, may the bot re-enter the same idea, and at what size?",Engine blocks same-direction re-entry; 2023 K2 allows it when the idea is intact; C7 halve size after a loss.,TE C14; 2024 C16; SMC 36
 MIN-ROOM,Management,What is the minimum room/target for an index day trade?,"Owner #2: 5 handles is the MINIMUM room, not the goal; targets are the draw.",2024 C6; 2025 C7
 FIXED-RR,Management,"Are fixed 1:1 targets acceptable, or must targets sit at liquidity?","2023: targets at liquidity/PD arrays, ~10 handles room to take 5 (G1).",SMC 45
-STOP-MGMT,Management,"Hold the initial stop, or exit early when price reaches the opposing wick CE?",Owner management default: BE only after the first partial and expansion; day trade keeps its initial stop (F5).,SMC 53; SMC 77
+STOP-MGMT,Management,"Hold the initial stop, or exit early when price reaches the opposing wick CE?",Owner management default: BE only after the first partial and expansion; day trade keeps its initial stop (F5).,"SMC 53, 57; SMC 77"
 SMT-USE,Bias and SMT,"How is SMT used: a qualifier only, or a reason to take partials / pick the index?","Rulebook: SMT is a qualifier only, useless without time of day and a draw (bias.md B51).","2024 C8; SMC 47, 51, 52"
 SMT-SET,Bias and SMT,Which indices count for SMT?,2023: ES/NQ/YM three-index SMT (bias.md B51).,SMC 51
 ASIA,Times,Should the bot trade the Asian session on index futures?,Engine: Asia skipped by default; 2023: Asia moves too little to trade indices (095).,TE C13; 2024 C10; SMC 86
 BIAS-SOURCE,Bias and SMT,"What sets the intraday bias: top-down HTF first, or the opening gaps alone?","2023 bias.md B3: weekly direction first, daily is where most analysis is done; intraday dips in a bullish week are buys.","SMC 10, 38, 44"
 ATH-RULE,Bias and SMT,"At all-time highs, may the bot take intraday shorts against the bullish daily?",2023: no special all-time-high rule; two-way bias by draw.,2025 C10; SMC 47
 CONTRACT,Data,Which contract/price series sets levels and targets?,"Owner #13: round numbers and levels come from the actual front-month contract, not the back-adjusted series.",TE C3; SMC 41
-NEWS-WAIT,News,"After an 08:30 release, when may the bot enter?","Owner #4: no fixed minute count; wait for the news dealing range to form, then trade from it. Standing: no 08:30 entries.","2024 C17; SMC 5, 14; SMC 76"
+NEWS-WAIT,News,"After an 08:30 release, when may the bot enter?","Owner #4: no fixed minute count; wait for the news dealing range to form, then trade from it. Standing: no 08:30 entries.","2024 C17; SMC 5, 14, 71; SMC 76"
 NEWS-HOLD,News,May a position be held through a CPI/PPI (or NFP) release?,2023: never trade before or at the CPI release; pre-market trades may let the 08:30 release run into the target (032).,SMC 14
 FOMC-DAY,News,How is FOMC day traded?,"Engine: FOMC PM blocked, AM open (filters.md Conflict 3); 2023 14:00-14:45 observation only, normal routine after 14:45.",2025 C5; SMC 37; SMC 76
 NFP-THU-FRI,News,Are NFP Thursday and NFP Friday tradable?,Owner #10 (2026-10-18): NFP-week Thursday and FOMC week stay tradable under the experienced rules; NFP Friday skipped by default (filters.md Conflict 1).,"TE C10; 2025 C5; SMC 18; SMC 76, 81"
 OPEN-RANGE-TRADE,Opening range,May the bot trade inside the 09:30-10:00 opening range?,"2023: do not trade the opening range; watch how price delivers, then trade from 10:00 (times.md D).",2024 C3; 2025 C3; SMC 13
-FPFVG-DEF,Opening range,"Which FVG is the ""first presented FVG"" (FPFVG) of the session?",2023: no FPFVG rule (new concept).,"2025 C3; SMC 13, 27, 48; SMC 80"
+FPFVG-DEF,Opening range,"Which FVG is the ""first presented FVG"" (FPFVG) of the session?",2023: no FPFVG rule (new concept).,"2025 C3; SMC 13, 27, 48, 70; SMC 80"
 ORG-CLOSE,Opening gaps,Which prior close anchors the RTH opening range gap (ORG)?,times.md Conflict 9: 16:15 settlement (7 videos) vs 16:00 (3); bot reads index data so uses 16:00.,SMC 1
 ORG-CE-WINDOW,Opening gaps,"By when is the ORG CE (half gap) expected, and how long is it a valid first draw?",2023: price reprices into the ORG after the 09:30 volatility; no time limit.,"TE C16; SMC 34, 50; SMC 85"
 ORG-AFTER-CE,Opening gaps,"After the ORG CE is hit, expect continuation (full fill and beyond) or done/fade?","2023: fill depth full, half or quarter; a breaker inside can stop full closure (levels.md ORG).","SMC 34, 43, 54"
 ORG-SIZE,Opening gaps,Does the size of the gap change how it is traded?,2023: CE and quarters on every ORG; a large ORG means the first 30-45 min chop and the PM is better (033).,2024 C15; 2025 C1; SMC 84
-GAP-LIFE,Opening gaps,How long do NWOGs and NDOGs stay on the chart as levels?,Rulebook: NWOGs up to 60 trading days (at least the 4-5 most recent); ORG/NDOG expire after 5 days (068) or 3 days (060).,2024 C1; SMC 89
+GAP-LIFE,Opening gaps,How long do NWOGs and NDOGs stay on the chart as levels?,Rulebook: NWOGs up to 60 trading days (at least the 4-5 most recent); ORG/NDOG expire after 5 days (068) or 3 days (060).,2024 C1; SMC 69; SMC 89
 MSS-CLOSE,PD arrays,"Does a market structure shift need a candle close beyond the swing, or is a wick/1-tick break enough?",pd_arrays.md C3: default wick (trade-through); bot currently uses close (param mss_mode).,TE C1
 OB-CANDLE,PD arrays,"In a series of same-colour candles, which candle is the order block?",2023: consecutive candles blend into one OB; reference = open of the first (highest for bullish) candle (pd_arrays 1.8).,"SMC 16, 22, 31"
 OB-CLOSE,PD arrays,Does an order block's change in state of delivery need a close through its open?,Rulebook OB confirmation (engine); 2023: first trade through the open of the first down-close candle = CISD.,"2024 C14; SMC 16, 22"
 IFVG-CONFIRM,PD arrays,What confirms an inversion FVG before it can be used for entries?,pd_arrays.md C15: default one close through + a new candle returns (048).,"SMC 9, 23, 32"
 BREAKER-ZONE,PD arrays,Is the breaker zone the candle body or its full range?,"Owner #14: full range default (Ep 02, 05, 07); body as a switch.",TE C8; 2024 C13; SMC 8
 UNICORN,PD arrays,What is a unicorn?,pd_arrays.md C11: default FVG inside a breaker (007).,SMC 21
-FVG-VALID,PD arrays,Which FVGs count as valid entry arrays?,2023: any FVG in the draw's direction (quality filters only).,SMC 27
-RANGE-ANCHOR,Levels,Are dealing ranges and projections anchored on wicks or on bodies?,"pd_arrays.md C16: wicks for intraday legs, bodies for multi-day ranges (param).","SMC 11, 29"
+FVG-VALID,PD arrays,Which FVGs count as valid entry arrays?,2023: any FVG in the draw's direction (quality filters only).,"SMC 27, 60"
+RANGE-ANCHOR,Levels,Are dealing ranges and projections anchored on wicks or on bodies?,"pd_arrays.md C16: wicks for intraday legs, bodies for multi-day ranges (param).","SMC 11, 29, 58"
 LIQ-LOCATION,Levels,Where does liquidity rest: beyond wick extremes or below body clusters?,2023: pools beyond old highs/lows and relative equal highs/lows (wick extremes).,SMC 35; SMC 88
 PREMARKET-ENTRY,Times,Should the bot take entries before 09:30 (07:00-09:00 pre-market)?,Owner: no 08:30 entries; pre-09:30 setups are test-only switches (owner_directives standing decisions; rulebook N5).,TE C12; 2024 C11; SMC 7
 PREMARKET-RANGE,Times,Which pre-market time range sets the day's reference levels?,2023: no grading rule for a pre-market range; NY open kill zone 07:00-09:00 (times.md C).,"TE C12; 2024 C2; 2025 C9; SMC 7, 26; SMC 73"
 TGIF-DEPTH,Weekly profile,How deep is the TGIF retracement of the weekly range?,"Rulebook tgif_exits ""066"": 20-30% sweet spot; >30-40% = reversal territory (2023 066).",2024 C7; SMC 4; SMC 75
 TGIF-TIMING,Weekly profile,"When can the TGIF retracement start, and what if Friday does not deliver it?","2023: Friday only, PM-leaning (066) vs Thu-Fri, often London close (084); times.md Conflict 13 has no default.",2024 C7; SMC 46; SMC 75
 WEEK-PROFILE,Weekly profile,Which day tends to form the intermediate high/low of the week?,2023 weekly profiles: bullish week wants a Tue/Wed low of week (048).,SMC 39
+WICK-PRIORITY,PD arrays,"When a wick sits next to an FVG or volume imbalance, which is the operative array?",2023: the FVG/VI as drawn; stop beyond the FVG's candle 2.,SMC 56
+EXIT-DEPTH,Management,"In a difficult climate, hold for the full target or exit early (75% of the projection / just short)?",2023/owner: targets at the draw (liquidity/PD array); partials on the way.,SMC 61
+SHORT-LOCATION,Levels,May the bot short when price is already deep in the discount of the day's range?,"2023: sell in premium, buy in discount of the dealing range (no extra rule).",SMC 62
+PARTIAL-TRIGGER,Management,What triggers a partial exit?,"B6 draft: stepped partials at targets, half off by T2, one runner (110).","SMC 63, 66"
+TWO-SIDED,Day filters,"When both directions are justifiable (conflicting arrays, small ORG, rollover week), stand aside or pick a side?",2023: trade only when the draw is clear; no explicit two-sided rule.,SMC 64
+TF-CHOP,PD arrays,"When the 1m chops inside one range, look up a timeframe or down?","2023: HTF array for the draw, LTF for the entry (no chop rule).",SMC 65
+OB-VALID,PD arrays,Which order blocks are valid entry arrays?,2023: any OB in the draw's direction after displacement (pd_arrays 1.8).,SMC 68
 EXIT-STYLE,Management,"Take one full exit at the first pool, or partials with a runner to a terminus?","Owner management default: partials at liquidity, runner trailed to structure (F5); 2023 targets at liquidity (G1).",SMC 74
