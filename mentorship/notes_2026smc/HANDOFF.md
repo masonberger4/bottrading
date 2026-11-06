@@ -46,3 +46,10 @@ Done (notes NNN_<id>.md): all 12. 061, 083, 090 and 094 still not in the caption
 Digest: mentorship/digests/m2026smc_b7_draft_rules.md (conflicts numbered 56-72). Scorecard appended (7 new cards; 67 and 72 not scored).
 Chronology inferred (runs backwards, the four weeks before batch 6): 124 (Tue Mar 10 PM) > 123 (Wed Mar 11 CPI) > 122 (Fri Mar 13 AM) > 121 (Fri Mar 13 PM) > 120 (Tue Mar 17 rollover) > 119 (Thu Mar 19) > 118 (Sat Mar 21) > 117 (Thu Mar 26) > 116 (Fri Mar 27) > 115 (Sat Mar 28 FHDR lecture) > Easter break > 114 (Mon Apr 6 AM) > 113 (Mon Apr 6 PM) > B6's 112.
 Main theme: First Hour's Dealing Range (115); wicks as the dominant array; time distortion (go up a timeframe); immediate rebalance (121) and lunch reversal gap (123) as new PD arrays; OBs anchored to ORG gradient levels (122); hard-climate exits (75%, three-candle trail, EH partial ladder).
+
+# Batch 8 (videos 001-020), 2026-11-05
+Branch claude/project-thread-m9ri9s (off mentorship). PR into mentorship, never merge.
+Done (notes NNN_<id>.md): all 17 available. 003, 009, 010 not in the caption folder (nor 061, 083, 090, 094).
+Digest: mentorship/digests/m2026smc_b8_draft_rules.md (conflicts numbered 73-89, continuing batch 7's 56-72 in PR #31).
+Chronology: these are the NEWEST lectures (021 = Mon Aug 31 2026; 001 = Wed Oct 28 2026, week before the midterms). 020 Tue Sep 1 > 019 Wed Sep 2 > 018/017 Fri Sep 4 NFP > 016 ~Sep 4 > 015 Sat Sep 5 > 014/013 Tue Sep 8 > 012 ~Wed Sep 9 > 011 Thu Sep 17 (FOMC) > 008 Mon Sep 28 > 005 Wed Sep 30 > 004 Fri Oct 2 (NFP, inferred) > 002 Mon Oct 19 > 001 Wed Oct 28. 006/007 date uncertain (holiday-week Tuesday; Thanksgiving Nov 24 fits).
+Main theme: back-to-basics series for new students (three pillars: 07:00-09:00 range, ORG CE, 10:00 first FVG; five data layouts), NFP/FOMC/holiday handling, carried FPFVG/NWOG/NDOG/ORG matrices, reflection FVG (013).

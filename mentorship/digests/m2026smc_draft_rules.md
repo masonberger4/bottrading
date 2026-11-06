@@ -9,6 +9,7 @@ See also batch 4 (088, 089, 091-093, 095-097): `m2026smc_b4_draft_rules.md`.
 See also batch 5 (098-105): `m2026smc_b5_draft_rules.md`.
 See also batch 6 (106-112): `m2026smc_b6_draft_rules.md`.
 See also batch 7 (113-124): `m2026smc_b7_draft_rules.md`.
+See also batch 8 (001-020, the newest lectures, Aug 31 - Oct 28 2026): `m2026smc_b8_draft_rules.md`.
 
 ## How to read this
 - **Source tier: 2023 Mentorship wins on every conflict.** This series sits below 2023, alongside 2024 Mentorship, 2025 lectures and TE/Charter. The 2026 series is ICT's free YouTube clinic (Jul 31 to ~Sep 2026, NQ Sep contract). It is mostly daily reviews and live executions built on one framework: grade every range in octants, and a PD array is valid only if it is tethered to a grade. The **experienced-trader version stays the default**, and beginner rules become switches only.

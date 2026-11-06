@@ -414,7 +414,7 @@ update this table. Keep numbering of existing conflicts/switches stable.
 25. Partial below a previous-day low only after the next short-term low (L19). Card PARTIAL-TRIGGER.
 26. 14:50-15:10 macro (L19) vs owner #1 15:00-15:50. Card LAST-HOUR.
 27. Re-entry after a stop-out while the model holds (L20). Card REENTRY.
-28. Stop to cover costs at half the way to the first partial (L20). Card STOP-MGMT (new position E).
+28. Stop to cover costs at half the way to the first partial (L20). Card STOP-MGMT (new position F).
 29. SMT as waning continuation only (L20). Card SMT-USE.
 30. Pre-holiday Friday and the Mon/Tue after a holiday skipped (L21): agrees with filters.md 1.2; not scored.
 31. No AM trades after a large range day, trade the PM (L22). Card AFTER-BIG-DAY.
