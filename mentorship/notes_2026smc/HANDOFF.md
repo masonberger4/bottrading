@@ -39,3 +39,10 @@ Done (notes NNN_<id>.md): all 7. 061, 083, 090 and 094 still not in the caption 
 Digest: mentorship/digests/m2026smc_b6_draft_rules.md (conflicts numbered 50-55, continuing batches 1-5).
 Chronology inferred: the week before batch 5: 112 (Tue Apr 7 AM) > 111 (Tue Apr 7 20:20, ceasefire headline) > 110 (Wed Apr 8 AM) > 109 (Wed PM review) > 108 (Fri Apr 10 CPI) > 107 (Sat Apr 11 lecture) > 106 (Mon Apr 13) > B5's 105 (Tue Apr 14).
 Main theme: MNQ daily suspension block quadrants as the HTF frame; back-adjust toggle for volume imbalances only (107); reluctance and must-do-it timing; event-day management (one HTF target, protect at the wick CE).
+
+# Batch 7 (videos 113-124), 2026-11-05
+Branch claude/project-thread-t8rwbb (off mentorship). PR into mentorship, never merge.
+Done (notes NNN_<id>.md): all 12. 061, 083, 090 and 094 still not in the caption folder; 001-020 (minus 003, 009, 010) now ARE on the caption branch, not yet noted.
+Digest: mentorship/digests/m2026smc_b7_draft_rules.md (conflicts numbered 56-72). Scorecard appended (7 new cards; 67 and 72 not scored).
+Chronology inferred (runs backwards, the four weeks before batch 6): 124 (Tue Mar 10 PM) > 123 (Wed Mar 11 CPI) > 122 (Fri Mar 13 AM) > 121 (Fri Mar 13 PM) > 120 (Tue Mar 17 rollover) > 119 (Thu Mar 19) > 118 (Sat Mar 21) > 117 (Thu Mar 26) > 116 (Fri Mar 27) > 115 (Sat Mar 28 FHDR lecture) > Easter break > 114 (Mon Apr 6 AM) > 113 (Mon Apr 6 PM) > B6's 112.
+Main theme: First Hour's Dealing Range (115); wicks as the dominant array; time distortion (go up a timeframe); immediate rebalance (121) and lunch reversal gap (123) as new PD arrays; OBs anchored to ORG gradient levels (122); hard-climate exits (75%, three-candle trail, EH partial ladder).
