@@ -68,7 +68,16 @@ rows on seventeen cards; 30 and 39-43 are "not scored". 55 cards in all (with ba
 (STOP-PLACE, which also scores 2024 C12 and C39), new positions on STOP-MGMT (G), ORG-SIZE (E), FPFVG-DEF (E), FOMC-DAY (D),
 and evidence rows on twenty existing cards; 65 and 66 are "not scored". 56 cards in all.
 
-Batch 9 append (2026-11-06): 2026 SMC 125-136 (`m2026smc_b9_draft_rules.md`, conflicts 90-103). Three new cards
-(RANGE-REGIME, HRLR-TRADE, SEASON-ACTIVITY), new positions on TGIF-DEPTH (C), OPEN-RANGE-TRADE (C), SMT-USE (E),
-CONTRACT (D), FPFVG-DEF (F), STOP-PLACE (H), MIN-ROOM (D), PREMARKET-RANGE (G), and evidence rows on twenty cards;
-92, 101 and 103 are "not scored". 59 cards in all.
+2024 Mentorship L15, L40-L49 append (2026-11-06): `m2024_draft_rules.md` conflicts 67-93. One new card (RESISTANCE-DAY:
+stand aside / adapt / forecast the high vs low resistance condition, with L36), new positions on MONDAY (C), NEWS-WAIT (F),
+ORG-CE-WINDOW (C), FPFVG-DEF (F), STOP-MGMT (H), and evidence rows on nineteen existing cards; 83 and 88-93 are "not scored"
+(one source each). 57 cards in all.
+
+2024 Mentorship L34, L50-L51 append (2026-11-06): `m2024_draft_rules.md` conflicts 94-106 (playlist complete). One new card
+(NDOG-DEF: 17:00 -> 18:00 only vs also the 16:14 RTH settlement -> 18:00 NDOG), and evidence rows on ORG-CLOSE, FVG-VALID,
+ATH-RULE, NFP-THU-FRI, EXIT-STYLE, STOP-PLACE; 97-99 and 102-104 are "not scored". 58 cards in all. Next m2024 number: 107.
+
+Batch 9 append (2026-11-06): 2026 SMC 125-136 (`m2026smc_b9_draft_rules.md`, conflicts 90-103). Two new cards
+(RANGE-REGIME, SEASON-ACTIVITY; the HRLR conflict 96 scores on RESISTANCE-DAY), new positions on TGIF-DEPTH (C), OPEN-RANGE-TRADE (C), SMT-USE (E),
+CONTRACT (D), FPFVG-DEF (G), STOP-PLACE (H), MIN-ROOM (D), PREMARKET-RANGE (G), and evidence rows on twenty cards;
+92, 101 and 103 are "not scored". 60 cards in all.

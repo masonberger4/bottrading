@@ -186,7 +186,7 @@ m2026smc,92,,Not scored yet: tiny 'nub' bodies outside an FVG don't invalidate i
 m2026smc,93,OPEN-RANGE-TRADE,
 m2026smc,94,SMT-USE,
 m2026smc,95,CONTRACT,
-m2026smc,96,HRLR-TRADE,
+m2026smc,96,RESISTANCE-DAY,
 m2026smc,97,FPFVG-DEF,
 m2026smc,98,SEASON-ACTIVITY,
 m2026smc,99,STOP-PLACE,
@@ -194,3 +194,43 @@ m2026smc,100,MIN-ROOM,
 m2026smc,101,,Not scored yet: rejection-block market/stop-order entry when price trades through the candle's open vs limit entries (131); one source.
 m2026smc,102,FVG-VALID,
 m2026smc,103,,"Not scored yet: position sizing (0.25-0.5% risk, +1 micro per $2,500) vs one micro only (125, 126, 134); sizing is outside the engine ($1k risk reporting)."
+m2024,67,NFP-THU-FRI,
+m2024,68,MONDAY,New position C (L49).
+m2024,69,NEWS-WAIT,"New position F (L46, L48)."
+m2024,70,ORG-SIZE,
+m2024,71,ORG-CE-WINDOW,New position C (L48).
+m2024,72,OPEN-RANGE-TRADE,
+m2024,73,FPFVG-DEF,New position F (L15).
+m2024,74,STOP-PLACE,
+m2024,75,STOP-MGMT,"New position H (L42, L48, L49)."
+m2024,76,SMT-USE,
+m2024,77,FVG-VALID,
+m2024,78,OB-VALID,
+m2024,79,OB-CANDLE,
+m2024,80,EXIT-STYLE,
+m2024,81,AFTER-BIG-DAY,
+m2024,82,PREMARKET-ENTRY,
+m2024,83,,"Not scored yet: clustered (overlapping) NWOGs/NDOGs as the day's draw, target the near extreme of the cluster (L49); one source."
+m2024,84,ASIA,
+m2024,85,MIN-ROOM,
+m2024,86,MACRO-GRID,
+m2024,87,RESISTANCE-DAY,"New card (L36, L43, L48, L49)."
+m2024,88,,"Not scored yet: overnight range 00:01-04:59 graded with quadrants, arrays just below levels when bullish, only on consolidating nights (L44); one source."
+m2024,89,,Not scored yet: London 02:00-05:00 high/low as the AM session draw (L47); one source.
+m2024,90,,Not scored yet: ORG turtle-soup buy stop at the open of the candle that pierced the low (L40); one source.
+m2024,91,,Not scored yet: entries only in the premium/discount of the inception-to-terminus range (L40); one source.
+m2024,92,,Not scored yet: inside day / smallest range of 7 days precedes expansion; large range day = range above the 3-day average (L48); one source.
+m2024,93,,Not scored yet: no 15-minute opening range; first 30 and 60 minutes frame the day (L49); one source.
+m2024,94,NDOG-DEF,
+m2024,95,ORG-CLOSE,
+m2024,96,FVG-VALID,
+m2024,97,,"Not scored yet: 10:00 news, no trade ahead, a few minutes after the initial hit (L34); one source."
+m2024,98,,"Not scored yet: NWOG half-working sequence, back below the midpoint = sidelines until the PM (L34); one source."
+m2024,99,,"Not scored yet: range-break extension = 1/4 of the previous range (L50, L51); agreeing sources, no opposing position."
+m2024,100,ATH-RULE,
+m2024,101,NFP-THU-FRI,
+m2024,102,,Not scored yet: holiday weeks range bound (L50); one source.
+m2024,103,,Not scored yet: Monday soft-open preference into last week's NWOG (L50); one source.
+m2024,104,,Not scored yet: 09:00 hour inside one candle = wait for 10:00 (L51); one source.
+m2024,105,EXIT-STYLE,
+m2024,106,STOP-PLACE,

@@ -614,9 +614,9 @@ SMT-USE,A,M2024:L37,decoupled indices: want all three to agree when in a trade; 
 LAST-HOUR,B,SMC2026:125,"""the last hour of trading has the 250 to 310 macro. Then it has the 315 to 345 macro ... If it doesn't, it can begin at 3:30"" then MOC (crude 15:15-15:39 example)",
 RANGE-REGIME,A,SMC2026:125,"""if it does manage to trade below an old key low or above an old key high, it's more likely that it's going to be pulling itself back into the range ... a turtle soup environment""",
 RANGE-REGIME,A,SMC2026:132,"""when we're range-bound ... the market will more likely use those [inefficiencies] and keep price inside the existing range""; target the 15m BISI just above the old low",
-HRLR-TRADE,A,SMC2026:128,"""Treat it like a rattlesnake""; scale-in on a wick poke only in LRLR, ""In high resistance ... don't do that""",
-HRLR-TRADE,A,SMC2026:133,"""I know I can trade in high resistance liquidity run conditions ... I tend to not want to do it""; new traders can't navigate it",
-HRLR-TRADE,B,SMC2026:124,"""You can trade in high resistance liquidity run conditions ... I just did it today"" (B7)",
+RESISTANCE-DAY,A,SMC2026:128,"""Treat it like a rattlesnake""; scale-in on a wick poke only in LRLR, ""In high resistance ... don't do that""",
+RESISTANCE-DAY,A,SMC2026:133,"""I know I can trade in high resistance liquidity run conditions ... I tend to not want to do it""; new traders can't navigate it",
+RESISTANCE-DAY,B,SMC2026:124,"""You can trade in high resistance liquidity run conditions ... I just did it today"" (B7)",
 SEASON-ACTIVITY,A,SMC2026:128,"""first month or two ... measuring risk by not participating""; LRLR ""last 2 weeks ... of August or ... September ... till ... the first week of December""",
 SEASON-ACTIVITY,A,SMC2026:131,"HRLR ""typical at the beginning of the year""; LRLR ""the last couple weeks of March, April, and May""",
 SEASON-ACTIVITY,A,SMC2026:132,"""weather this first month or two of 2026 ... April, May ... very clean ... September, October, November ... clean runs""",
@@ -628,7 +628,7 @@ SMT-USE,A,SMC2026:135,"""divergence there which is a qualifier. It is not a sele
 SMT-USE,E,SMC2026:131,"""If you're not using it at the opening range, the first 30 minutes, you're probably looking for SMT in the most inopportune times""",
 SMT-USE,C,SMC2026:127,"NQ ""the unwilling indices to go higher ... should ... travel probably more in magnitude lower"" (short the weakest)",
 CONTRACT,D,SMC2026:127,"""the next month out ... will build in by default more volume imbalances ... giving me targets that would otherwise be obscure ... all trading should be done on the March contract""",
-FPFVG-DEF,F,SMC2026:128,"""you can't take that as a long if these relative equal lows are there and we're in the first 30 minutes of trading""",
+FPFVG-DEF,G,SMC2026:128,"""you can't take that as a long if these relative equal lows are there and we're in the first 30 minutes of trading""",
 FPFVG-DEF,B,SMC2026:131,"""9:31 to 10:00 ... The very first presented fair value gap that shows displacement""",
 FPFVG-DEF,B,SMC2026:133,"""9:31. Now we can anticipate any fair value gap from that point on, but it has to displace""",
 STOP-PLACE,H,SMC2026:129,"""If we were not seeing elevated volatility, you could place the stop loss one tick above this high ... go back to that 1-minute chart and use the high""",
@@ -653,3 +653,70 @@ ORG-SIZE,E,SMC2026:133,"""a sizable gap opening 100 handles or more is ideal cuz
 LUNCH-TARGET,B,SMC2026:128,"""If it was bullish prior to that, the lunch macro runs to the low that was formed at 10:00 or immediately after 10:00""; trending day = most prominent low",
 REENTRY,A,SMC2026:134,"""If it stops you out ... that's another re-entry. Stop loss goes right back to candlestick number one""",
 REENTRY,A,SMC2026:129,"London KZ: stopped on the first 2022-model short, ""No problem at all""; second entry at the SIBI",
+NFP-THU-FRI,A,M2024:L40,"""sit on the sidelines Wednesday Thursday and Friday of nonfarm payroll"" (new students; Wed only before 09:00)","~6:00-7:00, ~1:50"
+NFP-THU-FRI,A,M2024:L41,"""trade on Monday ... trade on Tuesday don't trade on Wednesday don't trade on Thursday don't trade on Friday"" (new students)",~2:00
+NFP-THU-FRI,B,M2024:L42,"""then you can go into nonfarm payroll after the release at 8:30 wait 15 minutes minimum and then the rest of the day you can trade it normally"" (experienced)",~10:00-11:00
+NFP-THU-FRI,A,M2024:L49,"""I want to be done trading by Wednesday morning am session"" in NFP week",~11:00
+MONDAY,B,M2024:L40,"""we always try to go in and try to trade on the Monday of that week"" (NFP week)",~6:00-7:00
+MONDAY,C,M2024:L49,"no-news Monday: ""I want to be trading on the pre-market session ... but I don't want to be in at 9:30 or afterwards""",~12:00
+NEWS-WAIT,B,M2024:L40,"""let some time minimum 15 minutes ... if you don't see [CE respected] on the one minute chart ... don't touch it yet""",~42:00-44:00
+NEWS-WAIT,B,M2024:L42,"""15 minutes minimum after non farm payroll hits so that means 8:45""",~6:00
+NEWS-WAIT,F,M2024:L46,"""because there's multiple reports at 8:30 give it a chance to take both sides of the marketplace""",~18:00-19:00
+NEWS-WAIT,F,M2024:L48,"split 08:30 and 10:00 news ""can create like a catapult ... kind of like a fomc where the first run is the fake run""",~28:00-29:00
+ORG-SIZE,E,M2024:L40,"""at least 40 handles or more ... that's like my minimum ... 75 handles opening range gap that's really good""",~1:26
+ORG-SIZE,E,M2024:L44,"""a gap of like 45 50 handles ... that's a minimum threshold for me but I prefer 75""",~40:00
+ORG-SIZE,D,M2024:L44,"small anemic ORG: ""sit still ... wait till 10 o'clock"" or trade lunch / PM / last hour",~42:00-43:00
+ORG-SIZE,E,M2024:L49,"low resistance recipe includes ""an opening range gap of more than 45 handles minimum but I'd like 75""",~2:29
+ORG-CE-WINDOW,A,M2024:L41,"""70% of the time the gap will get filled to halfway"" (40 years of data)",~4:40-5:40
+ORG-CE-WINDOW,A,M2024:L42,"mid-gap delivered before 10:00, ""a strike rate of 70% no matter what anybody else tells you by 10:00""",~1:51
+ORG-CE-WINDOW,A,M2024:L47,"discount gap: bullish 09:30-10:00 ""until 50% of that gap has closed""",~31:00-32:00
+ORG-CE-WINDOW,A,M2024:L49,"mid-gap traded ""in 19 minutes"" on a high resistance day",~1:33
+ORG-CE-WINDOW,C,M2024:L48,"""any opening range gap should not be expected to be traded to even though there's a 70% likelihood ... throw that to the sidelines""",~1:23
+OPEN-RANGE-TRADE,B,M2024:L43,"Caleb: FPFVG 09:31-10:00 traded above, held as inversion, displaced, then a 15s FVG entry to the mid-gap",~1:01-1:02
+OPEN-RANGE-TRADE,B,M2024:L44,"at 75+ handles ""I'm not even going to wait for the first fair value gap ... I'm going in there right away""",~40:00-41:00
+OPEN-RANGE-TRADE,B,M2024:L40,"ORG turtle soup: buy stop at the open of the down-close candle that pierced the low, out at the ORG mid-gap",~1:26-1:28
+FPFVG-DEF,A,M2024:L43,"""the first one minute presented fair value gap between 9:31 and 10 o'clock""",~1:01
+FPFVG-DEF,A,M2024:L45,"price returned to the first presented FVG after the SMT: ""that's what it's coded to do""",~1:00
+FPFVG-DEF,F,M2024:L15,"""this is the second fair value gap if you're using electronic trading hours but it's the first ... in regular trading hours""",~0:15
+STOP-PLACE,B,M2024:L49,"""the low-risk stop loss is using the high of a bearish fair value gap's number two candlestick plus one tick"" (low resistance)",~1:41
+STOP-PLACE,C,M2024:L49,"high resistance / near the range low: ""you have to use the maximum which is the candlestick number one ... high plus one tick""",~1:42
+STOP-PLACE,G,M2024:L40,"""you can do the entry here and then use a wider stop loss"" above the higher FVG, or wait for it to stab into it",~58:00
+STOP-PLACE,G,M2024:L48,"Model 2022: trade the lower FVG ""but your stop has to respect the second fair value gap""",~40:00
+STOP-PLACE,E,M2024:L48,"low resistance IOFED: ""your stop loss can be just below this candlestick's high because it's not going to go down the lower bottom"" of the FVG",~1:26
+STOP-MGMT,H,M2024:L42,"grinding inside an inefficiency: ""you should not be trying to chase or trail your stop loss up just lock in cover costs""",~1:02
+STOP-MGMT,H,M2024:L48,"""if you do that [trail] in high resistance liquidity runs you're getting stopped out if you relax ... in low resistance ... you're not""",~1:42-1:43
+STOP-MGMT,H,M2024:L49,"""trailing stop losses in high resistance liquidity run conditions is a death nail"" (cover costs + ~$100)",~1:54
+SMT-USE,A,M2024:L45,decoupled indices = lower probability; forecast the SMT (ES fails a lower low) that re-syncs them; Dow divergence is not SMT,"~38:00, ~1:06-1:08"
+FVG-VALID,B,M2024:L48,"""a portion of the order block or a portion of the fair value gap must ... be at or below the quadrant level"" of the dealing range",~1:12
+OB-VALID,B,M2024:L48,OB below the dealing range lower quadrant is the proper candidate when bullish,~1:14
+OB-CANDLE,A,M2024:L48,"""two consecutive down closed candles that's all one range""; use the lowest down-close body, not the wick","~1:14, ~1:28"
+EXIT-STYLE,B,M2024:L41,"short 6, added 4, partials at three levels, 2 runners below the weekly CE",~8:20-9:20
+EXIT-STYLE,A,M2024:L44,"holiday-shortened day: limit ""just above"" the sell-side, not riding the return into the range",~1:26
+EXIT-STYLE,B,M2024:L48,"low resistance: ""don't be in such a rush to take partials off manage those days by your stop loss ... have your limit orders in""",~1:39-1:40
+AFTER-BIG-DAY,B,M2024:L48,"""stay away from the morning session after a large range day"" (range larger than the last three days' average); ICT lost twice doing it",~7:00-9:00
+PREMARKET-ENTRY,B,M2024:L44,"""6:00 a.m ... to 9:30 ... there's so much opportunity inside of that range and you never need to trade the opening bell""",~35:00
+PREMARKET-ENTRY,B,M2024:L46,"""normally I would like to have something on in a position ahead of the 9:30 opening bell on a high impact or medium impact news driver day""",~27:00
+PREMARKET-ENTRY,B,M2024:L49,no-news Monday: trade 07:00 to the 09:30 bell,~12:00
+ASIA,B,M2024:L42,"trade Asia only when the next NY session has no high/medium news 08:30-10:00; 19:00-21:00, macros 18:50 and 19:50, 20-40 handles",~1:20-1:24
+MIN-ROOM,B,M2024:L47,"""five handles a day on S&P and 10 handles a day on NASDAQ as your first rung objective""",~15:00
+MIN-ROOM,B,M2024:L49,"""10 handles in the NASDAQ or 15 ... or 20 ... or five handles in the S&P or 10"" every day",~59:00
+MACRO-GRID,B,M2024:L44,"""every macro every 10 minute to the top of the hour to 10 minutes after the top of the hour"" (05:50-06:10, 06:50-07:10, 07:50-08:10)","~23:00, ~52:00"
+MACRO-GRID,B,M2024:L48,"""first 10 minutes to the top of the hour and the first 10 minutes after the top of the hour that's every hour macro""; 08:30 the only 30-minute one",~1:12
+RESISTANCE-DAY,A,M2024:L43,"""I'm teaching my son to look for low resistance liquidity run"" - stood aside on a high resistance morning",~52:00-53:00
+RESISTANCE-DAY,A,M2024:L49,"""I'm trying to steer them away from these environments"" (high resistance) for new traders",~2:45
+RESISTANCE-DAY,B,M2024:L43,"high resistance: no return to the FPFVG, frame the nearer volume imbalance instead",~1:02-1:03
+RESISTANCE-DAY,B,M2024:L49,"high resistance: one contract, candle-1 stop, no trailing; ""there is a way to trade high resistance""","~1:40-1:42, ~2:45"
+RESISTANCE-DAY,B,M2024:L36,high resistance: stop 2x the FVG range; low resistance CE + 1 tick,~1:47-1:49
+RESISTANCE-DAY,C,M2024:L48,"""90% of the time large range days are low resistance""",~1:39
+RESISTANCE-DAY,C,M2024:L49,"news + not Monday + clustered gaps + ORG 45/75 = ""recipe for just beautiful low resistance liquidity run conditions""",~2:29
+NDOG-DEF,A,M2023:052,NDOG = 17:00 close to 18:00 reopen (rulebook L6),~0:46-5:46
+NDOG-DEF,A,SMC2026:067,NDOG = Tuesday 17:00 settle to 18:00 restart,
+NDOG-DEF,B,M2024:L34,"""there are two times for my new day opening gap"" ... ""4.14 settlement price to 6 p.m. opening"" when the 4:59 close equals the 6 p.m. open",~1:31-1:42
+ORG-CLOSE,A,M2024:L34,"""Difference between yesterday's settlement price at 4.14 p.m. Eastern time to 9.30's opening bell""",~0:15
+ORG-CLOSE,A,M2024:L47,settlement = close of the 16:14 1m RTH candle; Monday uses Friday's,
+FVG-VALID,D,M2024:L34,"""Inefficiencies have to stay with one or two candles and leave it""; building multiple candles inside ""isn't gonna perform""",~0:58
+ATH-RULE,A,M2024:L50,"""I favor a run here cuz I'm trying to avoid picking a top""; stay bullish until proven wrong by a breakdown","~0:00, ~5:00"
+ATH-RULE,A,M2024:L51,"""we're trading with all-time highs ... you stick with going long until it proves otherwise""",~2:00
+NFP-THU-FRI,A,M2024:L50,"NFP week: ""focus on your setups on Monday and Tuesday and be done by New York session opening on Wednesday"" (new traders)",~8:00
+EXIT-STYLE,B,M2024:L51,"""several limit orders layered below that in the event that we didn't get down to"" the 21,490 target; two filled",~7:00
+STOP-PLACE,G,M2024:L51,"two inefficiencies: ""always give room for it to trade from the higher one""",~10:00
