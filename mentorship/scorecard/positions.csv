@@ -146,3 +146,14 @@ GAP-LIFE,C,RTH opening range gaps: carry the last five
 NEWS-WAIT,E,"Fade the release's first leg once the range forms (after ~10:00), only on range-bound days"
 OVERNIGHT-HOLD,A,Flat by 16:00: day trades are never held overnight
 OVERNIGHT-HOLD,B,OSOK: hold a day-of-entry position overnight to a daily FVG CE (adds after midnight)
+STOP-MGMT,G,Break even / cover costs only after price has run 25% of the way to the profit target
+ORG-SIZE,E,"Bigger is better: need 40+ handles, ~75+ preferred; under 75 expect a lethargic high-resistance morning"
+FPFVG-DEF,E,On sub-1m charts the first gap after the 09:30 1m candle (from 09:31 on 15s) also counts
+FOMC-DAY,D,Inexperienced: avoid FOMC day entirely; the day before trade the morning only (careless price)
+STOP-PLACE,A,Below the mean threshold of the order block (nearest the sweep low)
+STOP-PLACE,B,"Just beyond the FVG-forming (middle) candle, 1 tick"
+STOP-PLACE,C,"Beyond candle 1 / the whole gap (conservative one-contract stop), 2-3 ticks past the far boundary"
+STOP-PLACE,D,One tick beyond the order block open/high inside the entry leg
+STOP-PLACE,E,"Tight: one tick past a wick CE or the gap CE (low resistance days, small ranges)"
+STOP-PLACE,F,Condition-based wide: entry gap range added again beyond the gap (2x) on high resistance days
+STOP-PLACE,G,"Beyond every nearby inefficiency: with two stacked FVGs, beyond the higher one / its CE"
