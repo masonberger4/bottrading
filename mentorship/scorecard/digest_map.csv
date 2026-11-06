@@ -234,3 +234,19 @@ m2024,103,,Not scored yet: Monday soft-open preference into last week's NWOG (L5
 m2024,104,,Not scored yet: 09:00 hour inside one candle = wait for 10:00 (L51); one source.
 m2024,105,EXIT-STYLE,
 m2024,106,STOP-PLACE,
+m2026smc,104,FVG-ENTRY,
+m2026smc,105,FPFVG-DEF,
+m2026smc,106,SEASON-ACTIVITY,
+m2026smc,107,FVG-CARRY,
+m2026smc,108,,Not scored yet: PM reference range 02:00-11:00 vs 2023 session pools (140); one source.
+m2026smc,109,PREMARKET-RANGE,
+m2026smc,110,EXIT-STYLE,
+m2026smc,111,NEWS-WAIT,
+m2026smc,112,OPEN-RANGE-TRADE,
+m2026smc,113,ORG-CE-WINDOW,
+m2026smc,114,LIQ-LOCATION,
+m2026smc,115,,Not scored yet: inefficiency on the buy side of the curve preferred over the right-side FVG (142); one source.
+m2026smc,116,,"Not scored yet: pre-market IFVG as a holding pattern, no fade (139, 140); no matching card."
+m2026smc,117,,Not scored yet: two SIBIs joined by a VI as one array (138); one source.
+m2026smc,118,STOP-MGMT,
+m2026smc,119,,"Not scored yet: morning done if a protective low goes before the AM target (139, 140); no matching card."

@@ -179,3 +179,15 @@ RESISTANCE-DAY,B,"Trade both, but in high resistance frame nearer arrays, use wi
 RESISTANCE-DAY,C,Forecast it before the open: news at 08:30/first hour + not Monday + clear draws + ORG 45/75 = low resistance; large range days ~90% low resistance
 NDOG-DEF,A,ETH only: the 17:00 settlement (16:59 close) to the 18:00 reopen
 NDOG-DEF,B,Two NDOGs: also the RTH 16:14 settlement to the 18:00 open; use it when the 17:00 -> 18:00 gap is empty
+FVG-ENTRY,A,"Near edge or first quadrant (""buy the fair value gap high or upper quadrant""); a CE limit may never fill"
+FVG-ENTRY,B,"At or beyond the CE (far half), accepting missed fills"
+FVG-CARRY,A,Yes: carry the first FVG after a turtle soup / unfilled FPFVG forward up to 20 trading days as a draw or PD array
+FVG-CARRY,B,No: use FVGs only in the session they form (engine default)
+FPFVG-DEF,H,"Size/displacement filter: under 10 NQ handles, or a small breakaway into an RTH inefficiency, is not the FPFVG; wait for the next"
+SEASON-ACTIVITY,C,Fixed start: nothing in January; start the first Tuesday (or second week) of February
+PREMARKET-RANGE,H,00:00-07:00 overnight low (relative equal lows preferred) is the session's sell-side draw
+EXIT-STYLE,C,"Time-based offload: take part off 10:00-11:00 (London close) on 07:00-10:00 entries, hold the rest toward the daily close in bias"
+NEWS-WAIT,G,CPI/PPI 08:30: no position into the release; look for entries again from 09:00
+OPEN-RANGE-TRADE,D,Conditional: trade 09:30-10:00 only if the pre-market (07:00-09:30) read was clean; otherwise wait for 10:00
+ORG-CE-WINDOW,D,The half-gap target stays valid after 10:00 when the daily PD array points to it
+LIQ-LOCATION,C,"Graded wick: when the anchor of relative equal highs/lows has a wick, the turn can come at its lower quadrant/CE; partial there"

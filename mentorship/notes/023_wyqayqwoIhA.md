@@ -3,8 +3,10 @@ Date on the charts: Fri 20 Jan 2023 (pre-market, platform clock 07:51-08:13 UTC-
 on-screen note says the stream is being set up for February 07, 2023 / ES (E-mini S&P 500, Mar 2023
 contract, CME) / 1h, 15m, 5m / ~22 min.
 
-**CHART-ONLY NOTES.** This video has no YouTube captions, so nothing here comes from his words.
-Everything below is reconstructed from the 20 s frames; rules are inferences from what he draws.
+**CHART NOTES + CAPTIONS (updated 2026-11-06).** The first pass had no captions and was built from the
+20 s frames only. YouTube captions now exist (~1,050 words, data/ict_captions/PLVgHx4Z63pabpjlduWBaEsn8VMtALhjGV/
+023_wyqayqwoIhA.en.vtt on branch claude/project-thread-dqjjol); see "From the captions" below. They confirm the
+frame reading and add one Friday rule. No trade, no timestamps in the cleaned text.
 
 ## Summary
 A "Stream Test & Setup" session for an "Index Futures Tape Reading Session", not a lesson. Title card
@@ -49,10 +51,28 @@ None stated (no audio text available).
 - 1h chart: Jan 19 low ~3902; Jan 20 bars in the 3916-3933 range.
 - Frames ~7:20-12:40 are byte-identical (stream frozen on the 07:51:04 chart).
 
+## From the captions (added 2026-11-06)
+His words are mostly stream setup (delay ~25 s, laptop mic, OBS, mobile legibility, live streams start Feb 7,
+recordings go to the YouTube library). The trading content:
+- **Overnight high = buy side, confirmed**: "What's the buy side at the 3933? I'll just toss this out here for no
+  extra charge." This answers the open question below: the 3933.00 overnight high is a buy-side draw, not a short
+  area. [confirms levels.md 023 line]
+- **Friday: low range expectation, he sits out**: "It's Friday. We had a really nice down week ... So Friday, you
+  kind of want to be very nimble. Don't expect a whole lot in terms of the range. it's always a potential for it to
+  go ballistic. But in my experience, it's better to just have a low expectation for the daily range. So I won't be
+  participating in anything." [new for 2023: adds to the Friday rules in filters.md]
+- **New York local time, always**: "everything should be on New York local time. Always ... That's what your time
+  should be set to all the time. Otherwise, you're going to be very frustrated." [repeats]
+- **VI first, liquidity above**: at the 07:45 candle "there's a volume imbalance right here. Let me trade it down
+  into that. And liquidity is right above this high." Reading: a retrace into the VI before the run to the buy
+  side. [repeats; consistent with VI rules]
+- **One market for the live streams (ES)**: "most of what I'm going to be talking about is going to be on ES. I don't
+  want to be jumping around ... it's going to dilute my attention"; tape reading "is not pushing a button";
+  "price is price" across asset classes. [repeats]
+
 ## Open questions
 - Date mismatch: charts are 20 Jan 2023 (ES ~3930) but the title and overlay say February 07, 2023.
   Likely a test stream recorded earlier and published/titled for Feb 7; treat the chart date as truth.
-- Is the overnight high meant as a long target (buy-side draw) or a short entry area (sell above it)?
-  Nothing in the frames shows bias; no trade follows.
+- ~~Is the overnight high meant as a long target or a short entry area?~~ Answered by the captions: buy-side draw.
 - Why 3916.50 was hovered (swing low? sell-side?) cannot be confirmed without audio.
 - The 1h/15m/5m layout lacks the 1m execution chart used in other videos; unclear if that is deliberate.

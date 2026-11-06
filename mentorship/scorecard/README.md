@@ -81,3 +81,9 @@ Batch 9 append (2026-11-06): 2026 SMC 125-136 (`m2026smc_b9_draft_rules.md`, con
 (RANGE-REGIME, SEASON-ACTIVITY; the HRLR conflict 96 scores on RESISTANCE-DAY), new positions on TGIF-DEPTH (C), OPEN-RANGE-TRADE (C), SMT-USE (E),
 CONTRACT (D), FPFVG-DEF (G), STOP-PLACE (H), MIN-ROOM (D), PREMARKET-RANGE (G), and evidence rows on twenty cards;
 92, 101 and 103 are "not scored". 60 cards in all.
+
+Batch 10 append (2026-11-06): 2026 SMC 138-143 (`m2026smc_b10_draft_rules.md`, conflicts 104-119; next 120). Two new cards
+(FVG-ENTRY, FVG-CARRY), new positions on FPFVG-DEF (H), SEASON-ACTIVITY (C), PREMARKET-RANGE (H), EXIT-STYLE (C), NEWS-WAIT (G),
+OPEN-RANGE-TRADE (D), ORG-CE-WINDOW (D), LIQ-LOCATION (C), and evidence rows on seventeen cards; 108, 115, 116, 117 and 119 are
+"not scored". 62 cards in all. Script: /mnt/project-files/mentorship/b10_score.py (also updates digest_refs on existing cards).
+Same PR: 2023 Mentorship 023 got caption-based notes, and 2025 Lecture 46 was noted (lectures.csv picks both up; no new rows).

@@ -60,3 +60,10 @@ Done (notes NNN_<id>.md): 125-129, 131-136 (11). 130 silent, skipped. 137 silent
 Digest: mentorship/digests/m2026smc_b9_draft_rules.md (conflicts numbered 90-103). Scorecard appended (2 new cards RANGE-REGIME, SEASON-ACTIVITY; HRLR conflict 96 on RESISTANCE-DAY; 92, 101, 103 not scored).
 Chronology: 136 Mon Feb 9 > 134 Tue Feb 10 AM (stated) / 135 Tue Feb 10 PM > 133 Wed Feb 11 (NFP) > 132 Tue Feb 17 (stated) > 131 Mon Feb 23 > 129 Fri Feb 27 PPI > 128 Sat Feb 28 > 127 Sun Mar 8 > 126 Mon Mar 9 AM > 125 Mon Mar 9 PM.
 Main theme: range-bound early 2026 (HRLR defined, yearly calendar), week of ORG levels as the notepad, PDAs only on gradient levels, 30-minute opening range / first-hour range, live micro entries (rejection block, candle-1 stop, one-tick-before-pool exit).
+
+# Batch 10 (videos 138-143), 2026-11-06
+Branch claude/project-thread-5apiyg (off mentorship). PR into mentorship, never merge.
+Done (notes NNN_<id>.md): 138-143 (6). 137 silent, skipped. This finishes the playlist (still missing from the caption folder: 003, 009, 010, 061, 083, 090, 094, mostly silent).
+Digest: mentorship/digests/m2026smc_b10_draft_rules.md (conflicts 104-119; next 120). Scorecard appended (new cards FVG-ENTRY, FVG-CARRY; new positions on FPFVG-DEF, SEASON-ACTIVITY, PREMARKET-RANGE, EXIT-STYLE, NEWS-WAIT, OPEN-RANGE-TRADE, ORG-CE-WINDOW, LIQ-LOCATION; 108, 115-117, 119 not scored).
+Chronology: 143 Thu Jan 1 (stated) > 142 Fri Jan 2 > 141 Mon Jan 5 > 138 Thu Jan 8 > 140 Mon Jan 12 (stated) > 139 Tue Jan 13 (CPI). Playlist order not strict (138).
+Main theme: January sit-out, pre-market 07:00 FPFVG to overnight smooth liquidity, session vs killzone, first-FVG carry-forward and size filter, ORG half gap for beginners.
