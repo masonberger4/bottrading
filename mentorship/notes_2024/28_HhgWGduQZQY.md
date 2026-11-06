@@ -39,7 +39,7 @@ Discount ORG (open below Friday's settlement), straight drop from the bell below
 - Mohawk: price coloring outside the lines (a wick past a level) before reversing.
 
 ## Open questions / conflict checks
-- [conflict check] Stop beyond candle 1 (conservative) vs beyond candle 2 (max leverage): third source for m2024 conflict 39 (STOP-PLACE).
+- [conflict check] Stop beyond candle 1 (conservative) vs beyond candle 2 (max leverage): m2024 conflict 45 (STOP-PLACE card).
 - [conflict check] First FVG must form at 09:31 or later: FPFVG-DEF card.
 - [conflict check] Failed FVG -> inversion at half size: re-entry after stop-out theme (RE-ENTRY card if present).
 - [new] `fvg_entry_c3_plus1tick` (entry at candle 3 extreme +/- 1 tick with adds at near quadrant and CE); default off.

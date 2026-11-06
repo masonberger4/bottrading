@@ -549,3 +549,65 @@ ORG-CE-WINDOW,A,M2024:L25,"""70% of the time that half gap price level gets trad
 FPFVG-DEF,A,M2024:L16,First presentation FVG: middle candle at 09:31 or later,
 FPFVG-DEF,A,M2024:L21,Each day's first presentation FVG (09:31-10:00) carried for a 3-day life cycle,~6:00
 FPFVG-DEF,D,M2024:L24,First presentation is not limited to 09:30-10:00: any first FVG after a time anchor (e.g. the 13:30 PM session),"~1:44-1:46, ~2:27"
+STOP-PLACE,A,M2023:009,stop 4011.50 under the 09:40 candle body mean threshold (execution B1),~04:17
+STOP-PLACE,A,M2023:022,short stop 4132 just above the OB mean threshold 4131.50 (execution B1),~59:02
+STOP-PLACE,A,M2024:L06,OB entry with the stop at the OB mean threshold (2024 C12),
+STOP-PLACE,B,M2023:001,stop just beyond the FVG-forming candle (execution B2),~37:45
+STOP-PLACE,B,M2023:013,stop just beyond the FVG-forming candle (execution B2),~18:13
+STOP-PLACE,B,M2023:015,stop just beyond the FVG-forming candle (execution B2),~33:56
+STOP-PLACE,B,M2024:L20,stop below the FVG imbalance (middle) candle minus 1 tick (2024 C39),
+STOP-PLACE,B,M2024:L28,"""number two candle is where your stop loss is"" if using maximum leverage",~20:00
+STOP-PLACE,B,M2024:L37,"""your stop if it could be afforded to you is always above candlestick number two""",~46:00
+STOP-PLACE,C,M2024:L28,"""the conservative stop ... one contract trader ... the number one candle is where your stop loss is""",~20:00
+STOP-PLACE,C,M2024:L27,"scale-in stop ""at least two to three ticks below"" the hourly BISI (it can touch the low)",~1:02-1:03
+STOP-PLACE,D,M2024:L24,"OB full run, stop at the OB high + 1 tick (2024 C39)",
+STOP-PLACE,D,M2024:L26,"""your stop has to refer to that opening price ... one tick above"" the bearish OB inside the entry gap",~1:07-1:08
+STOP-PLACE,E,M2023:089,stop above the CE of the longest wick above the FVG (execution B2),~6:48
+STOP-PLACE,E,M2024:L28,after months of practice: one tick below the CE of the wick (two layers of gaps),~2:02
+STOP-PLACE,E,M2024:L36,"""on a low resistance liquidity run day ... one tick above"" consequent encroachment",~1:49
+STOP-PLACE,F,M2024:L36,"""on high resistance liquidity run days your stop has to factor that fair value gap's range ... two times this""",~1:47-1:48
+STOP-PLACE,G,M2023:025,"with two FVGs in the leg, stop beyond the higher one / its CE (execution B3)",~55:15
+STOP-PLACE,G,M2023:069,stop beyond the higher of two FVGs (execution B3),~13:46
+STOP-PLACE,G,M2023:082,stop beyond the higher of two FVGs (execution B3),~5:31
+STOP-PLACE,G,M2024:L38,"inversion FVG under a higher FVG: ""the stop would have to be above the midpoint"" of the higher gap",~2:43-2:44
+STOP-PLACE,G,M2024:L26,"stop must allow a wick to trade to the CE of the neighbouring higher-TF gap (""color outside the lines"")",~1:00-1:01
+STOP-MGMT,G,M2024:L26,"""once they get to 25% of what you think the profit target is then if you want to take it to break even""",~1:02
+STOP-MGMT,E,M2024:L29,"once price breaks a short-term low move the stop to cover costs, partial below that low",~57:00
+ORG-SIZE,D,M2024:L27,"ORG ~15 handles: ""you don't want to be having a whole lot of excitement around days that have a very small opening range gap""",~16:00
+ORG-SIZE,D,M2024:L32,"""I don't like really less than 40 handles ... I'll just opt out and wait till 10 o'clock""",~20:00
+ORG-SIZE,E,M2024:L29,"""a gap of 40 handles or more ... the larger above 40 handles the better""",~50:00
+ORG-SIZE,E,M2024:L36,"""less than 75 handles ... invites the likelihood of a lethargic slow morning ... under 40 definitely""",~1:32-1:33
+ORG-SIZE,B,M2024:L31,"several-hundred-handle ORG: let them make the initial high, then a deeper retracement; continuation likely","~9:00-11:00, ~56:00"
+OPEN-RANGE-TRADE,B,M2024:L29,"ORG model: first FVG 09:31-10:00 toward the mid-gap; ""you're done in 30 minutes""",~34:00-35:00
+OPEN-RANGE-TRADE,B,M2024:L36,"""you have built-in advantage 70% being short right from the opening bell""",~1:27
+ORG-CE-WINDOW,A,M2024:L28,"""70% of the time mid gap gets hit within the first 30 minutes""",~25:00
+ORG-CE-WINDOW,A,M2024:L29,"""70% chance that ... by 10 o'clock it trades to mid gap""",~6:00
+FPFVG-DEF,A,M2024:L28,"""it can't be on your 9:30 candle it can only appear at 9:31 or after""",~1:15
+FPFVG-DEF,A,M2024:L32,"first FVG at 09:34 ""meets the minimum criteria of at least the 9:31 candle""; extend it ~3 days","~12:00, ~16:00"
+FPFVG-DEF,A,M2024:L36,"1m FPFVG at 09:35 ""valid because ... it's not on 9:30 candle""",~39:00
+FPFVG-DEF,E,M2024:L35,aggressive sub-1m traders can use the first 15s gap outside the 09:30 1m candle,~6:00
+AFTER-BIG-DAY,A,M2024:L27,"""the protocol is you don't trade in the morning session if you're brand new""; PM from 13:30 is easiest","~21:00, ~1:31"
+AFTER-BIG-DAY,A,M2024:L32,small ORG + Friday + large range yesterday = AM session harder; stick to time,~13:00-15:00
+FOMC-DAY,D,M2024:L29,"FOMC day ""I would have my completely avoid trading inexperienced""; day before trade the morning","~4:00, ~11:00"
+PREMARKET-ENTRY,B,M2024:L37,"Fed chair testimony in the 09:00-10:00 hour: ""you want to be trading before 8:00 in the morning""",~6:00
+NEWS-WAIT,B,M2024:L37,"09:45 medium news: ""wait 15 minutes"" minimum after any high or medium impact driver",~7:00
+MONDAY,B,M2024:L37,"""I am always trading on the Monday of nonfarm payroll ... new student to just sit still on Mondays outside of nonfarm""",~1:12-1:13
+NFP-THU-FRI,B,M2024:L38,"new students skip Wed-Fri of NFP week; experienced ""absolutely can trade after non-farm payroll""",~12:00
+LUNCH-WINDOW,C,M2024:L37,"""the afternoon lunch hour which is technically 2 hours is 11:30 to 1:30""",~1:13
+MIN-ROOM,B,M2024:L28,"""it's got to be able to move 20 handles""; 10 handles is static noise in NQ","~1:39, ~1:47"
+MIN-ROOM,B,M2024:L29,"""it has to give me at least 20 handles ... if I can't frame that then I have to sit still""",~1:33
+MIN-ROOM,B,M2024:L31,"""you want to see a 20 handle run potential for the setup""; 18 handles = pass","~29:00, ~38:00"
+REENTRY,B,M2024:L28,"stopped out of an FVG = an inversion forming: ""trade with half the size you took a loss on""",~52:00
+REENTRY,C,M2024:L36,"high resistance day: after a stop-out ""really take a second chance of do I really want to get back in""; paper or tape read",~51:00
+PARTIAL-TRIGGER,C,M2024:L36,"""every time it takes out a low ... that's where a partial will be taken""",~1:50
+PARTIAL-TRIGGER,C,M2024:L38,drill: annotate a partial below each broken low and at every large wick CE,"~2:27-2:30, ~2:44"
+PARTIAL-TRIGGER,A,M2024:L29,"""take 75 to 80% off of the trade at the mid gap""",~58:00
+EXIT-STYLE,A,M2024:L37,decoupled market: take the large portion off at the first target (relative equal lows),~2:27-2:28
+EXIT-STYLE,B,M2024:L38,8-contract runner: one contract off each time price breaks a new swing high,~1:27
+OB-CLOSE,A,M2024:L38,"""soon as we crossed this candlestick open ... I don't need it to close there ... that validates this as a bullish order block""",~1:18
+FVG-VALID,D,M2024:L28,"bullish ideal: one candle, ""at most two"", enters the upper half; lower half stays open",~55:00
+FVG-VALID,D,M2024:L33,"CE hit a second time: ""it should have hit it once and then left""; likely to fail","~48:00, ~59:00"
+FVG-VALID,D,M2024:L36,price marking time inside FVGs = high resistance (FVG not behaving),"~1:44, ~2:16"
+TGIF-DEPTH,A,M2024:L32,"""TGIF ... likely to have a 20 to 30% retracement of what the total weekly range was""",~31:00
+TGIF-DEPTH,A,M2024:L36,"20% level = first partial, 30% = target, hit inside an FVG",~1:27-1:28
+SMT-USE,A,M2024:L37,decoupled indices: want all three to agree when in a trade; never use high risk when symmetry is broken,"~1:34, ~2:13"

@@ -32,8 +32,8 @@ CPI (08:30) day. Large premium ORG (previous settlement ~18,846 vs ~18,920s open
 - Real volume imbalance: separation between two bodies with an indecisive candle in the middle.
 
 ## Open questions / conflict checks
-- [conflict check] Stop one tick above the OB opening price, allow a wick to the CE of the neighbouring gap: second source for m2024 conflict 39 (stop placement, STOP-PLACE card).
-- [conflict check] Break-even only after 25% of the target vs L22/L24 "cover costs at half the way to the first partial" and rulebook break-even rules (new conflict 44, BE-TRIGGER).
+- [conflict check] Stop one tick above the OB opening price, allow a wick to the CE of the neighbouring gap: m2024 conflict 45, new STOP-PLACE card (with 12 and 39).
+- [conflict check] Break-even only after 25% of the target vs L22/L24 "cover costs at half the way to the first partial" and rulebook break-even rules (m2024 conflict 44, STOP-MGMT position G).
 - [new] `wick_ce_entry` (enter at a long wick's CE after bodies build around it); default off.
 - [new] `stop_above_ob_open` (stop one tick past the order block opening price inside the entry gap); default off.
 - [new] `be_after_25pct_target`; default off.

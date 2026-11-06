@@ -40,6 +40,6 @@ Day before FOMC. Premium ORG of over 100 handles (settlement ~19,661 vs ~19,795 
 - [conflict check] ORG > 40 handles threshold for the mid-gap model: ORG-SIZE card (second 2024 source with L27 "small ORG").
 - [conflict check] Trading inside 09:31-10:00 toward the mid-gap: OPEN-RANGE-TRADE and ORG-CE-WINDOW cards.
 - [conflict check] Day-before-FOMC morning only; FOMC day avoid: FOMC-DAY card.
-- [conflict check] Body SMT (lower bodies despite higher wick): SMT definition (new conflict 45, SMT-BODY).
+- [conflict check] Body SMT (lower bodies despite higher wick): SMT definition (noted only; SMT-USE card gets L37).
 - [new] `org_midgap_model` (gap > 40 handles, first FVG 09:31-10:00 toward the mid-gap, 75-80% off at the mid-gap); default off.
 - [new] `pre_fomc_mohawk_entry` (wait for a wick past the FVG extreme before entering); default off.
