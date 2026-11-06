@@ -56,4 +56,6 @@ OB-VALID,PD arrays,Which order blocks are valid entry arrays?,2023: any OB in th
 EXIT-STYLE,Management,"Take one full exit at the first pool, or partials with a runner to a terminus?","Owner management default: partials at liquidity, runner trailed to structure (F5); 2023 targets at liquidity (G1).",SMC 74; 2024 C60; 2024 C80; 2024 C105
 OVERNIGHT-HOLD,Management,May a day trade be held overnight to a daily target (OSOK)?,Engine and rulebook: flat by 16:00.,2024 C32
 STOP-PLACE,Management,Where does the initial stop go on an FVG or order block entry?,2023 (execution.md B1-B3): below the mean threshold of the OB nearest the sweep low; alternative just beyond the FVG-forming candle; beyond every nearby inefficiency.,2024 C12; 2024 C39; 2024 C45; 2024 C74; 2024 C106
-RESISTANCE-DAY,Management,How should a high vs low resistance liquidity run condition change the trade?,No rule in the 2023 rulebook; engine ignores the condition.,2024 C87
+RESISTANCE-DAY,Management,How should a high vs low resistance liquidity run condition change the trade?,No rule in the 2023 rulebook; engine ignores the condition.,2024 C87; SMC 96
+RANGE-REGIME,Day filters,"In a multi-week daily consolidation, fade runs beyond the prior day's high/low and target inefficiencies inside the range, or trade the break as continuation?",2023: draw on liquidity beyond old highs/lows; no range-regime rule.,SMC 91
+SEASON-ACTIVITY,Day filters,"Should activity/size follow a yearly participation calendar (light Jan-Feb and summer, full late Aug to mid Dec)?",Engine: every month traded alike.,SMC 98

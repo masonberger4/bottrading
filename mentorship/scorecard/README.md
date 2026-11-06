@@ -76,3 +76,8 @@ ORG-CE-WINDOW (C), FPFVG-DEF (F), STOP-MGMT (H), and evidence rows on nineteen e
 2024 Mentorship L34, L50-L51 append (2026-11-06): `m2024_draft_rules.md` conflicts 94-106 (playlist complete). One new card
 (NDOG-DEF: 17:00 -> 18:00 only vs also the 16:14 RTH settlement -> 18:00 NDOG), and evidence rows on ORG-CLOSE, FVG-VALID,
 ATH-RULE, NFP-THU-FRI, EXIT-STYLE, STOP-PLACE; 97-99 and 102-104 are "not scored". 58 cards in all. Next m2024 number: 107.
+
+Batch 9 append (2026-11-06): 2026 SMC 125-136 (`m2026smc_b9_draft_rules.md`, conflicts 90-103). Two new cards
+(RANGE-REGIME, SEASON-ACTIVITY; the HRLR conflict 96 scores on RESISTANCE-DAY), new positions on TGIF-DEPTH (C), OPEN-RANGE-TRADE (C), SMT-USE (E),
+CONTRACT (D), FPFVG-DEF (G), STOP-PLACE (H), MIN-ROOM (D), PREMARKET-RANGE (G), and evidence rows on twenty cards;
+92, 101 and 103 are "not scored". 60 cards in all.

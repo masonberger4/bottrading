@@ -1,0 +1,27 @@
+# 2026 SMC 133: NFP-on-a-Wednesday live open: no trade ahead of 08:30, premium ORG half-gap (70% by 10:00) delivered at 09:58, gap >=100 handles ideal for the half-gap model, last week's ORG levels and a daily suspension block's gradient grid, 1m parent / 15s-5s subordinate, FVG must touch a gradient level, "barcode" HRLR test, implied dealing range with two-stage offset distribution, wick-CE immediate rebalance (Wed Feb 11 2026; MNQH2026; delayed January NFP released Wednesday)
+Full read (~7k words). Clean caption ("consequent creation" = CE). Date inferred: "non-farm payroll Wednesday", daily suspension block of Feb 3-5 with Feb 5 = "last Thursday". Frames laptop-only. About 20% rant (impostors, "dollar menu mentors", replay tools); dropped.
+## Summary
+Live 1m/15s/5s/RTH charts from 09:27. Premium ORG; half gap at 326.75 also a sell-side pool and just below a gradient of last week's daily suspension block (Feb 3-5, VIs both ends only visible with the settlement toggle). 09:30 ran the pre-session high, hit a breaker, FPFVG formed in the displacement lower; then HRLR on the 1m ("barcode"), patience, lower-TF inefficiencies on the way down, half gap hit at 09:58. ICT did not trade (exploration on an unusual NFP day). Explains smart money short at the high (turtle soup) -> first-stage offset at the nearest sell-side, second stage below the 08:30 candle low = implied dealing range; a 1m wick CE repelled price to the tick = immediate rebalance.
+## Rules in ICT's wording
+- **NFP (any weekday): wait for 09:30, explore**: "I don't think that anyone should be trying to trade ahead of the 8:30 employment data, whether it be on a normal Friday ... or as we have it today ... waiting until the opening bell ... And if it doesn't, then it's okay. Just take a step back and just wait until the afternoon session." Unusual release day = "exploration mode." [refines B8 A8; conflict 76]
+- **ORG half gap 70%**: "When this is half gap, that's the usual 70% chance of trading back to that within the first 30 minutes of trading" / "70% of the time trade to it by 10:00." Then: 3/4 or full gap, or reject half gap = gap and go. [repeats; conflict 85]
+- **Gap size for the half-gap model**: "If we have a sizable gap opening 100 handles or more is ideal cuz that means you got about 50 handles potential offered to you." [new; see conflict 84]
+- **Last week's same-day ORG levels used**: "Consider how many times we've seen last Wednesday's regular trading hours opening range gap levels utilized." Write the last three digits manually. [refines 131 notepad]
+- **Daily suspension block grid**: fib from its high to low; "I'm looking for and anticipating inefficiencies to form in close proximity to them." [refines 128/131; conflict 102]
+- **FVG must touch a gradient level**: "high probability fair value gaps form in close proximity and ... some form of the fair value gap is touching ... one of the levels that is a gradient level ... not all fair value gaps are created equal." [refines 131; conflict 102]
+- **First inefficiency above a consolidation**: "this inefficiency is always going to be the first consideration ... may be a factor for either a reversal or ... a pause and then consolidation." [new]
+- **1m parent, 15s/5s subordinate**: "When we start moving and displacing ... on the 1-minute chart, then these charts are going to be useful ... the 1-minute chart is parent and the 15-second, 5-second are subordinate." [new]
+- **HRLR "barcode" test**: "the candlestick you're in right now, is it sharing the same space of the previous candle or candles? ... like a picket fence ... a UPC symbol." "You can't really rush to move your stop to break even ... without getting stopped out." [refines 128; conflict 96]
+- **FPFVG from 09:31 in the displacement direction**: "9:31. Now we can anticipate any fair value gap from that point on, but it has to displace ... in a direction where we anticipate price gravitating towards." [repeats 131; conflict 80]
+- **Opening range = 30 minutes**: "it is the first 30 minutes of trading from 9:30 to 10:00 ... I don't care who says otherwise." [repeats; conflict 97]
+- **Implied dealing range, two-stage offset**: smart money sells the pre-session high raid; "first stage offset distribution" at the nearest sell-side, second stage at the next pool (below the 08:30 employment candle). "All you have to do is know what time of the day you're trading ... where the old highs and lows are." [refines B8 MM model]
+- **Wick CE rejection = immediate rebalance**: "If the price can't leave a body above that ... it's bearish. It's extremely heavy ... it acts just like an immediate rebalance." Half gap / half range / half OB all read bias during a run. [refines B7]
+- **New students: observe, don't trade along**. [not for the engine]
+## Our interpretation / switches (all off)
+- [off] nfp_wait_for_0930_any_weekday (no entries before 09:30 on NFP regardless of weekday) [conflict 76]
+- [off] half_gap_model_min_100_handles (trade ORG half-gap only when the NQ gap is >=100 handles) [new; conflict 84]
+- [off] carry_last_week_same_day_org [new]
+- [off] ltf_only_after_1m_displacement (15s/5s entries only after a 1m displacement candle) [new]
+- [off] implied_dealing_range_partials (partials at the first and second pool beyond the raid) [refines]
+- [off] wick_ce_immediate_rebalance_entry [refines]
+- Not for the engine: observe-only advice, rants.

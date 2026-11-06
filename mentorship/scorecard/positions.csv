@@ -157,6 +157,18 @@ STOP-PLACE,D,One tick beyond the order block open/high inside the entry leg
 STOP-PLACE,E,"Tight: one tick past a wick CE or the gap CE (low resistance days, small ranges)"
 STOP-PLACE,F,Condition-based wide: entry gap range added again beyond the gap (2x) on high resistance days
 STOP-PLACE,G,"Beyond every nearby inefficiency: with two stacked FVGs, beyond the higher one / its CE"
+RANGE-REGIME,A,Fade: a run beyond the prior day's high/low is turtle soup back into the range; target the FVG just inside the old extreme
+RANGE-REGIME,B,Trade the break as continuation toward the next external pool (engine default)
+SEASON-ACTIVITY,A,"Yes: measure risk Jan-Feb, start dabbling in Feb, clean late Mar-May, choppy summer, best late Aug/Sep to mid Dec"
+SEASON-ACTIVITY,B,No calendar (engine default)
+TGIF-DEPTH,C,"Consolidation week: 40% minimum, 60% extreme (back to the middle of the weekly range)"
+OPEN-RANGE-TRADE,C,"Unclear-bias day: wait for the first hour (09:30-10:30), grade its range, trade PDAs on its gradients in the bias half"
+SMT-USE,E,"Only at liquidity events: the 09:30-10:00 opening range, news injections, a pool raid"
+CONTRACT,D,"Rollover week: trade the front month, but add the next contract's VIs/FVGs (15m/5m) as targets"
+FPFVG-DEF,G,Not a valid entry while relative equal highs/lows against it remain unswept in the first 30 minutes
+STOP-PLACE,H,"Volatility-based: in high volatility use the setup-timeframe (1m) swing, not the sub-minute swing"
+MIN-ROOM,D,Fixed cookie-cutter 15-30 handle target; no liquidity pool needed
+PREMARKET-RANGE,G,"07:00-09:30: mark the smoothest overnight REQ high and low; the first one raided = false break, the other is the draw"
 MONDAY,C,"Trade Mondays with rules: NFP-week Monday always; a no-news Monday only in pre-market (07:00-09:30), not after the open"
 NEWS-WAIT,F,Several 08:30 reports or split 08:30 + 10:00 news: wait for both sides to be taken; the first run can be fake (like FOMC)
 ORG-CE-WINDOW,C,Drop the 70% expectation on low resistance run days with unfinished liquidity beyond: expect a dash to the draw instead
