@@ -79,3 +79,10 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v73 | 2026-11-05 18:15:04Z | Run memory curator | status.md | edit | apply approved W1 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPMBGYecGpAmYwMG2XKG7d9r | 7136d536fa -> b0ac39a2c7 |
 | v74 | 2026-11-05 18:15:07Z | Run memory curator | decisions.md | edit | apply approved W2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPMBGYecGpAmYwMG2XKG7d9r | 05db696b2a -> 17a763ceb1 |
 | v75 | 2026-11-05 18:15:08Z | Run memory curator | skill_drafts/dream.md | edit | apply approved W3 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPMBGYecGpAmYwMG2XKG7d9r | f01a87e415 -> 448e1b83ec |
+| v76 | 2026-11-06 06:05:27Z | dreamer | proposals/dreamer__status.md | proposal | V1 status 11-06 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPNEnnUJvnV7knoeUer53fWC | 8a2e508e1f -> c9d81a7bda |
+| v77 | 2026-11-06 06:05:30Z | dreamer | proposals/dreamer__decisions.md | proposal | V2 Mase decisions 11-05 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPYc2ViHkXMzKWNHKTtsCUDL | 0c4a332886 -> e9db02968c |
+| v78 | 2026-11-06 06:05:31Z | dreamer | proposals/dreamer__lessons.md | proposal | V3 parallel draft batches collide on IDs | cmsg_01FAHERC1Lsrg2bYtrKuRHmPLKksj9aEbVsG6f3SGuFZiA | 62cf02acc9 -> 4b40d3122e |
+| v79 | 2026-11-06 06:05:32Z | dreamer | proposals/dreamer__dream_2026-11-06.md | proposal | Fifth dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmPLKksj9aEbVsG6f3SGuFZiA | ABSENT -> 7afd61e866 |
+| v80 | 2026-11-06 15:40:29Z | Run memory curator | status.md | edit | apply approved V1 (edited per coordinator: downloads finished, all drafted) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVedqKwMm3QE5Pq34iByXUR | b0ac39a2c7 -> 72c50c1738 |
+| v81 | 2026-11-06 15:40:32Z | Run memory curator | decisions.md | edit | apply approved V2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVedqKwMm3QE5Pq34iByXUR | 17a763ceb1 -> 6720752a73 |
+| v82 | 2026-11-06 15:40:33Z | Run memory curator | lessons.md | edit | apply approved V3 (conflict-ID clash point dropped) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVedqKwMm3QE5Pq34iByXUR | cadf814736 -> 29260f1a07 |

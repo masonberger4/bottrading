@@ -19,6 +19,7 @@
 - (Mase 2026-11-02, updated 11-04 22:32 UTC) Browser cookies for yt-dlp: ONLY from a spare Google account, never the main one. The current route is the spare account signed in to YouTube in Firefox on the laptop (Mase agreed to do this at home). The Chrome-profile and Edge-extension routes were dropped because the extension is blocked on the work PC. Use cookies only when slow pacing and backoff do not clear the bot check.
 - (Mase 2026-11-02) Keep the 2026 SMC playlist (143 videos) in the download set.
 - (Mase 2026-11-02 ~04:51 UTC) Set each thread's model and effort to fit its work (coordinator's example: idle laptop-ops threads on Sonnet 5.5 low).
+- (Mase 2026-11-05 ~19:50 UTC) Video fetching: about 30 videos an hour with cookies is acceptable. No auto-ack speedup, no extra accounts, and no VPN or IP switching (declined as evading YouTube limits). Keep downloading the full video, not just captions, because frames are needed.
 
 Append new decisions at the bottom of the first section as `- (Mase, YYYY-MM-DD HH:MM UTC) decision`. Every owner-answer decision is a backtestable switch.
 
