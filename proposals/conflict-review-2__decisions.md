@@ -1,0 +1,2 @@
+<!-- proposal by conflict-review-2 at 2026-11-06 17:56:13Z; target: decisions.md; reason: Mase card answer; link: -; status: open -->
+- (Mase, 2026-11-06 17:55 UTC) The experienced-trader version still wins over the video count: where ICT gives a beginner vs experienced version, experienced is default regardless of count (flips NFP-THU-FRI to B: NFP Thu/Fri traded). Count decides everything else. Applied in mentorship/scorecard/defaults.py (PR #47).
