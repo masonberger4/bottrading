@@ -85,3 +85,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v79 | 2026-11-06 06:05:32Z | dreamer | proposals/dreamer__dream_2026-11-06.md | proposal | Fifth dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmPLKksj9aEbVsG6f3SGuFZiA | ABSENT -> 7afd61e866 |
 | v80 | 2026-11-06 15:40:29Z | Run memory curator | status.md | edit | apply approved V1 (edited per coordinator: downloads finished, all drafted) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVedqKwMm3QE5Pq34iByXUR | b0ac39a2c7 -> 72c50c1738 |
 | v81 | 2026-11-06 15:40:32Z | Run memory curator | decisions.md | edit | apply approved V2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVedqKwMm3QE5Pq34iByXUR | 17a763ceb1 -> 6720752a73 |
+| v82 | 2026-11-06 15:40:33Z | Run memory curator | lessons.md | edit | apply approved V3 (conflict-ID clash point dropped) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVedqKwMm3QE5Pq34iByXUR | cadf814736 -> 29260f1a07 |
