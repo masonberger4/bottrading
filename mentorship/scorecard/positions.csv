@@ -3,6 +3,7 @@ MONDAY,A,Trade Mondays like any other day (he shows many Monday trades)
 MONDAY,B,"Skip Mondays (accumulation/manipulation), except NFP-week Mondays or an obvious setup"
 CPI-WEEK,A,"Day before CPI: quiet, small risk, bread-and-butter only, then stop"
 CPI-WEEK,B,"Mon-Wed are difficult/range-bound in RTH (ETH trends); after Wednesday's PM it gets easy, expansion Thu/Fri"
+CPI-WEEK,C,Trade Monday and Tuesday before a midweek CPI/PPI; a no-news day must show clean price
 AFTER-BIG-DAY,A,"Large ORG / large prior range: chop for 30-45 min, run near 11:00, prefer the PM"
 AFTER-BIG-DAY,B,After a very large down day avoid the whole morning session (no trades 09:30-10:30)
 LUNCH-WINDOW,A,12:00-13:00
@@ -68,6 +69,7 @@ OPEN-RANGE-TRADE,B,"Yes: trade at or right after the open toward the ORG CE, or 
 FPFVG-DEF,A,"By time: the first FVG on the 1m between 09:31 and 10:00 (09:31 middle candle), used all week"
 FPFVG-DEF,B,"By context: the first FVG made by displacement through a swing; not the 09:30 candle on gap days; can be a later, more prominent one"
 FPFVG-DEF,C,The wick to the left of an FVG (low to CE) takes precedence as the first presented array
+FPFVG-DEF,D,Any time anchor: the first FVG after any session or macro start (e.g. 13:30)
 ORG-CLOSE,A,16:14 last RTH 1m print / 16:15 settlement
 ORG-CLOSE,B,"16:00 close (the ""bell"")"
 ORG-CE-WINDOW,A,"By 10:00 (first 30 minutes), ~70% of the time"
@@ -77,6 +79,7 @@ ORG-AFTER-CE,B,"Done or fade: CE hit = ""done ... relax""; if the next octant fa
 ORG-SIZE,A,"Every gap the same: grade CE and quarters, expect a reprice into it (large gap = chop, prefer PM)"
 ORG-SIZE,B,"Size buckets: 20-75 handles likes CE; 75-120 gray; extreme (>120) gaps only reach the near quadrant, then ""gap and go"""
 ORG-SIZE,C,Quadrants only on gaps of 20+ handles; smaller ones just eyeball the CE
+ORG-SIZE,D,"Small ORG (under ~20-40 NQ handles): no ORG play, wait for 10:00"
 GAP-LIFE,A,Keep NWOGs for months (every NWOG in the last 60 days; they work 6-9 months)
 GAP-LIFE,B,"NWOGs 5 weeks, NDOGs 5 days"
 MSS-CLOSE,A,Wick / 1-tick trade-through is enough
@@ -136,7 +139,10 @@ OB-VALID,A,Any OB in the draw's direction after displacement
 OB-VALID,B,Only an OB sitting on an ORG gradient level (quadrant/octant); a propulsion block inherits from that parent
 STOP-MGMT,C,Cut or close when three supporting PD arrays are lost (the third gone = walk away)
 STOP-MGMT,D,Trail above the last three candles' extreme (or strangle on 15s) once the target looks unlikely
+STOP-MGMT,F,Move the stop to cover costs once price is halfway to the first partial
 FVG-VALID,C,"On a trending day, only the first FVG after the first-hour dealing range breaks"
 FVG-VALID,D,An FVG that holds more than 1-2 candles inside it is not valid
 GAP-LIFE,C,RTH opening range gaps: carry the last five
 NEWS-WAIT,E,"Fade the release's first leg once the range forms (after ~10:00), only on range-bound days"
+OVERNIGHT-HOLD,A,Flat by 16:00: day trades are never held overnight
+OVERNIGHT-HOLD,B,OSOK: hold a day-of-entry position overnight to a daily FVG CE (adds after midnight)

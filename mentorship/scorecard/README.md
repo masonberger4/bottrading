@@ -59,3 +59,7 @@ Batch 7 append (2026-11-05): 2026 SMC 113-124 (`m2026smc_b7_draft_rules.md`, con
 cards (WICK-PRIORITY, EXIT-DEPTH, SHORT-LOCATION, PARTIAL-TRIGGER, TWO-SIDED, TF-CHOP, OB-VALID), new
 positions on STOP-MGMT, FVG-VALID, GAP-LIFE, NEWS-WAIT, and evidence rows on ten existing cards; 67 and 72
 are "not scored" (one source each). 53 cards in all.
+
+2024 Mentorship L14, L16-L25 append (2026-11-06): `m2024_draft_rules.md` conflicts 20-43. One new card
+(OVERNIGHT-HOLD), new positions on ORG-SIZE (D), STOP-MGMT (F), CPI-WEEK (C), FPFVG-DEF (D), and evidence
+rows on seventeen cards; 30 and 39-43 are "not scored". 55 cards in all (with batch 8).
