@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-06 06:05:32Z; target: dream_2026-11-06.md; reason: Fifth dream report; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPLKksj9aEbVsG6f3SGuFZiA; status: open -->
+<!-- proposal by dreamer at 2026-11-06 06:05:32Z; target: dream_2026-11-06.md; reason: Fifth dream report; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPLKksj9aEbVsG6f3SGuFZiA; status: merged (V1-V3 applied) -->
 # Dream report 2026-11-06 (reviewed: list_threads since 11-05 06:10 (7 threads; newest 3-6 messages of 3), CHANGELOG v73-v75. Not reviewed: project chat, the "part 3" download thread (not listed), the SMC 88-97 and 113-124 and 2024 40-49 threads in full.)
 Feedback on earlier merges: W1-W3 were applied cleanly on 11-05 18:15, with no wrapper text pasted in, so the W3 format fix worked.
 | # | ID | Change | Uplift |

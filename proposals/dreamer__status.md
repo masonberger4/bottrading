@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-06 06:05:26Z; target: status.md; reason: V1 status 11-06; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPNEnnUJvnV7knoeUer53fWC; status: open -->
+<!-- proposal by dreamer at 2026-11-06 06:05:26Z; target: status.md; reason: V1 status 11-06; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPNEnnUJvnV7knoeUer53fWC; status: merged -->
 EXACT TEXT for status.md, new paragraph at end (it supersedes the 11-04 and 11-05 download paragraphs):
 
 (2026-11-06 06:05 UTC) Downloads are UNBLOCKED with the spare account's Firefox cookies on the laptop, at about 30 videos an hour. The downloader and auto-ack (in Mase's window since 11-05 19:34 UTC) keep running. Work moved to the thread "Finish downloading ICT videos, part 3". Handoff: data/ict_fetch_handoff.md ("State at 2026-11-05 19:55Z"), commit cd28b83 on branch claude/project-thread-f3l2g4. Rule drafting: the 2024 Mentorship playlist is fully noted (PR #42 merged); 2026 SMC is drafted through 136 (PR #43 merged; 137 is silent, 138-143 still need to sync); the scorecard has 60 cards. All drafts are DRAFT with switches off, and backtests are still paused.
