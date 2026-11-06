@@ -1,0 +1,24 @@
+# 2026 SMC 004: NFP fade: don't trade before 8:30; after the first rip, event horizon between the post-news short-term high and the old daily high (June 22 high 31,285) meets the 07:00-8:30 range SD -2.5 = short; FVG that fails its CE = weakness; extreme best-case limit target plus partials (Fri Oct 2 2026, NFP day, December NQ; date inferred: NFP Friday after the September rollover, before ICT's two-week break in 002)
+Full read (~6k words). Clean caption ("non-farm apparel/perial" = NFP, "sibby" = SIBI, "buy sign balance sell sign efficiency" = BISI). Frames laptop-only. Marked "for advanced students"; ~$25k on minis. About a quarter is rants (volume profile, critics, nightclub analogy).
+## Summary
+Overlapping ORG/NDOG templates for Mon-Fri on one RTH chart; Thursday worked between its ORG CE and Monday's ORG high. NFP at 8:30 ripped up toward the only daily high left before all-time highs (June 22 2026 high, 31,285, Dec contract). After the first pullback, a short-term high at 8:38 set an unrealized dealing range to 31,285; its midpoint 31,146.75 = event horizon. The 07:00-08:30 range (on news days use 8:30, not 9:00) projected with SDs: -1, -1.5, -2 were isolated, -2.5 landed on the event horizon = convergence. ICT sold in three pieces into the bullish candle at the line, added when the BISI failed to reach its CE, took partials at 31,115 and 31,140 near a rejection block, trailed the last two. Price later returned to the event horizon, nearly tagged 31,285, then sold off.
+## Rules in ICT's wording
+- **Never position before NFP/CPI/PPI**: "you shouldn't try to position yourself ahead of non-farm payroll. That's guessing. That's gambling." "Wait about 15 minutes, 20 minutes into the session and then you'll see what liquidity ... will be left in its wake." [repeats B7 pre-news skip]
+- **Two-stage delivery: fade the first news leg back into its range**: "Whatever they do first, I will trade back into the range that was delivered because of the news ... FOMC is many times treated the same way ... at 2:30, usually it'll retrace ... Not all the time." If 2:00 continues at 2:30 to the close = trend day, "you're probably not getting in anyway." [new; see conflict 76]
+- **News at 8:30 = pre-market range runs 07:00-08:30**: "When there's a high impact news driver at 8:30, we don't look at just the 9:00, we have to look at right at 8:30." [refines 001's 07:00-09:00 range; conflict 73]
+- **Event horizon on an unrealized dealing range**: after a post-news short-term high and pullback, midpoint between that high and the next old daily high = "my event horizon"; "We're predicting ... not reacting." [refines B7 (119)]
+- **Isolated levels are useless; need convergence**: "Not interested at that level because it's by itself ... There has to be a convergence." SD steps -1, -1.5, -2, -2.5 checked until one lands on the event horizon. [new as a convergence rule]
+- **"Generally reasonable to anticipate a retracement going into 9:30"** after a straight NFP run from 8:30. "Not ... every non-farm payroll." [new]
+- **FVG/IFVG failing to touch its CE, then the next candle leaves = confirming weakness**: "It fails to touch the consequent encroachment ... That's why I went in there and sold right there." Inside a SIBI, premium side = "stay there briefly and then leave." [repeats B5/B7]
+- **Rejection block by bodies = take something off there.** [repeats]
+- **Extreme last target on news trades, but bank partials**: "whenever I trade events where it's news driven, I always put an extreme target for my take profit, the final one, way beyond what I think the trade's going to do ... you got to take partials along the way because NFP can take it quickly away from you." [new; see conflict 74]
+- **Wick-low/wick-high overlap of two candles = a level bodies stop at** ("another PDA"). [refines B7 wick = gap]
+- **A couple of PD arrays are enough**: draw on liquidity + IFVG, FVGs, breaker, immediate rebalance; "I did not use SMT today ... commitment of traders." [repeats]
+- **Template**: show NDOG, NWOG and each RTH ORG of the week on one chart; note where they "share the same space" (shadows). [refines B4]
+## Our interpretation / switches (all off)
+- [off] news_first_leg_fade (on NFP/CPI/PPI days, after 15-20 min, fade the first leg back into the news range at a convergence level) [new; conflict 76]
+- [off] premarket_range_end_at_news (pre-market SD range ends at 8:30 on 8:30 news days, else 09:00) [refines; conflict 73]
+- [off] event_horizon_unrealized_range (midpoint of post-news high and next old daily high as an entry level) [refines]
+- [off] require_level_convergence (entry level must coincide with a second independent level within N ticks) [new]
+- [off] news_extreme_final_target (final runner limit at an extreme level, partials at the nearer pools) [new; conflict 74]
+- Not for the engine: volume-profile critique, nightclub/wildlife analogies, critics, $5M bounty.

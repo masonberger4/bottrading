@@ -1,0 +1,24 @@
+# 2026 SMC 012: Backtesting lecture part 5: journal three pillars (07:00-09:00 pre-market range + its relative equal highs/lows, RTH ORG CE and SD -1, 10:00 Silver Bullet FPFVG vs FPFVG with displacement); lunch macro draws to a 10:00-hour low; hypothetical entry at FVG CE -1 tick, stop at the last candle outside the gap +1 tick (Wed Sep 9 2026?, inferred: September contract, "yesterday" = the FPFVG classification lecture 013 (Tue Sep 8); part 4 = 016)
+Full read (~7k words). Clean caption ("consequent encouragement" = CE, "bissy" = BISI, "sibi" = SIBI). Frames laptop-only. Teaching lecture; a third is journaling psychology and anti-market-replay advice (beginner). Silver Bullet noted only.
+## Summary
+Part 4 gave three pillars; each can be its own model. Journal method: record live or delayed 1m (Win+Alt+R), not market replay; 6 weeks back + 6 weeks forward; annotate exact prices with price notes; write positive notes. Example day: 07:00-09:00 range graded with lines stopped at 09:00 (look for agreement with the 09:30-10:00 opening range grades); premium FVG at 11:09 retested its CE and the pre-market high, then ran to the pre-market relative equal lows (94 handles). ORG: discount gap of 69 handles; CE delivered 5 min after the open; ORG SD -1 nailed the AM high; SD -1 down nailed the AM low at 11:12 to the tick; the prior day's MOC-macro relative high (RTH chart) was referred to again. 10:00 Silver Bullet: first FVG at 10:01 (a SIBI) vs a later BISI that took highs = FPFVG with displacement, which "trumps"; short in its lower half, stop above the last candle that opened outside the gap +1 tick, partial at the 10:00-hour low (lunch macro), then the 07:00-09:00 relative equal lows.
+## Rules in ICT's wording
+- **Three pillars**: (1) pre-market 07:00-09:00 high/low, relative equal highs/lows inside, phase (consolidation vs expansion) and its effect on the AM; (2) RTH ORG and its CE; (3) 10:00 Silver Bullet FPFVG. "Every single one ... you can make a model off of." [refines B7; Silver Bullet noted only]
+- **Pre-market relative equal highs/lows are draws**: "Look for relative equal lows and relative equal highs inside of this range between 7:00 and 9:00 because the algorithm will absolutely refer back to that." [new; see conflict 73]
+- **Pre-market high flips to discount after being bought out** (premium array becomes support). [repeats]
+- **Opening range = 09:30-10:00 (30 min), never 5 or 15**: "The dealing range is 30 minutes. The opening range is 30 minutes ... They're all wrong." Grade it and look for agreement with pre-market grades. [repeats B7]
+- **ORG CE delivered fast; ORG SD -1 marks the AM high/low** ("nails the high of the AM session," low "to the tick"). [refines B7 SD]
+- **Prior day's RTH relative highs/lows in the MOC macro (last 15-20 min) are referred to**; view them on the RTH chart, "it doesn't matter if price has [gone] above these things during electronic hours." [new]
+- **FPFVG with displacement trumps the first FVG**: "First presented fair value gap with displacement take greater command over price delivery than just a simple initial formation of a fair value gap." Displacement = takes out highs/lows and leaves a range; up-close BISI can be both reflection and bearish IFVG. [new; see conflict 80]
+- **Lunch macro draws to a low (or high) that formed in the 10:00 hour**; don't short into that low, short after it is set: "if we're using this ... what's the low? ... am I going to be inclined to take a short on that? No." [repeats B7 (115/116)]
+- **Bearish FVG order flow**: bodies in the lower half, wicks may reach the CE, each push lower than the last. [repeats]
+- **Backtest entry/stop convention**: entry at CE or CE -1 tick (or the lower half); "stop loss would be this candlestick ... high plus one tick ... the last one we spent time outside of it. The open is outside of it. Not just a wick." Include adjoining VIs. Target 1 tick before the pool. Record drawdown and time under water. [new as a backtest convention; see conflict 77]
+- **Rejection block = lowest down-close candle** as a partial target. [repeats]
+- Built-in 3:1 / 5:1 from setup geometry. [repeats]
+## Our interpretation / switches (all off)
+- [off] premarket_req_targets (relative equal highs/lows inside 07:00-09:00 as AM/lunch targets) [new; conflict 73]
+- [off] prior_rth_moc_relative_levels (prior day's last-20-min RTH relative highs/lows as levels) [new]
+- [off] fpfvg_displacement_priority (if a later FVG in the 10:00 hour takes out a swing, it replaces the FPFVG as the entry array) [new; conflict 80]
+- [off] stop_last_open_outside_gap (stop = high/low of the last candle whose open is outside the FVG/VI, +1 tick) [new; conflict 77]
+- [off] fill_convention_ce_minus_1 (backtest fills at FVG CE -1 tick; target fill 1 tick before the pool) [new; useful default for the engine]
+- Not for the engine: journaling psychology, market replay critique, AI critique, $7 data rant.

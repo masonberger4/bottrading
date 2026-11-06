@@ -1,0 +1,20 @@
+# 2026 SMC 013: Day after Labor Day: three PD arrays (FPFVG, FPFVG with displacement, first presented REFLECTION FVG = first opposite-direction gap after a BISI FPFVG); Friday's 10:01 reflection gap caps Tuesday's high; short when the 09:30 candle wicks in and closes back below; one contract, low-hanging-fruit exit (Tue Sep 8 2026, stated: "yesterday was Labor Day")
+Full read (~4.5k words). Clean caption ("busy/bissy" = BISI, "sibi/sibby" = SIBI, "first resistance fair value gap" = first presented FVG). Frames laptop-only. Live lecture with his son at the open (17-min video). About a quarter is critics and mute warnings.
+## Summary
+Friday Sep 4: the FPFVG was a BISI without displacement; a later BISI cleared highs = FPFVG with displacement (more emphasis). The first SIBI after 09:30 (at 10:01, in the macro, with a 1-tick VI) = first presented reflection FVG; extended right, it framed this week. Asia trade (sync only) inside Aug 28's FPFVG to smooth relative equal highs. Tuesday 09:30: first candle wicked through Friday's reflection gap and closed below it and below the Asia smooth level; next candle reached only that wick's CE = sold (6 down to 1 contract, post-holiday). Today's FPFVG with displacement then failed to reach the 09:30 opening price (weakness); bodies stayed in the lower half of the lower half of the SIBI. Exit at the CE of the 07:00-09:00 suspension block (low-hanging fruit); price later took the 07:00-09:00 low, London low and Globex low, then went "wonky."
+## Rules in ICT's wording
+- **Three related arrays**: "First presented, first presented with displacement ... I'm going to care more about that one. But, the very first presented fair value gap, if it's a [BISI], I'm going to look for the very first sibi that forms after that. And that is a reflection." "If the first presented fair value gap is not a [BISI], there is no significance on the first sibi." (Mirror case implied.) Stronger when formed in a macro. [new; see conflict 80]
+- **Displacement defined**: "part of a run that takes out the high or low"; "the first one that does that after 9:30." [refines B7 FPFVG]
+- **Prior days' FPFVG/reflection gaps carried forward as levels**. [new]
+- **Wick through an array and close back below on the first candle, then only the wick CE retested = one of the strongest reversal patterns**: "as long as we don't put a body close above that, I'm going to try to be short." Bodies unable to enter the array at all = bearish. [repeats B7 wick CE]
+- **Failing to reach the 09:30 opening price = weakness**: "it very well should have touched that. It didn't." [repeats 007/008]
+- **If-then on the SIBI**: a close above its CE sends price back to the 09:30 open; bodies in "the lower half of the lower half" = "extremely weak." [repeats]
+- **Day after a holiday-shortened session: small size, low-hanging-fruit exit**: "holiday volume ... skews the very first trading day after ... Most times it can be a little funky"; one contract, exit at the first easy level, "a protocol to prevent you from being greedy." [refines B7 holiday filter]
+- **Session phases (2016 Mentorship lecture 1)**: London trend, 07:00-09:00 consolidation, expansion, NY reversal. 07:00-09:00 gradients and its suspension block carried forward validate later SIBIs; octants of the pre-market range stopped bodies dead. [repeats; refines 001]
+- Keep a topical question list in the journal. [not for the engine]
+## Our interpretation / switches (all off)
+- [off] reflection_fvg (if the FPFVG after 09:30 is bullish, mark the first bearish FVG after it, and vice versa; carry both forward several days as levels) [new; conflict 80]
+- [off] carry_prior_fpfvg_levels (prior 1-5 days' FPFVG / displacement FVG / reflection FVG as levels) [new]
+- [off] first_candle_wick_reject_short (09:30 candle wicks through a carried array and closes back outside; enter on the retest of that wick's CE) [new]
+- [off] post_holiday_low_hanging_fruit (day after a shortened session: one unit, first-target exit only) [refines]
+- Not for the engine: critics, mute warnings, family lecture context.
