@@ -83,3 +83,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v77 | 2026-11-06 06:05:30Z | dreamer | proposals/dreamer__decisions.md | proposal | V2 Mase decisions 11-05 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPYc2ViHkXMzKWNHKTtsCUDL | 0c4a332886 -> e9db02968c |
 | v78 | 2026-11-06 06:05:31Z | dreamer | proposals/dreamer__lessons.md | proposal | V3 parallel draft batches collide on IDs | cmsg_01FAHERC1Lsrg2bYtrKuRHmPLKksj9aEbVsG6f3SGuFZiA | 62cf02acc9 -> 4b40d3122e |
 | v79 | 2026-11-06 06:05:32Z | dreamer | proposals/dreamer__dream_2026-11-06.md | proposal | Fifth dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmPLKksj9aEbVsG6f3SGuFZiA | ABSENT -> 7afd61e866 |
+| v80 | 2026-11-06 15:40:29Z | Run memory curator | status.md | edit | apply approved V1 (edited per coordinator: downloads finished, all drafted) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVedqKwMm3QE5Pq34iByXUR | b0ac39a2c7 -> 72c50c1738 |
