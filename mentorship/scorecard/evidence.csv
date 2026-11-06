@@ -667,3 +667,14 @@ RESISTANCE-DAY,B,M2024:L49,"high resistance: one contract, candle-1 stop, no tra
 RESISTANCE-DAY,B,M2024:L36,high resistance: stop 2x the FVG range; low resistance CE + 1 tick,~1:47-1:49
 RESISTANCE-DAY,C,M2024:L48,"""90% of the time large range days are low resistance""",~1:39
 RESISTANCE-DAY,C,M2024:L49,"news + not Monday + clustered gaps + ORG 45/75 = ""recipe for just beautiful low resistance liquidity run conditions""",~2:29
+NDOG-DEF,A,M2023:052,NDOG = 17:00 close to 18:00 reopen (rulebook L6),~0:46-5:46
+NDOG-DEF,A,SMC2026:067,NDOG = Tuesday 17:00 settle to 18:00 restart,
+NDOG-DEF,B,M2024:L34,"""there are two times for my new day opening gap"" ... ""4.14 settlement price to 6 p.m. opening"" when the 4:59 close equals the 6 p.m. open",~1:31-1:42
+ORG-CLOSE,A,M2024:L34,"""Difference between yesterday's settlement price at 4.14 p.m. Eastern time to 9.30's opening bell""",~0:15
+ORG-CLOSE,A,M2024:L47,settlement = close of the 16:14 1m RTH candle; Monday uses Friday's,
+FVG-VALID,D,M2024:L34,"""Inefficiencies have to stay with one or two candles and leave it""; building multiple candles inside ""isn't gonna perform""",~0:58
+ATH-RULE,A,M2024:L50,"""I favor a run here cuz I'm trying to avoid picking a top""; stay bullish until proven wrong by a breakdown","~0:00, ~5:00"
+ATH-RULE,A,M2024:L51,"""we're trading with all-time highs ... you stick with going long until it proves otherwise""",~2:00
+NFP-THU-FRI,A,M2024:L50,"NFP week: ""focus on your setups on Monday and Tuesday and be done by New York session opening on Wednesday"" (new traders)",~8:00
+EXIT-STYLE,B,M2024:L51,"""several limit orders layered below that in the event that we didn't get down to"" the 21,490 target; two filled",~7:00
+STOP-PLACE,G,M2024:L51,"two inefficiencies: ""always give room for it to trade from the higher one""",~10:00

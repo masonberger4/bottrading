@@ -32,7 +32,7 @@ FPFVG-DEF,Opening range,C,The wick to the left of an FVG (low to CE) takes prece
 FPFVG-DEF,Opening range,D,Any time anchor: the first FVG after any session or macro start (e.g. 13:30),1,0,2024 1,2024-09-06,2024-09-06
 FPFVG-DEF,Opening range,E,On sub-1m charts the first gap after the 09:30 1m candle (from 09:31 on 15s) also counts,1,0,2024 1,2024-09-25,2024-09-25
 FPFVG-DEF,Opening range,F,On RTH charts the first RTH FVG may be the second on ETH: watch the gap that bridges both sessions,1,0,2024 1,2024-08-23,2024-08-23
-ORG-CLOSE,Opening gaps,A,16:14 last RTH 1m print / 16:15 settlement,14,7,"2023 7, 2024 2, 2025 2, 2026 3",2023-02-16,2026-04-16
+ORG-CLOSE,Opening gaps,A,16:14 last RTH 1m print / 16:15 settlement,16,7,"2023 7, 2024 4, 2025 2, 2026 3",2023-02-16,2026-04-16
 ORG-CLOSE,Opening gaps,B,"16:00 close (the ""bell"")",1,1,2023 1,2023-06-24,2023-06-24
 ORG-CE-WINDOW,Opening gaps,A,"By 10:00 (first 30 minutes), ~70% of the time",18,0,"TE 1, 2024 9, 2025 1, 2026 7",2024-08-22,2026-09-04
 ORG-CE-WINDOW,Opening gaps,B,Valid through the first hour (to 10:30),3,0,2026 3,2026,2026-09-01
@@ -48,6 +48,8 @@ GAP-LIFE,Opening gaps,A,Keep NWOGs for months (every NWOG in the last 60 days; t
 GAP-LIFE,Opening gaps,B,"NWOGs 5 weeks, NDOGs 5 days",6,0,"2024 4, 2025 1, 2026 1",2024-08-07,2026-09-02
 GAP-LIFE,Opening gaps,D,NDOGs (Mon 18:00 and Friday) and Mon/Fri ORGs kept for the last two weeks,1,0,2026 1,2026-10-28,2026-10-28
 GAP-LIFE,Opening gaps,C,RTH opening range gaps: carry the last five,1,0,2026 1,2026-03-10,2026-03-10
+NDOG-DEF,Opening gaps,A,ETH only: the 17:00 settlement (16:59 close) to the 18:00 reopen,2,1,"2023 1, 2026 1",2023-05-03,2026
+NDOG-DEF,Opening gaps,B,Two NDOGs: also the RTH 16:14 settlement to the 18:00 open; use it when the 17:00 -> 18:00 gap is empty,1,0,2024 1,2024-09-24,2024-09-24
 NEWS-WAIT,News,A,Wait at least 30 minutes after a high/medium-impact release,2,1,"2023 1, 2026 1",2023-06-15,2026-09-04
 NEWS-WAIT,News,B,15-30 minutes after the release is fine (even NFP),7,0,"2024 6, 2026 1",2024-08-14,2026-10-02
 NEWS-WAIT,News,C,Only skip the 08:30/08:31 news candles; enter from ~08:32 if there is a setup,1,0,2026 1,2026-08-12,2026-08-12
@@ -60,7 +62,7 @@ FOMC-DAY,News,A,"Trade only to 10:30 with no hard bias, then sit until after 14:
 FOMC-DAY,News,B,"Trade the afternoon two-stage delivery: first FVG after 14:00, second wave from 14:30 (often the opposite way)",5,1,"2023 1, 2024 1, 2025 1, 2026 2",2023-06-15,2026-10-02
 FOMC-DAY,News,C,Don't trade the 14:00 release; 14:00-14:45 observation only; normal routine after 14:45,2,2,2023 2,2023-01-04,2023-02-01
 FOMC-DAY,News,D,Inexperienced: avoid FOMC day entirely; the day before trade the morning only (careless price),1,0,2024 1,2024-09-17,2024-09-17
-NFP-THU-FRI,News,A,No: NFP week = trade Mon-Wed to 11:00 (new traders done by 07:00 Wed); NFP Friday no live trading,13,5,"2023 5, 2024 3, 2025 2, 2026 3",2023-01-04,2026-09-30
+NFP-THU-FRI,News,A,No: NFP week = trade Mon-Wed to 11:00 (new traders done by 07:00 Wed); NFP Friday no live trading,14,5,"2023 5, 2024 4, 2025 2, 2026 3",2023-01-04,2026-09-30
 NFP-THU-FRI,News,B,Yes: experienced traders trade NFP Thursday and Friday (after the initial volatility),13,5,"2023 5, TE 5, 2024 2, 2026 1",2023-03-09,2026-10-02
 MONDAY,Day filters,A,Trade Mondays like any other day (he shows many Monday trades),7,2,"2023 2, TE 2, 2025 2, 2026 1",2023-01-30,2026
 MONDAY,Day filters,B,"Skip Mondays (accumulation/manipulation), except NFP-week Mondays or an obvious setup",9,2,"2023 2, CC 1, 2024 3, 2025 1, 2026 2",2017-08,2026-09-28
@@ -97,7 +99,7 @@ UNICORN,PD arrays,B,Second-stage redistribution of a market maker model,1,1,2023
 FVG-VALID,PD arrays,A,Any FVG in the draw's direction (with quality filters),0,0,,,
 FVG-VALID,PD arrays,B,"Only first-presented FVGs, or FVGs anchored to (touching) an octant/quadrant grade level",7,0,"2024 1, 2026 6",2024-10-25,2026-08-07
 FVG-VALID,PD arrays,C,"On a trending day, only the first FVG after the first-hour dealing range breaks",1,0,2026 1,2026-03-28,2026-03-28
-FVG-VALID,PD arrays,D,An FVG that holds more than 1-2 candles inside it is not valid,4,0,"2024 3, 2026 1",2024-09-16,2026-03-27
+FVG-VALID,PD arrays,D,An FVG that holds more than 1-2 candles inside it is not valid,5,0,"2024 4, 2026 1",2024-09-16,2026-03-27
 WICK-PRIORITY,PD arrays,A,The FVG/VI itself; the adjacent wick is not graded,0,0,,,
 WICK-PRIORITY,PD arrays,B,"The wick takes precedence: grade it (CE, quadrants) and set the stop beyond the wick",3,0,2026 3,2026-03-26,2026-04-06
 TF-CHOP,PD arrays,A,"Go up (5m, 15m, then 1h/4h) to find the array the chop is working toward",2,0,2026 2,2026-03-21,2026-04-06
@@ -120,7 +122,7 @@ BIAS-SOURCE,Bias and SMT,A,"Top-down: weekly, then daily draw; intraday trades f
 BIAS-SOURCE,Bias and SMT,B,"The ORG alone: premium ORG = shorts only, discount ORG = longs (first 30-60 min)",3,0,2026 3,2026,2026-04-16
 BIAS-SOURCE,Bias and SMT,C,"The last three RTH ORGs graded, ""without a hard line higher time frame bias""",1,0,2026 1,2026-04,2026-04
 BIAS-SOURCE,Bias and SMT,D,Weekly draw = the nearest higher-timeframe pool (path of least resistance) in the primary trend,1,0,2026 1,2026-08-15,2026-08-15
-ATH-RULE,Bias and SMT,A,"Near all-time highs, don't pick the top: daily bias stays long; shorts only intraday and only when seasoned",3,0,2025 3,2025,2025-09-18
+ATH-RULE,Bias and SMT,A,"Near all-time highs, don't pick the top: daily bias stays long; shorts only intraday and only when seasoned",5,0,"2024 2, 2025 3",2024-12-01,2025-09-18
 ATH-RULE,Bias and SMT,B,No special rule: follow the draw both ways,0,0,,,
 PYRAMID-WHERE,Management,A,Only on the favourable side of equilibrium of the leg/range; no adds past EQ or after partials,8,7,"2023 7, 2026 1",2023-01-06,2026-08-28
 PYRAMID-WHERE,Management,B,Add in drawdown (toward the wick/VI low) or keep adding into an IFVG,3,0,2026 3,2026-03-13,2026-08-01
@@ -149,7 +151,7 @@ PARTIAL-TRIGGER,Management,A,"At targets/liquidity only: half off by T2, one run
 PARTIAL-TRIGGER,Management,B,"On a warning candle: a body closes in the wrong half of the entry array, peel one of two",1,0,2026 1,2026-03-27,2026-03-27
 PARTIAL-TRIGGER,Management,C,"Ladder: below each intermediate low, 25% at the event horizon of two pools, leave a 20% runner",4,0,"2024 3, 2026 1",2024-08-28,2026-03-19
 EXIT-STYLE,Management,A,"One full exit at the first pool (+1 tick), e.g. counter-bias or post-holiday trades",4,0,"2024 2, 2026 2",2024-09-30,2026-10-28
-EXIT-STYLE,Management,B,"Staggered partials (chest/head, each new low) with a runner to the terminus or an extreme limit",8,0,"2024 3, 2026 5",2024-10-01,2026-10-02
+EXIT-STYLE,Management,B,"Staggered partials (chest/head, each new low) with a runner to the terminus or an extreme limit",9,0,"2024 4, 2026 5",2024-10-01,2026-10-02
 OVERNIGHT-HOLD,Management,A,Flat by 16:00: day trades are never held overnight,0,0,,,
 OVERNIGHT-HOLD,Management,B,OSOK: hold a day-of-entry position overnight to a daily FVG CE (adds after midnight),2,0,2024 2,2024-09-06,2024-09-06
 STOP-PLACE,Management,A,Below the mean threshold of the order block (nearest the sweep low),3,2,"2023 2, 2024 1",2023-01-17,2024-08-12
@@ -158,7 +160,7 @@ STOP-PLACE,Management,C,"Beyond candle 1 / the whole gap (conservative one-contr
 STOP-PLACE,Management,D,One tick beyond the order block open/high inside the entry leg,2,0,2024 2,2024-09-06,2024-09-11
 STOP-PLACE,Management,E,"Tight: one tick past a wick CE or the gap CE (low resistance days, small ranges)",4,1,"2023 1, 2024 3",2023-09-01,2024-10-25
 STOP-PLACE,Management,F,Condition-based wide: entry gap range added again beyond the gap (2x) on high resistance days,1,0,2024 1,2024-09-27,2024-09-27
-STOP-PLACE,Management,G,"Beyond every nearby inefficiency: with two stacked FVGs, beyond the higher one / its CE",7,3,"2023 3, 2024 4",2023-02-08,2024-10-25
+STOP-PLACE,Management,G,"Beyond every nearby inefficiency: with two stacked FVGs, beyond the higher one / its CE",8,3,"2023 3, 2024 5",2023-02-08,2024-12-05
 RESISTANCE-DAY,Management,A,Beginner: stand aside on high resistance days; trade only low resistance runs,2,0,2024 2,2024-10-07,2024-10-28
 RESISTANCE-DAY,Management,B,"Trade both, but in high resistance frame nearer arrays, use wider stops, one contract, no trailing",3,0,2024 3,2024-09-27,2024-10-28
 RESISTANCE-DAY,Management,C,Forecast it before the open: news at 08:30/first hour + not Monday + clear draws + ORG 45/75 = low resistance; large range days ~90% low resistance,2,0,2024 2,2024-10-25,2024-10-28

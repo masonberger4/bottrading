@@ -22,7 +22,7 @@ captions can be garbled; treat them as approximate.
     stays in force until Mase decides.
   - **[conflict check]**: possibly differs; needs a closer read.
 - "Our interpretation" marks places where ICT used judgment or withheld a threshold.
-- Lecture refs: L01-L49 = notes `01_*.md`-`49_*.md` (no L30 or L34 yet). Times are New York local.
+- Lecture refs: L01-L51 = notes `01_*.md`-`51_*.md` (no L30: silent). Times are New York local.
 
 ## Coverage
 
@@ -35,9 +35,9 @@ captions can be garbled; treat them as approximate.
 | L26-L29, L31-L33, L35-L38 | 2024-09-11 to 10-01 | notes done (captions; L32 is an after-session review) |
 | L39 | 2024-09-02 | notes done (5-min market replay clip, no rules) |
 | L30 | 2024-09-18 | no commentary (chart example only, no rules) |
-| L34 | 2024-09-24 | **pending**: needs whisper |
+| L34 | 2024-09-24 | notes done (whisper transcript, ~1h44m, mostly silent) |
 | L40-L49 | 2024-10-02 to 10-28 | notes done (captions; L41 and L49 are after-session reviews) |
-| L50-L51 | 2024-12-01, 12-05 | **pending**: captions not synced (handoff `/mnt/project-files/mentorship/handoff_2024m_050.md`) |
+| L50-L51 | 2024-12-01, 12-05 | notes done (captions; recorded new-week outlook and a day review). **Playlist complete.** |
 
 **Appending L14-L51:** add a note per lecture in `mentorship/notes_2024/` (same template), then
 add bullets under the matching topic in Part A with the lecture ref, new rows to Parts C/D/E, and
@@ -470,6 +470,40 @@ update this table. Keep numbering of existing conflicts/switches stable.
 - [beginner]: daily goal 10 NQ / 5 ES handles, then stop (L47, L49) [C85, MIN-ROOM]; one trade, stop after a loss
   (L47); one contract on high resistance days (L49); 1% fixed risk (L45).
 
+### A15. L34, L50-L51 additions (DRAFT; refs to the notes)
+- Opening gaps:
+  - DRAFT: Two NDOGs: ETH close (16:59 1m close) to the 18:00 open, and RTH settlement (16:14 1m final print) to the 18:00
+    open; both work; when the ETH one has no gap, use the RTH one; no 16:45 gap; mark on a 1m chart (L34). [conflict: C94,
+    new card NDOG-DEF; rulebook L6 = 17:00 -> 18:00 only]
+  - DRAFT: ORG anchored on the 16:14 settlement print (L34, as L47). [C95, ORG-CLOSE A]
+  - DRAFT: ORG mid-gap by 10:00 restated ("70% strike rate still holds") (L34). [ORG-CE-WINDOW A]
+  - DRAFT: NWOG half-working: lower half first (to or just below the midpoint, a wick below the low into a discount array),
+    then the upper half; once the midpoint is breached it should work the upper half; back below = sidelines until the PM
+    (L34). [new, C98]
+  - DRAFT: NWOG quadrants respected through the week (L50). [in rulebook]
+- News and days:
+  - DRAFT: 10:00 news: no trade ahead of it; after the initial hit give it a few minutes (L34). [new detail, C97]
+  - DRAFT: NFP week, new traders: Monday and Tuesday, done by Wednesday's NY open (L50). [C101, NFP-THU-FRI A]
+  - DRAFT: Holiday (Thanksgiving) weeks are range bound; sustained runs unlikely (L50). [new, C102]
+  - DRAFT: Monday open preference: gap lower into last week's NWOG, then back above the new NWOG = favorable; open high and
+    trade down into the NWOG = harder (L50). [new, C103]
+  - DRAFT: 09:00 hour stuck inside one candle's range = problematic; wait for an obvious run at 10:00 (L51). [new, C104]
+- Bias and targets:
+  - DRAFT: At all-time highs stay long, don't pick tops, until a breakdown proves otherwise (L50, L51). [C100, ATH-RULE A]
+  - DRAFT: Range-break extension: one quarter of the previous range beyond the broken extreme = objective, or the turtle-soup
+    frame (L51; L50 applied it: 21,580.25). ICT's own rule of thumb. [new, C99]
+  - DRAFT: Measuring gap: measure from the swept level (not the wick) to ~50% of the gap low (L34). [in rulebook, L38]
+  - DRAFT: Sequence minor buy-side, then primary sell-side, then primary buy-side (L51).
+- Arrays, entries, exits:
+  - DRAFT: An inefficiency should get one or two candles inside it and be left; building many candles inside = won't
+    perform (L34). [C96, FVG-VALID D]
+  - DRAFT: FVGs formed on the drop are re-used as inversion discount once price trades above (L34); a reclaimed SIBI/BISI as a
+    premium array (L51).
+  - DRAFT: Accumulation signature: price lingers inside bullish FVGs / the breaker low before the rally (L34).
+  - DRAFT: Short after the rally bodies break, add on the immediate rebalance (L51).
+  - DRAFT: Layered limit exits ahead of the target in case it falls short (L51). [C105, EXIT-STYLE B]
+  - DRAFT: Two stacked inefficiencies: give room from the higher one (L51). [C106, STOP-PLACE G]
+
 ---
 
 ## Part B. Trade examples (captions; prices approximate)
@@ -519,6 +553,9 @@ update this table. Keep numbering of existing conflicts/switches stable.
 | 2024-10-24 | L48 | two losses (-$1,200, -$800), recovered | AM after a large range day |
 | 2024-10-25 | L48 | none (study) | 08:30 OB low ~20,452.75 below the dealing-range lower quadrant; IOFED |
 | 2024-10-28 | L49 | pre-market short (on X); Caleb hindsight short | clustered NWOGs; mid-gap in 19 min; high resistance |
+| 2024-09-24 | L34 | none | 20,085 sell-side before 10:00 news; ORG half filled; NWOG lower then upper half |
+| 2024-12-01 | L50 | none (outlook) | stay long at ATH; target ~21,580.25 above November's high |
+| 2024-12-05 | L51 | short + add, layered limits (2 filled), rest stopped ~21,526; later 5s short, limit filled 21,490 | 08:00 high taken first |
 
 ---
 
@@ -617,6 +654,19 @@ update this table. Keep numbering of existing conflicts/switches stable.
 91. Entries only in the premium/discount of the inception-to-terminus range (L40). Not scored (one source).
 92. Inside day / NR7, large range day = above the 3-day average (L48). Not scored (one source).
 93. No 15-minute opening range (L49). Not scored (one source).
+94. NDOG = ETH 16:59 close -> 18:00, or RTH 16:14 settlement -> 18:00 (fallback when the ETH gap is empty) (L34) vs 17:00 -> 18:00 only (2023 052, SMC 067). New card NDOG-DEF.
+95. ORG anchored on the 16:14 settlement print (L34, L47). Card ORG-CLOSE.
+96. An inefficiency gets 1-2 candles inside it, then is left (L34). Card FVG-VALID.
+97. 10:00 news: no trade ahead; a few minutes after the initial hit (L34). Not scored (one source, 10:00 release).
+98. NWOG half-working sequence; back below the midpoint = sidelines until the PM (L34). Not scored (one source).
+99. Range-break extension = 1/4 of the previous range beyond the broken extreme (L50, L51). Not scored (agreeing sources, no opposing position).
+100. At all-time highs stay long, don't pick tops (L50, L51). Card ATH-RULE.
+101. NFP week new traders Mon/Tue, done by Wednesday's NY open (L50). Card NFP-THU-FRI.
+102. Holiday weeks are range bound (L50). Not scored (one source).
+103. Monday soft-open preference into last week's NWOG (L50). Not scored (one source).
+104. 09:00 hour inside one candle's range = wait for 10:00 (L51). Not scored (one source).
+105. Layered limit exits ahead of the target (L51). Card EXIT-STYLE.
+106. Two stacked inefficiencies: room from the higher one (L51). Card STOP-PLACE.
 Second sources found, still not scored (they agree, no opposing position): C41 weekly objective done (L40 "satisfied for this week", L42); C43 Jackson Hole (L15).
 
 ## Part D. Backtestable switches (all default OFF; DRAFT names)
@@ -782,6 +832,14 @@ Second sources found, still not scored (they agree, no opposing position): C41 w
 | `clustered_gap_draw` | on/off | L49 |
 | `stop_candle_by_resistance` | on/off | L49 |
 | `rth_vs_eth_first_fvg` | on/off | L15 |
+| `ndog_rth_settlement` | off / both / fallback | L34 |
+| `nwog_half_sequence` | on/off | L34 |
+| `news_1000_wait_minutes` | on/off | L34 |
+| `range_break_quarter_extension` | on/off | L50, L51 |
+| `holiday_week_range_bound` | on/off | L50 |
+| `monday_soft_open_pref` | on/off | L50 |
+| `hour09_inside_candle_wait_10` | on/off | L51 |
+| `layered_limit_exits` | on/off | L51 |
 
 Per-lecture switch ideas and every [conflict check] are in each note's "Open questions" section.
 

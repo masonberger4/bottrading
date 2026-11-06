@@ -207,3 +207,16 @@ m2024,90,,Not scored yet: ORG turtle-soup buy stop at the open of the candle tha
 m2024,91,,Not scored yet: entries only in the premium/discount of the inception-to-terminus range (L40); one source.
 m2024,92,,Not scored yet: inside day / smallest range of 7 days precedes expansion; large range day = range above the 3-day average (L48); one source.
 m2024,93,,Not scored yet: no 15-minute opening range; first 30 and 60 minutes frame the day (L49); one source.
+m2024,94,NDOG-DEF,
+m2024,95,ORG-CLOSE,
+m2024,96,FVG-VALID,
+m2024,97,,"Not scored yet: 10:00 news, no trade ahead, a few minutes after the initial hit (L34); one source."
+m2024,98,,"Not scored yet: NWOG half-working sequence, back below the midpoint = sidelines until the PM (L34); one source."
+m2024,99,,"Not scored yet: range-break extension = 1/4 of the previous range (L50, L51); agreeing sources, no opposing position."
+m2024,100,ATH-RULE,
+m2024,101,NFP-THU-FRI,
+m2024,102,,Not scored yet: holiday weeks range bound (L50); one source.
+m2024,103,,Not scored yet: Monday soft-open preference into last week's NWOG (L50); one source.
+m2024,104,,Not scored yet: 09:00 hour inside one candle = wait for 10:00 (L51); one source.
+m2024,105,EXIT-STYLE,
+m2024,106,STOP-PLACE,

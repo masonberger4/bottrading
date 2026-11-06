@@ -165,3 +165,5 @@ STOP-MGMT,H,"By condition: high resistance = no trailing, cover costs only; low 
 RESISTANCE-DAY,A,Beginner: stand aside on high resistance days; trade only low resistance runs
 RESISTANCE-DAY,B,"Trade both, but in high resistance frame nearer arrays, use wider stops, one contract, no trailing"
 RESISTANCE-DAY,C,Forecast it before the open: news at 08:30/first hour + not Monday + clear draws + ORG 45/75 = low resistance; large range days ~90% low resistance
+NDOG-DEF,A,ETH only: the 17:00 settlement (16:59 close) to the 18:00 reopen
+NDOG-DEF,B,Two NDOGs: also the RTH 16:14 settlement to the 18:00 open; use it when the 17:00 -> 18:00 gap is empty
