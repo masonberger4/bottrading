@@ -128,3 +128,62 @@ Where ICT labels a beginner vs experienced version, the experienced one is defau
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
 | FVG-ENTRY | **A**: Near edge or first quadrant ("buy the fair value gap high or upper quadrant"); a CE limit may never fill | 1 | B(1) | tie broken by date; thin (<=2 videos) |
+
+## One-source rules
+
+Mase 2026-11-06: one video beats an engine default no video supports, so these become DRAFT defaults
+(the current engine behaviour is the switch), except rows marked excluded.
+
+| Digest | # | Status | Rule | Why |
+|---|---|---|---|---|
+| te_charter | 2 | excluded | Charter 04:00/06:00 "platform opens" are most likely MT4 server-time clocks (00:00 NY shows as 04:00; times.md A). Check frames. | clock question (MT4 server time), not a rule; check frames |
+| te_charter | 4 | excluded | Model 1 trade-plan rules (flat by 10:00 and no Fridays) are internal to one Charter FX model. | internal to one Charter FX model; engine does not run Charter models |
+| te_charter | 5 | excluded | Model 2 vs Model 3 on Mondays is internal to the Charter models. | internal to the Charter models |
+| te_charter | 6 | excluded | COT look-back 6 vs 12 months applies to swing/position models only (engine is intraday; rulebook = 12 months). | swing/position models only; engine is intraday |
+| te_charter | 7 | excluded | Model 7's own MSS definition (highest reaccumulation low); single model. | single Charter model definition |
+| te_charter | 9 | excluded | Model 13 entry/stop edge is a slide-vs-audio question; needs the frames. | slide vs audio; needs the frames first |
+| m2024 | 16 | excluded | beginner risk rules (1% / one trade / stop after a loss); the standing rule is the experienced version (owner #12 risk 1.2%). Re-entry part is in REENTRY. | beginner risk rules; experienced version wins (Mase 2026-11-06) |
+| m2024 | 19 | excluded | stand aside until the 10:00 Silver Bullet; Silver Bullet is settled off. | Silver Bullet is settled off |
+| m2024 | 30 | default | pre-holiday Friday and post-holiday skip agree with filters.md 1.2 (L21 also skips the Tuesday after a Monday holiday, 2023 allows its PM). | post-holiday: 2023 090 skip the AM only vs 2024 L21 skip the whole Tuesday; 1-1 tie, 2023 wins: AM only, whole day a switch |
+| m2024 | 40 | default | FVG wick tolerance of one standard deviation of the gap width is one source (L24). |  |
+| m2024 | 41 | default | stop for the week once the weekly HTF objective is hit is one source (L24). |  |
+| m2024 | 42 | default | pyramid windows (final hour 14:30-15:00 or after midnight) for an OSOK hold are one source (L23). |  |
+| m2024 | 43 | default | light Jackson Hole week / skip the Monday after the Symposium is one source (L14). |  |
+| m2025 | 2 | default | 00-00:30 (L80) is a new range with no 2023 counterpart; not scored. |  |
+| m2025 | 6 | agrees | reclaimed FVG vs inversion FVG wording; 2026 (106) and 2023 (026/030/091) agree a reclaimed FVG holds after a break. IFVG confirmation is in IFVG-CONFIRM. | 2023 and 2026 agree; nothing changes |
+| m2026smc | 6 | default | session alternation (025/029: a trending session is followed by consolidation; rarely three trend in a row) has no opposing 2023 statement; it is a new rule. |  |
+| m2026smc | 12 | default | partial ladder at grade levels (050) refines the 2023 partial rules (scale out at each pool) rather than opposing them. |  |
+| m2026smc | 17 | switch | IOFED entry depth (partial short of CE vs 1 tick past candle 1) is internal to 2026 and has one source each. | IOFED depth: 1 vs 1 inside 2026; FVG-ENTRY default (near edge) stands, the other is a switch |
+| m2026smc | 19 | default, needs threshold | HRLR/LRLR "candles sharing a range" needs a numeric threshold before it can be compared. | HRLR "candles sharing a range" needs a numeric threshold before it can be coded |
+| m2026smc | 28 | default | wick precedence over the OB (074) is one source; compare with 2023 PD-array priority in the full review. |  |
+| m2026smc | 29 | default | Projection multiples (1.25 open-to-low; fulcrum -2 SD) are single-source and not scored separately. |  |
+| m2026smc | 30 | default | previous-day range half rule (075) is one source with no opposing 2023 statement. |  |
+| m2026smc | 49 | default | OB tolerance (wick may reach the OB quadrant while bodies hold the mean threshold; propulsion block bound) is one source (099). |  |
+| m2026smc | 67 | default | immediate rebalance timing (same or next day; day-2 failure = complex reversal) is one source (121, 122); no opposing statement found. |  |
+| m2026smc | 72 | default | the gap-fill target gate (last opposing FVG stays open = target taken; fills = not taken) is one source (124). |  |
+| m2026smc | 79 | default | inside days = expansion (011) has no opposing lecture yet. |  |
+| m2026smc | 82 | default | seasonal tilt (001, 019, 020) has no opposing lecture yet. |  |
+| m2026smc | 83 | default | nested ORGs widest (019) vs B4 last-three ORGs; no card for ORG nesting yet. | nested ORGs: widest (019, Aug-Oct 2026) vs last three ORGs (BIAS-SOURCE C, Apr 2026); tie broken by date: widest |
+| m2024 | 65 | default | opening inside the previous day's first presented FVG makes that gap the day's reference (L32); one source. |  |
+| m2024 | 66 | default | Fed chair speech = no trading during it and 15 min after; speech in the 09:00-10:00 hour = trade before 08:00 (L37); one source. |  |
+| m2026smc | 92 | default | tiny 'nub' bodies outside an FVG don't invalidate it (125); one source. |  |
+| m2026smc | 101 | default, flagged | rejection-block market/stop-order entry when price trades through the candle's open vs limit entries (131); one source. | stop entry through the rejection block open (131); limit entries were never counted, so a count could reverse this |
+| m2026smc | 103 | excluded | position sizing (0.25-0.5% risk, +1 micro per $2,500) vs one micro only (125, 126, 134); sizing is outside the engine ($1k risk reporting). | position sizing is outside the engine ($1k risk reporting) |
+| m2024 | 83 | default | clustered (overlapping) NWOGs/NDOGs as the day's draw, target the near extreme of the cluster (L49); one source. |  |
+| m2024 | 88 | default | overnight range 00:01-04:59 graded with quadrants, arrays just below levels when bullish, only on consolidating nights (L44); one source. |  |
+| m2024 | 89 | default | London 02:00-05:00 high/low as the AM session draw (L47); one source. |  |
+| m2024 | 90 | default | ORG turtle-soup buy stop at the open of the candle that pierced the low (L40); one source. |  |
+| m2024 | 91 | default | entries only in the premium/discount of the inception-to-terminus range (L40); one source. |  |
+| m2024 | 92 | default | inside day / smallest range of 7 days precedes expansion; large range day = range above the 3-day average (L48); one source. |  |
+| m2024 | 93 | default | no 15-minute opening range; first 30 and 60 minutes frame the day (L49); one source. |  |
+| m2024 | 97 | default | 10:00 news, no trade ahead, a few minutes after the initial hit (L34); one source. |  |
+| m2024 | 98 | default | NWOG half-working sequence, back below the midpoint = sidelines until the PM (L34); one source. |  |
+| m2024 | 99 | default | range-break extension = 1/4 of the previous range (L50, L51); agreeing sources, no opposing position. |  |
+| m2024 | 102 | default | holiday weeks range bound (L50); one source. |  |
+| m2024 | 103 | default | Monday soft-open preference into last week's NWOG (L50); one source. |  |
+| m2024 | 104 | default | 09:00 hour inside one candle = wait for 10:00 (L51); one source. |  |
+| m2026smc | 108 | default | PM reference range 02:00-11:00 vs 2023 session pools (140); one source. |  |
+| m2026smc | 115 | default | inefficiency on the buy side of the curve preferred over the right-side FVG (142); one source. |  |
+| m2026smc | 116 | default | pre-market IFVG as a holding pattern, no fade (139, 140); no matching card. |  |
+| m2026smc | 117 | default | two SIBIs joined by a VI as one array (138); one source. |  |
+| m2026smc | 119 | default | morning done if a protective low goes before the AM target (139, 140); no matching card. |  |

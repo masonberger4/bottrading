@@ -48,3 +48,14 @@ for o in out:
     md.append(f"| {o['conflict']} | **{o['default']}**: {o['position'].replace('|','/')} | {o['videos']} | {o['switches']} | {o['flags']} |")
 open(os.path.join(H, 'DEFAULTS.md'), 'w', encoding='utf-8').write('\n'.join(md) + '\n')
 print(len(out), 'cards;', sum(1 for o in out if o['flags']), 'flagged')
+
+# One-source rules (singles.csv, built by singles.py)
+import subprocess, sys
+subprocess.run([sys.executable, os.path.join(H, 'singles.py')], check=True)
+s = list(csv.DictReader(open(os.path.join(H, 'singles.csv'), encoding='utf-8')))
+md2 = ['', '## One-source rules', '',
+       'Mase 2026-11-06: one video beats an engine default no video supports, so these become DRAFT defaults',
+       '(the current engine behaviour is the switch), except rows marked excluded.', '',
+       '| Digest | # | Status | Rule | Why |', '|---|---|---|---|---|']
+md2 += [f"| {r['digest']} | {r['num']} | {r['status']} | {r['rule'].replace('|','/')} | {r['reason'].replace('|','/')} |" for r in s]
+open(os.path.join(H, 'DEFAULTS.md'), 'a', encoding='utf-8').write('\n'.join(md2) + '\n')
