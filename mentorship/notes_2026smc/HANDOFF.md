@@ -57,6 +57,6 @@ Main theme: back-to-basics series for new students (three pillars: 07:00-09:00 r
 # Batch 9 (videos 125-136), 2026-11-06
 Branch claude/project-thread-3p6bft (off mentorship). PR into mentorship, never merge.
 Done (notes NNN_<id>.md): 125-129, 131-136 (11). 130 silent, skipped. 137 silent; 138-143 not yet synced.
-Digest: mentorship/digests/m2026smc_b9_draft_rules.md (conflicts numbered 90-103). Scorecard appended (3 new cards RANGE-REGIME, HRLR-TRADE, SEASON-ACTIVITY; 92, 101, 103 not scored).
+Digest: mentorship/digests/m2026smc_b9_draft_rules.md (conflicts numbered 90-103). Scorecard appended (2 new cards RANGE-REGIME, SEASON-ACTIVITY; HRLR conflict 96 on RESISTANCE-DAY; 92, 101, 103 not scored).
 Chronology: 136 Mon Feb 9 > 134 Tue Feb 10 AM (stated) / 135 Tue Feb 10 PM > 133 Wed Feb 11 (NFP) > 132 Tue Feb 17 (stated) > 131 Mon Feb 23 > 129 Fri Feb 27 PPI > 128 Sat Feb 28 > 127 Sun Mar 8 > 126 Mon Mar 9 AM > 125 Mon Mar 9 PM.
 Main theme: range-bound early 2026 (HRLR defined, yearly calendar), week of ORG levels as the notepad, PDAs only on gradient levels, 30-minute opening range / first-hour range, live micro entries (rejection block, candle-1 stop, one-tick-before-pool exit).
