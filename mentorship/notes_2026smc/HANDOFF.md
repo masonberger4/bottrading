@@ -53,3 +53,10 @@ Done (notes NNN_<id>.md): all 17 available. 003, 009, 010 not in the caption fol
 Digest: mentorship/digests/m2026smc_b8_draft_rules.md (conflicts numbered 73-89, continuing batch 7's 56-72 in PR #31).
 Chronology: these are the NEWEST lectures (021 = Mon Aug 31 2026; 001 = Wed Oct 28 2026, week before the midterms). 020 Tue Sep 1 > 019 Wed Sep 2 > 018/017 Fri Sep 4 NFP > 016 ~Sep 4 > 015 Sat Sep 5 > 014/013 Tue Sep 8 > 012 ~Wed Sep 9 > 011 Thu Sep 17 (FOMC) > 008 Mon Sep 28 > 005 Wed Sep 30 > 004 Fri Oct 2 (NFP, inferred) > 002 Mon Oct 19 > 001 Wed Oct 28. 006/007 date uncertain (holiday-week Tuesday; Thanksgiving Nov 24 fits).
 Main theme: back-to-basics series for new students (three pillars: 07:00-09:00 range, ORG CE, 10:00 first FVG; five data layouts), NFP/FOMC/holiday handling, carried FPFVG/NWOG/NDOG/ORG matrices, reflection FVG (013).
+
+# Batch 9 (videos 125-136), 2026-11-06
+Branch claude/project-thread-3p6bft (off mentorship). PR into mentorship, never merge.
+Done (notes NNN_<id>.md): 125-129, 131-136 (11). 130 silent, skipped. 137 silent; 138-143 not yet synced.
+Digest: mentorship/digests/m2026smc_b9_draft_rules.md (conflicts numbered 90-103). Scorecard appended (3 new cards RANGE-REGIME, HRLR-TRADE, SEASON-ACTIVITY; 92, 101, 103 not scored).
+Chronology: 136 Mon Feb 9 > 134 Tue Feb 10 AM (stated) / 135 Tue Feb 10 PM > 133 Wed Feb 11 (NFP) > 132 Tue Feb 17 (stated) > 131 Mon Feb 23 > 129 Fri Feb 27 PPI > 128 Sat Feb 28 > 127 Sun Mar 8 > 126 Mon Mar 9 AM > 125 Mon Mar 9 PM.
+Main theme: range-bound early 2026 (HRLR defined, yearly calendar), week of ORG levels as the notepad, PDAs only on gradient levels, 30-minute opening range / first-hour range, live micro entries (rejection block, candle-1 stop, one-tick-before-pool exit).

@@ -180,3 +180,17 @@ m2024,63,TGIF-DEPTH,
 m2024,64,SMT-USE,
 m2024,65,,Not scored yet: opening inside the previous day's first presented FVG makes that gap the day's reference (L32); one source.
 m2024,66,,Not scored yet: Fed chair speech = no trading during it and 15 min after; speech in the 09:00-10:00 hour = trade before 08:00 (L37); one source.
+m2026smc,90,LAST-HOUR,
+m2026smc,91,RANGE-REGIME,
+m2026smc,92,,Not scored yet: tiny 'nub' bodies outside an FVG don't invalidate it (125); one source.
+m2026smc,93,OPEN-RANGE-TRADE,
+m2026smc,94,SMT-USE,
+m2026smc,95,CONTRACT,
+m2026smc,96,HRLR-TRADE,
+m2026smc,97,FPFVG-DEF,
+m2026smc,98,SEASON-ACTIVITY,
+m2026smc,99,STOP-PLACE,
+m2026smc,100,MIN-ROOM,
+m2026smc,101,,Not scored yet: rejection-block market/stop-order entry when price trades through the candle's open vs limit entries (131); one source.
+m2026smc,102,FVG-VALID,
+m2026smc,103,,"Not scored yet: position sizing (0.25-0.5% risk, +1 micro per $2,500) vs one micro only (125, 126, 134); sizing is outside the engine ($1k risk reporting)."
