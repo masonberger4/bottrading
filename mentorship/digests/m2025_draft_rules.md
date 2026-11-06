@@ -11,7 +11,8 @@ Built 2026-11-03 from the per-lecture notes in `mentorship/notes_2025/` (caption
 ## Coverage (lower-usage, core-only option chosen by Mase 2026-11-03)
 - **Read in full and noted (28 lectures):** 01 (live sample), 83, 82, 80, 78, 77, 76, 75, 74, 73, 72, 70, 66, 65, 64, 62, 58, 57, 51, 34, 32, 31, 29, 27, 26, 23, 22, 21. (58, 62, 64, 70 were re-read in full in part 6; the originals were accurate, addenda added.)
 - **Pending (not read, ~38 lectures):** daily/live NQ and forex reviews 02-20, 24, 28, 30, 33, 36-50, 52-56, 60, 61, 63, 68. These are applications of the same rules; 02 and 04 (24-36k-word live streams on market maker models and 20-day lookback grading) are probably worth a later read.
-- **Missing captions:** 25, 35, 46, 59, 67, 69, 71, 79, 81.
+- **Missing captions:** 25, 35, 59, 67, 69, 71, 79, 81 (most are silent per data/ict_no_commentary.txt).
+- **Added 2026-11-06:** L46 (Wed Apr 23 2025 review), read in full from the late captions (PR #40); note `notes_2025/46_28M9ouiKmSY.md`. Rules folded in below, tagged (L46). No new conflicts; it repeats L-series rules and adds one entry model.
 - **Caption 29 is truncated** (ends mid-sentence "then I'll touch"); 27 and 26/23/22 end only in sign-offs, but 27 also ends mid-sentence ("the last time we look at this particular"). Use as partial.
 - The core set is mostly the January "how I'd build a model" series plus the Storytellers (June) and September ATH lectures.
 
@@ -72,6 +73,13 @@ Built 2026-11-03 from the per-lecture notes in `mentorship/notes_2025/` (caption
 - DRAFT: Size for volatility (e.g. 3 contracts instead of 10-15 when volatile); beginners trade micros, $1,000 minimum. (L70, L82) [beginner]
 - DRAFT: One setup, one instrument; no trade every day. (L62, L82) [beginner/principle]
 
+### A7b. L46 additions (Apr 23 2025 review)
+- DRAFT: **Wick CE is measured from the body (open) to the extreme**; daily premium/discount wick CE as an HTF level (L46). [repeats; see L-series wick rules]
+- DRAFT: **Back-and-forth wicks after the open = manual intervention: stop trading the session** unless positioned early with a large stop and tiny size (L46). [refines HRLR/troubled market]
+- DRAFT: **10:50-11:10 entry drill**: in bias, a bearish OB with a SIBI inside an IFVG, plus a premium wick CE inside it, = one entry model ("three PD arrays all in one") (L46). [new]
+- DRAFT: **PDA expiry by 20/40/60-day lookback**; beyond 40 days only with experience (L46; same in 2026 SMC 140). [repeats]
+- DRAFT: **Planned three-step partials on a turtle-soup short**: 2 at the FPFVG, 1 below the next low, rest below the last; initial stop 3 ticks above the high (L46). [repeats]
+
 ### A8. Forex
 - DRAFT: Triad: only with the correlated pair and DXY confirming; leader hits the pool first. (L66) ; NWOG short example GBPUSD; reclaimed FVG London long. (L73, L74)
 
@@ -98,6 +106,7 @@ Venom: `venom_window_8_to_930_hl`, `venom_raid_close_above_then_close_below`, `v
 Bias/filters: `session_open_vs_close_bias`, `avoid_picking_top_near_ath`, `htf_swing_with_imbalance_priority`, `troubled_market_flag`, `daily_cibi_ce_failure_bearish`, `daily_cibi_support_resistance_with_wick_only_raid_fade`, `prior_day_inefficiency_as_next_target_below_range`, `open_dips_to_prior_high_then_above_open_bullish`, `friday_pre_weekend_no_new_highs_bias`, `friday_after_bull_week_take_low_hanging_target`, `thursday_fake_high_of_week_reversal_before_0830`, `nfp_week_monday_trade_ok`, `nfp_week_midweek_skip`, `nfp_week_trade_window_ends_0700_wed`, `avoid_morning_after_large_range_day`, `single_model_no_daily_trade_required`.
 Macros: `lunch_macro_target_first_high_after_1000`, `lunch_macro_first_high_after_1000`, `lunch_macro_seeks_first_prominent_sellside_after_1000`, `pm_macro_2250_to_310_first_gap_entry`, `pm_first_fvg_1330_to_1400`, `pm_opening_range_1330_to_1400_first_fvg`, `market_on_close_macro_345`, `fomc_2pm_first_fvg_trade_with_230_second_stage`, `premium_raid_before_0830_short_to_premarket_sellside`.
 Entries/mgmt: `model2022_premium_above_50_fib_entry`, `ote_62_79_with_705_sweet_spot`, `failure_then_inversion_fvg_long`, `scale_in_at_ce(max 4)`, `scale_in_to_16`, `stay_in_lower_half_confirmation`, `target_ticks_before_liquidity_in_counter_trend`, `stop_two_ticks_beyond_invalidation_level`, `min_net_handles_15_nq`, `move_stop_to_be_after_quadrant_lost_plus_fees`, `stop_to_cost_after_first_partial`, `partial_on_break_of_short_term_low_hrlr`, `hrlr_wide_stop_small_size`, `vol_scaled_size`.
+L46: `wick_ce_from_open`, `intervention_wicks_stop_session`, `m1050_ob_sibi_ifvg_drill`, `pda_lookback_20_40_60`.
 
 ## Part E. Questions for Mase (list only; not asked now, ask in the full review)
 1. 2025 FPFVG window 09:31-10:00 vs 09:30 candle itself (ICT's own rule for Caleb vs for experienced): which?
