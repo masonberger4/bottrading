@@ -22,7 +22,7 @@ captions can be garbled; treat them as approximate.
     stays in force until Mase decides.
   - **[conflict check]**: possibly differs; needs a closer read.
 - "Our interpretation" marks places where ICT used judgment or withheld a threshold.
-- Lecture refs: L01-L13 = notes `01_*.md`-`13_*.md`. Times are New York local.
+- Lecture refs: L01-L25 = notes `01_*.md`-`25_*.md` (no L15 yet). Times are New York local.
 
 ## Coverage
 
@@ -30,7 +30,9 @@ captions can be garbled; treat them as approximate.
 |---|---|---|
 | L01-L11, L13 (live) | 2024-08-05 to 08-20 | notes done (captions) |
 | L12 (after-close review) | 2024-08-19 | notes done (captions) |
-| L14-L51 | 2024-08-20 onward | **pending**: not yet transcribed into notes |
+| L14, L16-L25 | 2024-08-22 to 09-09 | notes done (captions; L16 is a Saturday review, L23 an execution video) |
+| L15 | 2024-08-23 | **pending**: no captions, needs whisper |
+| L26-L51 | 2024-09-10 onward | **pending** (handoff `/mnt/project-files/mentorship/handoff_2024m_026.md`) |
 
 **Appending L14-L51:** add a note per lecture in `mentorship/notes_2024/` (same template), then
 add bullets under the matching topic in Part A with the lecture ref, new rows to Parts C/D/E, and
@@ -66,6 +68,9 @@ update this table. Keep numbering of existing conflicts/switches stable.
   level, a retrace with one FVG. Sloppy = overlapping, back-and-forth; don't push the day (L07, L10).
   [in rulebook: owner #10 sloppy days, pending]
 
+- DRAFT: 14:50-15:10 macro in the PM (L19). [conflict: C26 LAST-HOUR]
+- DRAFT: PM session from 13:30; 13:50-14:10 macro (L22, L24). [in rulebook]
+
 ### A2. Day and week selection, news
 - DRAFT: CPI/PPI/NFP/FOMC are manually intervened: never trade the release; trading 15-30 min
   after it (even NFP) is fine; afternoons are fine (L06, L07, L08). [conflict check: rulebook N1/N4]
@@ -93,6 +98,20 @@ update this table. Keep numbering of existing conflicts/switches stable.
 - DRAFT: Fridays: if no money was made in the morning, don't trade the afternoon (L10). [new]
 - DRAFT: FOMC two-stage: the move into 14:00, then 14:00-14:30 goes the OPPOSITE way ~70% of the
   time and is larger; hold to ~15:15 (L11). [conflict check: rulebook FOMC handling]
+
+- DRAFT: After a large range day (up or down), beginners skip the AM session and trade the PM from
+  13:30; AM arrays get "colored outside the lines" (bodies outside the FVG) (L22). [conflict: C31]
+- DRAFT: Friday before a US holiday weekend: no trade (erratic, light volume); no trading the Monday
+  holiday or the Tuesday after (L21). [in rulebook: filters.md 1.2; C30 not scored]
+- DRAFT: NFP, FOMC, CPI, PPI are manual intervention: don't position ahead; trade 20-30 min after
+  (15 if very skilled; NFP 08:45 earliest); look at what the shock left behind (L16, L24, L25).
+  [conflict: C33 NEWS-WAIT]
+- DRAFT: No-news day = price must be absolutely clean or no trade; in a midweek PPI/CPI week trade
+  Monday and Tuesday (L25). [conflict: C36 CPI-WEEK]
+- DRAFT: Weekly objective hit (HTF target for the week) = done for the week (L24). [new; C41]
+- DRAFT: Jackson Hole week is light; skip the Monday after the Symposium (L14). [new; C43]
+- DRAFT: 15m bellwether: mark the 15m relative equal highs/lows before 08:30 and 09:30; the side the
+  release takes is a clue for the session (L24). [new]
 
 ### A3. Bias and draw on liquidity
 - DRAFT: Smooth vs jagged: price goes to smooth relative equal highs/lows; the jagged side was
@@ -135,6 +154,23 @@ update this table. Keep numbering of existing conflicts/switches stable.
   used forward 3 days (L10). [new]
 - DRAFT: London opening range = 00:00-00:30 (L05). [new]
 
+- DRAFT: ORG mid-gap is traded to ~70% of the time 09:30-10:00 ("back to 1987 using Globex
+  numbers"); after the mid-gap, taking the next low gives ~80% odds of a 3/4 fill (L14, L22, L25).
+  [conflict check: C37 ORG-CE-WINDOW; 80% follow-on new]
+- DRAFT: Small ORG (under ~20-40 NQ handles; ICT gives "20 to 30" and "30 to 40") = no ORG play,
+  wait for 10:00 (L17, L18). [conflict: C22 ORG-SIZE]
+- DRAFT: Large premium ORG = "too expensive": don't buy it; frame a short in a premium array between
+  a breaker low and the ORG upper quadrant, target the mid-gap, then the lower quadrant (L20, L25).
+  [new]
+- DRAFT: An NDOG/NWOG inside the ORG beyond the mid-gap is the next target (low-hanging fruit)
+  (L22). [new]
+- DRAFT: Layered (nested) NDOG/NWOG near price = high-resistance liquidity run (chop, "time
+  distortion"); spaced-out gaps = clean runs; slicing through layers = in a hurry to a farther
+  draw (L20, L21). [new]
+- DRAFT: Event horizon = halfway between the NWOG above and the NDOG below (L16, L21). [in rulebook]
+- DRAFT: NWOG lookback up to 60 trading days (5 weeks is the beginner baseline) (L16, L18).
+  [conflict: C23 GAP-LIFE]
+
 ### A5. PD arrays and definitions
 - DRAFT: CE = midpoint of a gap (FVG, VI, wick, opening gap); mean threshold = midpoint of an order
   block; equilibrium = midpoint of a delivered range (L03, L13). [in rulebook]
@@ -176,6 +212,20 @@ update this table. Keep numbering of existing conflicts/switches stable.
 - DRAFT: Daily references: previous day high/low, last 3 days' highs/lows, last week's high/low,
   and their quadrants (L07). [in rulebook]
 
+- DRAFT: First presentation FVG = first FVG with its middle candle at 09:31 or later before 10:00;
+  carried for a 3-day life (L14, L16, L21); not limited to the 09:30 anchor: any first FVG after a
+  time anchor (L24). [conflict: C38 FPFVG-DEF]
+- DRAFT: Bearish OB = the whole run of consecutive up-close candles; change of state at the lowest
+  open (bullish: highest open of the down-closes); validated when LTF bodies respect it; entry
+  range up to its mean threshold (L14, L17, L20, L24). [conflict: C35 OB-CANDLE]
+- DRAFT: OB activation by a one-tick breach of that open with no close (L14). [conflict: C21]
+- DRAFT: Breaker zone = body, upper half for a bullish breaker (L18). [conflict: C24 BREAKER-ZONE]
+- DRAFT: FVG wick tolerance: a wick may extend beyond an FVG by up to one standard deviation of the
+  gap's width (L24). [new; C40]
+- DRAFT: Immediate rebalance: next candle touches the prior candle's high/low and should go at
+  once (L17, L21). [new]
+- DRAFT: Balanced price range: no long through it; if reclaimed, stop for the day (L16). [new]
+
 ### A6. Entries
 - DRAFT: IOFED: limit at the near edge of an FVG expected not to fully fill (BISI: its top;
   SIBI: its bottom), within one tick either side (L07/L11 say one tick outside the gap, L10 one
@@ -198,6 +248,15 @@ update this table. Keep numbering of existing conflicts/switches stable.
 - DRAFT: NDOG high + 1 tick as the easiest-fill entry; stop below the opening candle / VI (L10). [new]
 - DRAFT: Asia NDOG protocol (see A12). [conflict: Asia skipped by default]
 
+- DRAFT: Caleb's model inside the OR: first FVG (09:31-10:00) entry, partial at the mid-gap,
+  terminus at an NDOG/NWOG (L14, L22). [conflict: C20 OPEN-RANGE-TRADE] Opposite on L25: sit still
+  until 10:00 (beginner exercise).
+- DRAFT: Re-entry after a stop-out while the model is intact (market maker sell model): re-enter
+  at the inversion FVG and keep pyramiding (L20). [conflict: C27 REENTRY]
+- DRAFT: Turtle soup above highs into a bearish OB; entry at the FVG candle high - 1 tick (L23,
+  L24). [in rulebook]
+- DRAFT: 50/50 rule: if the setup frames both ways, don't trade (L20). [new]
+
 ### A7. Stops and management
 - DRAFT: Breaker stop above the HIGHEST high of the consecutive down-close candles (+1-2 ticks)
   (L02). [conflict check: owner #14 full-range breaker]
@@ -216,6 +275,13 @@ update this table. Keep numbering of existing conflicts/switches stable.
   TE `max_giveback_unrealized`]
 - DRAFT: Hard stop, never a mental stop; if distracted, close at least 50% (L04). [in rulebook]
 
+- DRAFT: Stop below the FVG imbalance (middle) candle - 1 tick (conservative: first candle) (L20);
+  OB stop above its high + 1 tick (L24). [conflict check: C39 not scored]
+- DRAFT: Move the stop to cover costs once price is halfway to the first partial (L20).
+  [conflict: C28 STOP-MGMT]
+- DRAFT: OSOK: hold a day-of-entry position overnight to a daily FVG CE (L23, L24).
+  [conflict: C32 OVERNIGHT-HOLD]
+
 ### A8. Partials and targets
 - DRAFT: Every short-term high broken in a long is a partial candidate; better to take a partial
   than move the stop early ("running down equity") (L13). [in rulebook]
@@ -233,6 +299,14 @@ update this table. Keep numbering of existing conflicts/switches stable.
 - DRAFT: After the objective (e.g. high of day touched) → done for the day (L02, L04). [in rulebook]
 - DRAFT: Take 75-80% off at upside targets before Thursday 13:00 (L10). [new]
 
+- DRAFT: Below a previous-day low, take the partial after the next short-term low (L19).
+  [conflict: C25 PARTIAL-TRIGGER]
+- DRAFT: Dynamic trailed partial: one contract trailed above each prior 1m candle high (L19). [new]
+- DRAFT: Lunch macro target: first high/low after 10:00 (L14); always a retracement against the AM
+  move (L24). [conflict: C34 LUNCH-TARGET]
+- DRAFT: Prior 3 days' highs/lows and Thu/Fri highs/lows as draws (L18, L19). [new]
+- DRAFT: Limit cover a little before the exact target so the full size fills (L24). [new]
+
 ### A9. Pyramiding and size
 - DRAFT: Six-and-four: 6 first entry, +4 on the pullback; once the pullback fails to reach CE, stop
   to first entry minus 2 ticks (L03). [conflict check: E11/E12, add_ladder 631]
@@ -241,6 +315,9 @@ update this table. Keep numbering of existing conflicts/switches stable.
   E12 decreasing adds]
 - DRAFT: Size with the daily bias: full size with daily order flow while HTF targets remain; 1-4
   contracts counter-trend or late in the move (L12). [new; check owner #12]
+
+- DRAFT: OSOK pyramid windows: same-day adds only in the final hour (14:30-15:00) if the high holds,
+  else after midnight (L23). [new; C42]
 
 ### A10. Weekly and daily profiles (TGIF)
 - DRAFT: TGIF: after a big one-sided week, Friday retraces 20-30% of the week's range; fib low→high
@@ -260,6 +337,8 @@ update this table. Keep numbering of existing conflicts/switches stable.
 - DRAFT: Prefer ES vs NQ; YM is usually the one that "doesn't listen" (L09). [conflict check:
   rulebook ES/NQ/YM matrix]
 - DRAFT: SMT matrix 5m/4m/3m/2m/1m for NQ/ES/YM; a qualifier, not a necessity (L04). [in rulebook]
+
+- DRAFT: SMT = waning continuation only; combine with a technical break (L20). [conflict: C29]
 
 ### A12. Asia and London
 - DRAFT: Asia NDOG protocol (key window 19:00-21:00): don't trade the 18:00 open; price leaves the
@@ -292,6 +371,17 @@ update this table. Keep numbering of existing conflicts/switches stable.
 | 2024-08-15 | L09/L10 | short at lunch high (turtle soup, 15 lots, 5 off) | mentioned in L10 |
 | 2024-08-19 | L11/L12 | long IOFED in 10:00 FVG (demo) | 2 handles heat; exit at NWOG lower quadrant + 1 tick |
 | 2024-08-20 | L13 | none (hindsight long) | gap-down open → ORG CE, NDOG support, daily VI quadrants |
+| 2024-08-21 | L14 | ICT long (inversion FVG buy stop) and short 6 +4 at an OB / NDOG low | "over $177,000" (caption); last 4 stopped on the overlap |
+| 2024-08-22 | L14 | none (hindsight short, Caleb's model) | premium ORG, mid-gap hit, inversion entry 19,973.50 (candle high - 1 tick) |
+| 2024-08-23 | L16 | short (narrated) | Judas during Powell, turtle soup, bearish OB; draw to a nested NDOG/NWOG |
+| 2024-08-26 | L17 | none | small discount ORG (~20 handles), wait to 10:00; immediate rebalance |
+| 2024-08-27 | L18 | ICT pre-session short 12 (6 + 6 at wick CE); hindsight AM long | first FVG low held to the tick; 3/4 then full ORG fill |
+| 2024-08-28 PM | L19 | none | dynamic trailed partial example; 14:50 macro rally to Tuesday's low |
+| 2024-08-29 | L20 | ICT pre-session short, stopped, re-entered at the IFVG | premium ORG "too expensive"; layered gaps; 50/50 = no trade |
+| 2024-08-30 | L21 | none | pre-holiday Friday; layered NDOG/NWOG chop |
+| 2024-09-04 | L22 | none | after a large range day: sit out the AM; mid-gap then NDOG |
+| 2024-09-05/06 | L23, L24 | ICT OSOK short held overnight, 14 contracts covered at the Aug 13 daily FVG | ~$100,000 (caption), "almost 360 handles"; adds after midnight |
+| 2024-09-09 | L25 | none | premium ORG into a weekly IFVG; IOFED ~10:30 to the mid-gap |
 
 ---
 
@@ -316,6 +406,30 @@ update this table. Keep numbering of existing conflicts/switches stable.
 17. News: trade 15-30 min after the release vs rulebook N1/N4 handling (L08).
 18. Pyramid ladders (6/4, 6/4/5) vs E11/E12 and add_ladder 631 (L03, L07).
 19. Stand aside until the 10:00 SB when price reaches the NWOG before 09:30 (L04): SB is OFF, so this stays off.
+20. First FVG / ORG trades inside 09:30-10:00 (Caleb's model) vs rulebook no trades 09:30-10:00 (L14, L22; L25 the other way). Card OPEN-RANGE-TRADE.
+21. OB activation on a one-tick breach with no close (L14). Card OB-CLOSE.
+22. Small ORG (under ~20-40 handles) = wait for 10:00 (L17, L18). Card ORG-SIZE (new position D).
+23. NWOG/PD array lookback 60 days, 5 weeks only the beginner baseline (L16, L18). Card GAP-LIFE.
+24. Breaker = body, upper half (L18) vs owner #14 full range. Card BREAKER-ZONE.
+25. Partial below a previous-day low only after the next short-term low (L19). Card PARTIAL-TRIGGER.
+26. 14:50-15:10 macro (L19) vs owner #1 15:00-15:50. Card LAST-HOUR.
+27. Re-entry after a stop-out while the model holds (L20). Card REENTRY.
+28. Stop to cover costs at half the way to the first partial (L20). Card STOP-MGMT (new position E).
+29. SMT as waning continuation only (L20). Card SMT-USE.
+30. Pre-holiday Friday and the Mon/Tue after a holiday skipped (L21): agrees with filters.md 1.2; not scored.
+31. No AM trades after a large range day, trade the PM (L22). Card AFTER-BIG-DAY.
+32. OSOK: hold overnight to a daily FVG CE (L23, L24) vs flat by 16:00. New card OVERNIGHT-HOLD.
+33. News: trade 15-30 min after NFP/CPI/PPI (L24, L25). Card NEWS-WAIT.
+34. Lunch target: first high after 10:00 (L14) vs retracement of the AM move (L24). Card LUNCH-TARGET.
+35. OB = the whole consecutive-candle run, open of its extreme candle (L14, L17, L20, L24). Card OB-CANDLE.
+36. Trade Mon/Tue before midweek CPI/PPI; no-news days need clean price (L25). Card CPI-WEEK (new position C).
+37. ORG mid-gap 70% in the first 30 min (L14, L22, L25). Card ORG-CE-WINDOW.
+38. First presentation FVG at 09:31+ with a 3-day life (L16, L21), or after any time anchor (L24). Card FPFVG-DEF (new position D).
+39. Stop below the FVG imbalance candle - 1 tick (L20), OB high + 1 tick (L24). Not scored (later STOP-PLACE card with 12).
+40. FVG wick tolerance of one standard deviation of its width (L24). Not scored (one source).
+41. Done for the week once the weekly objective is hit (L24). Not scored (one source).
+42. OSOK pyramid windows: final hour or after midnight (L23). Not scored (one source).
+43. Light Jackson Hole week, skip the Monday after the Symposium (L14). Not scored (one source).
 
 ## Part D. Backtestable switches (all default OFF; DRAFT names)
 
@@ -393,6 +507,43 @@ update this table. Keep numbering of existing conflicts/switches stable.
 | `size_by_daily_bias` | on/off | L12 |
 | `draw_gap_with_eq_pool` | on/off | L13 |
 | `ndog_valid_after_fill` | on/off | L13 |
+| `org_three_quarter_after_low` | on/off | L14 |
+| `first_fvg_0930_model` | on/off | L14, L22 |
+| `stop_wick_ce_if_rebalance` | on/off | L14 |
+| `ob_void_on_rejection_block_take` | on/off | L14 |
+| `three_drives_retrace` | on/off | L14 |
+| `jackson_hole_week_light` / `skip_monday_if_symposium` | on/off | L14 |
+| `pd_array_wider_settlement` | on/off | L14 |
+| `london_or_first_fvg` | on/off | L14 |
+| `first_fvg_min_0931` | on/off | L16 |
+| `event_horizon_target` | on/off | L16, L21 |
+| `balanced_range_guard` | on/off | L16 |
+| `nested_gap_draw` | on/off | L16 |
+| `small_org_wait_1000` | 20 / 30 / 40 handles | L17, L18 |
+| `immediate_rebalance_continuation` | on/off | L17 |
+| `coin_flip_org_return` | on/off | L17 |
+| `accumulation_below_pool` | on/off | L18 |
+| `quadrant_range_extension_target` | on/off | L18 |
+| `vi_true_range_of_fvg` | on/off | L18 |
+| `prior_day_thu_fri_hl_draws` / `prior_3day_hl_liquidity` | on/off | L18, L19 |
+| `pdl_partial_after_next_swing` | on/off | L19 |
+| `dynamic_trailed_partial_1m` | on/off | L19 |
+| `speed_past_mid_range` | on/off | L19 (study) |
+| `stop_below_imbalance_candle` | on/off | L20 |
+| `cover_costs_at_half_first_partial` | on/off | L20 |
+| `no_chase_premium_open` / `no_buy_premium_org` | on/off | L20, L25 |
+| `layered_gap_high_resistance` / `layered_gap_congestion_filter` | on/off | L20, L21 |
+| `fifty_fifty_no_trade` | on/off | L20 (proxy, ours) |
+| `skip_preholiday_friday` / `skip_postholiday_two_days` | on/off | L21 |
+| `first_presentation_fvg_life_days` | 3 | L21 |
+| `skip_am_after_large_range_day` | on/off | L22 (proxy, ours) |
+| `hold_overnight_to_daily_target` | on/off | L23, L24 |
+| `pyramid_window_final_hour_or_after_midnight` | on/off | L23 |
+| `ob_full_run_stop_high_plus1` | on/off | L24 |
+| `fvg_wick_tolerance_1sd` | on/off | L24 |
+| `weekly_objective_done` | on/off | L24 |
+| `bellwether_15m_news_side` | on/off | L24 (study) |
+| `org_upper_quadrant_short_frame` | on/off | L25 |
 
 Per-lecture switch ideas and every [conflict check] are in each note's "Open questions" section.
 

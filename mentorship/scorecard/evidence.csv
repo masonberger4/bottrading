@@ -467,3 +467,36 @@ CONTRACT,B,SMC2026:118,"""whenever you're looking at higher time frame analysis,
 CONTRACT,C,SMC2026:116,"grade the daily wick on continuous and delivery: ""You want to do this on both""",
 SMT-USE,A,SMC2026:118,"""It's not the catalyst that's driving it down ... showing you that there isn't new buying"" (ES/NQ SMT = distribution)",
 PYRAMID-WHERE,B,SMC2026:122,"""Every time it gives me an opportunity to trade at the consequent [encroachment] ... I'm going to add one more"" (built 4 micros)",
+OPEN-RANGE-TRADE,B,M2024:L14,"Caleb's model: first FVG between 09:31 and 10:00 as the entry, partial at the ORG mid-gap (inside the opening range)",~
+OPEN-RANGE-TRADE,B,M2024:L22,"Model stated: first FVG (09:31-10:00) entry, partial at the mid-gap, terminus at the NDOG low",~33:00-37:00
+OPEN-RANGE-TRADE,A,M2024:L25,"""Sit still the first 30 minutes even if there is an ideal setup ... engage price after 10 o'clock"" (beginner exercise)",~18:00-19:00
+OB-CLOSE,A,M2024:L14,"OB activated by a one-tick breach of the lowest consecutive-candle open, no close required",
+ORG-SIZE,D,M2024:L17,"Small ORG (under ""30 to 40"" NQ handles): no ORG play, wait until 10:00",
+ORG-SIZE,D,M2024:L18,"Not a ""significant gap"" under ~20-30 handles: wait until 10:00",
+GAP-LIFE,A,M2024:L16,60-day NWOG lookback is the maximum; 5 weeks is the beginner baseline,
+GAP-LIFE,B,M2024:L16,5 weeks of NWOGs as the beginner baseline (60 days the maximum),
+GAP-LIFE,A,M2024:L18,PD array lookback 60 trading days (40 and 20 more sensitive),
+BREAKER-ZONE,A,M2024:L18,"Breaker: use the body, and its upper half for a bullish breaker",
+PARTIAL-TRIGGER,C,M2024:L19,"Below a previous-day low, take the partial after the next short-term low forms (not at the first break)",
+LAST-HOUR,B,M2024:L19,14:50-15:10 macro used in the PM session,
+REENTRY,A,M2024:L20,"Stopped out on an over-tight trail, idea still valid (market maker sell model): re-entered at the inversion FVG and pyramided","~5:30-6:00, ~10:00-11:00"
+STOP-MGMT,E,M2024:L20,"Decide the first partial before entry; when price is halfway to it, move the stop to cover costs (commission included), then sit still",~1:42-1:44
+SMT-USE,A,M2024:L20,"NQ higher high without ES = waning continuation, not a top by itself; combine with a technical break down",~34:00-35:00
+AFTER-BIG-DAY,B,M2024:L22,"After a large range day, beginners do not trade the AM session; trade the PM from 13:30","~7:00-8:00, ~19:00"
+OVERNIGHT-HOLD,B,M2024:L23,OSOK short from Thursday's high held overnight to the Aug 13 daily FVG CE; adds only in the final hour or after midnight (real execution),
+OVERNIGHT-HOLD,B,M2024:L24,Review of the same OSOK short: 14 contracts covered by limit near the daily FVG low in Friday's Asia session,~1:35-1:37
+NEWS-WAIT,B,M2024:L24,"NFP, FOMC, CPI, PPI are manual intervention: trade 20-30 minutes after, 15 if very skilled (NFP 08:45 earliest)",~8:00-9:30
+NEWS-WAIT,B,M2024:L25,"""Better for that report to come out and then give it a few minutes, 15 20 minutes, and then see what's left""",~35:00
+LUNCH-TARGET,B,M2024:L14,Lunch macro 11:30-13:30 target = the first high after 10:00 (as L10/L12),
+LUNCH-TARGET,A,M2024:L24,Lunch macro is always a retracement against the AM move (trailed stops),~1:44
+OB-CANDLE,A,M2024:L14,Bearish OB change of state = lowest opening price of the consecutive up-close candles,
+OB-CANDLE,A,M2024:L17,Bullish OB change of state = opening price of the highest down-close candle of the succession,
+OB-CANDLE,A,M2024:L20,Bearish OB change of state = the LOWEST opening price of the consecutive up-close candles,~8:30-9:00
+OB-CANDLE,A,M2024:L24,Bearish OB = the whole run of consecutive up-close candles; change of state at the opening price of the lowest one,"~2:06, ~2:25"
+CPI-WEEK,C,M2024:L25,"PPI/CPI Wed-Thu: ""you simply just trade on the Monday and Tuesday""; no-news days demand clean price","~11:00-12:00, ~28:00-31:00"
+ORG-CE-WINDOW,A,M2024:L14,"ORG mid-gap traded to ~70% of the time 09:30-10:00; after it, taking the next low = ~80% odds of a 3/4 fill",
+ORG-CE-WINDOW,A,M2024:L22,"70% case: move to the mid-gap between 09:30 and 10:00, ""back to 1987 using Globex numbers""",~15:00-17:00
+ORG-CE-WINDOW,A,M2024:L25,"""70% of the time that half gap price level gets traded to ... in the first 30 minutes""; this day it came after 10:00","~27:00, ~1:20"
+FPFVG-DEF,A,M2024:L16,First presentation FVG: middle candle at 09:31 or later,
+FPFVG-DEF,A,M2024:L21,Each day's first presentation FVG (09:31-10:00) carried for a 3-day life cycle,~6:00
+FPFVG-DEF,D,M2024:L24,First presentation is not limited to 09:30-10:00: any first FVG after a time anchor (e.g. the 13:30 PM session),"~1:44-1:46, ~2:27"
