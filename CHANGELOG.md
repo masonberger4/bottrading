@@ -90,3 +90,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v84 | 2026-11-06 17:56:14Z | conflict-review-2 | proposals/conflict-review-2__decisions.md | proposal | Mase card answer | - | ABSENT -> 57d457e3b1 |
 | v85 | 2026-11-06 17:57:32Z | conflict-review-3 | proposals/conflict-review-3__decisions.md | proposal | Mase card answer | - | ABSENT -> 1c208b56e3 |
 | v86 | 2026-11-07 06:05:24Z | dreamer | proposals/dreamer__decisions.md | proposal | U2 mark 2023-over-older superseded | proposals/conflict-review__decisions.md | be21e1dd81 -> aa59e3f3b2 |
+| v87 | 2026-11-07 06:05:28Z | dreamer | proposals/dreamer__dream_2026-11-07.md | proposal | Sixth dream report | proposals/conflict-review__decisions.md | ABSENT -> 6b0cdd2c2c |
