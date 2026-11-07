@@ -86,3 +86,12 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v80 | 2026-11-06 15:40:29Z | Run memory curator | status.md | edit | apply approved V1 (edited per coordinator: downloads finished, all drafted) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVedqKwMm3QE5Pq34iByXUR | b0ac39a2c7 -> 72c50c1738 |
 | v81 | 2026-11-06 15:40:32Z | Run memory curator | decisions.md | edit | apply approved V2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVedqKwMm3QE5Pq34iByXUR | 17a763ceb1 -> 6720752a73 |
 | v82 | 2026-11-06 15:40:33Z | Run memory curator | lessons.md | edit | apply approved V3 (conflict-ID clash point dropped) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVedqKwMm3QE5Pq34iByXUR | cadf814736 -> 29260f1a07 |
+| v83 | 2026-11-06 16:36:14Z | conflict-review | proposals/conflict-review__decisions.md | proposal | Mase picked Most videos wins on the precedence card | - | ABSENT -> 279aab05d6 |
+| v84 | 2026-11-06 17:56:14Z | conflict-review-2 | proposals/conflict-review-2__decisions.md | proposal | Mase card answer | - | ABSENT -> 57d457e3b1 |
+| v85 | 2026-11-06 17:57:32Z | conflict-review-3 | proposals/conflict-review-3__decisions.md | proposal | Mase card answer | - | ABSENT -> 1c208b56e3 |
+| v86 | 2026-11-07 06:05:24Z | dreamer | proposals/dreamer__decisions.md | proposal | U2 mark 2023-over-older superseded | proposals/conflict-review__decisions.md | be21e1dd81 -> aa59e3f3b2 |
+| v87 | 2026-11-07 06:05:28Z | dreamer | proposals/dreamer__dream_2026-11-07.md | proposal | Sixth dream report | proposals/conflict-review__decisions.md | ABSENT -> 6b0cdd2c2c |
+| v88 | 2026-11-07 23:23:33Z | Run memory curator | decisions.md | edit | apply approved U1 (3 conflict-review rulings) and U2 (2023 rule superseded; digest item 7 updated to match) | cmsg_01FAHERC1Lsrg2bYtrKuRHmP2c8oaFGcbPSmPRarwhLg2a | 6720752a73 -> a35e6a60ec |
+| v89 | 2026-11-07 23:23:36Z | Run memory curator | INDEX.md | edit | sync INDEX.md to coordinator's U3 index edit | cmsg_01FAHERC1Lsrg2bYtrKuRHmP2c8oaFGcbPSmPRarwhLg2a | b334a9d6ef -> f775343ae8 |
+| v90 | 2026-11-07 23:24:16Z | Run memory curator | decisions.md | edit | record Mase's tie-break decision: ties go to Mase | cmsg_01FAHERC1Lsrg2bYtrKuRHmPFFBhrWGbfZX742JQBGgbTX | a35e6a60ec -> 27bc1d4a2d |
+| v91 | 2026-11-07 23:24:18Z | Run memory curator | INDEX.md | edit | sync INDEX.md to coordinator's tie-break index edit | cmsg_01FAHERC1Lsrg2bYtrKuRHmPFFBhrWGbfZX742JQBGgbTX | f775343ae8 -> 45c7f52da7 |

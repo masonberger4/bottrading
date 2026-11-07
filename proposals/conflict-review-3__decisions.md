@@ -1,0 +1,2 @@
+<!-- proposal by conflict-review-3 at 2026-11-06 17:57:32Z; target: decisions.md; reason: Mase card answer; link: -; status: merged -->
+- (Mase, 2026-11-06 17:56 UTC) One ICT video beats an engine default that no video supports. The 51 "not scored" one-source rules become DRAFT defaults (engine behaviour = switch); 9 excluded (Charter-model-internal, frames needed, beginner risk, Silver Bullet, sizing). List: mentorship/scorecard/singles.csv (PR #47).
