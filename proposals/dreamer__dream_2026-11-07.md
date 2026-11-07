@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-07 06:05:28Z; target: dream_2026-11-07.md; reason: Sixth dream report; link: proposals/conflict-review__decisions.md; status: open -->
+<!-- proposal by dreamer at 2026-11-07 06:05:28Z; target: dream_2026-11-07.md; reason: Sixth dream report; link: proposals/conflict-review__decisions.md; status: merged (U1-U3 applied) -->
 # Dream report 2026-11-07 (reviewed: list_threads since 11-06 06:10 (only the curator active; the conflict-review threads are not listed), CHANGELOG v80-v85, the open proposals. Not reviewed: project chat, conflict-review transcripts.)
 Feedback: V1-V3 were applied 11-06 15:40. The curator dropped the conflict-ID clash point from V3, so that check is still open.
 | # | ID | Change | Uplift |
