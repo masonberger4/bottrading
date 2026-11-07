@@ -11,7 +11,7 @@ for r in rows:
     cards.setdefault(r['conflict'], []).append(r)
 # Mase 2026-11-06: where ICT gives a beginner and an experienced version, the experienced one is
 # the default whatever the count. Cards where that changes the count winner:
-EXPERIENCED = {'NFP-THU-FRI': 'B'}
+EXPERIENCED = {'NFP-THU-FRI': 'B', 'RESISTANCE-DAY': 'B'}  # RESISTANCE-DAY A is ICT's beginner version
 # Mase 2026-11-07: ties on video count go to Mase; no automatic tie-break.
 # Fill in his pick here as {card: pos}; until then the card shows PENDING.
 TIE_PICKS = {}

@@ -115,7 +115,7 @@ Where ICT labels a beginner vs experienced version, the experienced one is defau
 | EXIT-STYLE | **B**: Staggered partials (chest/head, each new low) with a runner to the terminus or an extreme limit | 10 | A(4) C(2) |  |
 | OVERNIGHT-HOLD | **B**: OSOK: hold a day-of-entry position overnight to a daily FVG CE (adds after midnight) | 2 | A(1) | margin 1; thin (<=2 videos) |
 | STOP-PLACE | **G**: Beyond every nearby inefficiency: with two stacked FVGs, beyond the higher one / its CE | 8 | B(7) C(5) E(4) A(3) H(2) D(2) F(1) | margin 1 |
-| RESISTANCE-DAY | **B**: Trade both, but in high resistance frame nearer arrays, use wider stops, one contract, no trailing | 4 | A(4) C(2) | TIE PENDING Mase: B/A |
+| RESISTANCE-DAY | **B**: Trade both, but in high resistance frame nearer arrays, use wider stops, one contract, no trailing | 4 | A(4) C(2) | experienced version (overrides count) |
 
 ## Data
 

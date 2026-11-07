@@ -58,6 +58,6 @@ PARTIAL-TRIGGER,Management,C,4,"Ladder: below each intermediate low, 25% at the 
 EXIT-STYLE,Management,B,10,"Staggered partials (chest/head, each new low) with a runner to the terminus or an extreme limit",A(4) C(2),
 OVERNIGHT-HOLD,Management,B,2,OSOK: hold a day-of-entry position overnight to a daily FVG CE (adds after midnight),A(1),margin 1; thin (<=2 videos)
 STOP-PLACE,Management,G,8,"Beyond every nearby inefficiency: with two stacked FVGs, beyond the higher one / its CE",B(7) C(5) E(4) A(3) H(2) D(2) F(1),margin 1
-RESISTANCE-DAY,Management,B,4,"Trade both, but in high resistance frame nearer arrays, use wider stops, one contract, no trailing",A(4) C(2),TIE PENDING Mase: B/A
+RESISTANCE-DAY,Management,B,4,"Trade both, but in high resistance frame nearer arrays, use wider stops, one contract, no trailing",A(4) C(2),experienced version (overrides count)
 CONTRACT,Data,B,4,"Back-adjusted continuous contract: for old highs/lows at ATHs, and (107) only to reveal volume imbalances",C(2) D(1) A(1),
 FVG-ENTRY,Entries,A,1,"Near edge or first quadrant (""buy the fair value gap high or upper quadrant""); a CE limit may never fill",B(1),TIE PENDING Mase: A/B; thin (<=2 videos)
