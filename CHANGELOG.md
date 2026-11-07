@@ -89,3 +89,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v83 | 2026-11-06 16:36:14Z | conflict-review | proposals/conflict-review__decisions.md | proposal | Mase picked Most videos wins on the precedence card | - | ABSENT -> 279aab05d6 |
 | v84 | 2026-11-06 17:56:14Z | conflict-review-2 | proposals/conflict-review-2__decisions.md | proposal | Mase card answer | - | ABSENT -> 57d457e3b1 |
 | v85 | 2026-11-06 17:57:32Z | conflict-review-3 | proposals/conflict-review-3__decisions.md | proposal | Mase card answer | - | ABSENT -> 1c208b56e3 |
+| v86 | 2026-11-07 06:05:24Z | dreamer | proposals/dreamer__decisions.md | proposal | U2 mark 2023-over-older superseded | proposals/conflict-review__decisions.md | be21e1dd81 -> aa59e3f3b2 |
