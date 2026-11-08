@@ -213,12 +213,9 @@ CARDS.update({
         "A": dict(big_day_am_skip=True, big_day_am_resume=0),     # sacrifice the AM, keep the PM
         "B": dict(big_day_am_skip=True, big_day_am_resume=630),   # no trades 09:30-10:30 [the down-day condition is not built: any very large day]
     },
-    "RANGE-REGIME": {                          # A: drange_scalp (BH-B17 daily-range regime): in a multi-day daily range every order is a scalp and after one
-        "A": dict(drange_scalp=True),          # side's pool ran only the opposite side trades (the fade back into the range); after the range breaks the breakout side
-        "B": dict(drange_scalp=False),         # trades with runners. B: continuation through the break (the old engine)
-    },
+    "RANGE-REGIME": {"B": {}},
     "TWO-SIDED": {                             # A: both sides armed in one window = stand aside for the rest of it (B17.1 neutral_5050 "armed")
-        "A": dict(neutral_5050="armed"),
+        "A": dict(neutral_5050="armed"),       # the rollover-week "trade very light" part is not built (queued)
     },
     "SEASON-ACTIVITY": {
         "A": dict(season_quality="size"),
@@ -259,6 +256,7 @@ NOT_BUILT.update({
     ("MONDAY", "C"): "Monday pre-market only needs a per-day session list; queued",
     ("CPI-WEEK", "B"): Q,
     ("AFTER-BIG-DAY", "C"): "'keep expectations low' has no exact rule",
+    ("RANGE-REGIME", "A"): "queued (S1 review): a PDH / PDL turtle soup back into a multi-week daily range, target the FVG inside the old extreme; drange_scalp is not it",
     ("TWO-SIDED", "B"): "pick a side at small size and scratch fast: no rule for which side; queued",
     ("SEASON-ACTIVITY", "C"): Q,
     ("HOLIDAY-WEEK", "D"): Q,
@@ -298,6 +296,7 @@ SAME_AS_ENGINE.update({
     ("LIQ-LOCATION", "A"): "the engine's pools are wick extremes and relative equal highs / lows",
     ("SHORT-LOCATION", "B"): "the engine has no deep-discount short block",
     ("BIAS-SOURCE", "A"): "the engine's bias is the HTF draw (daily table) that intraday trades follow",
+    ("RANGE-REGIME", "B"): "continuation through the break is the engine's default",
     ("TF-CHOP", "A"): "the engine reads the draw from the higher timeframes (5m / 15m / 1h / 4h / D arrays); it never drops below 1m",
 })
 NOT_BUILT.update({

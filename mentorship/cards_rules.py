@@ -36,11 +36,18 @@ def ath_block(ctx, sd, o: dict, p) -> str | None:
     if p.ath_rule == "longs_only":
         hit("ath_no_short")
         return "x_ath_no_short"
-    from .bh1e import _is_top_pick
-    if _is_top_pick(o):
+    if _top_pick(o):
         hit("ath_top_pick")
         return "x_ath_top_pick"
     return None
+
+
+def _top_pick(o: dict) -> bool:
+    """bh1e._is_top_pick with whole tags (its substring test also matched lc_reversal / td_reversal, S1 review)."""
+    from . import sm7 as _SM7
+    from .bh1e import TOP_KINDS
+    tags = set(str(o.get("lv_tags") or "").split("|"))
+    return bool(_SM7.is_ts_kind(o) or {"three_drives", "reversal"} & tags or str(o.get("entry_kind") or "") in TOP_KINDS)
 
 
 def check_params(p) -> None:

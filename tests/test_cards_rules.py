@@ -64,4 +64,4 @@ def test_depth_trail_arms_at_the_share_and_trails_under_each_bar_low():
 
 def test_card_defaults_of_the_new_concepts():
     p = Params()
-    assert (p.depth_trail, p.ath_rule, p.fed_chair_skip_am, p.drange_scalp, p.neutral_5050, p.tgif_thu) == (0.75, "no_top_pick", True, True, "armed", True)
+    assert (p.depth_trail, p.ath_rule, p.fed_chair_skip_am, p.neutral_5050, p.tgif_thu) == (0.75, "no_top_pick", True, "armed", True)

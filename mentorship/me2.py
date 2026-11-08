@@ -26,7 +26,7 @@ LADDER_TRAILS = ("candle_mt", "eq_pause", "rej_block", "071", "structure")
 BOOLS = ("raise_on_vi", "raise_on_sth_break", "trail_swing_at_array", "trail_after_pool", "ob_stop_to_mt_after_run", "rde_partials", "peel_singles", "pm_macro_runner", "hh_low_hold",
          "marginal_ext_warn", "stall_exits", "wick_ce_close_test", "gap_q_hold", "ref_speed_check", "opp_tear_check", "edge_bump_add", "edge_bump_guard", "late_fvg_flip", "sister_breaker_hold",
          "stall_at_htf", "chop_close", "upclose_pair_guard", "urgency_runner", "pool_lock_day_done")
-NUMS = ("pool_lock_pts", "ob_retests", "htf_bank", "adr_closed_min", "ote_leave_bars", "fulcrum_speed_bars", "breaker_far_partial", "small_fvg_linger")
+NUMS = ("pool_lock_pts", "ob_retests", "htf_bank", "adr_closed_min", "ote_leave_bars", "fulcrum_speed_bars", "breaker_far_partial", "small_fvg_linger", "depth_trail")
 STRS = ("trail_wick_gate", "three_array_mode", "held_hi_action")
 
 
@@ -1241,7 +1241,8 @@ def _rde(sd, pos, tr, d, i, ts, p, o, h, lv, avg) -> bool:
 
 def _depth_trail(pos, d, i, h, l, c, p, lv, avg) -> None:
     """EXIT-DEPTH B: "close or trail tight from 75% of the projection; don't demand the exact target" - armed once a bar's high reaches depth_trail of the way from the
-    average fill to the final rung; from then on every closed bar raises the stop to one tick under its low [our interpretation: "trail tight" = the 1m bar low]."""
+    average fill to the final rung; from then on every closed bar raises the stop to one tick under its low [our interpretation: "trail tight" = the engine bar's low (1m or 5m); only the trail half of
+    "close or trail" is built]. A trail: refused while a trail lock / wick gate / freeze holds (raise_to gate=True); a bar that exits earlier in manage skips it."""
     fin = lv[-1] if lv else None
     if fin is None or fin <= avg:
         return

@@ -14,7 +14,7 @@ LEGACY = dict(
     big_day_am_resume=0, week_done_on_draw="off", ob_pick="blend", ndog_scalp=False, asia_session=False,
     lunch_macro_entry=False, hold_through_0830=True, thu_cap=False, pm_macro_runner=False, lunch_raid="off",
     holiday_week_skip=False, smt_ym=True, add_cut="", lunch_range=(720, 810), macro_grid="fixed", season_quality="off",
-    fed_chair_skip_am=False, depth_trail=0.0, ath_rule="off", tgif_thu=False, drange_scalp=False, neutral_5050="off",
+    fed_chair_skip_am=False, depth_trail=0.0, ath_rule="off", tgif_thu=False, neutral_5050="off",
 )
 
 

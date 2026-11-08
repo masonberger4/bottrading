@@ -1230,7 +1230,7 @@ class Params:
     # N5.4 / N5.5 / N5.6
     skip_two_drivers: bool = False       # N5.4 (100 ~50:59-1:40:56): stand aside the AM when 08:30 and 09:45 / 10:00 both release
     two_driver_gate: bool = True         # N5.4 minimal rule: no entry window ends before the day's last morning release
-    fed_chair_skip_am: bool = True       # N5.5 FED-SPEECH A (Mase's tie pick 2026-11-08 21:34 UTC; calendar.FED_CHAIR is unverified and incomplete - owner to verify / complete it incl. 2026 and speeches) (037 ~3:09; 038 ~39:59): no AM trade on a Fed chair 10:00 testimony day (calendar.FED_CHAIR, unverified)
+    fed_chair_skip_am: bool = True       # N5.5 FED-SPEECH A: no entry before 13:30 (any session) on the day (Mase's tie pick 2026-11-08 21:34 UTC; calendar.FED_CHAIR is unverified and incomplete - owner to verify / complete it incl. 2026 and speeches) (037 ~3:09; 038 ~39:59): no AM trade on a Fed chair 10:00 testimony day (calendar.FED_CHAIR, unverified)
     skip_auction_am: bool = False        # N5.6 (cc10_008 ~7:29): avoid the AM on Treasury auction days (calendar.is_auction_day, approximate)
     # M9 / M9.1 news Judas. NOTE (main engine only): the news / FOMC Judas, side filters (or_bias, or_wide, pm_continue_am), or_no_entry / or_deep,
     # macro gates and fomc_observe / fomc_only_am act in the main engine's scan loop; the Silver Bullet and Ma Deuce ignore them.
@@ -2974,7 +2974,7 @@ class Params:
     rde_frac: float = 0.2
     ath_rule: str = "no_top_pick"        # ATH-RULE A (scorecard default, Mase 2026-11-08): near the all-time high no top picking - no turtle-soup / three-drive / reversal shorts (cards_rules.ath_block); "longs_only" (C) = no shorts at all; "off" (B) = follow the draw both ways
     ath_near_frac: float = 0.02          # [our interpretation] "near" = the short's entry within 2 % under the highest high of the loaded history (or above it)
-    depth_trail: float = 0.75            # EXIT-DEPTH B (scorecard default, Mase 2026-11-08): from this share of the way to the final rung the stop trails one tick under each closed 1m bar's low (me2._depth_trail); 0 = hold for the full target (A)
+    depth_trail: float = 0.75            # EXIT-DEPTH B (scorecard default, Mase 2026-11-08): from this share of the way to the final rung the stop trails one tick under each closed engine bar's low (me2._depth_trail); 0 = hold for the full target (A)
     peel_singles: bool = False           # X3-020-runner-peel-singles (020 ~00:10:25 ..): after >= 75 % is closed and above the target NWOG's CE: one lot per bar at an REH poke / a higher high / halfway to the gap top; the last unit gets a pivot-low stop
     pm_macro_runner: bool = True        # X3-027-pm-runner-macro (027 ~00:40:28): a PM trade's first partial lifts the stop to +1 pt, the last unit is held to 15:50 (the 15:45-15:50 macro, newscal.macro_wins)
     hh_low_hold: bool = False            # X3-runner-swing-low-must-hold (027 ~00:43:52): after the first partial, the swing low between a pivot high and the new high that takes it out must hold; a trade under it closes hh_low_frac of the rest
@@ -3251,7 +3251,7 @@ class Params:
     tgif_pm_from: int = 810
     consol_pm_news_skip_am: bool = False  # N8-consolidation-pm-news (cc10_008 ~00:16:34): a consolidation day with a PM release (at / after 12:00) has no AM trade
     # --- Caption-gap pass, package bias_htf#1/7 (digests/rulebook_gaps/bias_htf_intermarket.md; bh1.py table side, bh1e.py engine side). Everything defaults off. -----------------------------------
-    drange_scalp: bool = True    # RANGE-REGIME A (scorecard default 2026-11-08);         # BH-B17-daily-range-scalp-regime (002 ~00:06:57; 043 ~00:06:55; ~00:13:48): in a multi-day daily consolidation every order is a scalp (one target, no adds, T1 capped at drange_t1_pts), after one side's pool ran only the opposite side trades, the day stops after drange_day_pts or two wins; after the range breaks only the breakout side trades, runners allowed
+    drange_scalp: bool = False           # BH-B17-daily-range-scalp-regime (002 ~00:06:57; 043 ~00:06:55; ~00:13:48): in a multi-day daily consolidation every order is a scalp (one target, no adds, T1 capped at drange_t1_pts), after one side's pool ran only the opposite side trades, the day stops after drange_day_pts or two wins; after the range breaks only the breakout side trades, runners allowed
     drange_n: int = 5                    # ... [our interpretation] the range = the last N daily closes inside the first of those days' high-low
     drange_break: str = "close"          # ... a breakout = a daily "close" beyond the range or a "wick" beyond it (undefined by the source: test both)
     drange_t1_pts: float = 5.0           # ... scalp target distance, ES points (~5 handles)

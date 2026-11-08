@@ -68,9 +68,9 @@ def calendar_block(d, session: str, p, t: int = 0):
         return "pre_fomc"
     if (p.skip_pre_cpi or p.pre_cpi == "skip") and CAL.eve_of(d, "cpi"):
         return "pre_cpi"
+    if p.fed_chair_skip_am and (am_only or t < 810) and (d in CAL.FED_CHAIR or d in CAL.FED_CHAIR_EXTRA):
+        return "fed_chair"                               # FED-SPEECH A: observe until the PM; trade 13:30-16:00 (London / lunch too)
     if am_only:
-        if p.fed_chair_skip_am and (d in CAL.FED_CHAIR or d in CAL.FED_CHAIR_EXTRA):
-            return "fed_chair"
         if p.skip_auction_am and CAL.is_auction_day(d):
             return "auction_am"
         if p.skip_two_drivers and CAL.two_drivers(d, p.news_claims, p.news_conf_board):

@@ -279,6 +279,10 @@ COVERAGE_OLD = dict(news_cal="legacy", sick_count_at=570, sick_refs="built", sic
 PRE_OWNER.update(OA1029_OLD)
 PRE_OWNER.update(COVERAGE_OLD)
 CURRENT.update(OA1029_OLD)
+# scorecard cards stage S1 (2026-11-08): the pre-build baselines keep the old values of the new card defaults (fed_chair_skip_am is pinned above)
+CARDS_S1_OLD = dict(depth_trail=0.0, ath_rule="off", neutral_5050="off", tgif_thu=False)
+PRE_OWNER.update(CARDS_S1_OLD)
+CURRENT.update(CARDS_S1_OLD)
 CURRENT.update(COVERAGE_OLD)
 LEGACY_1PCT_2PCT = dict(risk_dollars=1000.0, max_total_risk=2000.0)   # E8 / owner #12 preset
 # setups_models review: the FVG-path variants need the FVG path to trade at all - post_mss with the
