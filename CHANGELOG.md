@@ -95,3 +95,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v89 | 2026-11-07 23:23:36Z | Run memory curator | INDEX.md | edit | sync INDEX.md to coordinator's U3 index edit | cmsg_01FAHERC1Lsrg2bYtrKuRHmP2c8oaFGcbPSmPRarwhLg2a | b334a9d6ef -> f775343ae8 |
 | v90 | 2026-11-07 23:24:16Z | Run memory curator | decisions.md | edit | record Mase's tie-break decision: ties go to Mase | cmsg_01FAHERC1Lsrg2bYtrKuRHmPFFBhrWGbfZX742JQBGgbTX | a35e6a60ec -> 27bc1d4a2d |
 | v91 | 2026-11-07 23:24:18Z | Run memory curator | INDEX.md | edit | sync INDEX.md to coordinator's tie-break index edit | cmsg_01FAHERC1Lsrg2bYtrKuRHmPFFBhrWGbfZX742JQBGgbTX | f775343ae8 -> 45c7f52da7 |
+| v92 | 2026-11-08 06:05:00Z | dreamer | proposals/dreamer__dream_2026-11-08.md | proposal | Seventh dream report: nothing to propose | cmsg_01FAHERC1Lsrg2bYtrKuRHmPFFBhrWGbfZX742JQBGgbTX | ABSENT -> dcdc0e7333 |
