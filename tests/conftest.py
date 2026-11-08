@@ -9,3 +9,16 @@ def _default_news_calendar():
     from mentorship import calendar as C
     C.use("csv")
     yield
+
+
+# Test modules written against the pre-card engine defaults (tests/_legacy.py): their `Params` is LegacyParams.
+LEGACY_MODULES: set[str] = set()
+
+
+@pytest.fixture(autouse=True)
+def _legacy_defaults(request, monkeypatch):
+    mod = request.module
+    if mod.__name__.rsplit(".", 1)[-1] in LEGACY_MODULES and hasattr(mod, "Params"):
+        from _legacy import LegacyParams
+        monkeypatch.setattr(mod, "Params", LegacyParams)
+    yield

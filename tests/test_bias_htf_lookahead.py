@@ -69,9 +69,10 @@ def _variants():
 
 
 def _params(name, **extra):
-    kw = dict(study.DECISIONS[name])
+    kw = dict(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, leg_pd=0, min_draw_pts=0)
+    kw.update(study.DECISIONS[name])          # (a variant may set one of the base keys, e.g. the MIN-ROOM card's min_draw_pts)
     kw.update(extra)
-    return Params(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, leg_pd=0, min_draw_pts=0, **kw)
+    return Params(**kw)
 
 
 _CACHE = {}
