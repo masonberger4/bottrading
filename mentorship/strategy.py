@@ -105,7 +105,7 @@ class Params:
     max_risk_pts: float = 15.0
     min_rr: float = 1.0
     partial: float = 0.5
-    entry: str = "edge"            # "edge" (top of a BISI) or "ce" (50% of the gap)
+    entry: str = "ce"            # "edge" (top of a BISI) or "ce" (50% of the gap)
     stop_mode: str = "ob_mt"       # "ob_mt" or "fvg"
     stop_buffer: float = 0.01
     fvg_wait: int = 2              # bars after the structure break to wait for an FVG
@@ -171,7 +171,7 @@ class Params:
                                    # beyond its CE (wicks may poke) exits the trade before T1
     skip_news: bool = False        # no trades at all on 08:30 / 10:00 release days
     # decisions in mentorship_rules.md section 3 (D#); defaults are the recommended ones
-    mss_mode: str = "close"        # D3: structure shift on a candle "close" or a "wick" through
+    mss_mode: str = "wick"        # D3: structure shift on a candle "close" or a "wick" through
     mt_mode: str = "body"          # D4: order-block mean threshold of the "body" or full "range"; caption-gap D4-mt-source-tally (entries_stops_sizing #1/3): "sensitive" = (high + open) / 2 (cc04_013 ~07:02), "body_single_range_blended" = the body mean of a single candle, the range mid of a multi-candle block (065A)
     exit_mode: str = "split"       # D5: "split" = before arrays, just beyond pools; "before" = all
     pool_beyond_pts: float = 0.25  # ES pts beyond a liquidity pool (one tick)
@@ -183,7 +183,7 @@ class Params:
                                    # the retrace, against the leg high reached before the fill ("fill")
     am_exit: int = 720             # D16: AM leftovers out at 12:00 (minutes); 0 = hold to flatten
     pm_done_by: int = 0            # D16 test: PM out at this time once T1 filled (900 = 15:00) - the 15:00 DEADLINE variant, not ICT's 006 rule (that is last_hour_target_done: a target hit from 15:00 closes everything at the target)
-    breaker_zone: str = "range"    # owner #14 (D6): Ep 02/05 (and Ep 07 OB, [our interpretation]) use the
+    breaker_zone: str = "body"    # owner #14 (D6): Ep 02/05 (and Ep 07 OB, [our interpretation]) use the
                                    # breaker candle's full high-low range; "body" = Ep 01 switch;
                                    # "leg" = the A->B leg (070), "last" = the last up-close candle
                                    # (cc05_014) - see levels.breaker_zone
@@ -413,7 +413,7 @@ class Params:
     # B21 / L3 IPDA data ranges [CC] (015 ~4:25; cc05_004 ~1:56; cc09_008 ~6:03): the high/low of the
     # last 20/40/60 trading sessions, rolling from yesterday (= day 1). Needs >= 61 prior sessions
     # (backtest.HIST_DAYS); shorter histories give only the ranges they cover.
-    ipda_pools: bool = False             # the 20/40/60-day highs/lows as sweep pools and targets
+    ipda_pools: bool = True             # the 20/40/60-day highs/lows as sweep pools and targets
     ipda_next: bool = False              # cc05_003 ~28:38: as targets only the NEXT in sequence - the 40-day
                                          # once today traded through the 20-day, then the 60-day
     ipda_eq_day: str = "off"             # cc05_003 ~1:18:26 "range day until news": price near EQ of all
@@ -1704,7 +1704,7 @@ class Params:
     two_pass_state: bool = False         # A5: a gap band crossed both ways (efficient) is not a target; a band crossed several times shields the arrays beyond
     shield_passes: int = 3               # A5 [our interpretation]: >= this many two-way crossings = a shield (078 uses >= 2 opposite LTF candles)
     # A12-ob-candle-selection (012 ~14:06; cc04_003 ~1:00; cc03_004 ~10:30; cc06_005 ~19:10; 065 ~1:21:02; 032 ~53:04)
-    ob_pick: str = "blend"               # A12: "blend" / "original" (first / highest candle) / "largest_body" / "blend_in_htf"
+    ob_pick: str = "original"               # A12: "blend" / "original" (first / highest candle) / "largest_body" / "blend_in_htf"
     ob_skip_encapsulated: bool = False   # A12 (cc06_005): skip a last candle whose body sits inside the previous same-colour body and is clearly smaller
     # A12-consolidation-ob-open-level (008 ~4:09)
     cons_ob_open: bool = False           # A12: the open of the last down-close 1h candle before a consolidation is support (up-close: resistance)
@@ -3100,6 +3100,7 @@ class Params:
     lunch_raid: str = "after_1000"              # T8-lunch-raid-target (025 ~01:01:51; 064 ~01:46:02; 075): the lunch pool L - "recent" (last swing against the AM move before noon) / "am_low" (the AM extreme before 11:00) / "post_news" (the first swing after the 08:30 release) / "first_of"
     inside_day_def: str = "wick"         # INSIDE-DAY card A (by wicks); "body" (B) / "body_in_range" (C) - the day tag inside_day and daycontext.candle_patterns
     holiday_week_skip: bool = True       # HOLIDAY-WEEK card B (2 videos): stand aside in a holiday week (dwc1.calendar_block); A trade it / C holiday_week_thu_fri
+    smt_ym: bool = False                 # SMT-SET card B: the Dow (YM) is left out of SMT (NQ vs ES only); True = A (ES, NQ and YM all count)
     lunch_range: tuple = (690, 810)      # LUNCH-WINDOW card C (9 videos): the lunch range 11:30-13:30; its high / low are PM pools from its end (A 12:00-13:00, B 12:00-13:30, D from 10:30 [our interpretation])
     macro_grid: str = "hourly"           # MACRO-GRID card B (9 videos): macros every hour :50-:10 (07:50 .. 15:10) plus the named windows; "fixed" = the 2023 named list only (newscal.MACROS_T7)
     lunch_raid_wait: bool = False        # ... no PM entry until L traded a tick through or lunch_raid_by
@@ -6830,7 +6831,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     ctx.sides_map = {1: sides[0], -1: sides[1]}            # caption-gap setups_models #1/7: the live Sides (the other Side of the day: stop-run re-arm, pool runs, compressed highs)
     ctx.pside = (pctx, psides, ppos)                      # setups_models M16.2 sick sister
     ctx.partner2 = None
-    if partner2 is not None:
+    if partner2 is not None and p.smt_ym:              # SMT-SET card: B (default) = NQ vs ES only, the Dow left out
         c2 = DayCtx(partner2[0], day, partner2[1], tf, lunch_range=p.lunch_range)
         _setup_news(c2, day, p)
         _extra_levels(c2, partner2[0], partner2[1], p)

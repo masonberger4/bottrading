@@ -247,3 +247,51 @@ NOT_BUILT.update({
     ("TGIF-TIMING", "B"): Q, ("TGIF-TIMING", "C"): Q,
     ("WEEK-PROFILE", "B"): Q,
 })
+
+
+# --- stage d: PD arrays, levels, bias and SMT, data, entries -------------------------------------------------
+CARDS.update({
+    "MSS-CLOSE": {"A": dict(mss_mode="wick"), "B": dict(mss_mode="close")},
+    "OB-CANDLE": {"A": dict(ob_pick="original"), "B": dict(ob_pick="largest_body")},
+    "IFVG-CONFIRM": {"A": dict(ifvg_hold=False), "B": dict(ifvg_hold=True)},
+    "BREAKER-ZONE": {"A": dict(breaker_zone="body"), "B": dict(breaker_zone="range")},
+    "UNICORN": {"A": {}},
+    "PDA-LOOKBACK": {"B": dict(ipda_pools=True)},
+    "LIQ-LOCATION": {"A": {}},
+    "SHORT-LOCATION": {"B": {}},
+    "SMT-USE": {"A": dict(smt_partial="off"), "B": dict(smt_partial="a")},
+    "SMT-SET": {"A": dict(smt_ym=True), "B": dict(smt_ym=False)},
+    "BIAS-SOURCE": {"A": {}},
+    "CONTRACT": {                              # tie open: the engine keeps front-month prices
+        "A": dict(price_frame="front_month"),
+        "B": dict(price_frame="back_adjusted"),
+    },
+    "FVG-ENTRY": {"A": dict(entry="edge"), "B": dict(entry="ce")},
+})
+SAME_AS_ENGINE.update({
+    ("UNICORN", "A"): "the engine's unicorn is an FVG inside a breaker",
+    ("LIQ-LOCATION", "A"): "the engine's pools are wick extremes and relative equal highs / lows",
+    ("SHORT-LOCATION", "B"): "the engine has no deep-discount short block",
+    ("BIAS-SOURCE", "A"): "the engine's bias is the HTF draw (daily table) that intraday trades follow",
+})
+NOT_BUILT.update({
+    ("OB-CANDLE", "C"): Q, ("OB-CLOSE", "A"): Q, ("OB-CLOSE", "B"): Q,
+    ("IFVG-CONFIRM", "C"): Q, ("IFVG-CONFIRM", "D"): "anticipation from structure is judgment; no exact rule yet",
+    ("UNICORN", "B"): "market maker model stages are not built", ("UNICORN", "C"): Q,
+    ("FVG-VALID", "A"): Q, ("FVG-VALID", "B"): Q, ("FVG-VALID", "C"): Q, ("FVG-VALID", "D"): Q,
+    ("WICK-PRIORITY", "A"): Q, ("WICK-PRIORITY", "B"): Q,
+    ("TF-CHOP", "A"): Q, ("TF-CHOP", "B"): "sub-1m entries; the engine runs 1m / 5m bars",
+    ("OB-VALID", "A"): Q, ("OB-VALID", "B"): Q,
+    ("FVG-CARRY", "A"): Q, ("FVG-CARRY", "B"): Q, ("FVG-CARRY", "C"): Q, ("FVG-CARRY", "D"): Q,
+    ("WICK-SELECT", "A"): Q, ("WICK-SELECT", "B"): Q, ("WICK-SELECT", "C"): Q,
+    ("WICK-SELECT", "D"): "judgment (the wick price respects); no exact rule",
+    ("PDA-LOOKBACK", "A"): Q,
+    ("RANGE-ANCHOR", "A"): Q, ("RANGE-ANCHOR", "B"): Q,
+    ("LIQ-LOCATION", "B"): Q, ("LIQ-LOCATION", "C"): Q,
+    ("SHORT-LOCATION", "A"): Q,
+    ("SMT-USE", "C"): Q, ("SMT-USE", "D"): Q, ("SMT-USE", "E"): Q,
+    ("BIAS-SOURCE", "B"): Q, ("BIAS-SOURCE", "C"): Q, ("BIAS-SOURCE", "D"): Q, ("BIAS-SOURCE", "E"): Q,
+    ("ATH-RULE", "A"): Q, ("ATH-RULE", "B"): Q, ("ATH-RULE", "C"): Q,
+    ("CONTRACT", "C"): Q, ("CONTRACT", "D"): Q,
+    ("VENOM-STOP", "A"): "the Venom model is not in the engine", ("VENOM-STOP", "B"): "the Venom model is not in the engine",
+})
