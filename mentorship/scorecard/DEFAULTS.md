@@ -47,6 +47,7 @@ Where ICT labels a beginner vs experienced version, the experienced one is defau
 | NEWS-HOLD | **B**: Yes: a pre-market trade can let the 08:30 release run into its target | 2 | A(2) | tie: Mase picked; thin (<=2 videos) |
 | FOMC-DAY | **B**: Trade the afternoon two-stage delivery: first FVG after 14:00, second wave from 14:30 (often the opposite way) | 5 | C(2) A(1) D(1) |  |
 | NFP-THU-FRI | **B**: Yes: experienced traders trade NFP Thursday and Friday (after the initial volatility) | 13 | A(14) | experienced version (overrides count) |
+| FED-SPEECH | **A**: No AM trades on a 10:00 Fed chair speech/testimony day (observe only); trade the PM 13:30-16:00 | 3 | B(2) C(2) | margin 1 |
 
 ## Day filters
 
@@ -58,6 +59,8 @@ Where ICT labels a beginner vs experienced version, the experienced one is defau
 | TWO-SIDED | **A**: Stand aside (low probability); in rollover week trade very light and expect to be wrong | 2 | B(1) | margin 1; thin (<=2 videos) |
 | RANGE-REGIME | **A**: Fade: a run beyond the prior day's high/low is turtle soup back into the range; target the FVG just inside the old extreme | 2 | B(0) | thin (<=2 videos) |
 | SEASON-ACTIVITY | **A**: Yes: measure risk Jan-Feb, start dabbling in Feb, clean late Mar-May, choppy summer, best late Aug/Sep to mid Dec | 5 | C(3) B(0) |  |
+| INSIDE-DAY | **A**: By wicks: today's high below and low above the prior day's high/low | 3 | B(2) C(1) | margin 1 |
+| HOLIDAY-WEEK | **B**: Stand aside in low-volume holiday weeks (or only the very best setups) | 2 | C(1) A(1) D(1) | margin 1; thin (<=2 videos) |
 
 ## Weekly profile
 
@@ -146,9 +149,9 @@ Mase 2026-11-06: one video beats an engine default no video supports, so these b
 | m2024 | 19 | excluded | stand aside until the 10:00 Silver Bullet; Silver Bullet is settled off. | Silver Bullet is settled off |
 | m2024 | 30 | default | pre-holiday Friday and post-holiday skip agree with filters.md 1.2 (L21 also skips the Tuesday after a Monday holiday, 2023 allows its PM). | post-holiday: 2023 090 skip the AM only vs 2024 L21 skip the whole Tuesday; 1-1 tie, Mase 2026-11-08 picked AM only; whole day a switch |
 | m2024 | 40 | default | FVG wick tolerance of one standard deviation of the gap width is one source (L24). |  |
-| m2024 | 41 | default | stop for the week once the weekly HTF objective is hit is one source (L24). |  |
+| m2024 | 41 | default | stop for the week once the weekly HTF objective is hit is one source (L24). | also 2023 038, 101; CC cc10_019; SMC 036, 058 |
 | m2024 | 42 | default | pyramid windows (final hour 14:30-15:00 or after midnight) for an OSOK hold are one source (L23). |  |
-| m2024 | 43 | default | light Jackson Hole week / skip the Monday after the Symposium is one source (L14). |  |
+| m2024 | 43 | default | light Jackson Hole week / skip the Monday after the Symposium is one source (L14). | light size agrees with SMC 022, 025, 028 (seek and destroy, do not over-leverage); Monday skip is L14 only |
 | m2025 | 2 | default | 00-00:30 (L80) is a new range with no 2023 counterpart; not scored. |  |
 | m2025 | 6 | agrees | reclaimed FVG vs inversion FVG wording; 2026 (106) and 2023 (026/030/091) agree a reclaimed FVG holds after a break. IFVG confirmation is in IFVG-CONFIRM. | 2023 and 2026 agree; nothing changes |
 | m2026smc | 6 | default | session alternation (025/029: a trending session is followed by consolidation; rarely three trend in a row) has no opposing 2023 statement; it is a new rule. |  |
@@ -161,25 +164,21 @@ Mase 2026-11-06: one video beats an engine default no video supports, so these b
 | m2026smc | 49 | default | OB tolerance (wick may reach the OB quadrant while bodies hold the mean threshold; propulsion block bound) is one source (099). |  |
 | m2026smc | 67 | default | immediate rebalance timing (same or next day; day-2 failure = complex reversal) is one source (121, 122); no opposing statement found. |  |
 | m2026smc | 72 | default | the gap-fill target gate (last opposing FVG stays open = target taken; fills = not taken) is one source (124). |  |
-| m2026smc | 79 | default | inside days = expansion (011) has no opposing lecture yet. |  |
 | m2026smc | 82 | default | seasonal tilt (001, 019, 020) has no opposing lecture yet. |  |
 | m2026smc | 83 | switch | nested ORGs widest (019) vs B4 last-three ORGs; no card for ORG nesting yet. | nested ORGs: widest (019, Aug-Oct 2026) vs last three ORGs (BIAS-SOURCE C, Apr 2026); 1-1 tie, Mase 2026-11-08 picked last three ORGs graded; widest nested is a switch |
-| m2024 | 65 | default | opening inside the previous day's first presented FVG makes that gap the day's reference (L32); one source. |  |
-| m2024 | 66 | default | Fed chair speech = no trading during it and 15 min after; speech in the 09:00-10:00 hour = trade before 08:00 (L37); one source. |  |
+| m2024 | 65 | default | opening inside the previous day's first presented FVG makes that gap the day's reference (L32); one source. | also L35, L38, SMC 062 (prior day FPFVG as reference/draw) |
 | m2026smc | 92 | default | tiny 'nub' bodies outside an FVG don't invalidate it (125); one source. |  |
 | m2026smc | 101 | default, flagged | rejection-block market/stop-order entry when price trades through the candle's open vs limit entries (131); one source. | stop entry through the rejection block open (131); limit entries were never counted, so a count could reverse this |
 | m2026smc | 103 | excluded | position sizing (0.25-0.5% risk, +1 micro per $2,500) vs one micro only (125, 126, 134); sizing is outside the engine ($1k risk reporting). | position sizing is outside the engine ($1k risk reporting) |
-| m2024 | 83 | default | clustered (overlapping) NWOGs/NDOGs as the day's draw, target the near extreme of the cluster (L49); one source. |  |
+| m2024 | 83 | default | clustered (overlapping) NWOGs/NDOGs as the day's draw, target the near extreme of the cluster (L49); one source. | also L04, L06 (cluster of NDOGs sets the direction) |
 | m2024 | 88 | default | overnight range 00:01-04:59 graded with quadrants, arrays just below levels when bullish, only on consolidating nights (L44); one source. |  |
-| m2024 | 89 | default | London 02:00-05:00 high/low as the AM session draw (L47); one source. |  |
+| m2024 | 89 | default | London 02:00-05:00 high/low as the AM session draw (L47); one source. | also 2023 067, L49, SMC 007, 036, 037, 2025 L34, L78, TE te59 |
 | m2024 | 90 | default | ORG turtle-soup buy stop at the open of the candle that pierced the low (L40); one source. |  |
-| m2024 | 91 | default | entries only in the premium/discount of the inception-to-terminus range (L40); one source. |  |
-| m2024 | 92 | default | inside day / smallest range of 7 days precedes expansion; large range day = range above the 3-day average (L48); one source. |  |
-| m2024 | 93 | default | no 15-minute opening range; first 30 and 60 minutes frame the day (L49); one source. |  |
-| m2024 | 97 | default | 10:00 news, no trade ahead, a few minutes after the initial hit (L34); one source. |  |
+| m2024 | 91 | default | entries only in the premium/discount of the inception-to-terminus range (L40); one source. | also 2023 060 (shorts only above equilibrium of inception-to-terminus) |
+| m2024 | 93 | default | no 15-minute opening range; first 30 and 60 minutes frame the day (L49); one source. | also 2023 031, 042, 090; 2025 L80, L82; SMC 012 ("never 5 or 15") |
+| m2024 | 97 | default | 10:00 news, no trade ahead, a few minutes after the initial hit (L34); one source. | also 2023 100, L48, SMC 071 (no entry into the 10:00 release) |
 | m2024 | 98 | default | NWOG half-working sequence, back below the midpoint = sidelines until the PM (L34); one source. |  |
 | m2024 | 99 | default | range-break extension = 1/4 of the previous range (L50, L51); agreeing sources, no opposing position. |  |
-| m2024 | 102 | default | holiday weeks range bound (L50); one source. |  |
 | m2024 | 103 | default | Monday soft-open preference into last week's NWOG (L50); one source. |  |
 | m2024 | 104 | default | 09:00 hour inside one candle = wait for 10:00 (L51); one source. |  |
 | m2026smc | 108 | default | PM reference range 02:00-11:00 vs 2023 session pools (140); one source. |  |

@@ -87,3 +87,8 @@ Batch 10 append (2026-11-06): 2026 SMC 138-143 (`m2026smc_b10_draft_rules.md`, c
 OPEN-RANGE-TRADE (D), ORG-CE-WINDOW (D), LIQ-LOCATION (C), and evidence rows on seventeen cards; 108, 115, 116, 117 and 119 are
 "not scored". 62 cards in all. Script: /mnt/project-files/mentorship/b10_score.py (also updates digest_refs on existing cards).
 Same PR: 2023 Mentorship 023 got caption-based notes, and 2025 Lecture 46 was noted (lectures.csv picks both up; no new rows).
+
+2024 Mentorship recheck (2026-11-08): the 22 remaining "not scored" m2024 conflicts were searched against every other
+playlist. Three new cards: FED-SPEECH (2024 C66), INSIDE-DAY (2024 C92 + SMC 79), HOLIDAY-WEEK (2024 C102). C16 and C19
+stay excluded, C30 stays Mase's 11-08 pick; the other 16 have no opposing video and stay single-source defaults
+(`singles.py` notes which other videos agree). 65 cards in all.

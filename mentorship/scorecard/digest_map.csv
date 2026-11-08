@@ -54,10 +54,10 @@ m2024,36,CPI-WEEK,
 m2024,37,ORG-CE-WINDOW,
 m2024,38,FPFVG-DEF,
 m2024,39,STOP-PLACE,
-m2024,40,,Not scored yet: FVG wick tolerance of one standard deviation of the gap width is one source (L24).
-m2024,41,,Not scored yet: stop for the week once the weekly HTF objective is hit is one source (L24).
-m2024,42,,Not scored yet: pyramid windows (final hour 14:30-15:00 or after midnight) for an OSOK hold are one source (L23).
-m2024,43,,Not scored yet: light Jackson Hole week / skip the Monday after the Symposium is one source (L14).
+m2024,40,,"Not scored (rechecked 2026-11-08, no opposing video): FVG wick tolerance of one standard deviation of the gap width is one source (L24)."
+m2024,41,,"Not scored (rechecked 2026-11-08, no opposing video): stop for the week once the weekly HTF objective is hit is one source (L24)."
+m2024,42,,"Not scored (rechecked 2026-11-08, no opposing video): pyramid windows (final hour 14:30-15:00 or after midnight) for an OSOK hold are one source (L23)."
+m2024,43,,"Not scored (rechecked 2026-11-08, no opposing video): light Jackson Hole week / skip the Monday after the Symposium is one source (L14)."
 m2025,1,ORG-SIZE,
 m2025,2,LONDON-MACRO,Midnight opening range 00:00-00:30 (L80) is a new range with no 2023 counterpart; not scored.
 m2025,3,OPEN-RANGE-TRADE FPFVG-DEF,
@@ -146,7 +146,7 @@ m2026smc,75,TGIF-TIMING TGIF-DEPTH,
 m2026smc,76,NEWS-WAIT NFP-THU-FRI FOMC-DAY,
 m2026smc,77,STOP-MGMT,
 m2026smc,78,MACRO-GRID,
-m2026smc,79,,Not scored yet: inside days = expansion (011) has no opposing lecture yet.
+m2026smc,79,INSIDE-DAY,Scored 2026-11-08 (other playlists found).
 m2026smc,80,FPFVG-DEF,
 m2026smc,81,NFP-THU-FRI MONDAY,
 m2026smc,82,,"Not scored yet: seasonal tilt (001, 019, 020) has no opposing lecture yet."
@@ -178,8 +178,8 @@ m2024,61,OB-CLOSE,
 m2024,62,FVG-VALID,
 m2024,63,TGIF-DEPTH,
 m2024,64,SMT-USE,
-m2024,65,,Not scored yet: opening inside the previous day's first presented FVG makes that gap the day's reference (L32); one source.
-m2024,66,,Not scored yet: Fed chair speech = no trading during it and 15 min after; speech in the 09:00-10:00 hour = trade before 08:00 (L37); one source.
+m2024,65,,"Not scored (rechecked 2026-11-08, no opposing video): opening inside the previous day's first presented FVG makes that gap the day's reference (L32); one source."
+m2024,66,FED-SPEECH,Scored 2026-11-08 (other playlists found).
 m2026smc,90,LAST-HOUR,
 m2026smc,91,RANGE-REGIME,
 m2026smc,92,,Not scored yet: tiny 'nub' bodies outside an FVG don't invalidate it (125); one source.
@@ -210,28 +210,28 @@ m2024,79,OB-CANDLE,
 m2024,80,EXIT-STYLE,
 m2024,81,AFTER-BIG-DAY,
 m2024,82,PREMARKET-ENTRY,
-m2024,83,,"Not scored yet: clustered (overlapping) NWOGs/NDOGs as the day's draw, target the near extreme of the cluster (L49); one source."
+m2024,83,,"Not scored (rechecked 2026-11-08, no opposing video): clustered (overlapping) NWOGs/NDOGs as the day's draw, target the near extreme of the cluster (L49); one source."
 m2024,84,ASIA,
 m2024,85,MIN-ROOM,
 m2024,86,MACRO-GRID,
 m2024,87,RESISTANCE-DAY,"New card (L36, L43, L48, L49)."
-m2024,88,,"Not scored yet: overnight range 00:01-04:59 graded with quadrants, arrays just below levels when bullish, only on consolidating nights (L44); one source."
-m2024,89,,Not scored yet: London 02:00-05:00 high/low as the AM session draw (L47); one source.
-m2024,90,,Not scored yet: ORG turtle-soup buy stop at the open of the candle that pierced the low (L40); one source.
-m2024,91,,Not scored yet: entries only in the premium/discount of the inception-to-terminus range (L40); one source.
-m2024,92,,Not scored yet: inside day / smallest range of 7 days precedes expansion; large range day = range above the 3-day average (L48); one source.
-m2024,93,,Not scored yet: no 15-minute opening range; first 30 and 60 minutes frame the day (L49); one source.
+m2024,88,,"Not scored (rechecked 2026-11-08, no opposing video): overnight range 00:01-04:59 graded with quadrants, arrays just below levels when bullish, only on consolidating nights (L44); one source."
+m2024,89,,"Not scored (rechecked 2026-11-08, no opposing video): London 02:00-05:00 high/low as the AM session draw (L47); one source."
+m2024,90,,"Not scored (rechecked 2026-11-08, no opposing video): ORG turtle-soup buy stop at the open of the candle that pierced the low (L40); one source."
+m2024,91,,"Not scored (rechecked 2026-11-08, no opposing video): entries only in the premium/discount of the inception-to-terminus range (L40); one source."
+m2024,92,INSIDE-DAY,Scored 2026-11-08 (other playlists found).
+m2024,93,,"Not scored (rechecked 2026-11-08, no opposing video): no 15-minute opening range; first 30 and 60 minutes frame the day (L49); one source."
 m2024,94,NDOG-DEF,
 m2024,95,ORG-CLOSE,
 m2024,96,FVG-VALID,
-m2024,97,,"Not scored yet: 10:00 news, no trade ahead, a few minutes after the initial hit (L34); one source."
-m2024,98,,"Not scored yet: NWOG half-working sequence, back below the midpoint = sidelines until the PM (L34); one source."
-m2024,99,,"Not scored yet: range-break extension = 1/4 of the previous range (L50, L51); agreeing sources, no opposing position."
+m2024,97,,"Not scored (rechecked 2026-11-08, no opposing video): 10:00 news, no trade ahead, a few minutes after the initial hit (L34); one source."
+m2024,98,,"Not scored (rechecked 2026-11-08, no opposing video): NWOG half-working sequence, back below the midpoint = sidelines until the PM (L34); one source."
+m2024,99,,"Not scored (rechecked 2026-11-08, no opposing video): range-break extension = 1/4 of the previous range (L50, L51); agreeing sources, no opposing position."
 m2024,100,ATH-RULE,
 m2024,101,NFP-THU-FRI,
-m2024,102,,Not scored yet: holiday weeks range bound (L50); one source.
-m2024,103,,Not scored yet: Monday soft-open preference into last week's NWOG (L50); one source.
-m2024,104,,Not scored yet: 09:00 hour inside one candle = wait for 10:00 (L51); one source.
+m2024,102,HOLIDAY-WEEK,Scored 2026-11-08 (other playlists found).
+m2024,103,,"Not scored (rechecked 2026-11-08, no opposing video): Monday soft-open preference into last week's NWOG (L50); one source."
+m2024,104,,"Not scored (rechecked 2026-11-08, no opposing video): 09:00 hour inside one candle = wait for 10:00 (L51); one source."
 m2024,105,EXIT-STYLE,
 m2024,106,STOP-PLACE,
 m2026smc,104,FVG-ENTRY,

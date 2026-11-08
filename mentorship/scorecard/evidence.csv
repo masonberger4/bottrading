@@ -754,3 +754,21 @@ OVERNIGHT-HOLD,A,SMC2026:139,"""because of all the things that's going on around
 STOP-PLACE,C,SMC2026:139,"""Candlestick number one's low is the stop ... bearish fair value gaps, the stop is above the high of candlestick number one""",
 GAP-LIFE,C,SMC2026:140,"""by having them on for at least 5 days ... whether they fill in or stay open, they're important""",
 ORG-AFTER-CE,B,SMC2026:138,"""If it went through here and sliced through that on a closing basis, then I would abandon this gap closure portion""",
+FED-SPEECH,A,M2023:037,"Fed chair testimony at 10:00 = treat like a rate announcement: no AM trading, no bias, not even demo trades",~3:09-9:17
+FED-SPEECH,A,M2023:038,"observation-only session because the Fed chair spoke at 10:00: ""observe only, do not trade""",~39:59-40:50
+FED-SPEECH,A,M2023:067,Fed chair testimony/speech at 10:00: no AM trade; trade only 13:30-16:00,"~0:34:00, ~0:57:30"
+FED-SPEECH,B,M2024:L37,"don't trade while he talks and for 15 minutes after; a speech in the 09:00-10:00 hour = ""you want to be trading before 8:00 in the morning""","~1:12, ~5:00-8:00"
+FED-SPEECH,B,SMC2026:022,"live long 07:00-09:30 on Fed-chair-speech day; partials before the 10:00 speech, ""fund the trade"", raise stop (= te63)",
+FED-SPEECH,C,SMC2026:064,"""Why don't you take a trade until 10:00? Because the Fed chair is talking at 10:00""; live short at 10:00 during the talk",
+FED-SPEECH,C,CH:ch27,"EURUSD Tue 2020-12-01, Fed chair 10:00 NY: NY-open OTE entry held and scaled out 10:39-14:57 (forex)",~10:39-14:57
+INSIDE-DAY,A,M2023:012,inside day (high below and low above previous day) -> expect a large range day next,~16:17
+INSIDE-DAY,A,M2023:001,low-volatility day: expect an inside day relative to the previous day's high/low,~17:01-19:02
+INSIDE-DAY,A,SMC2026:011,"back-to-back inside days: ""we had yet to trade above Tuesday's high or Monday's high, or below ... daily lows"" = large range expansion incoming",
+INSIDE-DAY,B,CC:cc06_007,"volatility contraction: an inside bar (lower high and higher low) judged on the bodies, not the wicks; or the smallest range of 3 or 7 days",
+INSIDE-DAY,B,SMC2026:129,"""the body was not able to go below the previous day's body. And this body was not able to go above previous day's body. So, this is an inside day despite ... the wick""",
+INSIDE-DAY,C,SMC2026:131,"ICT's version (vs the classic): ""The body of the candle for today's trading is inside Friday's range. So, yes, the wicks are allowed to do the damage.""",
+HOLIDAY-WEEK,A,M2024:L50,"Thanksgiving week = range bound, fewer large flows, sustained runs unlikely (trades still possible)",~2:00-3:00
+HOLIDAY-WEEK,B,SMC2026:117,"""We're going into a time when there's low volume ... Passion Week ... I'm not engaging price action. I'm not trading.""",
+HOLIDAY-WEEK,B,SMC2026:143,"""I stopped trading around the holidays because it gets very thin""",
+HOLIDAY-WEEK,C,M2023:072,holiday weeks: the low-volume holiday day distorts the week; expect cleaner delivery late in the week (Thu/Fri),~3:36-4:36
+HOLIDAY-WEEK,D,M2024:L21,Caleb: no trades on Fridays into holiday weekends; the higher-probability setups form early in the week (treat it like an NFP week),"~28:00-29:00, ~48:00-51:00"
