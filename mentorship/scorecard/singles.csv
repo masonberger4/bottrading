@@ -46,3 +46,10 @@ m2026smc,115,default,inefficiency on the buy side of the curve preferred over th
 m2026smc,116,default,"pre-market IFVG as a holding pattern, no fade (139, 140); no matching card.",
 m2026smc,117,default,two SIBIs joined by a VI as one array (138); one source.,
 m2026smc,119,default,"morning done if a protective low goes before the AM target (139, 140); no matching card.",
+m2025,13,default,"suspension block definitions in L07/L09/L11 are compatible (VI at both ends, body range); new array, no counter-position.",
+m2025,17,switch,"IOFED depth was decided on SMC 17 (Mase 2026-11-08: 1 tick past candle 1; partial short of CE a switch). 2025 L04, L05, L16, L54 describe the partial fill short of CE; L46 adds the OB+SIBI-in-IFVG drill as a separate entry model.","IOFED depth decided on SMC 17 (Mase 2026-11-08); 2025 L04/L05/L16/L54 back partial short of CE, still a switch; L46 OB+SIBI drill is a separate entry model"
+m2025,23,default,"one-sided (L30, L28 ignore a doji middle candle when drawing an FVG); no video for the engine default.",
+m2025,24,excluded,London close window 10:00-13:00 ET is one forex source (L14).,forex London close window; engine trades index futures
+m2025,27,default,"""ETH must be confirmed in RTH"" is one source (L52).",
+m2025,28,agrees,"unfilled limit near target (L54 pride in precision vs L60 move the stop to the near-touch) is compatible, not a disagreement.",compatible statements; nothing changes
+m2025,29,default,fading toward smooth highs after a one-way week is one source (L56).,

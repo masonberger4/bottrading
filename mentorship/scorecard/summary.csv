@@ -1,81 +1,83 @@
 conflict,topic,pos,position,videos,m2023,by_playlist,oldest,newest
 LUNCH-WINDOW,Times,A,12:00-13:00,3,3,2023 3,2023-01-23,2023-05-18
 LUNCH-WINDOW,Times,B,12:00-13:30 (90 minutes),3,3,2023 3,2023-06-13,2023-06-24
-LUNCH-WINDOW,Times,C,11:30-13:30 (2 hours); setup forms in the first hour,9,0,"2024 3, 2025 1, 2026 5",2024-08-16,2026-07
+LUNCH-WINDOW,Times,C,11:30-13:30 (2 hours); setup forms in the first hour,10,0,"2024 3, 2025 2, 2026 5",2024-08-16,2026-07
 LUNCH-WINDOW,Times,D,The lunch retracement can start as early as 10:30,3,0,2026 3,2026-03-27,2026-04-14
 LUNCH-TRADE,Times,A,Avoid / consolidation: lunch is a stop run against the AM; trade only if you know its rules,2,2,2023 2,2023-01-23,2023-04-11
-LUNCH-TRADE,Times,B,Trade it: lunch macro is a setup with its own target (short or long against the morning),9,1,"2023 1, TE 1, 2024 1, 2025 3, 2026 3",2023-07-16,2026-07
-LUNCH-TARGET,Times,A,The liquidity protecting the AM move (AM winners' trailed stops; most recent AM high/low),4,3,"2023 3, 2024 1",2023-02-08,2024-09-06
+LUNCH-TRADE,Times,B,Trade it: lunch macro is a setup with its own target (short or long against the morning),10,1,"2023 1, TE 1, 2024 1, 2025 4, 2026 3",2023-07-16,2026-07
+LUNCH-TARGET,Times,A,The liquidity protecting the AM move (AM winners' trailed stops; most recent AM high/low),5,3,"2023 3, 2024 1, 2025 1",2023-02-08,2025-03-21
 LUNCH-TARGET,Times,B,"The FIRST swing low (bull day) / high (bear day) that formed after 10:00, looking left from 11:30",13,1,"2023 1, 2024 2, 2025 4, 2026 6",2023-07-16,2026-09-05
-LUNCH-TARGET,Times,C,The low (high) made in the 09:50-10:10 macro / the 10:00 low,4,0,2026 4,2026,2026-09-09
-MACRO-GRID,Times,A,"Fixed named macros only (09:50-10:10, 10:50-11:10, lunch, 14:50-15:10, 15:15-15:45); don't invent others",5,4,"2023 4, 2026 1",2023-01-17,2026-05-26
-MACRO-GRID,Times,B,"Every hour: the last 10 minutes of an hour and the first 10 of the next (:50-:10), incl. 07:50-08:10, 08:50-09:10, 13:50-14:10",9,0,"2024 2, 2026 7",2024-10-15,2026-09-28
-LAST-HOUR,Times,A,"One final-hour macro 15:15-15:45; after the HTF target is hit 15:45-16:00 only ""sputters""; flat by 15:50-16:00",3,3,2023 3,2023-02-10,2023-02-14
-LAST-HOUR,Times,B,"Several last-hour macros (14:50-15:10, 15:15-15:45, then MOC 15:45/15:50-16:00 ""supercharge""); hold runners into them",10,3,"2023 3, TE 1, 2024 3, 2026 3",2023-02-07,2026-08-28
+LUNCH-TARGET,Times,C,The low (high) made in the 09:50-10:10 macro / the 10:00 low,5,0,"2025 1, 2026 4",2025-09-22,2026-09-09
+MACRO-GRID,Times,A,"Fixed named macros only (09:50-10:10, 10:50-11:10, lunch, 14:50-15:10, 15:15-15:45); don't invent others",8,4,"2023 4, 2025 3, 2026 1",2023-01-17,2026-05-26
+MACRO-GRID,Times,B,"Every hour: the last 10 minutes of an hour and the first 10 of the next (:50-:10), incl. 07:50-08:10, 08:50-09:10, 13:50-14:10",15,0,"2024 2, 2025 6, 2026 7",2024-10-15,2026-09-28
+LAST-HOUR,Times,A,"One final-hour macro 15:15-15:45; after the HTF target is hit 15:45-16:00 only ""sputters""; flat by 15:50-16:00",6,3,"2023 3, 2025 3",2023-02-10,2025-05-13
+LAST-HOUR,Times,B,"Several last-hour macros (14:50-15:10, 15:15-15:45, then MOC 15:45/15:50-16:00 ""supercharge""); hold runners into them",12,3,"2023 3, TE 1, 2024 3, 2025 2, 2026 3",2023-02-07,2026-08-28
 LONDON-MACRO,Times,A,London macro is exactly 03:30,1,0,2025 1,2025-01-07,2025-01-07
-LONDON-MACRO,Times,B,"No single London macro time (2023: London kill zone; :50-:10 grid in 2026 would give 02:50-03:10, 03:50-04:10)",1,0,2026 1,2026-01-12,2026-01-12
+LONDON-MACRO,Times,B,"No single London macro time (2023: London kill zone; :50-:10 grid in 2026 would give 02:50-03:10, 03:50-04:10)",3,0,"2025 2, 2026 1",2025-05-12,2026-01-12
 ASIA,Times,A,No: Asia moves too little to trade indices,2,1,"2023 1, CC 1",2017-03,2023-09-21
 ASIA,Times,B,Yes: Asia protocol around the 18:00 NDOG / bread-and-butter liquidity,6,1,"2023 1, TE 1, 2024 2, 2026 2",2023-05-03,2026-09-29
 PREMARKET-ENTRY,Times,A,Wait for 09:30 (no 08:30 news = wait for the open; act on bias only after 09:30),4,2,"2023 2, 2025 2",2023-01-09,2025-06-20
-PREMARKET-ENTRY,Times,B,"Trade pre-market (07:00-09:00, or 07:00-08:30 into a release) when the setup is there",16,3,"2023 3, TE 4, 2024 5, 2025 1, 2026 3",2023-02-07,2026-08-26
+PREMARKET-ENTRY,Times,B,"Trade pre-market (07:00-09:00, or 07:00-08:30 into a release) when the setup is there",20,3,"2023 3, TE 4, 2024 5, 2025 5, 2026 3",2023-02-07,2026-08-26
 PREMARKET-RANGE,Times,A,07:00-09:00 pre-market session as one range (ends 08:30 on 08:30-news days),8,0,2026 8,2026-08,2026-10-28
 PREMARKET-RANGE,Times,B,First 30 minutes (07:00-07:30) on news weeks; the whole first hour 07:00-08:00 otherwise,1,0,TE 1,,
 PREMARKET-RANGE,Times,C,"07:00-08:29/08:30 pre-release range on 08:30 news days (graded, SD-projected)",2,1,"2023 1, TE 1",2023-02-15,2026-08-07
-PREMARKET-RANGE,Times,D,"First 30 min of 07:00, 08:00 or 09:00 (07:00-07:30 / 08:00-08:30 / 09:00-09:30); opening range = the next 30 min",2,0,2024 2,2024-08-05,2024-08-06
-PREMARKET-RANGE,Times,E,"08:00-09:30 ETH 90-minute window (Venom): its high = buy side, low = sell side",1,0,2025 1,2025-04-03,2025-04-03
+PREMARKET-RANGE,Times,D,"First 30 min of 07:00, 08:00 or 09:00 (07:00-07:30 / 08:00-08:30 / 09:00-09:30); opening range = the next 30 min",3,0,"2024 2, 2025 1",2024-08-05,2025-11-11
+PREMARKET-RANGE,Times,E,"08:00-09:30 ETH 90-minute window (Venom): its high = buy side, low = sell side",2,0,2025 2,2025-04-03,2025-05-05
 PREMARKET-RANGE,Times,F,Runs are trustworthy from 06:00 (05:00-06:00 dead time); 06:00-09:00 on NFP weeks,1,0,2026 1,2026-06-02,2026-06-02
-PREMARKET-RANGE,Times,G,"07:00-09:30: mark the smoothest overnight REQ high and low; the first one raided = false break, the other is the draw",3,0,2026 3,2026-01-08,2026-02-10
+PREMARKET-RANGE,Times,G,"07:00-09:30: mark the smoothest overnight REQ high and low; the first one raided = false break, the other is the draw",4,0,"2025 1, 2026 3",2025-05-05,2026-02-10
 PREMARKET-RANGE,Times,H,00:00-07:00 overnight low (relative equal lows preferred) is the session's sell-side draw,1,0,2026 1,2026-01-01,2026-01-01
 OPEN-RANGE-TRADE,Opening range,A,"No: 09:30-10:00 is erratic ""amateur hour""; wait, then trade from 10:00",12,9,"2023 9, 2024 1, 2025 1, 2026 1",2023-02-13,2026-01-05
-OPEN-RANGE-TRADE,Opening range,B,"Yes: trade at or right after the open toward the ORG CE, or the first presented FVG",14,0,"2024 8, 2025 1, 2026 5",2024-08-20,2026-04-16
+OPEN-RANGE-TRADE,Opening range,B,"Yes: trade at or right after the open toward the ORG CE, or the first presented FVG",20,0,"2024 8, 2025 7, 2026 5",2024-08-20,2026-04-16
 OPEN-RANGE-TRADE,Opening range,C,"Unclear-bias day: wait for the first hour (09:30-10:30), grade its range, trade PDAs on its gradients in the bias half",1,0,2026 1,2026-02-09,2026-02-09
-OPEN-RANGE-TRADE,Opening range,D,Conditional: trade 09:30-10:00 only if the pre-market (07:00-09:30) read was clean; otherwise wait for 10:00,1,0,2026 1,2026-01-01,2026-01-01
-FPFVG-DEF,Opening range,A,"By time: the first FVG on the 1m between 09:31 and 10:00 (09:31 middle candle), used all week",15,0,"2024 7, 2025 2, 2026 6",2024-08-23,2026-09-02
-FPFVG-DEF,Opening range,B,"By context: the first FVG made by displacement through a swing; not the 09:30 candle on gap days; can be a later, more prominent one",8,0,2026 8,2026,2026-09-09
+OPEN-RANGE-TRADE,Opening range,D,Conditional: trade 09:30-10:00 only if the pre-market (07:00-09:30) read was clean; otherwise wait for 10:00,2,0,"2025 1, 2026 1",2025-04-24,2026-01-01
+FPFVG-DEF,Opening range,A,"By time: the first FVG on the 1m between 09:31 and 10:00 (09:31 middle candle), used all week",20,0,"2024 7, 2025 7, 2026 6",2024-08-23,2026-09-02
+FPFVG-DEF,Opening range,B,"By context: the first FVG made by displacement through a swing; not the 09:30 candle on gap days; can be a later, more prominent one",14,0,"2025 6, 2026 8",2025-03-21,2026-09-09
 FPFVG-DEF,Opening range,C,The wick to the left of an FVG (low to CE) takes precedence as the first presented array,2,0,2026 2,2026-04-11,2026-04-14
-FPFVG-DEF,Opening range,D,Any time anchor: the first FVG after any session or macro start (e.g. 13:30),3,0,"2024 1, 2026 2",2024-09-06,2026-01-13
-FPFVG-DEF,Opening range,E,On sub-1m charts the first gap after the 09:30 1m candle (from 09:31 on 15s) also counts,1,0,2024 1,2024-09-25,2024-09-25
+FPFVG-DEF,Opening range,D,Any time anchor: the first FVG after any session or macro start (e.g. 13:30),10,0,"2024 1, 2025 7, 2026 2",2024-09-06,2026-01-13
+FPFVG-DEF,Opening range,E,On sub-1m charts the first gap after the 09:30 1m candle (from 09:31 on 15s) also counts,2,0,"2024 1, 2025 1",2024-09-25,2025-05-05
 FPFVG-DEF,Opening range,G,Not a valid entry while relative equal highs/lows against it remain unswept in the first 30 minutes,1,0,2026 1,2026-02-28,2026-02-28
 FPFVG-DEF,Opening range,F,On RTH charts the first RTH FVG may be the second on ETH: watch the gap that bridges both sessions,1,0,2024 1,2024-08-23,2024-08-23
-FPFVG-DEF,Opening range,H,"Size/displacement filter: under 10 NQ handles, or a small breakaway into an RTH inefficiency, is not the FPFVG; wait for the next",2,0,2026 2,2026-01-08,2026-01-12
-ORG-CLOSE,Opening gaps,A,16:14 last RTH 1m print / 16:15 settlement,16,7,"2023 7, 2024 4, 2025 2, 2026 3",2023-02-16,2026-04-16
+FPFVG-DEF,Opening range,H,"Size/displacement filter: under 10 NQ handles, or a small breakaway into an RTH inefficiency, is not the FPFVG; wait for the next",6,0,"2025 4, 2026 2",2025-03-21,2026-01-12
+ORG-CLOSE,Opening gaps,A,16:14 last RTH 1m print / 16:15 settlement,24,7,"2023 7, 2024 4, 2025 10, 2026 3",2023-02-16,2026-04-16
 ORG-CLOSE,Opening gaps,B,"16:00 close (the ""bell"")",1,1,2023 1,2023-06-24,2023-06-24
-ORG-CE-WINDOW,Opening gaps,A,"By 10:00 (first 30 minutes), ~70% of the time",21,0,"TE 1, 2024 9, 2025 1, 2026 10",2024-08-22,2026-09-04
+ORG-CE-WINDOW,Opening gaps,A,"By 10:00 (first 30 minutes), ~70% of the time",23,0,"TE 1, 2024 9, 2025 3, 2026 10",2024-08-22,2026-09-04
 ORG-CE-WINDOW,Opening gaps,B,Valid through the first hour (to 10:30),3,0,2026 3,2026,2026-09-01
 ORG-CE-WINDOW,Opening gaps,C,Drop the 70% expectation on low resistance run days with unfinished liquidity beyond: expect a dash to the draw instead,1,0,2024 1,2024-10-25,2024-10-25
 ORG-CE-WINDOW,Opening gaps,D,The half-gap target stays valid after 10:00 when the daily PD array points to it,1,0,2026 1,2026-01-02,2026-01-02
-ORG-AFTER-CE,Opening gaps,A,"Continue: through CE to full gap closure, then beyond (-0.5 SD; 6.5-8 SD on one-sided days)",6,0,"TE 1, 2026 5",2026,2026-08-31
+ORG-AFTER-CE,Opening gaps,A,"Continue: through CE to full gap closure, then beyond (-0.5 SD; 6.5-8 SD on one-sided days)",7,0,"TE 1, 2025 1, 2026 5",2025-09-16,2026-08-31
 ORG-AFTER-CE,Opening gaps,B,"Done or fade: CE hit = ""done ... relax""; if the next octant fails it is not bullish; back at CE after target = 50/50",4,0,2026 4,2026-01-08,2026-04-16
 ORG-SIZE,Opening gaps,A,"Every gap the same: grade CE and quarters, expect a reprice into it (large gap = chop, prefer PM)",5,4,"2023 4, 2026 1",2023-02-07,2026-09-01
-ORG-SIZE,Opening gaps,B,"Size buckets: 20-75 handles likes CE; 75-120 gray; extreme (>120) gaps only reach the near quadrant, then ""gap and go""",6,0,"2024 1, 2025 3, 2026 2",2024-09-19,2026-09-28
+ORG-SIZE,Opening gaps,B,"Size buckets: 20-75 handles likes CE; 75-120 gray; extreme (>120) gaps only reach the near quadrant, then ""gap and go""",7,0,"2024 1, 2025 4, 2026 2",2024-09-19,2026-09-28
 ORG-SIZE,Opening gaps,C,Quadrants only on gaps of 20+ handles; smaller ones just eyeball the CE,3,0,2024 3,2024-08-08,2024-08-19
 ORG-SIZE,Opening gaps,D,"Small ORG (under ~20-40 NQ handles): no ORG play, wait for 10:00",5,0,2024 5,2024-08-26,2024-10-15
 ORG-SIZE,Opening gaps,E,"Bigger is better: need 40+ handles, ~75+ preferred; under 75 expect a lethargic high-resistance morning",6,0,"2024 5, 2026 1",2024-09-17,2026-02-11
-GAP-LIFE,Opening gaps,A,Keep NWOGs for months (every NWOG in the last 60 days; they work 6-9 months),7,4,"2023 4, 2024 3",2023-03-07,2024-08-27
+GAP-LIFE,Opening gaps,A,Keep NWOGs for months (every NWOG in the last 60 days; they work 6-9 months),8,4,"2023 4, 2024 3, 2025 1",2023-03-07,2025-04-30
 GAP-LIFE,Opening gaps,B,"NWOGs 5 weeks, NDOGs 5 days",6,0,"2024 4, 2025 1, 2026 1",2024-08-07,2026-09-02
 GAP-LIFE,Opening gaps,D,NDOGs (Mon 18:00 and Friday) and Mon/Fri ORGs kept for the last two weeks,1,0,2026 1,2026-10-28,2026-10-28
-GAP-LIFE,Opening gaps,C,RTH opening range gaps: carry the last five,2,0,2026 2,2026-01-12,2026-03-10
-NDOG-DEF,Opening gaps,A,ETH only: the 17:00 settlement (16:59 close) to the 18:00 reopen,2,1,"2023 1, 2026 1",2023-05-03,2026
-NDOG-DEF,Opening gaps,B,Two NDOGs: also the RTH 16:14 settlement to the 18:00 open; use it when the 17:00 -> 18:00 gap is empty,1,0,2024 1,2024-09-24,2024-09-24
+GAP-LIFE,Opening gaps,C,RTH opening range gaps: carry the last five,3,0,"2025 1, 2026 2",2025-04-28,2026-03-10
+GAP-LIFE,Opening gaps,E,RTH opening range gaps: today plus the last three sessions (four sets); a gap whose day closed a body above an old ATH is carried on,2,0,2025 2,2025-10-01,2025-10-11
+NDOG-DEF,Opening gaps,A,ETH only: the 17:00 settlement (16:59 close) to the 18:00 reopen,3,1,"2023 1, 2025 1, 2026 1",2023-05-03,2026
+NDOG-DEF,Opening gaps,B,Two NDOGs: also the RTH 16:14 settlement to the 18:00 open; use it when the 17:00 -> 18:00 gap is empty,2,0,"2024 1, 2025 1",2024-09-24,2025-10-14
 NEWS-WAIT,News,A,Wait at least 30 minutes after a high/medium-impact release,3,1,"2023 1, 2026 2",2023-06-15,2026-09-04
 NEWS-WAIT,News,B,15-30 minutes after the release is fine (even NFP),7,0,"2024 6, 2026 1",2024-08-14,2026-10-02
 NEWS-WAIT,News,C,Only skip the 08:30/08:31 news candles; enter from ~08:32 if there is a setup,1,0,2026 1,2026-08-12,2026-08-12
-NEWS-WAIT,News,D,"Trade off the release itself: 08:30 open/wick CE, the 08:30 candle's extreme as the draw, the release as the Judas",9,4,"2023 4, TE 2, 2026 3",2023-05-04,2026-09-03
+NEWS-WAIT,News,D,"Trade off the release itself: 08:30 open/wick CE, the 08:30 candle's extreme as the draw, the release as the Judas",10,4,"2023 4, TE 2, 2025 1, 2026 3",2023-05-04,2026-09-03
 NEWS-WAIT,News,E,"Fade the release's first leg once the range forms (after ~10:00), only on range-bound days",2,0,2026 2,2026-03-11,2026-04-06
 NEWS-WAIT,News,F,Several 08:30 reports or split 08:30 + 10:00 news: wait for both sides to be taken; the first run can be fake (like FOMC),2,0,2024 2,2024-10-17,2024-10-25
 NEWS-WAIT,News,G,CPI/PPI 08:30: no position into the release; look for entries again from 09:00,1,0,2026 1,2026-01-13,2026-01-13
-NEWS-HOLD,News,A,No: square positions ahead of CPI/PPI; don't trade the numbers,2,1,"2023 1, 2026 1",2023-06-15,2026
+NEWS-WAIT,News,H,"Treat a 10:00 release (e.g. ISM) like 08:30: wait for it to deliver, then validate the entry array",1,0,2025 1,2025-05-01,2025-05-01
+NEWS-HOLD,News,A,No: square positions ahead of CPI/PPI; don't trade the numbers,4,1,"2023 1, 2025 2, 2026 1",2023-06-15,2026
 NEWS-HOLD,News,B,Yes: a pre-market trade can let the 08:30 release run into its target,2,1,"2023 1, TE 1",2023-02-15,2026-08-07
 FOMC-DAY,News,A,"Trade only to 10:30 with no hard bias, then sit until after 14:00/14:30",1,0,2026 1,2026-04-29,2026-04-29
 FOMC-DAY,News,B,"Trade the afternoon two-stage delivery: first FVG after 14:00, second wave from 14:30 (often the opposite way)",5,1,"2023 1, 2024 1, 2025 1, 2026 2",2023-06-15,2026-10-02
 FOMC-DAY,News,C,Don't trade the 14:00 release; 14:00-14:45 observation only; normal routine after 14:45,2,2,2023 2,2023-01-04,2023-02-01
 FOMC-DAY,News,D,Inexperienced: avoid FOMC day entirely; the day before trade the morning only (careless price),1,0,2024 1,2024-09-17,2024-09-17
-NFP-THU-FRI,News,A,No: NFP week = trade Mon-Wed to 11:00 (new traders done by 07:00 Wed); NFP Friday no live trading,14,5,"2023 5, 2024 4, 2025 2, 2026 3",2023-01-04,2026-09-30
-NFP-THU-FRI,News,B,Yes: experienced traders trade NFP Thursday and Friday (after the initial volatility),13,5,"2023 5, TE 5, 2024 2, 2026 1",2023-03-09,2026-10-02
+NFP-THU-FRI,News,A,No: NFP week = trade Mon-Wed to 11:00 (new traders done by 07:00 Wed); NFP Friday no live trading,15,5,"2023 5, 2024 4, 2025 3, 2026 3",2023-01-04,2026-09-30
+NFP-THU-FRI,News,B,Yes: experienced traders trade NFP Thursday and Friday (after the initial volatility),15,5,"2023 5, TE 5, 2024 2, 2025 2, 2026 1",2023-03-09,2026-10-02
 FED-SPEECH,News,A,No AM trades on a 10:00 Fed chair speech/testimony day (observe only); trade the PM 13:30-16:00,3,3,2023 3,2023-03-07,2023-06-21
 FED-SPEECH,News,B,Trade before the speech (before 08:00 if it is in the 09:00 hour) and be flat/funded by it; no trading while he talks and 15 min after,2,0,"2024 1, 2026 1",2024-09-30,2026-08
 FED-SPEECH,News,C,"Trade the speech itself: wait for 10:00, then enter while he talks",2,0,"Charter 1, 2026 1",2020-12,2026
-MONDAY,Day filters,A,Trade Mondays like any other day (he shows many Monday trades),7,2,"2023 2, TE 2, 2025 2, 2026 1",2023-01-30,2026
+MONDAY,Day filters,A,Trade Mondays like any other day (he shows many Monday trades),9,2,"2023 2, TE 2, 2025 4, 2026 1",2023-01-30,2026
 MONDAY,Day filters,B,"Skip Mondays (accumulation/manipulation), except NFP-week Mondays or an obvious setup",9,2,"2023 2, CC 1, 2024 3, 2025 1, 2026 2",2017-08,2026-09-28
 MONDAY,Day filters,C,"Trade Mondays with rules: NFP-week Monday always; a no-news Monday only in pre-market (07:00-09:30), not after the open",1,0,2024 1,2024-10-28,2024-10-28
 CPI-WEEK,Day filters,A,"Day before CPI: quiet, small risk, bread-and-butter only, then stop",4,2,"2023 2, 2024 1, 2026 1",2023-02-12,2026
@@ -83,9 +85,10 @@ CPI-WEEK,Day filters,B,"Mon-Wed are difficult/range-bound in RTH (ETH trends); a
 CPI-WEEK,Day filters,C,Trade Monday and Tuesday before a midweek CPI/PPI; a no-news day must show clean price,1,0,2024 1,2024-09-09,2024-09-09
 AFTER-BIG-DAY,Day filters,A,"Large ORG / large prior range: chop for 30-45 min, run near 11:00, prefer the PM",3,1,"2023 1, 2024 2",2023-02-16,2024-09-20
 AFTER-BIG-DAY,Day filters,B,After a very large down day avoid the whole morning session (no trades 09:30-10:30),4,0,"2024 2, 2025 2",2024-09-04,2025-04
-TWO-SIDED,Day filters,A,Stand aside (low probability); in rollover week trade very light and expect to be wrong,2,0,2026 2,2026-03-17,2026-03-21
-TWO-SIDED,Day filters,B,"Pick a side (gun to head), small size, scratch fast if wrong",1,0,2026 1,2026-03-10,2026-03-10
-RANGE-REGIME,Day filters,A,Fade: a run beyond the prior day's high/low is turtle soup back into the range; target the FVG just inside the old extreme,2,0,2026 2,2026-02-17,2026-03-09
+AFTER-BIG-DAY,Day filters,C,"After a large range day (e.g. a big Thursday), keep expectations low for the next day",1,0,2025 1,2025-09-25,2025-09-25
+TWO-SIDED,Day filters,A,Stand aside (low probability); in rollover week trade very light and expect to be wrong,6,0,"2025 4, 2026 2",2025-06-11,2026-03-21
+TWO-SIDED,Day filters,B,"Pick a side (gun to head), small size, scratch fast if wrong",2,0,"2025 1, 2026 1",2025-05-12,2026-03-10
+RANGE-REGIME,Day filters,A,Fade: a run beyond the prior day's high/low is turtle soup back into the range; target the FVG just inside the old extreme,5,0,"2025 3, 2026 2",2025-02-28,2026-03-09
 RANGE-REGIME,Day filters,B,Trade the break as continuation toward the next external pool (engine default),0,0,,,
 SEASON-ACTIVITY,Day filters,A,"Yes: measure risk Jan-Feb, start dabbling in Feb, clean late Mar-May, choppy summer, best late Aug/Sep to mid Dec",5,0,2026 5,2026-01-01,2026-02-28
 SEASON-ACTIVITY,Day filters,B,No calendar (engine default),0,0,,,
@@ -98,106 +101,125 @@ HOLIDAY-WEEK,Day filters,B,Stand aside in low-volume holiday weeks (or only the 
 HOLIDAY-WEEK,Day filters,C,The holiday distorts the week: expect cleaner delivery late in the week (Thu/Fri),1,1,2023 1,2023-07-09,2023-07-09
 HOLIDAY-WEEK,Day filters,D,Treat it like an NFP week: the higher-probability setups form early in the week; no pre-holiday Friday,1,0,2024 1,2024-08-30,2024-08-30
 TGIF-DEPTH,Weekly profile,A,20-30% (25% the midpoint); 40%+ is reversal talk outside the model,9,5,"2023 5, 2024 3, 2026 1",2023-06-16,2026-09-05
-TGIF-DEPTH,Weekly profile,B,"20-30% usually, up to 40% in extreme/rare cases (still TGIF)",5,0,"2024 1, 2026 4",2024-08-09,2026-10-19
+TGIF-DEPTH,Weekly profile,B,"20-30% usually, up to 40% in extreme/rare cases (still TGIF)",7,0,"2024 1, 2025 2, 2026 4",2024-08-09,2026-10-19
 TGIF-DEPTH,Weekly profile,C,"Consolidation week: 40% minimum, 60% extreme (back to the middle of the weekly range)",1,0,2026 1,2026-02-28,2026-02-28
 TGIF-TIMING,Weekly profile,A,Friday only (PM-leaning or London close),2,2,2023 2,2023-06-16,2023-07-09
 TGIF-TIMING,Weekly profile,B,From Thursday 13:00 through Friday's close (measure from the high formed after Thursday 13:00),5,1,"2023 1, 2024 1, 2026 3",2023-08-19,2026-09-05
 TGIF-TIMING,Weekly profile,C,"If Friday doesn't deliver it, expect it Sunday 18:00/Monday; drop it after Tuesday",4,0,"2024 1, 2026 3",2024-08-12,2026-10-19
 WEEK-PROFILE,Weekly profile,A,Tuesday/Wednesday forms the low (high) of the week,1,1,2023 1,2023-04-13,2023-04-13
 WEEK-PROFILE,Weekly profile,B,"Wednesday (""hump day"") midweek retracement or reversal",1,0,2026 1,2026-06,2026-06
-WEEK-PROFILE,Weekly profile,C,Thursday tends to create an intermediate-term high,1,0,2026 1,2026-05,2026-05
+WEEK-PROFILE,Weekly profile,C,Thursday tends to create an intermediate-term high,3,0,"2025 2, 2026 1",2025-10-02,2026-05
 MSS-CLOSE,PD arrays,A,Wick / 1-tick trade-through is enough,6,5,"2023 5, Charter 1",2023-01-25,2023-12-28
-MSS-CLOSE,PD arrays,B,A close/body beyond the swing is required,2,2,2023 2,2023-01-01,2023-02-25
-OB-CANDLE,PD arrays,A,The series is one block; use the open of the first (highest/lowest) candle,14,4,"2023 4, CC 4, 2024 6",2016-11,2024-10-25
+MSS-CLOSE,PD arrays,B,A close/body beyond the swing is required,3,2,"2023 2, 2025 1",2023-01-01,2025-09-19
+OB-CANDLE,PD arrays,A,The series is one block; use the open of the first (highest/lowest) candle,19,4,"2023 4, CC 4, 2024 6, 2025 5",2016-11,2025-10-18
 OB-CANDLE,PD arrays,B,The candle with the largest body in the series,3,0,2026 3,2026,2026-07-01
 OB-CANDLE,PD arrays,C,"""Book definition"": the last candle if it is the largest or the smallest; the first if uniform",1,0,2026 1,2026-04,2026-04
-OB-CLOSE,PD arrays,A,No close needed: trading through the OB open is the change in state,9,3,"2023 3, 2024 3, 2026 3",2023-02-15,2026-07-01
+OB-CLOSE,PD arrays,A,No close needed: trading through the OB open is the change in state,11,3,"2023 3, 2024 3, 2025 2, 2026 3",2023-02-15,2026-07-01
 OB-CLOSE,PD arrays,B,A later candle must trade above the OB's high (Core Content validation),4,0,CC 4,2016-10-13,2016-12
-IFVG-CONFIRM,PD arrays,A,"One candle close beyond the gap, then a new candle returns to it",10,9,"2023 9, 2026 1",2023-01-23,2026-06-02
-IFVG-CONFIRM,PD arrays,B,Close beyond plus a second confirmation (retest close / body outside then return / next candle refuses / body past CE),5,0,2026 5,2026,2026-08-10
-IFVG-CONFIRM,PD arrays,C,Price must pass through the gap twice,1,1,2023 1,2023-05-23,2023-05-23
+IFVG-CONFIRM,PD arrays,A,"One candle close beyond the gap, then a new candle returns to it",13,9,"2023 9, 2025 3, 2026 1",2023-01-23,2026-06-02
+IFVG-CONFIRM,PD arrays,B,Close beyond plus a second confirmation (retest close / body outside then return / next candle refuses / body past CE),9,0,"2025 4, 2026 5",2025-02-04,2026-08-10
+IFVG-CONFIRM,PD arrays,C,Price must pass through the gap twice,2,1,"2023 1, 2025 1",2023-05-23,2025-05-01
+IFVG-CONFIRM,PD arrays,D,"Anticipate from structure (lower low with an imbalance in the leg, or bearish FPFVG after a buy-side raid), then validate on the close",3,0,2025 3,2025-10-02,2025-11-14
 BREAKER-ZONE,PD arrays,A,Body of the breaker candle,11,7,"2023 7, CC 1, 2024 1, 2026 2",2017-05-30,2026
 BREAKER-ZONE,PD arrays,B,Full candle range incl. wicks,5,3,"2023 3, CC 1, 2024 1",2016-12,2024-08-06
 UNICORN,PD arrays,A,An FVG inside a breaker (same location),4,2,"2023 2, 2026 2",2023-01-09,2026
-UNICORN,PD arrays,B,Second-stage redistribution of a market maker model,1,1,2023 1,2023,2023
+UNICORN,PD arrays,B,Second-stage redistribution of a market maker model,3,1,"2023 1, 2025 2",2023,2025-11-14
+UNICORN,PD arrays,C,An FVG lying on a premium/discount wick quadrant during a macro time,1,0,2025 1,2025-09-24,2025-09-24
 FVG-VALID,PD arrays,A,Any FVG in the draw's direction (with quality filters),0,0,,,
-FVG-VALID,PD arrays,B,"Only first-presented FVGs, or FVGs anchored to (touching) an octant/quadrant grade level",11,0,"2024 1, 2026 10",2024-10-25,2026-08-07
+FVG-VALID,PD arrays,B,"Only first-presented FVGs, or FVGs anchored to (touching) an octant/quadrant grade level",15,0,"2024 1, 2025 4, 2026 10",2024-10-25,2026-08-07
 FVG-VALID,PD arrays,C,"On a trending day, only the first FVG after the first-hour dealing range breaks",1,0,2026 1,2026-03-28,2026-03-28
 FVG-VALID,PD arrays,D,An FVG that holds more than 1-2 candles inside it is not valid,5,0,"2024 4, 2026 1",2024-09-16,2026-03-27
 WICK-PRIORITY,PD arrays,A,The FVG/VI itself; the adjacent wick is not graded,0,0,,,
-WICK-PRIORITY,PD arrays,B,"The wick takes precedence: grade it (CE, quadrants) and set the stop beyond the wick",3,0,2026 3,2026-03-26,2026-04-06
-TF-CHOP,PD arrays,A,"Go up (5m, 15m, then 1h/4h) to find the array the chop is working toward",2,0,2026 2,2026-03-21,2026-04-06
-TF-CHOP,PD arrays,B,Drop to a lower timeframe (15s/sub-1m) for the entry inside the higher-timeframe array,2,0,2026 2,2026-03-11,2026-03-21
+WICK-PRIORITY,PD arrays,B,"The wick takes precedence: grade it (CE, quadrants) and set the stop beyond the wick",9,0,"2025 6, 2026 3",2025-04-30,2026-04-06
+TF-CHOP,PD arrays,A,"Go up (5m, 15m, then 1h/4h) to find the array the chop is working toward",4,0,"2025 2, 2026 2",2025-05-12,2026-04-06
+TF-CHOP,PD arrays,B,Drop to a lower timeframe (15s/sub-1m) for the entry inside the higher-timeframe array,3,0,"2025 1, 2026 2",2025-05-05,2026-03-21
 OB-VALID,PD arrays,A,Any OB in the draw's direction after displacement,0,0,,,
 OB-VALID,PD arrays,B,Only an OB sitting on an ORG gradient level (quadrant/octant); a propulsion block inherits from that parent,2,0,"2024 1, 2026 1",2024-10-25,2026-03-13
-FVG-CARRY,PD arrays,A,Yes: carry the first FVG after a turtle soup / unfilled FPFVG forward up to 20 trading days as a draw or PD array,4,0,2026 4,2026-01-01,2026-01-12
+FVG-CARRY,PD arrays,A,Yes: carry the first FVG after a turtle soup / unfilled FPFVG forward up to 20 trading days as a draw or PD array,9,0,"2025 5, 2026 4",2025-02-25,2026-01-12
 FVG-CARRY,PD arrays,B,No: use FVGs only in the session they form (engine default),0,0,,,
-RANGE-ANCHOR,Levels,A,Wicks (swing extremes),3,2,"2023 2, CC 1",2016-09-16,2023-03-30
-RANGE-ANCHOR,Levels,B,"Bodies (""the bodies tell you the real narrative"")",9,2,"2023 2, CC 2, 2026 5",2016-09,2026-09
-LIQ-LOCATION,Levels,A,"Beyond wick extremes: old highs/lows, relative equal highs/lows",4,2,"2023 2, 2024 1, 2026 1",2023-01-23,2026-01-01
+FVG-CARRY,PD arrays,C,Carry for the week only: Monday's FPFVG is used until the last 30 minutes of Friday,1,0,2025 1,2025-05-12,2025-05-12
+FVG-CARRY,PD arrays,D,"Keep only the last 5-10 first FVGs per session type (NY AM, PM, Asia, London) as workspaces",1,0,2025 1,2025-05-15,2025-05-15
+WICK-SELECT,PD arrays,A,"The lowest-reaching (for lows) or highest-reaching (for highs) wick, not simply the longest",4,0,2025 4,2025-09-24,2025-11-14
+WICK-SELECT,PD arrays,B,"The longest (most elongated) wick that also meets a criterion, e.g. reaching the FVG low",1,0,2025 1,2025-10-02,2025-10-02
+WICK-SELECT,PD arrays,C,The wick on the path of the draw (the first one price will meet); wicks already passed are ignored,2,0,2025 2,2025-10-14,2025-10-18
+WICK-SELECT,PD arrays,D,Judgment: grade the candidates and use the one price respects; skip a wick that shares a value with another PD array,2,0,2025 2,2025-09-24,2025-10-15
+PDA-LOOKBACK,PD arrays,A,20 trading days is enough; 40/60 days only in a runaway (parabolic) market,1,0,2025 1,2025-10-18,2025-10-18
+PDA-LOOKBACK,PD arrays,B,"Use 20, 40 and 60 trading days; beyond 40 days needs more experience",4,0,"2025 3, 2026 1",2025-04-23,2026-01-12
+RANGE-ANCHOR,Levels,A,Wicks (swing extremes),6,2,"2023 2, CC 1, 2025 3",2016-09-16,2025-11-14
+RANGE-ANCHOR,Levels,B,"Bodies (""the bodies tell you the real narrative"")",13,2,"2023 2, CC 2, 2025 4, 2026 5",2016-09,2026-09
+LIQ-LOCATION,Levels,A,"Beyond wick extremes: old highs/lows, relative equal highs/lows",6,2,"2023 2, 2024 1, 2025 2, 2026 1",2023-01-23,2026-01-01
 LIQ-LOCATION,Levels,B,Below/above clusters of candle bodies,4,0,2026 4,2026-04,2026-09-05
-LIQ-LOCATION,Levels,C,"Graded wick: when the anchor of relative equal highs/lows has a wick, the turn can come at its lower quadrant/CE; partial there",1,0,2026 1,2026-01-12,2026-01-12
+LIQ-LOCATION,Levels,C,"Graded wick: when the anchor of relative equal highs/lows has a wick, the turn can come at its lower quadrant/CE; partial there",3,0,"2025 2, 2026 1",2025-09-24,2026-01-12
 SHORT-LOCATION,Levels,A,"No: one-sided day already deep in the RTH range (esp. Friday, near lunch) is a poor short",1,0,2026 1,2026-03-27,2026-03-27
 SHORT-LOCATION,Levels,B,Yes if a swing low of the larger run broke: the range resets and its new EQ is a short-term premium,1,0,2026 1,2026-03-19,2026-03-19
-SMT-USE,Bias and SMT,A,Qualifier only: confirms a turn at a PD array with time and draw,9,3,"2023 3, 2024 3, 2026 3",2023-02-15,2026-06-03
+SMT-USE,Bias and SMT,A,Qualifier only: confirms a turn at a PD array with time and draw,11,3,"2023 3, 2024 3, 2025 2, 2026 3",2023-02-15,2026-06-03
 SMT-USE,Bias and SMT,B,Act on it: take a partial when NQ makes a higher high and ES doesn't; down-weight on headline days,3,1,"2023 1, 2024 1, 2026 1",2023-04-11,2026-04-07
-SMT-USE,Bias and SMT,C,Use relative strength to choose the market: short the weakest index / the one nearest its old ATH,3,0,2026 3,2026-03-08,2026-04-20
+SMT-USE,Bias and SMT,C,Use relative strength to choose the market: short the weakest index / the one nearest its old ATH,4,0,"2025 1, 2026 3",2025-11-14,2026-04-20
 SMT-USE,Bias and SMT,D,"Use it to pick the lagging market's target: the ""sick sister"" still has clean highs to run (long the lagger)",1,0,2026 1,2026-04-07,2026-04-07
-SMT-USE,Bias and SMT,E,"Only at liquidity events: the 09:30-10:00 opening range, news injections, a pool raid",1,0,2026 1,2026-02-23,2026-02-23
+SMT-USE,Bias and SMT,E,"Only at liquidity events: the 09:30-10:00 opening range, news injections, a pool raid",2,0,"2025 1, 2026 1",2025-04-07,2026-02-23
 SMT-SET,Bias and SMT,A,"ES, NQ and YM all count",2,1,"2023 1, 2026 1",2023-02-15,2026-04-14
-SMT-SET,Bias and SMT,B,"NQ vs ES only; the Dow is down-weighted (""only 30 stocks"")",2,0,"2024 1, 2026 1",2024-08-09,2026-04-10
-BIAS-SOURCE,Bias and SMT,A,"Top-down: weekly, then daily draw; intraday trades follow it",5,5,2023 5,2023-06-13,2023-09-21
+SMT-SET,Bias and SMT,B,"NQ vs ES only; the Dow is down-weighted (""only 30 stocks"")",3,0,"2024 1, 2025 1, 2026 1",2024-08-09,2026-04-10
+BIAS-SOURCE,Bias and SMT,A,"Top-down: weekly, then daily draw; intraday trades follow it",9,5,"2023 5, 2025 4",2023-06-13,2025-10-18
 BIAS-SOURCE,Bias and SMT,B,"The ORG alone: premium ORG = shorts only, discount ORG = longs (first 30-60 min)",3,0,2026 3,2026,2026-04-16
 BIAS-SOURCE,Bias and SMT,C,"The last three RTH ORGs graded, ""without a hard line higher time frame bias""",1,0,2026 1,2026-04,2026-04
 BIAS-SOURCE,Bias and SMT,D,Weekly draw = the nearest higher-timeframe pool (path of least resistance) in the primary trend,1,0,2026 1,2026-08-15,2026-08-15
-ATH-RULE,Bias and SMT,A,"Near all-time highs, don't pick the top: daily bias stays long; shorts only intraday and only when seasoned",5,0,"2024 2, 2025 3",2024-12-01,2025-09-18
+BIAS-SOURCE,Bias and SMT,E,"Session time and price alone (opening-range FPFVG after a raid), independent of daily/weekly bias",1,0,2025 1,2025-11-11,2025-11-11
+ATH-RULE,Bias and SMT,A,"Near all-time highs, don't pick the top: daily bias stays long; shorts only intraday and only when seasoned",12,0,"2024 2, 2025 10",2024-12-01,2025-10-14
 ATH-RULE,Bias and SMT,B,No special rule: follow the draw both ways,0,0,,,
+ATH-RULE,Bias and SMT,C,At all-time highs take only buy signals until the market has completely collapsed; no shorts at all,2,0,2025 2,2025-09-16,2025-09-22
 PYRAMID-WHERE,Management,A,Only on the favourable side of equilibrium of the leg/range; no adds past EQ or after partials,8,7,"2023 7, 2026 1",2023-01-06,2026-08-28
-PYRAMID-WHERE,Management,B,Add in drawdown (toward the wick/VI low) or keep adding into an IFVG,3,0,2026 3,2026-03-13,2026-08-01
+PYRAMID-WHERE,Management,B,Add in drawdown (toward the wick/VI low) or keep adding into an IFVG,8,0,"2025 5, 2026 3",2025-02-13,2026-08-01
 PYRAMID-WHERE,Management,C,Don't add above your average; re-add partials only after a retrace far (~20-30 handles) from the exit,2,0,2026 2,2026-04-17,2026-04-20
+PYRAMID-WHERE,Management,D,"In a confirmed strong trend (FVGs left open), add on every short-term retracement",1,0,2025 1,2025-10-14,2025-10-14
 PYRAMID-SIZES,Management,A,"Decreasing: largest first (6,3,1 / 6,3,2,1 / 5,4,3,2,1)",5,5,2023 5,2023-01-06,2023-08-18
 PYRAMID-SIZES,Management,B,"6 then 4 (= 10), or 6/4/5 by levels",4,1,"2023 1, 2024 2, 2026 1",2023-07-18,2026-08-28
-REENTRY,Management,A,"Yes, same narrative and same (full) size",8,3,"2023 3, 2024 1, 2026 4",2023,2026-08-28
-REENTRY,Management,B,"Yes, but at half size (halve after a loss)",4,2,"2023 2, CC 1, 2024 1",2016-10,2024-09-16
-REENTRY,Management,C,"No re-entry on the same leg (""There has to be rules""); one chance, then stop",4,1,"2023 1, 2024 2, 2026 1",2023-02-01,2026-07-02
+REENTRY,Management,A,"Yes, same narrative and same (full) size",9,3,"2023 3, 2024 1, 2025 1, 2026 4",2023,2026-08-28
+REENTRY,Management,B,"Yes, but at half size (halve after a loss)",5,2,"2023 2, CC 1, 2024 1, 2025 1",2016-10,2025-10-14
+REENTRY,Management,C,"No re-entry on the same leg (""There has to be rules""); one chance, then stop",5,1,"2023 1, 2024 2, 2025 1, 2026 1",2023-02-01,2026-07-02
 MIN-ROOM,Management,A,~10 handles of room to take 5 (ES); experienced may take 5-handle moves,6,6,2023 6,2023-02-07,2023-06-15
 MIN-ROOM,Management,B,NQ 10 / ES 5 minimum move; setup needs ~20 NQ handles of room,7,0,2024 7,2024-08-13,2024-10-28
 MIN-ROOM,Management,C,"At least 15 NQ handles net of spread, or no trade",3,0,"2025 1, 2026 2",2025,2026-04-15
-MIN-ROOM,Management,D,Fixed cookie-cutter 15-30 handle target; no liquidity pool needed,2,0,2026 2,2026-02-10,2026-02-23
-FIXED-RR,Management,A,"Targets at liquidity / PD arrays (the draw), not a fixed multiple",1,1,2023 1,2023-05-10,2023-05-10
+MIN-ROOM,Management,D,Fixed cookie-cutter 15-30 handle target; no liquidity pool needed,3,0,"2025 1, 2026 2",2025-05-01,2026-02-23
+FIXED-RR,Management,A,"Targets at liquidity / PD arrays (the draw), not a fixed multiple",2,1,"2023 1, 2025 1",2023-05-10,2025-11-14
 FIXED-RR,Management,B,A fixed 1:1 can be profitable for a skilled trader (and is the beginner drill),2,0,2026 2,2026-04-15,2026-04-16
-STOP-MGMT,Management,A,"Keep the initial stop (day trade) and pay yourself with partials; trail only to structure, not early",7,3,"2023 3, 2026 4",2023-02-13,2026-09-04
+STOP-MGMT,Management,A,"Keep the initial stop (day trade) and pay yourself with partials; trail only to structure, not early",10,3,"2023 3, 2025 3, 2026 4",2023-02-13,2026-09-04
 STOP-MGMT,Management,B,Protect/exit at the CE of the last opposing wick before the stop is challenged,3,0,"TE 2, 2026 1",2024-05-13,2026-04-08
-STOP-MGMT,Management,E,"Lock a small profit early (""steak dinner"") after the first target, then trail stepwise beyond defensive arrays / new lows",7,0,"2024 1, 2026 6",2024-09-17,2026-10-28
+STOP-MGMT,Management,E,"Lock a small profit early (""steak dinner"") after the first target, then trail stepwise beyond defensive arrays / new lows",8,0,"2024 1, 2025 1, 2026 6",2024-09-17,2026-10-28
 STOP-MGMT,Management,C,Cut or close when three supporting PD arrays are lost (the third gone = walk away),2,0,2026 2,2026-03-27,2026-04-06
 STOP-MGMT,Management,D,Trail above the last three candles' extreme (or strangle on 15s) once the target looks unlikely,2,0,2026 2,2026-03-27,2026-03-28
 STOP-MGMT,Management,F,Move the stop to cover costs once price is halfway to the first partial,1,0,2024 1,2024-08-29,2024-08-29
 STOP-MGMT,Management,G,Break even / cover costs only after price has run 25% of the way to the profit target,1,0,2024 1,2024-09-11,2024-09-11
 STOP-MGMT,Management,H,"By condition: high resistance = no trailing, cover costs only; low resistance = relaxed stop, limits at targets, walk away",3,0,2024 3,2024-10-04,2024-10-28
+STOP-MGMT,Management,I,Cover costs once price has run about 40% of the way to the target,1,0,2025 1,2025-10-18,2025-10-18
+STOP-MGMT,Management,J,"Move the stop to cost/CE once price is in close proximity to the target, so a trade near target never becomes a loss",1,0,2025 1,2025-02-13,2025-02-13
+STOP-MGMT,Management,K,Cover costs on a structural trigger: a close outside the key level (ORG low) and its failed retest,1,0,2025 1,2025-04-01,2025-04-01
 EXIT-DEPTH,Management,A,Hold for the full target at the draw (with partials),0,0,,,
-EXIT-DEPTH,Management,B,Lower exit threshold: close or trail tight from 75% of the projection; don't demand the exact target,2,0,2026 2,2026-03-27,2026-03-28
-PARTIAL-TRIGGER,Management,A,"At targets/liquidity only: half off by T2, one runner",2,0,"2024 1, 2026 1",2024-09-17,2026-04-08
-PARTIAL-TRIGGER,Management,B,"On a warning candle: a body closes in the wrong half of the entry array, peel one of two",1,0,2026 1,2026-03-27,2026-03-27
-PARTIAL-TRIGGER,Management,C,"Ladder: below each intermediate low, 25% at the event horizon of two pools, leave a 20% runner",4,0,"2024 3, 2026 1",2024-08-28,2026-03-19
-EXIT-STYLE,Management,A,"One full exit at the first pool (+1 tick), e.g. counter-bias or post-holiday trades",4,0,"2024 2, 2026 2",2024-09-30,2026-10-28
-EXIT-STYLE,Management,B,"Staggered partials (chest/head, each new low) with a runner to the terminus or an extreme limit",10,0,"2024 4, 2026 6",2024-10-01,2026-10-02
+EXIT-DEPTH,Management,B,Lower exit threshold: close or trail tight from 75% of the projection; don't demand the exact target,4,0,"2025 2, 2026 2",2025-02-21,2026-03-28
+PARTIAL-TRIGGER,Management,A,"At targets/liquidity only: half off by T2, one runner",4,0,"2024 1, 2025 2, 2026 1",2024-09-17,2026-04-08
+PARTIAL-TRIGGER,Management,B,"On a warning candle: a body closes in the wrong half of the entry array, peel one of two",2,0,"2025 1, 2026 1",2025-11-14,2026-03-27
+PARTIAL-TRIGGER,Management,C,"Ladder: below each intermediate low, 25% at the event horizon of two pools, leave a 20% runner",6,0,"2024 3, 2025 2, 2026 1",2024-08-28,2026-03-19
+EXIT-STYLE,Management,A,"One full exit at the first pool (+1 tick), e.g. counter-bias or post-holiday trades",7,0,"2024 2, 2025 3, 2026 2",2024-09-30,2026-10-28
+EXIT-STYLE,Management,B,"Staggered partials (chest/head, each new low) with a runner to the terminus or an extreme limit",13,0,"2024 4, 2025 3, 2026 6",2024-10-01,2026-10-02
 EXIT-STYLE,Management,C,"Time-based offload: take part off 10:00-11:00 (London close) on 07:00-10:00 entries, hold the rest toward the daily close in bias",2,0,2026 2,2026-01-12,2026-01-13
-OVERNIGHT-HOLD,Management,A,Flat by 16:00: day trades are never held overnight,1,0,2026 1,2026-01-13,2026-01-13
-OVERNIGHT-HOLD,Management,B,OSOK: hold a day-of-entry position overnight to a daily FVG CE (adds after midnight),2,0,2024 2,2024-09-06,2024-09-06
+OVERNIGHT-HOLD,Management,A,Flat by 16:00: day trades are never held overnight,3,0,"2025 2, 2026 1",2025-10-11,2026-01-13
+OVERNIGHT-HOLD,Management,B,OSOK: hold a day-of-entry position overnight to a daily FVG CE (adds after midnight),3,0,"2024 2, 2025 1",2024-09-06,2025-03-28
 STOP-PLACE,Management,A,Below the mean threshold of the order block (nearest the sweep low),3,2,"2023 2, 2024 1",2023-01-17,2024-08-12
 STOP-PLACE,Management,B,"Just beyond the FVG-forming (middle) candle, 1 tick",7,3,"2023 3, 2024 4",2023-01-01,2024-10-28
 STOP-PLACE,Management,C,"Beyond candle 1 / the whole gap (conservative one-contract stop), 2-3 ticks past the far boundary",5,0,"2024 3, 2026 2",2024-09-12,2026-02-10
-STOP-PLACE,Management,D,One tick beyond the order block open/high inside the entry leg,2,0,2024 2,2024-09-06,2024-09-11
-STOP-PLACE,Management,E,"Tight: one tick past a wick CE or the gap CE (low resistance days, small ranges)",4,1,"2023 1, 2024 3",2023-09-01,2024-10-25
+STOP-PLACE,Management,D,One tick beyond the order block open/high inside the entry leg,3,0,"2024 2, 2025 1",2024-09-06,2025-05-05
+STOP-PLACE,Management,E,"Tight: one tick past a wick CE or the gap CE (low resistance days, small ranges)",10,1,"2023 1, 2024 3, 2025 6",2023-09-01,2025-10-14
 STOP-PLACE,Management,F,Condition-based wide: entry gap range added again beyond the gap (2x) on high resistance days,1,0,2024 1,2024-09-27,2024-09-27
 STOP-PLACE,Management,G,"Beyond every nearby inefficiency: with two stacked FVGs, beyond the higher one / its CE",8,3,"2023 3, 2024 5",2023-02-08,2024-12-05
 STOP-PLACE,Management,H,"Volatility-based: in high volatility use the setup-timeframe (1m) swing, not the sub-minute swing",2,0,2026 2,2026-02-09,2026-02-27
-RESISTANCE-DAY,Management,A,Beginner: stand aside on high resistance days; trade only low resistance runs,4,0,"2024 2, 2026 2",2024-10-07,2026-02-28
+STOP-PLACE,Management,I,One tick beyond the previous candle's wick low/high,1,0,2025 1,2025-02-13,2025-02-13
+RESISTANCE-DAY,Management,A,Beginner: stand aside on high resistance days; trade only low resistance runs,7,0,"2024 2, 2025 3, 2026 2",2024-10-07,2026-02-28
 RESISTANCE-DAY,Management,B,"Trade both, but in high resistance frame nearer arrays, use wider stops, one contract, no trailing",4,0,"2024 3, 2026 1",2024-09-27,2026-03-10
-RESISTANCE-DAY,Management,C,Forecast it before the open: news at 08:30/first hour + not Monday + clear draws + ORG 45/75 = low resistance; large range days ~90% low resistance,2,0,2024 2,2024-10-25,2024-10-28
-CONTRACT,Data,A,Front month / delivery contract (or the largest open interest contract),1,0,Charter 1,2024-01-26,2024-01-26
-CONTRACT,Data,B,"Back-adjusted continuous contract: for old highs/lows at ATHs, and (107) only to reveal volume imbalances",4,0,2026 4,2026-03-21,2026-04-20
+RESISTANCE-DAY,Management,C,Forecast it before the open: news at 08:30/first hour + not Monday + clear draws + ORG 45/75 = low resistance; large range days ~90% low resistance,3,0,"2024 2, 2025 1",2024-10-25,2025-09-30
+CONTRACT,Data,A,Front month / delivery contract (or the largest open interest contract),6,0,"Charter 1, 2025 5",2024-01-26,2025-10-15
+CONTRACT,Data,B,"Back-adjusted continuous contract: for old highs/lows at ATHs, and (107) only to reveal volume imbalances",6,0,"2025 2, 2026 4",2025-03-21,2026-04-20
 CONTRACT,Data,C,Compute targets on both delivery and continuous; take the one closest to market price,2,0,2026 2,2026-03-27,2026-04-14
 CONTRACT,Data,D,"Rollover week: trade the front month, but add the next contract's VIs/FVGs (15m/5m) as targets",1,0,2026 1,2026-03-08,2026-03-08
-FVG-ENTRY,Entries,A,"Near edge or first quadrant (""buy the fair value gap high or upper quadrant""); a CE limit may never fill",1,0,2026 1,2026-01-13,2026-01-13
-FVG-ENTRY,Entries,B,"At or beyond the CE (far half), accepting missed fills",1,0,2026 1,2026-01-02,2026-01-02
+FVG-ENTRY,Entries,A,"Near edge or first quadrant (""buy the fair value gap high or upper quadrant""); a CE limit may never fill",2,0,"2025 1, 2026 1",2025-02-21,2026-01-13
+FVG-ENTRY,Entries,B,"At or beyond the CE (far half), accepting missed fills",4,0,"2025 3, 2026 1",2025-02-13,2026-01-02
+VENOM-STOP,Entries,A,Stop below the candle that pierces back above the swept low; entry at the second candle's close or less,1,0,2025 1,2025-05-12,2025-05-12
+VENOM-STOP,Entries,B,Stop just below the CE of the SIBI+BISI balanced price range; entry buy stop at the BISI high or limit at its open or less,1,0,2025 1,2025-04-30,2025-04-30
