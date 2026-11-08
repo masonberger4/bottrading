@@ -197,7 +197,7 @@ class Params:
     nfp_day: bool = True           # experienced (101, 105, 071): trade NFP Friday (entries from 09:30)
     nfp_week_block: bool = False   # beginner rule: no NFP-week Wed PM / Thu / Fri
     reverse_after_loss: bool = True    # experienced (001 ~47:32): may reverse after a losing trade
-    fomc_pm_from: int = 885          # D8 test: FOMC-day PM entries allowed from this time (885)
+    fomc_pm_from: int = 840          # D8 test: FOMC-day PM entries allowed from this time (885)
     nfp_thu: bool = True           # D8 test: trade the Thursday of NFP week
     skip_cpi: bool = False         # D9 test
     skip_monday: bool = False      # D20 test (NFP / FOMC weeks still traded)
@@ -1222,7 +1222,7 @@ class Params:
     fomc_judas_end: int = 870            # M9.2 correction: 14:30 (no source for 14:25 was found)
     fomc_stage2_cont: bool = False       # M9.2 (065B): the real-move side holds through the whole PM, not only to fomc_pm_from
     # N4 / D9 CPI
-    pre_cpi: str = "off"                 # N4 / D9 (028; 029 ~5:22): the day before CPI: "off", "small" (pre_cpi_risk), "skip"
+    pre_cpi: str = "small"                 # N4 / D9 (028; 029 ~5:22): the day before CPI: "off", "small" (pre_cpi_risk), "skip"
     pre_cpi_risk: float = 0.5
     skip_pre_cpi: bool = False           # D9: the same as pre_cpi="skip"
     flat_0830_extras: bool = True        # N4 (030 ~7:22; 047 ~5:26): with pre_flat_0830, the 08:29 flat also covers Ma Deuce and the
@@ -1234,7 +1234,7 @@ class Params:
     skip_auction_am: bool = False        # N5.6 (cc10_008 ~7:29): avoid the AM on Treasury auction days (calendar.is_auction_day, approximate)
     # M9 / M9.1 news Judas. NOTE (main engine only): the news / FOMC Judas, side filters (or_bias, or_wide, pm_continue_am), or_no_entry / or_deep,
     # macro gates and fomc_observe / fomc_only_am act in the main engine's scan loop; the Silver Bullet and Ma Deuce ignore them.
-    news_judas: str = "off"              # M9 / M9.1 (064 ~52:12; 073 ~10:42): the first run of a pre-release pool after the release is
+    news_judas: str = "block"              # M9 / M9.1 (064 ~52:12; 073 ~10:42): the first run of a pre-release pool after the release is
                                          # the losing side: "block" = that direction is closed, "wait" = also no entry before a run
     news_judas_ref_min: int = 60         # [our interpretation] the pre-release reference pools = the high / low of this many minutes
     # T4 / D1 opening range
@@ -1371,7 +1371,7 @@ class Params:
     consol_pm_rule: bool = True
     consol_pm_pools: tuple = ("pd", "london", "draw")   # N8.3 "the AM ran a stop pool": the prior day's high / low, London's, the AM lock's own
                                          # draw; "on" (the overnight range: nearly always run) is opt-in [our interpretation]
-    big_day_am_skip: bool = False        # N8.4 (033 ~13:27): a very large prior range or a large ORG gap -> the first 30-45 min chop:
+    big_day_am_skip: bool = True        # N8.4 (033 ~13:27): a very large prior range or a large ORG gap -> the first 30-45 min chop:
                                          # sacrifice the AM (everything before 13:30), keep the PM
     big_day_range_mult: float = 1.5      # [our interpretation] very large = prior range > this x the ADR5 before it
     big_day_org_frac: float = 0.5        # [our interpretation] large ORG = |open - prior close| >= this x ADR5
@@ -2911,9 +2911,9 @@ class Params:
     heavy_scale: float = 0.33
     no_lunch_retrace_hold: bool = False  # T9-strong-am-no-lunch-retrace (cc10_012 ~00:11:54): a strong AM rally from the day's low whose 12:00-13:00 low retraces < lunch_retr_max of the AM leg keeps the AM position past the 12:00 close (stop to the lunch low, out at 15:50 or the target); else it closes at 13:00. The PM-entry extension to the last hour is NOT built
     lunch_retr_max: float = 0.3          # ... [our interpretation] 25-30 %
-    hold_through_0830: bool = True      # N5-hold-through-0830 (032 ~00:06:56; 091 ~00:22:26): the experienced version - a pre-09:30 position (incl. Ma Deuce / SB London) is held through the 08:30 release, the exit being a resting limit at the pool; jobs / CPI days stay excluded. PRE8 orders still never fill on or after the 08:30 bar. Default OFF (flat at 08:29, pre_flat_0830) because owner directive "No 08:30 entries; pre-09:30 setups are test-only switches" (owner_directives.md line 16) wins over the experienced-version rule; listed under the owner questions
+    hold_through_0830: bool = False      # N5-hold-through-0830 (032 ~00:06:56; 091 ~00:22:26): the experienced version - a pre-09:30 position (incl. Ma Deuce / SB London) is held through the 08:30 release, the exit being a resting limit at the pool; jobs / CPI days stay excluded. PRE8 orders still never fill on or after the 08:30 bar. Default OFF (flat at 08:29, pre_flat_0830) because owner directive "No 08:30 entries; pre-09:30 setups are test-only switches" (owner_directives.md line 16) wins over the experienced-version rule; listed under the owner questions
     no_entry_0825: bool = True           # ... no pre-09:30 order fills 08:25-08:30 on a day with a 08:30 release (main engine; the experienced hold_through_0830 lifts it) [spec default on: the existing intent of pre_flat_0830]
-    thu_cap: bool = False                # N10-thursday-caps-week (cc08_001 ~00:21:59): a Thursday position entered before 09:30 is closed at 10:00; a Thursday 09:30-12:00 new weekly extreme into a daily array blocks entries in its direction that day (x_thu_week_ext) [our interpretation]
+    thu_cap: bool = True                # N10-thursday-caps-week (cc08_001 ~00:21:59): a Thursday position entered before 09:30 is closed at 10:00; a Thursday 09:30-12:00 new weekly extreme into a daily array blocks entries in its direction that day (x_thu_week_ext) [our interpretation]
     bpr_limit: str = "mt_body_close_abort"   # A11-bpr-retrace-allowance (001 ~20:43; 012 ~22:34; 024 ~6:18; 026 ~1:05:53; 065 ~4:28): how deep a return into the BPR under the entry may go (needs bpr_abort or bpr_rule): "mt_body_close_abort" (the built rule, 065) / "no_reentry" (001) / "ce_touch" (012) / "mt_warn_far_exit" (026) / "far_edge" (024: a trade-through of the far edge)
     breaker_mt_test: str = "close"       # A13-breaker-mt-trade-test (018 ~1:56): "close" (a body close below the breaker MT, the built rule) / "trade" (a print below MT - mohawk_ticks)
     far_half_no_adds: bool = False       # A5-partial-fill-strength-read (007 ~10:00 ...): no adds once price traded into the far half (past the CE) of the newest gap formed after the entry; tag strength_read
@@ -3098,6 +3098,8 @@ class Params:
     macro_gate_set: tuple = ()           # T7-macro-start-only-all (044 ~00:56:58; 046): the macro windows ("0950", "1050", "1150", "1330", "1450", "1515") the macro_gate / macro_only tests use; () = every window as before
     macro_trend_off: bool = False        # T7-no-macro-trending (025 ~00:59:10): on a one-sided trending day (no retrace to the running session EQ after 10:00) the macro gate is waived
     lunch_raid: str = "after_1000"              # T8-lunch-raid-target (025 ~01:01:51; 064 ~01:46:02; 075): the lunch pool L - "recent" (last swing against the AM move before noon) / "am_low" (the AM extreme before 11:00) / "post_news" (the first swing after the 08:30 release) / "first_of"
+    inside_day_def: str = "wick"         # INSIDE-DAY card A (by wicks); "body" (B) / "body_in_range" (C) - the day tag inside_day and daycontext.candle_patterns
+    holiday_week_skip: bool = True       # HOLIDAY-WEEK card B (2 videos): stand aside in a holiday week (dwc1.calendar_block); A trade it / C holiday_week_thu_fri
     lunch_range: tuple = (690, 810)      # LUNCH-WINDOW card C (9 videos): the lunch range 11:30-13:30; its high / low are PM pools from its end (A 12:00-13:00, B 12:00-13:30, D from 10:30 [our interpretation])
     macro_grid: str = "hourly"           # MACRO-GRID card B (9 videos): macros every hour :50-:10 (07:50 .. 15:10) plus the named windows; "fixed" = the 2023 named list only (newscal.MACROS_T7)
     lunch_raid_wait: bool = False        # ... no PM entry until L traded a tick through or lunch_raid_by
@@ -3127,7 +3129,7 @@ class Params:
     holiday_week_mult: float = 1.0       # N7-holiday-week (045 ~00:44:04): holiday weeks (wonky delivery): risk multiplier (test 0.5); != 1 also means no pyramiding on holiday_week days
     august_mode: str = "off"             # N7-august (079 ~00:10:14; 081; 084; 087): the whole month - "skip" or "light" (experienced: risk x0.5, no adds, a single exit at the first target)
     summer_off: bool = False             # N7-august (084 ~00:28:06; 087 ~00:01:56): no trading Jun-Aug
-    season_quality: str = "off"          # B23-seasonal-quality (079 ~00:24:47; 100; 102; cc10_015): "tag" (season_prime / season_poor / season_off / season_may_overlap) or "size" (risk x 1.0 / 0.5 / 0.75 [our interpretation])
+    season_quality: str = "size"          # B23-seasonal-quality (079 ~00:24:47; 100; 102; cc10_015): "tag" (season_prime / season_poor / season_off / season_may_overlap) or "size" (risk x 1.0 / 0.5 / 0.75 [our interpretation])
     season_autumn_start: int = 9         # ... the autumn prime window starts Sep 1 (079) or 10 = Oct 1 (cc10_015)
     season_march_mult: float = 1.0       # ... March risk multiplier in "size" mode (B23 flags March low probability; test 0.5)
     skip_election: str = "off"           # N7-election (cc04_002 ~00:26:40): "two_weeks" (Nov 1 to election day + 9) / "narrow" (election day and the next trading day) - ICT's personal practice
@@ -3141,7 +3143,7 @@ class Params:
     sd_week_detect: bool = False         # N8-seek-destroy-week (cc07_002 ~00:07:57): the S&D week needs the Mon-Wed/Thu shallow two-sided run (sd_shallow_frac x ADR5, no daily close beyond) on top of the FOMC / NFP / July-August calendar condition
     sd_shallow_frac: float = 0.25        # ... [our interpretation]
     sd_after_array: bool = False         # ... the week is released again once its extreme touched a D / W array (a new setup is then allowed)
-    big_day_am_resume: int = 0           # N8-large-org-day (033 ~00:13:51): 0 = off (test 645) - big_day_am_skip lets the AM resume from this minute
+    big_day_am_resume: int = 630           # N8-large-org-day (033 ~00:13:51): 0 = off (test 645) - big_day_am_skip lets the AM resume from this minute
     nwog_templates: str = "off"          # BH-NWOG-week-open-scenarios (084; 028; 029; 103; 101): "tag" / "gate" the Monday templates (nwog_up_bull, nwog_dn_bear, nwog_flat_bear, nwog_below_wick_bull + fill status)
     thu_strict: bool = False             # BH-N10-thursday-not-top-call (044 ~00:16:07): Thursday after a one-sided week: a counter-trend entry needs an HTF array at the sweep, a displaced MSS (x1.5) and a 10:00-11:00 fill
     fri_one_sided: str = "off"           # BH-B17-friday-after-one-sided-week (045 ~00:11:00): "tag" / "raid_first" (longs need the sweep below the 09:30 open; T1 capped at fri_t1_pts)
@@ -3776,7 +3778,7 @@ class Params:
                          ("fomc_whipsaw_skip", ("off", "london", "am")), ("am_search_sb", ("exempt", "include")),
                          ("macro_fail_windows", ("am", "all")), ("macro_fail_scope", ("session", "day")),
                          ("lunch_raid", ("off", "recent", "am_low", "post_news", "after_1000", "macro_0950", "first_of")),
-                         ("macro_grid", ("fixed", "hourly")),
+                         ("macro_grid", ("fixed", "hourly")), ("inside_day_def", ("wick", "body", "body_in_range")),
                          ("am_session", ("default", "0830_1200"))):                      # caption-gap pass news_calendar_times#1/1
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
@@ -5928,6 +5930,18 @@ def december_dir(hist: list[pd.DataFrame], day, flat_frac: float = 0.25) -> int:
     return int(np.sign(c - o))
 
 
+def _inside_day(prev: pd.DataFrame, cur: pd.DataFrame, how: str = "wick") -> bool:
+    """INSIDE-DAY card: "wick" = cur's high / low inside prev's (A, default); "body" = cur's body inside prev's body (B);
+    "body_in_range" = cur's body inside prev's high-low range, wicks may poke out (C). Bodies = the session open / last close."""
+    ph, pl, ch, cl_ = float(prev.high.max()), float(prev.low.min()), float(cur.high.max()), float(cur.low.min())
+    po, pc, co, cc = float(prev.open.iloc[0]), float(prev.close.iloc[-1]), float(cur.open.iloc[0]), float(cur.close.iloc[-1])
+    if how == "body":
+        return min(co, cc) > min(po, pc) and max(co, cc) < max(po, pc)
+    if how == "body_in_range":
+        return min(co, cc) > pl and max(co, cc) < ph
+    return ch < ph and cl_ > pl
+
+
 def day_context(hist: list[pd.DataFrame], day, p: "Params | None" = None, eth: dict | None = None,
                 conf=None) -> tuple[set, dict]:
     """Daily-candle context from the prior regular sessions (B11, B17, N8, M14, N7.4):
@@ -5960,7 +5974,7 @@ def day_context(hist: list[pd.DataFrame], day, p: "Params | None" = None, eth: d
     cl = [float(x.close.iloc[-1]) for x in hist]
     if rng[-1] > 2 * np.mean(rng[-6:-1]):
         tags.add("big_prev")
-    if hist[-1].high.max() < hist[-2].high.max() and hist[-1].low.min() > hist[-2].low.min():
+    if _inside_day(hist[-2], hist[-1], getattr(p, "inside_day_def", "wick") if p is not None else "wick"):
         tags.add("inside_day")
     d = np.sign(np.diff(cl[-4:]))
     if len(d) == 3 and abs(d.sum()) == 3:

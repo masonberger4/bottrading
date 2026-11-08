@@ -160,3 +160,90 @@ NOT_BUILT.update({
     ("GAP-LIFE", "D"): "NDOG / ORG two-week life keyed to Mon / Fri only; queued",
     ("NDOG-DEF", "B"): Q,
 })
+
+
+# --- stage c: news, day filters, weekly profile -----------------------------------------------------------
+_NW = lambda w, m, two, j: dict(news_wait=w, news_wait_min=m, news_two_sided=two, news_judas=j)
+CARDS.update({
+    "NEWS-WAIT": {
+        "A": _NW("fixed", 30, False, "off"),
+        "B": _NW("fixed", 15, False, "off"),
+        "C": _NW("fixed", 2, False, "off"),
+        "D": _NW("range", 30, False, "block"),   # trade off the release: its dealing range, the first run is the Judas
+        "F": _NW("range", 30, True, "wait"),     # several reports: both sides of the release range taken first
+        "H": _NW("range", 30, False, "block"),
+    },
+    "NEWS-HOLD": {
+        "A": dict(hold_through_0830=False),
+        "B": dict(hold_through_0830=True),
+    },
+    "FOMC-DAY": {                              # PM entries from: B the first FVG after 14:00; C after 14:45
+        "B": dict(fomc_pm_from=840),
+        "C": dict(fomc_pm_from=885),
+    },
+    "NFP-THU-FRI": {
+        "A": dict(nfp_day=False, nfp_thu=False, nfp_week_block=True),
+        "B": dict(nfp_day=True, nfp_thu=True, nfp_week_block=False),
+    },
+    "FED-SPEECH": {                            # tie open: the engine keeps trading the AM until Mase picks
+        "A": dict(fed_chair_skip_am=True),
+    },
+    "MONDAY": {                                # tie open
+        "A": dict(monday_mode="trade"),
+        "B": dict(monday_mode="obvious"),
+    },
+    "CPI-WEEK": {
+        "A": dict(pre_cpi="small"),
+        "C": dict(pre_cpi="off"),
+    },
+    "AFTER-BIG-DAY": {
+        "A": dict(big_day_am_skip=True, big_day_am_resume=0),     # sacrifice the AM, keep the PM
+        "B": dict(big_day_am_skip=True, big_day_am_resume=630),   # no trades 09:30-10:30 [the down-day condition is not built: any very large day]
+    },
+    "RANGE-REGIME": {"B": {}},
+    "SEASON-ACTIVITY": {
+        "A": dict(season_quality="size"),
+        "B": dict(season_quality="off"),
+    },
+    "INSIDE-DAY": {
+        "A": dict(inside_day_def="wick"),
+        "B": dict(inside_day_def="body"),
+        "C": dict(inside_day_def="body_in_range"),
+    },
+    "HOLIDAY-WEEK": {
+        "A": dict(holiday_week_skip=False, holiday_week_thu_fri="off"),
+        "B": dict(holiday_week_skip=True, holiday_week_thu_fri="off"),
+        "C": dict(holiday_week_skip=False, holiday_week_thu_fri="trade"),
+    },
+    "TGIF-DEPTH": {                            # acts with the TGIF model (tgif_model, off by default)
+        "A": dict(tgif_cap=0.30, tgif_stand_down=0.40),
+        "B": dict(tgif_cap=0.40, tgif_stand_down=0.45),   # [our interpretation] up to 40%
+    },
+    "TGIF-TIMING": {"A": {}},
+    "WEEK-PROFILE": {                          # C: Thursday caps the week (N10 thu_cap)
+        "C": dict(thu_cap=True),
+        "A": dict(thu_cap=False),              # [our interpretation] no Thursday cap; the Tue/Wed low is the wk_profile tag
+    },
+})
+SAME_AS_ENGINE.update({
+    ("NEWS-WAIT", "H"): "the release dealing range applies to 10:00 releases too",
+    ("RANGE-REGIME", "B"): "continuation through the break is the engine's default",
+    ("TGIF-TIMING", "A"): "TGIF is a Friday model in the engine",
+})
+NOT_BUILT.update({
+    ("NEWS-WAIT", "E"): "fade the release's first leg on range-bound days after 10:00: no range-day release fade yet; queued",
+    ("NEWS-WAIT", "G"): Q,
+    ("FOMC-DAY", "A"): "an FOMC AM cut-off at 10:30 is not built; queued",
+    ("FOMC-DAY", "D"): "beginner version (avoid FOMC day); experienced default stands",
+    ("FED-SPEECH", "B"): Q, ("FED-SPEECH", "C"): Q,
+    ("MONDAY", "C"): "Monday pre-market only needs a per-day session list; queued",
+    ("CPI-WEEK", "B"): Q,
+    ("AFTER-BIG-DAY", "C"): "'keep expectations low' has no exact rule",
+    ("TWO-SIDED", "A"): Q, ("TWO-SIDED", "B"): Q,
+    ("RANGE-REGIME", "A"): Q,
+    ("SEASON-ACTIVITY", "C"): Q,
+    ("HOLIDAY-WEEK", "D"): Q,
+    ("TGIF-DEPTH", "C"): Q,
+    ("TGIF-TIMING", "B"): Q, ("TGIF-TIMING", "C"): Q,
+    ("WEEK-PROFILE", "B"): Q,
+})
