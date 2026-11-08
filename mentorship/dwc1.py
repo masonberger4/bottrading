@@ -869,6 +869,8 @@ def calendar_block(d: date, session: str, p, t: int = 0):
         return "election"                                         # N7-election (cc04_002 ~00:26:40)
     if p.summer_off and 6 <= d.month <= 8:
         return "summer_off"                                       # N7-august (084 ~00:28:06; 087 ~00:01:56)
+    if getattr(p, "holiday_week_skip", False) and CAL.holiday_in_week(d):
+        return "holiday_week"                                     # HOLIDAY-WEEK card B: stand aside in a holiday week [our interpretation: low volume = a weekday market holiday in the week]
     return None
 
 

@@ -26,7 +26,7 @@ LADDER_TRAILS = ("candle_mt", "eq_pause", "rej_block", "071", "structure")
 BOOLS = ("raise_on_vi", "raise_on_sth_break", "trail_swing_at_array", "trail_after_pool", "ob_stop_to_mt_after_run", "rde_partials", "peel_singles", "pm_macro_runner", "hh_low_hold",
          "marginal_ext_warn", "stall_exits", "wick_ce_close_test", "gap_q_hold", "ref_speed_check", "opp_tear_check", "edge_bump_add", "edge_bump_guard", "late_fvg_flip", "sister_breaker_hold",
          "stall_at_htf", "chop_close", "upclose_pair_guard", "urgency_runner", "pool_lock_day_done")
-NUMS = ("pool_lock_pts", "ob_retests", "htf_bank", "adr_closed_min", "ote_leave_bars", "fulcrum_speed_bars", "breaker_far_partial", "small_fvg_linger")
+NUMS = ("pool_lock_pts", "ob_retests", "htf_bank", "adr_closed_min", "ote_leave_bars", "fulcrum_speed_bars", "breaker_far_partial", "small_fvg_linger", "depth_trail")
 STRS = ("trail_wick_gate", "three_array_mode", "held_hi_action")
 
 
@@ -51,10 +51,11 @@ def check_params(p) -> None:
     if (p.pool_lock_pts < 0 or not 0 <= p.pool_lock_after <= 1 or p.ob_retests < 0 or not 0 <= p.htf_bank < 1 or not 0 < p.rde_arm <= 1 or not 0 < p.rde_frac <= 1
             or not 0 < p.hh_low_frac <= 1 or p.marginal_pts < 0 or p.marginal_n < 1 or p.stall_bars < 1 or not 0 <= p.adr_closed_min < 1 or p.ote_leave_bars < 0
             or not 0 < p.pd3_close_frac <= 1 or p.pd3_near_pts < 0 or p.speed_k <= 0 or p.ref_speed_bars < 1 or not 0 < p.speed_pare <= 1 or p.stall_at_htf_bars < 1
-            or p.fulcrum_speed_bars < 0 or not 0 <= p.breaker_far_partial < 1 or p.small_fvg_linger < 0 or p.urgency_stop_pts < 0):
+            or p.fulcrum_speed_bars < 0 or not 0 <= p.breaker_far_partial < 1 or p.small_fvg_linger < 0 or p.urgency_stop_pts < 0
+            or not 0 <= p.depth_trail < 1):
         raise ValueError("management_exits #2/3: pool_lock_pts, ob_retests, marginal_pts, pd3_near_pts, ote_leave_bars, fulcrum_speed_bars, small_fvg_linger, urgency_stop_pts >= 0; "
                          "pool_lock_after in [0, 1]; htf_bank, adr_closed_min, breaker_far_partial in [0, 1); rde_arm, rde_frac, hh_low_frac, pd3_close_frac, speed_pare in (0, 1]; "
-                         "marginal_n, stall_bars, ref_speed_bars, stall_at_htf_bars >= 1; speed_k > 0")
+                         "marginal_n, stall_bars, ref_speed_bars, stall_at_htf_bars >= 1; speed_k > 0; depth_trail in [0, 1)")
 
 
 def any_on(p) -> bool:
@@ -701,6 +702,9 @@ def manage(ctx, sd, pos, tr, i: int, ts, p, pctx=None, psides=None, ppos=None) -
     # 49 running down equity: one tranche above each short-term high once armed
     if p.rde_partials and _rde(sd, pos, tr, d, i, ts, p, o, h, lv, avg):
         return
+    # EXIT-DEPTH B (scorecard card, Mase 2026-11-08): from depth_trail of the way to the final rung the stop trails one tick under each closed bar's low
+    if p.depth_trail:
+        _depth_trail(pos, d, i, h, l, c, p, lv, avg)
     # 50 / 92 the runner peel
     if p.peel_singles and _peel(ctx, sd, pos, tr, d, i, ts, p, o, h, l, c, avg):
         return
@@ -1233,6 +1237,23 @@ def _rde(sd, pos, tr, d, i, ts, p, o, h, lv, avg) -> bool:
             if not pos["left"]:
                 return True
     return False
+
+
+def _depth_trail(pos, d, i, h, l, c, p, lv, avg) -> None:
+    """EXIT-DEPTH B: "close or trail tight from 75% of the projection; don't demand the exact target" - armed once a bar's high reaches depth_trail of the way from the
+    average fill to the final rung; from then on every closed bar raises the stop to one tick under its low [our interpretation: "trail tight" = the engine bar's low (1m or 5m); only the trail half of
+    "close or trail" is built]. A trail: refused while a trail lock / wick gate / freeze holds (raise_to gate=True); a bar that exits earlier in manage skips it."""
+    fin = lv[-1] if lv else None
+    if fin is None or fin <= avg:
+        return
+    hit("eval_depth_trail")
+    if not d.get("depth_armed"):
+        if (h - avg) / (fin - avg) < p.depth_trail - 1e-12:
+            return
+        d["depth_armed"] = True
+        hit("depth_trail_armed")
+    if raise_to(pos, l - p.tick, "depth_trail", c, p):
+        hit("depth_trail_raise")
 
 
 def _peel(ctx, sd, pos, tr, d, i, ts, p, o, h, l, c, avg) -> bool:

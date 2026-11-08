@@ -348,6 +348,7 @@ class Prepared:
     midnight_map: dict | None = None   # bias_htf D22 bias_open_src="es_map": {date: the futures midnight open mapped to this instrument}
     reb: dict | None = None        # caption-gap L5 nwog_rebalanced: {(high, low): (known_time, near_edge, exit_edge)} of the rebalanced NWOGs
     daily_all: dict | None = None  # caption-gap pass day_week_context#1/3 (season_min_rank): {date: RTH close} of every session (run_day reads prior years only)
+    ath: dict | None = None        # ATH-RULE (scorecard card): {date: the highest high of every day frame before that date} (cards_rules.ath_map)
 
 
 def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
@@ -395,7 +396,9 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
             from .levels import map_midnight
             mm = map_midnight(ref_df, df)
     da = {g.index[0].date(): float(rth(g).close.iloc[-1]) for g in ds} if p.season_min_rank > 0 else None
-    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth, eve, mm, reb, da)
+    from .cards_rules import ath_map
+    ath = ath_map(ds) if p.ath_rule != "off" else None
+    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth, eve, mm, reb, da, ath)
 
 
 def evenings(df: pd.DataFrame) -> dict:
@@ -444,6 +447,7 @@ def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: d
                 bias_by_cut={m: t_.loc[d].to_dict() for m, t_ in pr.cuts.items() if d in t_.index},
                 meta=pr.meta, week=week, eve=(pr.eve or {}).get(d),
                 post_eve=_SM4.post_evening(pr.df, d) if p.asia_session else None,
+                ath=(pr.ath or {}).get(d),
                 daily_all=pr.daily_all)
 
 

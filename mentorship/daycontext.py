@@ -141,7 +141,9 @@ def candle_patterns(hist, p, eth: dict | None = None) -> dict:
     out = dict(inside_day=False, outside=None, nr3=False, nr7=False, inside_body=False, inside_week=False)
     if len(hist) >= 2:
         o, h, l, c = _ohlc(hist[-2:])
-        out["inside_day"] = bool(h[1] < h[0] and l[1] > l[0])
+        how = getattr(p, "inside_day_def", "wick")                 # INSIDE-DAY card (A wicks default; B bodies; C body inside the range)
+        b0_, b1_ = (min(o[0], c[0]), max(o[0], c[0])), (min(o[1], c[1]), max(o[1], c[1]))
+        out["inside_day"] = bool(b1_[0] > b0_[0] and b1_[1] < b0_[1]) if how == "body" else             bool(b1_[0] > l[0] and b1_[1] < h[0]) if how == "body_in_range" else bool(h[1] < h[0] and l[1] > l[0])
         if h[1] > h[0] and l[1] < l[0]:
             out["outside"] = "down" if c[1] < o[1] else "up"
             out["out_hi"], out["out_lo"] = float(h[1]), float(l[1])
