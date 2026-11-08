@@ -92,3 +92,9 @@ Same PR: 2023 Mentorship 023 got caption-based notes, and 2025 Lecture 46 was no
 playlist. Three new cards: FED-SPEECH (2024 C66), INSIDE-DAY (2024 C92 + SMC 79), HOLIDAY-WEEK (2024 C102). C16 and C19
 stay excluded, C30 stays Mase's 11-08 pick; the other 16 have no opposing video and stay single-source defaults
 (`singles.py` notes which other videos agree). 65 cards in all.
+
+2025 Lectures daily reviews append (2026-11-08): `m2025_draft_rules.md` Part F conflicts 11-39 (46 daily/live reviews, series
+complete). Three new cards (WICK-SELECT, PDA-LOOKBACK, VENOM-STOP), new positions on IFVG-CONFIRM (D), UNICORN (C), ATH-RULE (C),
+FVG-CARRY (C, D), STOP-MGMT (I, J, K), STOP-PLACE (I), BIAS-SOURCE (E), PYRAMID-WHERE (D), AFTER-BIG-DAY (C), NEWS-WAIT (H),
+GAP-LIFE (E), and ~240 evidence rows on existing cards. 13, 17, 23, 24, 27, 28, 29 are "not scored" (17 defers to Mase's SMC 17
+IOFED pick). C40 adds L36 to FED-SPEECH B. 68 cards in all (after PR #52). Rows tagged L2025:L02-L68.
