@@ -223,4 +223,3 @@ PDA-LOOKBACK,A,20 trading days is enough; 40/60 days only in a runaway (paraboli
 PDA-LOOKBACK,B,"Use 20, 40 and 60 trading days; beyond 40 days needs more experience"
 VENOM-STOP,A,Stop below the candle that pierces back above the swept low; entry at the second candle's close or less
 VENOM-STOP,B,Stop just below the CE of the SIBI+BISI balanced price range; entry buy stop at the BISI high or limit at its open or less
-FED-SPEECH,D,"Owner pick (Mase 2026-11-08): no trades before or during the speech; trade after it ends"
