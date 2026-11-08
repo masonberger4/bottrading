@@ -57,8 +57,8 @@ def check_params(p) -> None:
         raise ValueError(f"entry {p.entry!r}: expected one of {_S().ENTRY_MODES + ENTRY_MODES_ES2}")
     if p.entry_order not in ("limit", "stop_cc", "market_on_touch"):
         raise ValueError(f"entry_order {p.entry_order!r}: expected 'limit', 'stop_cc' or 'market_on_touch'")
-    if p.ob_arm not in ("leave", "touch", "intrabar_htf"):
-        raise ValueError(f"ob_arm {p.ob_arm!r}: expected 'leave', 'touch' or 'intrabar_htf'")
+    if p.ob_arm not in ("leave", "touch", "high", "intrabar_htf"):
+        raise ValueError(f"ob_arm {p.ob_arm!r}: expected 'leave', 'touch', 'high' or 'intrabar_htf'")
     if len(p.ob_grade_mult) != 2 or any(m <= 0 for m in p.ob_grade_mult):
         raise ValueError(f"ob_grade_mult {p.ob_grade_mult!r}: expected two multipliers > 0 (A, B)")
     for t_ in tuple(p.ob_session_windows) + tuple(p.close_prox_windows):

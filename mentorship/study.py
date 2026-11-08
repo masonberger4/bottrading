@@ -283,6 +283,10 @@ CURRENT.update(OA1029_OLD)
 CARDS_S1_OLD = dict(depth_trail=0.0, ath_rule="off", neutral_5050="off", tgif_thu=False)
 PRE_OWNER.update(CARDS_S1_OLD)
 CURRENT.update(CARDS_S1_OLD)
+# stage S2 (2026-11-08): FPFVG / FVG / OB validity, wick rules, range anchor and range regime
+CARDS_S2_OLD = dict(fpfvg_def="off", fvg_carry_days=0, fvg_valid="any", ob_valid="any", wick_priority=False, wick_pick="longest", range_regime="off", ob_arm="leave", leg_fib="wick")
+PRE_OWNER.update(CARDS_S2_OLD)
+CURRENT.update(CARDS_S2_OLD)
 CURRENT.update(COVERAGE_OLD)
 LEGACY_1PCT_2PCT = dict(risk_dollars=1000.0, max_total_risk=2000.0)   # E8 / owner #12 preset
 # setups_models review: the FVG-path variants need the FVG path to trade at all - post_mss with the

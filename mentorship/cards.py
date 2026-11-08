@@ -164,7 +164,7 @@ NOT_BUILT.update({
     ("PREMARKET-RANGE", "D"): Q, ("PREMARKET-RANGE", "E"): Q, ("PREMARKET-RANGE", "F"): Q,
     ("PREMARKET-RANGE", "G"): Q, ("PREMARKET-RANGE", "H"): Q,
     ("OPEN-RANGE-TRADE", "D"): "needs a 'clean pre-market read' rule (judgment); no exact rule yet",
-    ("FPFVG-DEF", "A"): Q, ("FPFVG-DEF", "B"): Q, ("FPFVG-DEF", "C"): Q, ("FPFVG-DEF", "D"): Q,
+    ("FPFVG-DEF", "B"): Q, ("FPFVG-DEF", "C"): Q, ("FPFVG-DEF", "D"): Q,
     ("FPFVG-DEF", "E"): "sub-1m charts; the engine runs 1m / 5m bars",
     ("FPFVG-DEF", "F"): Q, ("FPFVG-DEF", "G"): Q, ("FPFVG-DEF", "H"): Q,
     ("ORG-CE-WINDOW", "A"): Q, ("ORG-CE-WINDOW", "B"): Q, ("ORG-CE-WINDOW", "C"): Q, ("ORG-CE-WINDOW", "D"): Q,
@@ -213,7 +213,10 @@ CARDS.update({
         "A": dict(big_day_am_skip=True, big_day_am_resume=0),     # sacrifice the AM, keep the PM
         "B": dict(big_day_am_skip=True, big_day_am_resume=630),   # no trades 09:30-10:30 [the down-day condition is not built: any very large day]
     },
-    "RANGE-REGIME": {"B": {}},
+    "RANGE-REGIME": {                          # A: range-bound day = no breakout entries (cards_rules.range_gate); the "target the FVG just inside the old extreme" part is queued
+        "A": dict(range_regime="fade"),
+        "B": dict(range_regime="off"),         # continuation through the break (the old engine)
+    },
     "TWO-SIDED": {                             # A: both sides armed in one window = stand aside for the rest of it (B17.1 neutral_5050 "armed")
         "A": dict(neutral_5050="armed"),       # the rollover-week "trade very light" part is not built (queued)
     },
@@ -256,7 +259,6 @@ NOT_BUILT.update({
     ("MONDAY", "C"): "Monday pre-market only needs a per-day session list; queued",
     ("CPI-WEEK", "B"): Q,
     ("AFTER-BIG-DAY", "C"): "'keep expectations low' has no exact rule",
-    ("RANGE-REGIME", "A"): "queued (S1 review): a PDH / PDL turtle soup back into a multi-week daily range, target the FVG inside the old extreme; drange_scalp is not it",
     ("TWO-SIDED", "B"): "pick a side at small size and scratch fast: no rule for which side; queued",
     ("SEASON-ACTIVITY", "C"): Q,
     ("HOLIDAY-WEEK", "D"): Q,
@@ -290,28 +292,37 @@ CARDS.update({
         "C": dict(ath_rule="longs_only"),
     },
     "TF-CHOP": {"A": {}},
+    # stage S2 (Mase 2026-11-08: build every card default); the rules are in cards_rules.array_gate / card_map unless noted
+    "FPFVG-DEF": {"A": dict(fpfvg_def="time")},          # the first FVG with a 09:31-09:59 middle candle, a PD array all week
+    "FVG-CARRY": {                                        # an unfilled FPFVG stays a PD array for 20 trading days (the turtle-soup first-FVG part is queued)
+        "A": dict(fvg_carry_days=20),
+        "B": dict(fvg_carry_days=0),                      # [our interpretation] no carry beyond the FPFVG's own week
+    },
+    "FVG-VALID": {"A": dict(fvg_valid="any"), "B": dict(fvg_valid="first_or_grade")},
+    "OB-VALID": {"A": dict(ob_valid="any"), "B": dict(ob_valid="grade")},     # the propulsion block's inheritance from its parent is not built
+    "OB-CLOSE": {"A": dict(ob_arm="intrabar_htf"), "B": dict(ob_arm="high")},   # strategy._ob_pre
+    "WICK-PRIORITY": {"A": dict(wick_priority=False), "B": dict(wick_priority=True)},
+    "WICK-SELECT": {"A": dict(wick_pick="reach")},       # targets.partial_extras (acts with wick_partials)
+    "RANGE-ANCHOR": {"A": dict(leg_fib="wick"), "B": dict(leg_fib="body")},  # the leg / EQ anchors (es1.body_leg); the multi-day range is on bodies already (pd_body_multiday)
 })
 SAME_AS_ENGINE.update({
     ("UNICORN", "A"): "the engine's unicorn is an FVG inside a breaker",
     ("LIQ-LOCATION", "A"): "the engine's pools are wick extremes and relative equal highs / lows",
     ("SHORT-LOCATION", "B"): "the engine has no deep-discount short block",
     ("BIAS-SOURCE", "A"): "the engine's bias is the HTF draw (daily table) that intraday trades follow",
-    ("RANGE-REGIME", "B"): "continuation through the break is the engine's default",
     ("TF-CHOP", "A"): "the engine reads the draw from the higher timeframes (5m / 15m / 1h / 4h / D arrays); it never drops below 1m",
 })
 NOT_BUILT.update({
-    ("OB-CANDLE", "C"): Q, ("OB-CLOSE", "A"): Q, ("OB-CLOSE", "B"): Q,
+    ("OB-CANDLE", "C"): Q,
     ("IFVG-CONFIRM", "C"): Q, ("IFVG-CONFIRM", "D"): "anticipation from structure is judgment; no exact rule yet",
     ("UNICORN", "B"): "market maker model stages are not built", ("UNICORN", "C"): Q,
-    ("FVG-VALID", "A"): Q, ("FVG-VALID", "B"): Q, ("FVG-VALID", "C"): Q, ("FVG-VALID", "D"): Q,
-    ("WICK-PRIORITY", "A"): Q, ("WICK-PRIORITY", "B"): Q,
+    ("FVG-VALID", "C"): Q, ("FVG-VALID", "D"): Q,
     ("TF-CHOP", "B"): "sub-1m entries; the engine runs 1m / 5m bars",
-    ("OB-VALID", "A"): Q, ("OB-VALID", "B"): Q,
-    ("FVG-CARRY", "A"): Q, ("FVG-CARRY", "B"): Q, ("FVG-CARRY", "C"): Q, ("FVG-CARRY", "D"): Q,
-    ("WICK-SELECT", "A"): Q, ("WICK-SELECT", "B"): Q, ("WICK-SELECT", "C"): Q,
+    ("FVG-CARRY", "C"): Q, ("FVG-CARRY", "D"): Q,
+    ("WICK-SELECT", "B"): "the longest wick that also meets a criterion: no criterion rule yet (wick_pick='longest' is the old pick, kept as a switch)",
+    ("WICK-SELECT", "C"): Q,
     ("WICK-SELECT", "D"): "judgment (the wick price respects); no exact rule",
     ("PDA-LOOKBACK", "A"): Q,
-    ("RANGE-ANCHOR", "A"): Q, ("RANGE-ANCHOR", "B"): Q,
     ("LIQ-LOCATION", "B"): Q, ("LIQ-LOCATION", "C"): Q,
     ("SHORT-LOCATION", "A"): Q,
     ("SMT-USE", "C"): Q, ("SMT-USE", "D"): Q, ("SMT-USE", "E"): Q,
@@ -415,4 +426,5 @@ TAG_ONLY.update({
     "MACRO-GRID": "the macro windows gate only with macro_gate / macro_only / macro_done_skip (off)",
     "TGIF-DEPTH": "acts only with the TGIF model (tgif_model, off)",
     "TGIF-TIMING": "acts only with the TGIF model (tgif, off)",
+    "WICK-SELECT": "acts only with the wick partials (wick_partials, off)",
 })

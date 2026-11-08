@@ -349,6 +349,7 @@ class Prepared:
     reb: dict | None = None        # caption-gap L5 nwog_rebalanced: {(high, low): (known_time, near_edge, exit_edge)} of the rebalanced NWOGs
     daily_all: dict | None = None  # caption-gap pass day_week_context#1/3 (season_min_rank): {date: RTH close} of every session (run_day reads prior years only)
     ath: dict | None = None        # ATH-RULE (scorecard card): {date: the highest high of every day frame before that date} (cards_rules.ath_map)
+    cards: dict | None = None      # FPFVG-DEF / FVG-CARRY / RANGE-REGIME (scorecard cards): {date: day context} (cards_rules.card_map)
 
 
 def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
@@ -396,9 +397,10 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
             from .levels import map_midnight
             mm = map_midnight(ref_df, df)
     da = {g.index[0].date(): float(rth(g).close.iloc[-1]) for g in ds} if p.season_min_rank > 0 else None
-    from .cards_rules import ath_map
+    from .cards_rules import ath_map, card_map
     ath = ath_map(ds) if p.ath_rule != "off" else None
-    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth, eve, mm, reb, da, ath)
+    crd = card_map(ds, p) if (p.fpfvg_def != "off" or p.range_regime != "off") else None
+    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth, eve, mm, reb, da, ath, crd)
 
 
 def evenings(df: pd.DataFrame) -> dict:
@@ -447,7 +449,7 @@ def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: d
                 bias_by_cut={m: t_.loc[d].to_dict() for m, t_ in pr.cuts.items() if d in t_.index},
                 meta=pr.meta, week=week, eve=(pr.eve or {}).get(d),
                 post_eve=_SM4.post_evening(pr.df, d) if p.asia_session else None,
-                ath=(pr.ath or {}).get(d),
+                ath=(pr.ath or {}).get(d), cards=(pr.cards or {}).get(d),
                 daily_all=pr.daily_all)
 
 

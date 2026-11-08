@@ -65,3 +65,49 @@ def test_depth_trail_arms_at_the_share_and_trails_under_each_bar_low():
 def test_card_defaults_of_the_new_concepts():
     p = Params()
     assert (p.depth_trail, p.ath_rule, p.fed_chair_skip_am, p.neutral_5050, p.tgif_thu) == (0.75, "no_top_pick", True, "armed", True)
+
+
+def _bars(d, rows, start="09:30"):
+    ix = pd.date_range(f"{d} {start}", periods=len(rows), freq="1min")
+    return pd.DataFrame(rows, columns=["open", "high", "low", "close"], index=ix)
+
+
+def test_fpfvg_needs_a_0931_middle_candle_and_lives_its_week():
+    gap_on_0930 = [(100, 101, 99, 100.5), (101, 105, 100.8, 104), (104.5, 106, 103, 105)]       # middle 09:31, gap 101 -> 103
+    g = _bars("2024-01-08", gap_on_0930)                       # a Monday
+    z = CR.fpfvg_of(g)
+    assert z["sign"] == 1 and (z["bottom"], z["top"]) == (101.0, 103.0) and z["ts"] == g.index[2]
+    assert CR.fpfvg_of(_bars("2024-01-08", gap_on_0930, start="09:29")) is None              # c1 09:29 is not RTH: no 09:31 middle candle in 3 bars
+    flat = [(104, 105, 103.5, 104)] * 3                       # above the gap: unfilled
+    ds = [g, _bars("2024-01-09", flat), _bars("2024-01-15", flat)]
+    m = CR.card_map(ds, Params(fpfvg_def="time", fvg_carry_days=0, range_regime="off"))
+    d = [x.index[0].date() for x in ds]
+    assert len(m[d[0]]["fpfvg"]) == 1 and len(m[d[1]]["fpfvg"]) == 1 and m[d[2]]["fpfvg"] == []   # the next week drops it (no carry)
+    m = CR.card_map(ds, Params(fpfvg_def="time", fvg_carry_days=20, range_regime="off"))
+    assert len(m[d[2]]["fpfvg"]) == 1                          # carried while unfilled
+    filled = [(100, 101, 100.5, 100.8)] * 2 + [(100, 101, 100.9, 100.9)]
+    ds2 = [g, _bars("2024-01-09", filled), _bars("2024-01-15", flat)]
+    assert CR.card_map(ds2, Params(fpfvg_def="time", fvg_carry_days=20, range_regime="off"))[d[2]]["fpfvg"] == []   # a low through 101 filled it
+
+
+def test_range_gate_blocks_breakouts_only_on_a_range_day():
+    ctx = SimpleNamespace(cards={"rr": (110.0, 90.0, 105.0, 95.0, True)})
+    p = Params(range_regime="fade")
+    assert CR.range_gate(ctx, _Long, {"entry": 106.0}, p) == "x_range_breakout"
+    assert CR.range_gate(ctx, _Long, {"entry": 100.0}, p) is None
+    assert CR.range_gate(ctx, _Short, {"entry": -94.0}, p) == "x_range_breakout"
+    assert CR.range_gate(SimpleNamespace(cards={"rr": (110.0, 90.0, 105.0, 95.0, False)}), _Long, {"entry": 106.0}, p) is None
+
+
+def test_wick_priority_moves_the_limit_to_the_candle1_wick_ce():
+    from mentorship.levels import Zone
+    import numpy as np
+    sd = SimpleNamespace(o=np.array([100.0, 101.0, 106.0, 107.0]), c=np.array([100.5, 101.0, 107.0, 108.0]),
+                         h=np.array([101.0, 104.0, 108.0, 109.0]), l=np.array([99.0, 100.0, 105.0, 106.0]))
+
+    g = Zone("bull", top=106.0, bottom=104.0, i=3)                     # candle 1 = bar 1: body top 101, wick to 104 (3 pts >= the 2-pt gap)
+    p = Params(wick_priority=True, min_risk_pts=0.5)
+    e, s = CR._wick_first(sd, g, 3, p, 104.0, 99.0)
+    assert e == 102.5 and s == 101.0 - p.pad
+    e, s = CR._wick_first(sd, Zone("bull", top=108.0, bottom=104.0, i=3), 3, p, 104.0, 99.0)   # a 4-pt gap outgrows the wick: unchanged
+    assert (e, s) == (104.0, 99.0)
