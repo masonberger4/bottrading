@@ -29,7 +29,10 @@
   4. Then run one full suite, detached. Only one pytest may run at a time.
 - Before relying on the `tests/test_news_calendar.py` edit (pins `pre_0900=False`), note that `pre_0900` is back to False by default, so the pin is harmless.
 
-## Open decisions for Mase (asked in the thread, no answer yet)
+## Decision (Mase, 2026-11-08 21:23 UTC): "build all 18 first, then run the screen once" (option 2)
+Build the 18 missing default concepts (plus FED-SPEECH D, CONTRACT B, OVERNIGHT-HOLD B, VENOM-STOP B) in stages with a second-agent review each, get the suite green, then run the 2021 screen once on the final engine.
+
+## Options that were offered
 - Option 1 (recommended): ship what is built (PR #55 after the tests are green), restart the 2021 screen on this engine, and build the 18 missing default concepts in a follow-up.
 - Option 2: build all 18 first, then run the screen once.
 - The 18 cards whose default is not built: PREMARKET-RANGE, FPFVG-DEF, ORG-CE-WINDOW, ORG-AFTER-CE, ORG-SIZE, TWO-SIDED, RANGE-REGIME, TGIF-TIMING, OB-CLOSE, FVG-VALID, WICK-PRIORITY, TF-CHOP, OB-VALID, FVG-CARRY, WICK-SELECT, RANGE-ANCHOR, ATH-RULE, EXIT-DEPTH. Also not built: the FED-SPEECH D, CONTRACT B, OVERNIGHT-HOLD B and VENOM-STOP B picks.
