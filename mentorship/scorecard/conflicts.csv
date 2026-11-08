@@ -61,7 +61,7 @@ RANGE-REGIME,Day filters,"In a multi-week daily consolidation, fade runs beyond 
 SEASON-ACTIVITY,Day filters,"Should activity/size follow a yearly participation calendar (light Jan-Feb and summer, full late Aug to mid Dec)?",Engine: every month traded alike.,SMC 98; SMC 106
 FVG-ENTRY,Entries,"Where inside an FVG does the bot enter: the near edge/first quadrant, or the CE and beyond?",Engine entry defaults (pd_arrays.md); 2023 has no single FVG entry-depth rule.,SMC 104
 FVG-CARRY,PD arrays,"Should the first FVG after a turtle soup, and unfilled FPFVGs, be kept as levels for later sessions (up to 20 trading days)?",2023: no carry-forward rule for intraday FVGs; engine FVGs are used in the session they form.,SMC 107; 2025 C21
-FED-SPEECH,News,How is a day with a scheduled Fed chair speech or testimony traded?,"2023: Fed chair at 10:00 = no AM trades, no bias; PM 13:30-16:00 only (filters.md 1.1).",2024 C66
+FED-SPEECH,News,How is a day with a scheduled Fed chair speech or testimony traded?,"2023: Fed chair at 10:00 = no AM trades, no bias; PM 13:30-16:00 only (filters.md 1.1).",2024 C66; 2025 C40
 INSIDE-DAY,Day filters,How is an inside day (the precursor to range expansion) defined?,Engine: no inside-day flag.,2024 C92; SMC 79
 HOLIDAY-WEEK,Day filters,How is a holiday week traded?,2023: skip holiday eve and the post-holiday AM (filters.md 1.2); no whole-week rule.,2024 C102
 WICK-SELECT,PD arrays,"Among several adjacent wicks, which one does the bot grade?",Engine wick grading has no selection rule between neighbouring wicks.,2025 C11

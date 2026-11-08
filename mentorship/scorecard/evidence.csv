@@ -1014,3 +1014,4 @@ PDA-LOOKBACK,B,L2025:L44,"quote: 'We carry the PD array in the future ... 20, 40
 PDA-LOOKBACK,B,SMC2026:140,"quote: 'a look-back period of 20, 40, and 60 days, your highest probability ... setups are going to form in the last 20 days'",
 VENOM-STOP,A,L2025:L39,paraphrase: stop below the candle that pierces back above the sell-side low; entry at the second candle's close or less,
 VENOM-STOP,B,L2025:L43,"quote: stop at 'consequent encroachment of [the SIBI/BISI pair] has to be just below that ... if it goes there, it's not a Venom'",
+FED-SPEECH,B,L2025:L36,"quote: 'I don't want to stand in front of Powell, the Fed chair' (closed the trade before the speech)",

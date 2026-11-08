@@ -47,7 +47,7 @@ Where ICT labels a beginner vs experienced version, the experienced one is defau
 | NEWS-HOLD | **A**: No: square positions ahead of CPI/PPI; don't trade the numbers | 4 | B(2) |  |
 | FOMC-DAY | **B**: Trade the afternoon two-stage delivery: first FVG after 14:00, second wave from 14:30 (often the opposite way) | 5 | C(2) A(1) D(1) |  |
 | NFP-THU-FRI | **B**: Yes: experienced traders trade NFP Thursday and Friday (after the initial volatility) | 15 | A(15) | experienced version (overrides count) |
-| FED-SPEECH | **A**: No AM trades on a 10:00 Fed chair speech/testimony day (observe only); trade the PM 13:30-16:00 | 3 | B(2) C(2) | margin 1 |
+| FED-SPEECH | **A**: No AM trades on a 10:00 Fed chair speech/testimony day (observe only); trade the PM 13:30-16:00 | 3 | B(3) C(2) | TIE PENDING Mase: A/B |
 
 ## Day filters
 

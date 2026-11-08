@@ -75,7 +75,7 @@ FOMC-DAY,News,D,Inexperienced: avoid FOMC day entirely; the day before trade the
 NFP-THU-FRI,News,A,No: NFP week = trade Mon-Wed to 11:00 (new traders done by 07:00 Wed); NFP Friday no live trading,15,5,"2023 5, 2024 4, 2025 3, 2026 3",2023-01-04,2026-09-30
 NFP-THU-FRI,News,B,Yes: experienced traders trade NFP Thursday and Friday (after the initial volatility),15,5,"2023 5, TE 5, 2024 2, 2025 2, 2026 1",2023-03-09,2026-10-02
 FED-SPEECH,News,A,No AM trades on a 10:00 Fed chair speech/testimony day (observe only); trade the PM 13:30-16:00,3,3,2023 3,2023-03-07,2023-06-21
-FED-SPEECH,News,B,Trade before the speech (before 08:00 if it is in the 09:00 hour) and be flat/funded by it; no trading while he talks and 15 min after,2,0,"2024 1, 2026 1",2024-09-30,2026-08
+FED-SPEECH,News,B,Trade before the speech (before 08:00 if it is in the 09:00 hour) and be flat/funded by it; no trading while he talks and 15 min after,3,0,"2024 1, 2025 1, 2026 1",2024-09-30,2026-08
 FED-SPEECH,News,C,"Trade the speech itself: wait for 10:00, then enter while he talks",2,0,"Charter 1, 2026 1",2020-12,2026
 MONDAY,Day filters,A,Trade Mondays like any other day (he shows many Monday trades),9,2,"2023 2, TE 2, 2025 4, 2026 1",2023-01-30,2026
 MONDAY,Day filters,B,"Skip Mondays (accumulation/manipulation), except NFP-week Mondays or an obvious setup",9,2,"2023 2, CC 1, 2024 3, 2025 1, 2026 2",2017-08,2026-09-28

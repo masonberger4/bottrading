@@ -308,9 +308,10 @@ Read in full from captions (cloud, four readers in parallel), one note per video
 37. RTH ORGs: today plus the last three sessions (L07, L10). GAP-LIFE E.
 38. Practice targets 30 handles AM / 20 PM (L42, L43, L44). MIN-ROOM D.
 39. NY lunch = 11:30-13:30 as one window (L54). LUNCH-WINDOW C evidence.
+40. Close a position before a Fed chair speech (L36). FED-SPEECH B evidence.
 
 ## Part F switches (DRAFT names, default OFF)
 `wick_select(reach|longest|path|judgment)`, `ifvg_anticipate_from_structure`, `suspension_block_array`, `pda_lookback(20|20_40_60)`, `band_of_volatility_big_day`, `fvg_on_quadrant_only`, `unfinished_business_wick_raid`, `purge_and_revert_3day`, `working_class_hero_daily`, `cut_half_on_body_past_ce`, `stop_be_at_40pct`, `stop_be_near_target`, `stop_one_tick_prior_wick`, `venom_stop(pierce_candle|bpr_ce)`, `fpfvg_week_carry_monday`, `session_fpfvg_workspaces(5..10)`, `ath_buy_only_until_collapse`, `smr_three_stage_short_at_ath`, `org_keep_last3_plus_today`, `org_carry_body_above_ath`, `gray_pool_wick_ce_cluster`, `gauntlet_fvg`, `doji_ignored_in_fvg`, `wick_overlapped_fvg_90pct_revisit`, `post_holiday_buffer_day`, `rth_confirms_eth`, `weekly_objective_stop`, `news_1000_wait`, `macro_grid_hourly`, `or_sd_targets(1,1.5,2.5)`.
 
 ## Part F questions for Mase (ties only; everything else follows the count rule)
-See the PR: MONDAY, PYRAMID-WHERE, FIXED-RR, OVERNIGHT-HOLD, CONTRACT and VENOM-STOP are tied after this append.
+See the PR: FED-SPEECH, MONDAY, PYRAMID-WHERE, FIXED-RR, OVERNIGHT-HOLD, CONTRACT and VENOM-STOP are tied after this append.
