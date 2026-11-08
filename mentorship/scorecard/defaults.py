@@ -18,6 +18,9 @@ TIE_PICKS = {  # Mase's picks, 2026-11-08 16:00-16:09 UTC
     'STOP-MGMT': 'E', 'ORG-SIZE': 'B', 'FVG-ENTRY': 'A', 'LIQ-LOCATION': 'A',
     'NEWS-HOLD': 'B', 'SMT-SET': 'A', 'TF-CHOP': 'A', 'SHORT-LOCATION': 'B',
     'LONDON-MACRO': 'B', 'WEEK-PROFILE': 'A',
+    # Mase's picks, 2026-11-08 21:27 UTC (after the 2025 daily-review append):
+    'FED-SPEECH': 'D', 'MONDAY': 'A', 'PYRAMID-WHERE': 'A', 'CONTRACT': 'B',
+    'OVERNIGHT-HOLD': 'B', 'FIXED-RR': 'A', 'VENOM-STOP': 'B',
 }
 key = lambda r: (int(r['videos']), int(r['m2023']), r['newest'] or '')
 out = []
