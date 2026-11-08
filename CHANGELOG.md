@@ -99,3 +99,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v93 | 2026-11-08 16:10:14Z | conflict-review-4 | proposals/conflict-review-4__decisions.md | proposal | Mase tie picks | - | ABSENT -> 1d9b910d09 |
 | v94 | 2026-11-08 16:16:09Z | Run memory curator | decisions.md | edit | apply approved X5: ict_fetch owned by download thread only | cmsg_01FAHERC1Lsrg2bYtrKuRHmPLCagAeRgWGKAVLEq9AGvBT | 27bc1d4a2d -> 7459979ef7 |
 | v95 | 2026-11-08 16:16:12Z | Run memory curator | INDEX.md | edit | apply approved X5 in INDEX.md copy (coordinator updates live index) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPLCagAeRgWGKAVLEq9AGvBT | 45c7f52da7 -> cf914da13f |
+| v96 | 2026-11-08 23:45:10Z | Run memory curator | decisions.md | edit | apply approved item 1 (conflict-review-4 tie picks), corrected to merged defaults after PRs #53/#54 | cmsg_01FAHERC1Lsrg2bYtrKuRHmP6o8wjRX7n1avRMxkiGMnpJ | 7459979ef7 -> d53aef9b4f |
