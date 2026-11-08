@@ -106,7 +106,7 @@ class Params:
     min_rr: float = 1.0
     partial: float = 0.5
     entry: str = "ce"            # "edge" (top of a BISI) or "ce" (50% of the gap)
-    stop_mode: str = "ob_mt"       # "ob_mt" or "fvg"
+    stop_mode: str = "wick_ce"       # STOP-PLACE card E (8 videos): E6 wick CE stop; "ob_mt" (A) / "fvg_candle" (B) / "fvg_c1_low" (C) / "ce2" (G) / "fvg" (beyond the gap)
     stop_buffer: float = 0.01
     fvg_wait: int = 2              # bars after the structure break to wait for an FVG
     entry_tf: str = "1m"           # run on 1m bars, enter in: "1m" a 1m FVG; "5m" a 5m FVG (or the
@@ -203,7 +203,7 @@ class Params:
     skip_monday: bool = False      # D20 test (NFP / FOMC weeks still traded)
     no_pm_after_am_win: bool = False   # D19 test
     max_trades_week: int = 0           # D19 test (0 = no cap)
-    reentry_half: bool = False     # D18 test: one same-direction re-entry at half risk after a loss
+    reentry_half: bool = True     # D18 test: one same-direction re-entry at half risk after a loss
     conf_min_n: int = 0            # min number of timeframes (1m..monthly) with a PD array at the
     conf_min_top: str = ""         # sweep extreme / highest such timeframe (confluence.py); 0/"" off
     gap_mode: str = "ict"          # opening-gap targets: "ict" = NWOG (Fri close -> Sun 18:00, last
@@ -971,7 +971,7 @@ class Params:
     smt_bank_against_frac: float = 0.0   # X3g (037 ~32:56 "80% off"): the sister index BREAKS against the trade (prints a new low
                                          # since the fill) while our bar holds its low -> bank this share of what is left (once;
                                          # 0 = off, 0.8 = the lesson's 80%); same min-R gate [our interpretation]
-    resistance_mode: str = "off"         # X3f (089 ~8:46; 092 ~1:28:54; 102 ~2:15:30): "low_full" = a low-resistance run
+    resistance_mode: str = "both"         # X3f (089 ~8:46; 092 ~1:28:54; 102 ~2:15:30): "low_full" = a low-resistance run
                                          # (<= res_low_max obstacles) is one full pull at the draw; "high_run" = a
                                          # high-resistance run (>= res_high_min obstacles) runs down equity; "both"
     res_low_max: int = 1                 # [our interpretation] obstacles (opposing FVGs, untaken swing highs) allowed
@@ -2488,7 +2488,7 @@ class Params:
     trail_reentry_entry: str = "ifvg_ce"    # "ifvg_ce" (085) / "breaker" (022)
     trail_reentry_max: int = 2
     reentry_trigger: str = "new_array"   # X13b: the loss re-entry trigger - "new_array" (a PD array formed after the stop, limit only) / "sibi_return" (104: beyond the entry array's far edge, then the return)
-    reentry_risk_mult: float = 0.5       # X13b: the re-entry risk (half per X13; 060 / 104 give no cut: test 1.0) - replaces the hard 0.5
+    reentry_risk_mult: float = 1.0       # X13b: the re-entry risk (half per X13; 060 / 104 give no cut: test 1.0) - replaces the hard 0.5
     reentry_stop: str = "array"          # "array" (the order's own stop) / "wick_ce" (104: the CE of the new wick)
     reentry_idea_gate: bool = False      # X13b: replace the restored-sweep trigger with the three idea-intact conditions (draw untouched, no opposing MSS / close beyond the leg origin, a NEW array after the stop)
     # X13-reverse-after-failure-switch (045; 094; 102; cc04_008) / X14-opposite-second-trade-after-win (093; cc10_007)

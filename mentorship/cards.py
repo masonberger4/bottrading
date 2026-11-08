@@ -295,3 +295,65 @@ NOT_BUILT.update({
     ("CONTRACT", "C"): Q, ("CONTRACT", "D"): Q,
     ("VENOM-STOP", "A"): "the Venom model is not in the engine", ("VENOM-STOP", "B"): "the Venom model is not in the engine",
 })
+
+
+# --- stage e: management --------------------------------------------------------------------------------------
+_LF = lambda a, b: dict(ladder_fracs=a, ladder_fracs_slow=b)
+CARDS.update({
+    "PYRAMID-WHERE": {"A": {}},                # tie open; A is the engine's rule (adds before the first partial, on the right side of the leg's EQ)
+    "PYRAMID-SIZES": {"A": dict(add_ladder="631")},
+    "REENTRY": {
+        "A": dict(reentry_half=True, reentry_risk_mult=1.0),
+        "B": dict(reentry_half=True, reentry_risk_mult=0.5),
+        "C": dict(reentry_half=False, reentry_risk_mult=0.5),
+    },
+    "MIN-ROOM": {
+        "A": dict(min_draw_pts=10.0),
+        "B": dict(min_draw_pts=5.0),
+        "C": dict(min_draw_pts=7.5),           # [our interpretation] 15 NQ handles ~ 7.5 ES points
+    },
+    "FIXED-RR": {"A": {}},                     # tie open; A (targets at the draw) is the engine
+    "STOP-MGMT": {
+        "A": dict(be_on="expansion", trail_wick_ce=False),
+        "B": dict(be_on="expansion", trail_wick_ce=True),
+        "E": dict(be_on="t1", trail_wick_ce=False),
+    },
+    "EXIT-DEPTH": {"A": {}},
+    "PARTIAL-TRIGGER": {"A": dict(mgmt="t1t2"), "C": dict(mgmt="ladder")},
+    "EXIT-STYLE": {
+        "A": _LF((1.0,), (1.0,)),
+        "B": _LF((0.5, 0.25, 0.25), (0.8, 0.2)),
+    },
+    "OVERNIGHT-HOLD": {"A": {}},               # tie open; flat by the close is the engine
+    "STOP-PLACE": {
+        "A": dict(stop_mode="ob_mt"),
+        "B": dict(stop_mode="fvg_candle"),
+        "C": dict(stop_mode="fvg_c1_low"),
+        "E": dict(stop_mode="wick_ce"),
+        "G": dict(stop_mode="ce2"),
+    },
+    "RESISTANCE-DAY": {
+        "A": dict(resistance_mode="off", resist_def="struct", resist_filter=True),
+        "B": dict(resistance_mode="both", resist_def="off", resist_filter=False),   # wider stops / one contract / no trail on high-resistance days: not built
+    },
+})
+SAME_AS_ENGINE.update({
+    ("PYRAMID-WHERE", "A"): "adds stop at the first partial and past the leg's EQ (leg_pd)",
+    ("FIXED-RR", "A"): "targets are the draw / PD arrays",
+    ("EXIT-DEPTH", "A"): "the ladder holds for the draw",
+    ("OVERNIGHT-HOLD", "A"): "flat at the session close",
+})
+NOT_BUILT.update({
+    ("PYRAMID-WHERE", "B"): Q, ("PYRAMID-WHERE", "C"): Q, ("PYRAMID-WHERE", "D"): Q,
+    ("PYRAMID-SIZES", "B"): Q,
+    ("MIN-ROOM", "D"): Q,
+    ("FIXED-RR", "B"): Q,
+    ("STOP-MGMT", "C"): Q, ("STOP-MGMT", "D"): Q, ("STOP-MGMT", "F"): Q, ("STOP-MGMT", "G"): Q,
+    ("STOP-MGMT", "H"): Q, ("STOP-MGMT", "I"): Q, ("STOP-MGMT", "J"): Q, ("STOP-MGMT", "K"): Q,
+    ("EXIT-DEPTH", "B"): Q,
+    ("PARTIAL-TRIGGER", "B"): Q,
+    ("EXIT-STYLE", "C"): Q,
+    ("OVERNIGHT-HOLD", "B"): Q,
+    ("STOP-PLACE", "D"): Q, ("STOP-PLACE", "F"): Q, ("STOP-PLACE", "H"): Q, ("STOP-PLACE", "I"): Q,
+    ("RESISTANCE-DAY", "C"): Q,
+})
