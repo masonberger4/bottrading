@@ -27,6 +27,10 @@ NOT_BUILT: dict[tuple, str] = {}
 # {(card, pos): note} - positions that need no parameter (the engine already does it)
 SAME_AS_ENGINE: dict[tuple, str] = {}
 
+# {card: note} - built cards whose switches only change tags while another switch is off; their variants are
+# left out of the screen (variants(screen=True)) until that switch is on
+TAG_ONLY: dict[str, str] = {}
+
 # {(digest, num): {"on": {...}, "off": {...}}} - one-source rules
 SINGLES: dict[tuple, dict[str, dict]] = {}
 SINGLES_NOT_BUILT: dict[tuple, str] = {}
@@ -72,11 +76,13 @@ def default_overrides() -> dict:
     return out
 
 
-def variants() -> dict[str, dict]:
-    """Every non-default built position as a study.DECISIONS variant (overrides over Params())."""
+def variants(screen: bool = False) -> dict[str, dict]:
+    """Every non-default built position as a study.DECISIONS variant (overrides over Params()); screen=True leaves out TAG_ONLY cards."""
     d, pend = card_defaults(), pending_ties()
     out: dict[str, dict] = {}
     for card, ps in CARDS.items():
+        if screen and card in TAG_ONLY:
+            continue
         base = None if card in pend else ps.get(d[card])
         for pos, kw in ps.items():
             if (pos != d[card] or card in pend) and kw and kw != base:
@@ -120,8 +126,8 @@ CARDS.update({
         "B": dict(asia_session=True, ndog_scalp=True),
     },
     "PREMARKET-ENTRY": {
-        "A": dict(pre_0700=False, pre_0900=False),
-        "B": dict(pre_0700=True, pre_0900=True),
+        "A": dict(pre_0700=False),
+        "B": dict(pre_0700=True),              # 07:00-08:30 (flat before an 08:30 release); 09:00-09:29 (pre_0900) is not in the card
     },
     "OPEN-RANGE-TRADE": {
         "A": dict(or_no_entry=True, or_end=600),
@@ -211,9 +217,8 @@ CARDS.update({
         "C": dict(inside_day_def="body_in_range"),
     },
     "HOLIDAY-WEEK": {
-        "A": dict(holiday_week_skip=False, holiday_week_thu_fri="off"),
-        "B": dict(holiday_week_skip=True, holiday_week_thu_fri="off"),
-        "C": dict(holiday_week_skip=False, holiday_week_thu_fri="trade"),
+        "A": dict(holiday_week_skip=False),
+        "B": dict(holiday_week_skip=True),
     },
     "TGIF-DEPTH": {                            # acts with the TGIF model (tgif_model, off by default)
         "A": dict(tgif_cap=0.30, tgif_stand_down=0.40),
@@ -243,6 +248,7 @@ NOT_BUILT.update({
     ("RANGE-REGIME", "A"): Q,
     ("SEASON-ACTIVITY", "C"): Q,
     ("HOLIDAY-WEEK", "D"): Q,
+    ("HOLIDAY-WEEK", "C"): "holiday_week_thu_fri only lifts the NFP-week Thu/Fri block, which is off; a Thu/Fri preference is queued",
     ("TGIF-DEPTH", "C"): Q,
     ("TGIF-TIMING", "B"): Q, ("TGIF-TIMING", "C"): Q,
     ("WEEK-PROFILE", "B"): Q,
@@ -259,7 +265,7 @@ CARDS.update({
     "PDA-LOOKBACK": {"B": dict(ipda_pools=True)},
     "LIQ-LOCATION": {"A": {}},
     "SHORT-LOCATION": {"B": {}},
-    "SMT-USE": {"A": dict(smt_partial="off"), "B": dict(smt_partial="a")},
+    "SMT-USE": {"A": dict(smt_partial="off", smt_ym=False), "B": dict(smt_partial="a", smt_ym=True)},   # B needs the sister indices (YM too)
     "SMT-SET": {"A": dict(smt_ym=True), "B": dict(smt_ym=False)},
     "BIAS-SOURCE": {"A": {}},
     "CONTRACT": {                              # tie open: the engine keeps front-month prices
@@ -300,7 +306,7 @@ NOT_BUILT.update({
 # --- stage e: management --------------------------------------------------------------------------------------
 _LF = lambda a, b: dict(ladder_fracs=a, ladder_fracs_slow=b)
 CARDS.update({
-    "PYRAMID-WHERE": {"A": {}},                # tie open; A is the engine's rule (adds before the first partial, on the right side of the leg's EQ)
+    "PYRAMID-WHERE": {"A": dict(add_cut="eq")},   # tie open: no adds past EQ of the range (E12e); the engine keeps add_cut="" until Mase picks
     "PYRAMID-SIZES": {"A": dict(add_ladder="631")},
     "REENTRY": {
         "A": dict(reentry_half=True, reentry_risk_mult=1.0),
@@ -326,7 +332,7 @@ CARDS.update({
     },
     "OVERNIGHT-HOLD": {"A": {}},               # tie open; flat by the close is the engine
     "STOP-PLACE": {
-        "A": dict(stop_mode="ob_mt"),
+        "A": dict(stop_mode="ob_near"),        # the MT of the OB nearest the sweep low
         "B": dict(stop_mode="fvg_candle"),
         "C": dict(stop_mode="fvg_c1_low"),
         "E": dict(stop_mode="wick_ce"),
@@ -334,11 +340,10 @@ CARDS.update({
     },
     "RESISTANCE-DAY": {
         "A": dict(resistance_mode="off", resist_def="struct", resist_filter=True),
-        "B": dict(resistance_mode="both", resist_def="off", resist_filter=False),   # wider stops / one contract / no trail on high-resistance days: not built
+        "B": dict(resistance_mode="high_run", resist_def="off", resist_filter=False),   # high-resistance runs pay at the nearer arrays; wider stops / one contract / no trail: not built
     },
 })
 SAME_AS_ENGINE.update({
-    ("PYRAMID-WHERE", "A"): "adds stop at the first partial and past the leg's EQ (leg_pd)",
     ("FIXED-RR", "A"): "targets are the draw / PD arrays",
     ("EXIT-DEPTH", "A"): "the ladder holds for the draw",
     ("OVERNIGHT-HOLD", "A"): "flat at the session close",
@@ -382,3 +387,11 @@ for _k in [("m2024", "40"), ("m2024", "42"), ("m2024", "43"), ("m2025", "2"), ("
            ("m2026smc", "108"), ("m2026smc", "115"), ("m2026smc", "116"), ("m2026smc", "117"), ("m2026smc", "119"),
            ("m2025", "13"), ("m2025", "23"), ("m2025", "27"), ("m2025", "29")]:
     SINGLES_NOT_BUILT.setdefault(_k, _SQ)
+
+
+# review fixes (second-agent review of stages b-f, 2026-11-08)
+TAG_ONLY.update({
+    "LUNCH-TARGET": "the lunch pool L feeds lunch_raid_wait / lunch_trail_guard (off) and a tag; not yet the lunch-macro target",
+    "MACRO-GRID": "the macro windows gate only with macro_gate / macro_only / macro_done_skip (off)",
+    "TGIF-DEPTH": "acts only with the TGIF model (tgif_model, off)",
+})

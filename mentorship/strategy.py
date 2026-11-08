@@ -232,7 +232,7 @@ class Params:
     pre_0700: bool = True         # 07:00-08:30 window (022, 032, 099), same model; flat before an
                                    # 08:30 release (pre_flat_0830)
     pre_flat_0830: bool = True
-    pre_0900: bool = True         # 09:00-09:29 entries, any day (018, 056, 100); not with am_from_0830 (the AM covers it)
+    pre_0900: bool = False         # 09:00-09:29 entries, any day (018, 056, 100); not with am_from_0830 (the AM covers it)
     post_news: bool = False        # 08:30 release days: wait 30 min (065), then 09:00-09:29 entries
                                    # off the 08:30-09:00 range's high/low
     ma_deuce: bool = False         # 091: daily BISI premium + 1m FVG inverted before 08:00 ->
@@ -971,7 +971,7 @@ class Params:
     smt_bank_against_frac: float = 0.0   # X3g (037 ~32:56 "80% off"): the sister index BREAKS against the trade (prints a new low
                                          # since the fill) while our bar holds its low -> bank this share of what is left (once;
                                          # 0 = off, 0.8 = the lesson's 80%); same min-R gate [our interpretation]
-    resistance_mode: str = "both"         # X3f (089 ~8:46; 092 ~1:28:54; 102 ~2:15:30): "low_full" = a low-resistance run
+    resistance_mode: str = "high_run"         # X3f (089 ~8:46; 092 ~1:28:54; 102 ~2:15:30): "low_full" = a low-resistance run
                                          # (<= res_low_max obstacles) is one full pull at the draw; "high_run" = a
                                          # high-resistance run (>= res_high_min obstacles) runs down equity; "both"
     res_low_max: int = 1                 # [our interpretation] obstacles (opposing FVGs, untaken swing highs) allowed
@@ -3700,6 +3700,8 @@ class Params:
                 or not 0 < self.mm_oc_frac <= 1 or self.reclaim_bounce_bars < 1 or self.mm_lowrisk_reentry not in ("", "extreme", "wick_ce")):
             raise ValueError("setups_models #5/7: flag_min_bars >= 2, 0 < flag_max_frac <= 1, po3_15m_n / pd50_tf / reclaim_bounce_bars >= 1, distances >= 0, all_pools_names a subset of "
                              "(london, prev_ny, lunch, prev_pm), unicorn_tf in (1, 5, 15, 60), 0 <= max_retrace < 1, mm_accum_frac > 0, 0 < mm_oc_frac <= 1")
+        if not (0 <= self.lunch_range[0] < self.lunch_range[1] <= 810):
+            raise ValueError("lunch_range: start < end <= 810 (the lunch pools are read from 13:30)")
         if self.ndog_scalp and not self.asia_session:
             self.asia_session = True           # new-ndog-asian-scalp: the scalp needs the evening window
         if self.mm_plan:                       # M1-three-entry-plans: the umbrella forces the paths it names (ONE-WAY: ob_entry / mmxm_ctx / add_on_vi stay forced after replace(p, mm_plan=""); set them back explicitly)
@@ -4912,7 +4914,7 @@ class DayCtx:
     def __init__(self, df: pd.DataFrame, day: date, hist: list[pd.DataFrame], tf: int,
                  htf: tuple = (), closes: dict | None = None, or_minutes: int = 30,
                  evening: pd.DataFrame | None = None, tf_lookback: dict | None = None,
-                 lunch_range: tuple = (720, 810)):
+                 lunch_range: tuple = (690, 810)):
         prev = hist[-1]
         self.day, self.tf = day, tf
         frame = pd.concat([prev, df])
@@ -9036,7 +9038,7 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
     stop = bottom - p.pad
     mt = None if ob is None else _ES1.mt_of(p, sd, ob)          # (caption-gap D4-mt-source-tally: body / range / sensitive / blended)
     mt_bind = None
-    if (p.stop_mode == "ob_mt" or p.mt_break != "off") and mt is not None and mt < entry - p.min_risk_pts * p.es_pt:
+    if (p.stop_mode in ("ob_mt", "wick_ce") or p.mt_break != "off") and mt is not None and mt < entry - p.min_risk_pts * p.es_pt:
         if p.ob_mt_two_sided and _ES2.ob_mt_dead(sd, _ES1.zone_dict(sd, ob)["k"], float(mt), i):
             stop = min(stop, float(ob.bottom) - p.pad)  # caption-gap A12-mt-worked-both-sides (cc09_008 ~14:37): the MT has worked on both sides - the stop falls back to the OB low
             _ES2.hit("ob_mt_dead")
