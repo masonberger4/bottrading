@@ -47,13 +47,13 @@ Where ICT labels a beginner vs experienced version, the experienced one is defau
 | NEWS-HOLD | **A**: No: square positions ahead of CPI/PPI; don't trade the numbers | 4 | B(2) |  |
 | FOMC-DAY | **B**: Trade the afternoon two-stage delivery: first FVG after 14:00, second wave from 14:30 (often the opposite way) | 5 | C(2) A(1) D(1) |  |
 | NFP-THU-FRI | **B**: Yes: experienced traders trade NFP Thursday and Friday (after the initial volatility) | 15 | A(15) | experienced version (overrides count) |
-| FED-SPEECH | **A**: No AM trades on a 10:00 Fed chair speech/testimony day (observe only); trade the PM 13:30-16:00 | 3 | B(3) C(2) | TIE PENDING Mase: A/B |
+| FED-SPEECH | **A**: No AM trades on a 10:00 Fed chair speech/testimony day (observe only); trade the PM 13:30-16:00 | 3 | B(3) C(2) | tie: Mase picked |
 
 ## Day filters
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
-| MONDAY | **B**: Skip Mondays (accumulation/manipulation), except NFP-week Mondays or an obvious setup | 9 | A(9) C(1) | TIE PENDING Mase: B/A |
+| MONDAY | **A**: Trade Mondays like any other day (he shows many Monday trades) | 9 | B(9) C(1) | tie: Mase picked |
 | CPI-WEEK | **A**: Day before CPI: quiet, small risk, bread-and-butter only, then stop | 4 | B(2) C(1) |  |
 | AFTER-BIG-DAY | **B**: After a very large down day avoid the whole morning session (no trades 09:30-10:30) | 4 | A(3) C(1) | margin 1 |
 | TWO-SIDED | **A**: Stand aside (low probability); in rollover week trade very light and expect to be wrong | 6 | B(2) |  |
@@ -109,16 +109,16 @@ Where ICT labels a beginner vs experienced version, the experienced one is defau
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
-| PYRAMID-WHERE | **A**: Only on the favourable side of equilibrium of the leg/range; no adds past EQ or after partials | 8 | B(8) C(2) D(1) | TIE PENDING Mase: A/B |
+| PYRAMID-WHERE | **A**: Only on the favourable side of equilibrium of the leg/range; no adds past EQ or after partials | 8 | B(8) C(2) D(1) | tie: Mase picked |
 | PYRAMID-SIZES | **A**: Decreasing: largest first (6,3,1 / 6,3,2,1 / 5,4,3,2,1) | 5 | B(4) | margin 1 |
 | REENTRY | **A**: Yes, same narrative and same (full) size | 9 | B(5) C(5) |  |
 | MIN-ROOM | **B**: NQ 10 / ES 5 minimum move; setup needs ~20 NQ handles of room | 7 | A(6) C(3) D(3) | margin 1 |
-| FIXED-RR | **A**: Targets at liquidity / PD arrays (the draw), not a fixed multiple | 2 | B(2) | TIE PENDING Mase: A/B; thin (<=2 videos) |
+| FIXED-RR | **A**: Targets at liquidity / PD arrays (the draw), not a fixed multiple | 2 | B(2) | tie: Mase picked; thin (<=2 videos) |
 | STOP-MGMT | **A**: Keep the initial stop (day trade) and pay yourself with partials; trail only to structure, not early | 10 | E(8) B(3) H(3) C(2) D(2) I(1) K(1) J(1) G(1) F(1) |  |
 | EXIT-DEPTH | **B**: Lower exit threshold: close or trail tight from 75% of the projection; don't demand the exact target | 4 | A(0) |  |
 | PARTIAL-TRIGGER | **C**: Ladder: below each intermediate low, 25% at the event horizon of two pools, leave a 20% runner | 6 | A(4) B(2) |  |
 | EXIT-STYLE | **B**: Staggered partials (chest/head, each new low) with a runner to the terminus or an extreme limit | 13 | A(7) C(2) |  |
-| OVERNIGHT-HOLD | **A**: Flat by 16:00: day trades are never held overnight | 3 | B(3) | TIE PENDING Mase: A/B |
+| OVERNIGHT-HOLD | **B**: OSOK: hold a day-of-entry position overnight to a daily FVG CE (adds after midnight) | 3 | A(3) | tie: Mase picked |
 | STOP-PLACE | **E**: Tight: one tick past a wick CE or the gap CE (low resistance days, small ranges) | 10 | G(8) B(7) C(5) A(3) D(3) H(2) I(1) F(1) |  |
 | RESISTANCE-DAY | **B**: Trade both, but in high resistance frame nearer arrays, use wider stops, one contract, no trailing | 4 | A(7) C(3) | experienced version (overrides count) |
 
@@ -126,14 +126,14 @@ Where ICT labels a beginner vs experienced version, the experienced one is defau
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
-| CONTRACT | **B**: Back-adjusted continuous contract: for old highs/lows at ATHs, and (107) only to reveal volume imbalances | 6 | A(6) C(2) D(1) | TIE PENDING Mase: B/A |
+| CONTRACT | **B**: Back-adjusted continuous contract: for old highs/lows at ATHs, and (107) only to reveal volume imbalances | 6 | A(6) C(2) D(1) | tie: Mase picked |
 
 ## Entries
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
 | FVG-ENTRY | **B**: At or beyond the CE (far half), accepting missed fills | 4 | A(2) |  |
-| VENOM-STOP | **A**: Stop below the candle that pierces back above the swept low; entry at the second candle's close or less | 1 | B(1) | TIE PENDING Mase: A/B; thin (<=2 videos) |
+| VENOM-STOP | **B**: Stop just below the CE of the SIBI+BISI balanced price range; entry buy stop at the BISI high or limit at its open or less | 1 | A(1) | tie: Mase picked; thin (<=2 videos) |
 
 ## One-source rules
 
