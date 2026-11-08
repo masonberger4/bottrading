@@ -552,7 +552,7 @@ class Params:
     # D6
     unicorn_pref: bool = True            # the unicorn FVG is preferred over plain FVGs (A14); False = no preference
     # L3 higher pools
-    or_extra: bool = False               # the other opening range (OR60 with or_minutes=30) as pools too
+    or_extra: bool = True               # the other opening range (OR60 with or_minutes=30) as pools too
     pw_pm_full_session: bool = False     # previous week / month H/L from full (ETH) sessions
     # L8 vacuum block (cc04_009)
     vacuum_blocks: bool = False          # release gaps (08:30: near / MT / far; 09:45 / 10:00+: near / MT) as
@@ -1325,7 +1325,7 @@ class Params:
     sunday_no_gap_trade: bool = False    # [our interpretation] "filter": a Sunday without a gap has no scenario to wait for - False (the
                                          # default) treats it like "neither" (no Monday trade), True trades it as an ordinary Monday
     # N7 holidays and calendar (cc08_006 ~5:06; 090 ~8:00; 072 ~3:36; 079 ~8:54; 093 ~0:32)
-    skip_holiday_eve: bool = False       # N7.1: no trading the day before a long weekend / market holiday
+    skip_holiday_eve: bool = True       # N7.1: no trading the day before a long weekend / market holiday
     holiday_eve_bank: bool = False       # N7.1 "and bank holidays": Columbus / Veterans Day count as holidays
     early_close_flat: bool = True        # N7.1 EARLY_CLOSE: flat before a shortened day's close (those days are not loaded by
                                          # backtest.days(); matters for live / custom frames)
@@ -1438,13 +1438,13 @@ class Params:
     tgif_week_sweep: bool = False        # M14.3: Friday has swept the Mon-Thu extreme before the order (all three engines)
     # X10d / X15 / X15d / D19
     am_range_skip_pm: float = 0.0        # X10d: AM (09:30-12:00) range >= this x ADR5 -> no PM / lunch entries (0 = off)
-    week_done_on_draw: str = "off"       # X15d (038 ~6:33; 101 ~34:21): the weekly objective (all-hours prior-week high / low, this week's
+    week_done_on_draw: str = "skip"       # X15d (038 ~6:33; 101 ~34:21): the weekly objective (all-hours prior-week high / low, this week's
                                          # NWOG CE) delivered -> "tag" / "skip": done for the week
     week_done_levels: tuple = ("pwh", "pwl", "nwog_ce")
     week_done_pick: str = "any"          # "any" delivered objective, or "nearest" to the week's first open
     be_counts_as_win: bool = True        # D19: no_pm_after_am_win counts a breakeven (net >= 0) as a win (the old behaviour); False = net > 0
     # B23 / X16
-    seasonal_tag: bool = False           # B23 (cc10_015 ~5:04): month map tag, HTF agreement, fail after day 10 - reported only
+    seasonal_tag: bool = True           # B23 (cc10_015 ~5:04): month map tag, HTF agreement, fail after day 10 - reported only
     seasonal_map: tuple = SEASONAL_DOW20
     seasonal_map_b: tuple = ()           # an optional second sample: the tag is "none" unless both lines agree
     seasonal_fail_day: int = 10

@@ -79,3 +79,17 @@ def test_variants_registered_in_study():
     from mentorship import study
     for name in C.variants():
         assert name in study.DECISIONS, name
+
+
+def test_every_single_accounted_for():
+    st = C.singles_status()
+    for key, status in st.items():
+        if status in ("excluded", "agrees"):
+            continue
+        assert key in C.SINGLES or key in C.SINGLES_NOT_BUILT, key
+
+
+def test_every_card_accounted_for():
+    for card in DEF:
+        for pos in POS[card]:
+            assert pos in C.CARDS.get(card, {}) or (card, pos) in C.NOT_BUILT, (card, pos)

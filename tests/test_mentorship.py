@@ -196,7 +196,7 @@ def test_confluence_tags_do_not_look_ahead():
         part = B.run(df[df.index <= c], 5, "SPX", p, partial_last=True)
         a = full[full.entry_time <= c][cols].reset_index(drop=True)
         b = part[part.entry_time <= c][cols].reset_index(drop=True)
-        pd.testing.assert_frame_equal(a, b)
+        pd.testing.assert_frame_equal(a, b, check_dtype=False)     # an Asia NDOG trade later in the full run (ASIA card) has no conf_n, which makes the column float
 
 
 def test_inversion_fvg_void_and_mitigation():

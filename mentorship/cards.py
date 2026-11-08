@@ -357,3 +357,28 @@ NOT_BUILT.update({
     ("STOP-PLACE", "D"): Q, ("STOP-PLACE", "F"): Q, ("STOP-PLACE", "H"): Q, ("STOP-PLACE", "I"): Q,
     ("RESISTANCE-DAY", "C"): Q,
 })
+
+
+# --- stage f: one-source rules (scorecard/singles.csv; "on" = the draft default) -------------------------------
+SINGLES.update({
+    ("m2024", "30"): {"on": dict(skip_holiday_eve=True), "off": dict(skip_holiday_eve=False)},   # pre-holiday Friday out; post-holiday AM skip stays (skip_post_holiday_am)
+    ("m2024", "41"): {"on": dict(week_done_on_draw="skip"), "off": dict(week_done_on_draw="off")},
+    ("m2026smc", "82"): {"on": dict(seasonal_tag=True), "off": dict(seasonal_tag=False)},       # a tag: reported, no trade change
+    ("m2024", "93"): {"on": dict(or_extra=True), "off": dict(or_extra=False)},                  # the first 30 and 60 minutes both frame the day
+})
+_SQ = "queued: no engine rule yet; built in the new-concepts stage"
+SINGLES_NOT_BUILT.update({
+    ("m2024", "89"): "already the engine: London 02:00-05:00 high / low are AM pools and targets (extra_pools)",
+    ("m2024", "97"): "already the engine: the release dealing-range wait covers 10:00 releases",
+    ("m2026smc", "17"): "IOFED 1 tick past candle 1 is an entry mode (entry='iofed', iofed_ref='tick'); FVG-ENTRY B (CE) is the card default, so it stays a switch",
+    ("m2026smc", "83"): "switch only (widest nested ORG); queued",
+    ("m2026smc", "19"): "needs a numeric threshold first",
+    ("m2025", "17"): "decided with m2026smc 17",
+})
+for _k in [("m2024", "40"), ("m2024", "42"), ("m2024", "43"), ("m2025", "2"), ("m2026smc", "6"), ("m2026smc", "12"),
+           ("m2026smc", "28"), ("m2026smc", "29"), ("m2026smc", "30"), ("m2026smc", "49"), ("m2026smc", "67"),
+           ("m2026smc", "72"), ("m2024", "65"), ("m2026smc", "92"), ("m2026smc", "101"), ("m2024", "83"), ("m2024", "88"),
+           ("m2024", "90"), ("m2024", "91"), ("m2024", "98"), ("m2024", "99"), ("m2024", "103"), ("m2024", "104"),
+           ("m2026smc", "108"), ("m2026smc", "115"), ("m2026smc", "116"), ("m2026smc", "117"), ("m2026smc", "119"),
+           ("m2025", "13"), ("m2025", "23"), ("m2025", "27"), ("m2025", "29")]:
+    SINGLES_NOT_BUILT.setdefault(_k, _SQ)
