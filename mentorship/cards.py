@@ -76,6 +76,13 @@ def default_overrides() -> dict:
     return out
 
 
+def _is_engine(kw: dict) -> bool:
+    """True when every key already has this value in Params() (no switch needed)."""
+    from .strategy import Params
+    p = Params()
+    return all(getattr(p, k) == v for k, v in kw.items())
+
+
 def variants(screen: bool = False) -> dict[str, dict]:
     """Every non-default built position as a study.DECISIONS variant (overrides over Params()); screen=True leaves out TAG_ONLY cards."""
     d, pend = card_defaults(), pending_ties()
@@ -85,7 +92,7 @@ def variants(screen: bool = False) -> dict[str, dict]:
             continue
         base = None if card in pend else ps.get(d[card])
         for pos, kw in ps.items():
-            if (pos != d[card] or card in pend) and kw and kw != base:
+            if (pos != d[card] or card in pend) and kw and kw != base and not _is_engine(kw):
                 out[f"SC-{card}-{pos}"] = dict(kw)
     for (dig, num), ps in SINGLES.items():
         if ps["off"]:
@@ -191,10 +198,10 @@ CARDS.update({
         "A": dict(nfp_day=False, nfp_thu=False, nfp_week_block=True),
         "B": dict(nfp_day=True, nfp_thu=True, nfp_week_block=False),
     },
-    "FED-SPEECH": {                            # tie open: the engine keeps trading the AM until Mase picks
+    "FED-SPEECH": {                            # Mase picked D (trade after the speech, 2026-11-08); not built yet, A stays a switch
         "A": dict(fed_chair_skip_am=True),
     },
-    "MONDAY": {                                # tie open
+    "MONDAY": {                                # Mase's tie pick 2026-11-08: A
         "A": dict(monday_mode="trade"),
         "B": dict(monday_mode="obvious"),
     },
@@ -241,6 +248,7 @@ NOT_BUILT.update({
     ("FOMC-DAY", "A"): "an FOMC AM cut-off at 10:30 is not built; queued",
     ("FOMC-DAY", "D"): "beginner version (avoid FOMC day); experienced default stands",
     ("FED-SPEECH", "B"): Q, ("FED-SPEECH", "C"): Q,
+    ("FED-SPEECH", "D"): "needs each speech's end time; calendar.FED_CHAIR is unverified and has no end times; queued",
     ("MONDAY", "C"): "Monday pre-market only needs a per-day session list; queued",
     ("CPI-WEEK", "B"): Q,
     ("AFTER-BIG-DAY", "C"): "'keep expectations low' has no exact rule",
@@ -268,9 +276,8 @@ CARDS.update({
     "SMT-USE": {"A": dict(smt_partial="off", smt_ym=False), "B": dict(smt_partial="a", smt_ym=True)},   # B needs the sister indices (YM too)
     "SMT-SET": {"A": dict(smt_ym=True), "B": dict(smt_ym=False)},
     "BIAS-SOURCE": {"A": {}},
-    "CONTRACT": {                              # tie open: the engine keeps front-month prices
+    "CONTRACT": {                              # Mase picked B (2026-11-08), which is not built yet: the engine keeps front-month prices
         "A": dict(price_frame="front_month"),
-        "B": dict(price_frame="back_adjusted"),
     },
     "FVG-ENTRY": {"A": dict(entry="edge"), "B": dict(entry="ce")},
 })
@@ -299,6 +306,7 @@ NOT_BUILT.update({
     ("BIAS-SOURCE", "B"): Q, ("BIAS-SOURCE", "C"): Q, ("BIAS-SOURCE", "D"): Q, ("BIAS-SOURCE", "E"): Q,
     ("ATH-RULE", "A"): Q, ("ATH-RULE", "B"): Q, ("ATH-RULE", "C"): Q,
     ("CONTRACT", "C"): Q, ("CONTRACT", "D"): Q,
+    ("CONTRACT", "B"): "back-adjusted prices only for old highs / lows at ATHs and to reveal VIs (front month otherwise): a per-level frame; queued",
     ("VENOM-STOP", "A"): "the Venom model is not in the engine", ("VENOM-STOP", "B"): "the Venom model is not in the engine",
 })
 
@@ -306,7 +314,7 @@ NOT_BUILT.update({
 # --- stage e: management --------------------------------------------------------------------------------------
 _LF = lambda a, b: dict(ladder_fracs=a, ladder_fracs_slow=b)
 CARDS.update({
-    "PYRAMID-WHERE": {"A": dict(add_cut="eq")},   # tie open: no adds past EQ of the range (E12e); the engine keeps add_cut="" until Mase picks
+    "PYRAMID-WHERE": {"A": dict(add_cut="eq")},   # Mase's tie pick 2026-11-08: no adds past EQ of the range (E12e)
     "PYRAMID-SIZES": {"A": dict(add_ladder="631")},
     "REENTRY": {
         "A": dict(reentry_half=True, reentry_risk_mult=1.0),

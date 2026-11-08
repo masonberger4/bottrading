@@ -919,7 +919,7 @@ class Params:
                                          # "covered" = no adds once (1 - add_cutoff) of the range is covered
                                          # (0.25 -> 75%); "progress" = no adds once add_cutoff of the range
                                          # is covered, measured up from the sweep low (0.25 -> 25%)
-    add_cut: str = ""                    # E12e: "eq" = no adds past EQ of the range; "leg75" = past 75% of the leg
+    add_cut: str = "eq"                    # E12e: "eq" = no adds past EQ of the range; "leg75" = past 75% of the leg
     add_cut_ref: str = "range"           # range = sweep extreme .. the locked draw; "leg" = .. the leg high
     nfp_no_adds: bool = True             # E12f (105 ~9:13): no pyramiding on a jobs (NFP) day
     no_adds_nfp: bool = False            # E12 (same rule, restated)

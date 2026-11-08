@@ -13,6 +13,8 @@ def _default_news_calendar():
 
 # Test modules written against the pre-card engine defaults (tests/_legacy.py): their `Params` is LegacyParams.
 LEGACY_MODULES: set[str] = set()
+import os as _os
+LEGACY_MODULES |= {m for m in _os.environ.get("MENTORSHIP_LEGACY_MODULES", "").split(",") if m}     # diagnostic reruns
 
 
 @pytest.fixture(autouse=True)
