@@ -87,3 +87,9 @@ Batch 10 append (2026-11-06): 2026 SMC 138-143 (`m2026smc_b10_draft_rules.md`, c
 OPEN-RANGE-TRADE (D), ORG-CE-WINDOW (D), LIQ-LOCATION (C), and evidence rows on seventeen cards; 108, 115, 116, 117 and 119 are
 "not scored". 62 cards in all. Script: /mnt/project-files/mentorship/b10_score.py (also updates digest_refs on existing cards).
 Same PR: 2023 Mentorship 023 got caption-based notes, and 2025 Lecture 46 was noted (lectures.csv picks both up; no new rows).
+
+2025 Lectures daily reviews append (2026-11-08): `m2025_draft_rules.md` Part F conflicts 11-39 (46 daily/live reviews, series
+complete). Three new cards (WICK-SELECT, PDA-LOOKBACK, VENOM-STOP), new positions on IFVG-CONFIRM (D), UNICORN (C), ATH-RULE (C),
+FVG-CARRY (C, D), STOP-MGMT (I, J, K), STOP-PLACE (I), BIAS-SOURCE (E), PYRAMID-WHERE (D), AFTER-BIG-DAY (C), NEWS-WAIT (H),
+GAP-LIFE (E), and ~240 evidence rows on existing cards. 13, 17, 23, 24, 27, 28, 29 are "not scored" (17 defers to Mase's SMC 17
+IOFED pick). 65 cards in all. Script: scratch append (rows tagged L2025:L02-L68).

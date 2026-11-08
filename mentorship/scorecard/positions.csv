@@ -191,3 +191,25 @@ NEWS-WAIT,G,CPI/PPI 08:30: no position into the release; look for entries again 
 OPEN-RANGE-TRADE,D,Conditional: trade 09:30-10:00 only if the pre-market (07:00-09:30) read was clean; otherwise wait for 10:00
 ORG-CE-WINDOW,D,The half-gap target stays valid after 10:00 when the daily PD array points to it
 LIQ-LOCATION,C,"Graded wick: when the anchor of relative equal highs/lows has a wick, the turn can come at its lower quadrant/CE; partial there"
+GAP-LIFE,E,RTH opening range gaps: today plus the last three sessions (four sets); a gap whose day closed a body above an old ATH is carried on
+BIAS-SOURCE,E,"Session time and price alone (opening-range FPFVG after a raid), independent of daily/weekly bias"
+UNICORN,C,An FVG lying on a premium/discount wick quadrant during a macro time
+STOP-MGMT,I,Cover costs once price has run about 40% of the way to the target
+STOP-MGMT,J,"Move the stop to cost/CE once price is in close proximity to the target, so a trade near target never becomes a loss"
+STOP-MGMT,K,Cover costs on a structural trigger: a close outside the key level (ORG low) and its failed retest
+PYRAMID-WHERE,D,"In a confirmed strong trend (FVGs left open), add on every short-term retracement"
+STOP-PLACE,I,One tick beyond the previous candle's wick low/high
+ATH-RULE,C,At all-time highs take only buy signals until the market has completely collapsed; no shorts at all
+NEWS-WAIT,H,"Treat a 10:00 release (e.g. ISM) like 08:30: wait for it to deliver, then validate the entry array"
+AFTER-BIG-DAY,C,"After a large range day (e.g. a big Thursday), keep expectations low for the next day"
+FVG-CARRY,C,Carry for the week only: Monday's FPFVG is used until the last 30 minutes of Friday
+FVG-CARRY,D,"Keep only the last 5-10 first FVGs per session type (NY AM, PM, Asia, London) as workspaces"
+IFVG-CONFIRM,D,"Anticipate from structure (lower low with an imbalance in the leg, or bearish FPFVG after a buy-side raid), then validate on the close"
+WICK-SELECT,A,"The lowest-reaching (for lows) or highest-reaching (for highs) wick, not simply the longest"
+WICK-SELECT,B,"The longest (most elongated) wick that also meets a criterion, e.g. reaching the FVG low"
+WICK-SELECT,C,The wick on the path of the draw (the first one price will meet); wicks already passed are ignored
+WICK-SELECT,D,Judgment: grade the candidates and use the one price respects; skip a wick that shares a value with another PD array
+PDA-LOOKBACK,A,20 trading days is enough; 40/60 days only in a runaway (parabolic) market
+PDA-LOOKBACK,B,"Use 20, 40 and 60 trading days; beyond 40 days needs more experience"
+VENOM-STOP,A,Stop below the candle that pierces back above the swept low; entry at the second candle's close or less
+VENOM-STOP,B,Stop just below the CE of the SIBI+BISI balanced price range; entry buy stop at the BISI high or limit at its open or less

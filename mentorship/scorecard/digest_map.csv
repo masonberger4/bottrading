@@ -250,3 +250,32 @@ m2026smc,116,,"Not scored yet: pre-market IFVG as a holding pattern, no fade (13
 m2026smc,117,,Not scored yet: two SIBIs joined by a VI as one array (138); one source.
 m2026smc,118,STOP-MGMT,
 m2026smc,119,,"Not scored yet: morning done if a protective low goes before the AM target (139, 140); no matching card."
+m2025,11,WICK-SELECT,
+m2025,12,IFVG-CONFIRM,
+m2025,13,,"Not scored: suspension block definitions in L07/L09/L11 are compatible (VI at both ends, body range); new array, no counter-position."
+m2025,14,OVERNIGHT-HOLD,
+m2025,15,PREMARKET-RANGE,
+m2025,16,PDA-LOOKBACK,
+m2025,17,,"Not scored: IOFED depth was decided on SMC 17 (Mase 2026-11-08: 1 tick past candle 1; partial short of CE a switch). 2025 L04, L05, L16, L54 describe the partial fill short of CE; L46 adds the OB+SIBI-in-IFVG drill as a separate entry model."
+m2025,18,UNICORN,
+m2025,19,OB-CANDLE,
+m2025,20,ATH-RULE,
+m2025,21,FVG-CARRY,
+m2025,22,VENOM-STOP,
+m2025,23,,"Not scored: one-sided (L30, L28 ignore a doji middle candle when drawing an FVG); no video for the engine default."
+m2025,24,,Not scored: London close window 10:00-13:00 ET is one forex source (L14).
+m2025,25,PREMARKET-RANGE,
+m2025,26,MACRO-GRID,
+m2025,27,,"Not scored: ""ETH must be confirmed in RTH"" is one source (L52)."
+m2025,28,,"Not scored: unfilled limit near target (L54 pride in precision vs L60 move the stop to the near-touch) is compatible, not a disagreement."
+m2025,29,,Not scored: fading toward smooth highs after a one-way week is one source (L56).
+m2025,30,OPEN-RANGE-TRADE,
+m2025,31,STOP-MGMT,
+m2025,32,STOP-PLACE,
+m2025,33,BIAS-SOURCE,
+m2025,34,PYRAMID-WHERE,
+m2025,35,AFTER-BIG-DAY,
+m2025,36,NEWS-WAIT,
+m2025,37,GAP-LIFE,
+m2025,38,MIN-ROOM,
+m2025,39,LUNCH-WINDOW,

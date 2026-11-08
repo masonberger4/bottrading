@@ -9,3 +9,5 @@ Read only ~27 core teaching lectures in full; the rest are PENDING. Playlist ord
 **Done:** 01 (live sample, not core), 46 (late captions, 2026-11-06), 51, 34, 32, 31, 29, 83, 82, 80, 78, 77, 76, 75, 74, 73, 72, 70, 66, 65, 64, 62, 58, 57.
 **Pending (not read):** the daily/live NQ and forex reviews: 02-20, 24, 28, 30, 33, 36-50, 52-56, 60, 61, 63, 68, plus missing captions 25, 35, 46, 59, 67, 69, 71, 79, 81. Reviews are examples of the same rules; revisit if gaps appear (02 and 04 are 24-36k-word live streams on market maker models and 20-day lookback grading, likely worth a later read).
 **Order of reading:** chronological from 83 so rules build up. Update this list as notes are added.
+
+**Update 2026-11-08:** all pending daily/live reviews noted from full caption reads (02-20, 24, 28, 30, 33, 36-45, 47-50, 52-56, 60, 61, 63, 68). Only the silent videos (25, 35, 59, 67, 69, 71, 79, 81) have no note. Rules: digest Part F.
