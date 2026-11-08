@@ -14,7 +14,11 @@ for r in rows:
 EXPERIENCED = {'NFP-THU-FRI': 'B', 'RESISTANCE-DAY': 'B'}  # RESISTANCE-DAY A is ICT's beginner version
 # Mase 2026-11-07: ties on video count go to Mase; no automatic tie-break.
 # Fill in his pick here as {card: pos}; until then the card shows PENDING.
-TIE_PICKS = {}
+TIE_PICKS = {  # Mase's picks, 2026-11-08 16:00-16:09 UTC
+    'STOP-MGMT': 'E', 'ORG-SIZE': 'B', 'FVG-ENTRY': 'A', 'LIQ-LOCATION': 'A',
+    'NEWS-HOLD': 'B', 'SMT-SET': 'A', 'TF-CHOP': 'A', 'SHORT-LOCATION': 'B',
+    'LONDON-MACRO': 'B', 'WEEK-PROFILE': 'A',
+}
 key = lambda r: (int(r['videos']), int(r['m2023']), r['newest'] or '')
 out = []
 for c, ps in cards.items():
