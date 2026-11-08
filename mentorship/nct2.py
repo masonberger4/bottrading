@@ -508,6 +508,8 @@ def lunch_pools(ctx, p):
     after the 08:30 release. lunch_raid selects one ("first_of" = all). Returns dict(d, pools={name: raw price}) or None."""
     if p.lunch_raid == "off":
         return None
+    if getattr(ctx, "sides_map", None) is None:
+        return None                              # a bare context (unit tests) has no sides yet
     c = _cache(ctx)
     if ("lunch", p.lunch_raid) in c:
         return c[("lunch", p.lunch_raid)]

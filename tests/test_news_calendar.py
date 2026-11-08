@@ -347,8 +347,8 @@ def test_pre_open_windows_pre8_lon_and_am_from_0830():
 def test_window_helpers():
     ctx = ctx_for(A_ROWS)
     assert NC.extra_windows(Params(), ctx, NORMAL, "ES") == []
-    assert NC.extra_windows(Params(pre_0820=True), ctx, NORMAL, "ES") == [("PRE8", 500, 570)]
-    assert NC.extra_windows(Params(pre_0820=True, am_from_0830=True), ctx, NORMAL, "ES") == [("PRE8", 500, 510)]
+    assert NC.extra_windows(Params(pre_0820=True, pre_0900=False), ctx, NORMAL, "ES") == [("PRE8", 500, 570)]     # (PREMARKET-ENTRY card: pre_0900 is on by default)
+    assert NC.extra_windows(Params(pre_0820=True, pre_0900=False, am_from_0830=True), ctx, NORMAL, "ES") == [("PRE8", 500, 510)]
     assert NC.extra_windows(Params(pre_0820=True, pre_0900=True), ctx, NORMAL, "ES") == [("PRE8", 500, 540)]
     assert NC.extra_windows(Params(pre_0820=True), ctx, date(2026, 4, 14), "ES") == []
     assert NC.extra_windows(Params(ny_kz_futures=True), ctx, date(2026, 4, 14), "ES") == [("PRE8", 500, 570)]
