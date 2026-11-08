@@ -8,6 +8,7 @@ from mentorship.strategy import Params
 
 DEF = C.card_defaults()
 POS = C.card_positions()
+PEND = C.pending_ties()
 P0 = Params()
 FIELDS = {f.name for f in fields(Params)}
 
@@ -23,7 +24,7 @@ def test_every_position_accounted_for():
     for card, ps in C.CARDS.items():
         for pos in POS[card]:
             assert pos in ps or (card, pos) in C.NOT_BUILT, (card, pos)
-            if pos in ps and pos != DEF[card] and ps[pos] == ps.get(DEF[card]):
+            if pos in ps and pos != DEF[card] and card not in PEND and ps[pos] == ps.get(DEF[card]):
                 assert (card, pos) in C.SAME_AS_ENGINE, (card, pos)     # the default already does it
             if pos in ps and not ps[pos]:
                 assert (card, pos) in C.SAME_AS_ENGINE, (card, pos)
@@ -41,6 +42,8 @@ def test_positions_set_the_same_keys():
 
 def test_default_position_is_params_default():
     for card, ps in C.CARDS.items():
+        if card in PEND:
+            continue                       # tie open: the engine keeps its behaviour, every position a switch
         for k, v in ps.get(DEF[card], {}).items():
             assert getattr(P0, k) == v, (card, k, getattr(P0, k), v)
     for key, ps in C.SINGLES.items():
@@ -51,6 +54,8 @@ def test_default_position_is_params_default():
 def test_no_two_defaults_disagree():
     seen = {}
     for card, ps in C.CARDS.items():
+        if card in PEND:
+            continue
         for k, v in ps.get(DEF[card], {}).items():
             assert seen.setdefault(k, (card, v))[1] == v, (k, seen[k], card)
 
@@ -58,6 +63,8 @@ def test_no_two_defaults_disagree():
 def test_variants_differ_from_defaults_and_build():
     for name, kw in C.variants().items():
         p = replace(P0, **kw)
+        if name.startswith("SC-") and name.split("-", 1)[1].rsplit("-", 1)[0] in PEND:
+            continue                       # a pending tie's engine-matching position is listed too
         assert any(getattr(p, k) != getattr(P0, k) for k in kw), name
 
 

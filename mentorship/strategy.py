@@ -213,7 +213,7 @@ class Params:
     nwog_keep: int = 5             # used when nwog_days = 0: the last N NWOGs (039: "4, preferably 5")
     org_days: int = 5              # opening range gaps (prior 16:00 close -> 09:30 open) kept as
                                    # targets (high / 75% / CE / 25% / low); 0 = off (L7, D21)
-    org_close: int = 0             # ORG uses the last price before this minute: 975 = 16:15 ES
+    org_close: int = 975             # ORG uses the last price before this minute: 975 = 16:15 ES
                                    # settlement (7 videos), 960 = 16:00 (3 videos; SPY's close);
                                    # 0 = per symbol (L7 levels_detectors): the resolved session close
     or_minutes: int = 30           # opening range 09:30-10:00 (2023 videos); 60 = CC's 09:30-10:30;
@@ -229,10 +229,10 @@ class Params:
     topdown: tuple = ()            # e.g. ("D", "4h", "1h", "15m"): structure on these timeframes
     topdown_min: int = 0           # must agree with the trade on at least this many (0 = all)
     # pre-09:30 setups (test-only switches; mentorship/digests/pre_open_entries.md)
-    pre_0700: bool = False         # 07:00-08:30 window (022, 032, 099), same model; flat before an
+    pre_0700: bool = True         # 07:00-08:30 window (022, 032, 099), same model; flat before an
                                    # 08:30 release (pre_flat_0830)
     pre_flat_0830: bool = True
-    pre_0900: bool = False         # 09:00-09:29 entries, any day (018, 056, 100); not with am_from_0830 (the AM covers it)
+    pre_0900: bool = True         # 09:00-09:29 entries, any day (018, 056, 100); not with am_from_0830 (the AM covers it)
     post_news: bool = False        # 08:30 release days: wait 30 min (065), then 09:00-09:29 entries
                                    # off the 08:30-09:00 range's high/low
     ma_deuce: bool = False         # 091: daily BISI premium + 1m FVG inverted before 08:00 ->
@@ -2259,8 +2259,8 @@ class Params:
     # new-short-top-of-htf-discount-fvg (050 ~00:51:08)
     htf_fvg_top_short: bool = False      # new: the top of a daily discount FVG already hit, a 5m bearish breaker there: sell it, target just beyond the nearest swing inside the FVG, out by 12:00
     # new-ndog-asian-scalp (052 ~00:08:18)
-    ndog_scalp: bool = False             # new: Asian session (18:00-24:00) gap-down NDOG, price at / consolidating at its low: a long to the NDOG high
-    asia_session: bool = False           # ... adds the 18:00-24:00 window to the day (backtest passes the evening bars)
+    ndog_scalp: bool = True             # new: Asian session (18:00-24:00) gap-down NDOG, price at / consolidating at its low: a long to the NDOG high
+    asia_session: bool = True           # ... adds the 18:00-24:00 window to the day (backtest passes the evening bars)
     # M16-trending-divergence-continuation (053 ~00:08:20)
     smt_trend_ignore: bool = False       # M16 / B18: on a trending day an SMT against the trend blocks nothing and the sick sister needs no deep discount
     # M2-three-drives-conditions (056 ~00:08:47; 074; 076)
@@ -2513,7 +2513,7 @@ class Params:
     lh_after_target: bool = False        # T7: the objective is done before noon, a PM MSS against the AM move formed, an opposite ORG / FVG unfilled: the last hour trades the reversal toward it
     moc_range_dir: bool = False          # T10: a range day tested one boundary 2+ times without a sustained break: only the other direction in 15:00-16:00
     moc_no_chase_hod: bool = False       # T10: a big bull day (range >= ADR5, close in the top quarter) whose HOD printed before 15:00 and which is not a trend day: no new longs from 15:00 (bear mirror)
-    lunch_macro_entry: bool = False      # T8: the 11:50-12:30 lunch-macro entry - a retrace into a 5m / 15m same-side FVG against the AM move; the first rung only
+    lunch_macro_entry: bool = True      # T8: the 11:50-12:30 lunch-macro entry - a retrace into a 5m / 15m same-side FVG against the AM move; the first rung only
     lunch_macro_win: tuple = (710, 750)
     lunch_first_rung_only: bool = True
     lunch_htf_program: bool = False      # T7: the lunch macro runs the buy-side (REH) above the late-AM pullback: with the HTF program that way the first rung = REH + exit_before_pts, the runner the HTF draw; against it no entry
@@ -2973,7 +2973,7 @@ class Params:
     rde_arm: float = 0.75
     rde_frac: float = 0.2
     peel_singles: bool = False           # X3-020-runner-peel-singles (020 ~00:10:25 ..): after >= 75 % is closed and above the target NWOG's CE: one lot per bar at an REH poke / a higher high / halfway to the gap top; the last unit gets a pivot-low stop
-    pm_macro_runner: bool = False        # X3-027-pm-runner-macro (027 ~00:40:28): a PM trade's first partial lifts the stop to +1 pt, the last unit is held to 15:50 (the 15:45-15:50 macro, newscal.macro_wins)
+    pm_macro_runner: bool = True        # X3-027-pm-runner-macro (027 ~00:40:28): a PM trade's first partial lifts the stop to +1 pt, the last unit is held to 15:50 (the 15:45-15:50 macro, newscal.macro_wins)
     hh_low_hold: bool = False            # X3-runner-swing-low-must-hold (027 ~00:43:52): after the first partial, the swing low between a pivot high and the new high that takes it out must hold; a trade under it closes hh_low_frac of the rest
     hh_low_frac: float = 1.0
     marginal_ext_warn: bool = False      # X3-marginal-lower-lows-warning (046 ~01:00:39): bars that make a new session extreme by < marginal_pts and close back inside it, marginal_n times before the final rung = no adds
@@ -3097,7 +3097,9 @@ class Params:
     macro_fail_scope: str = "session"    # ... "session" / "day" (maybe even that trading day)
     macro_gate_set: tuple = ()           # T7-macro-start-only-all (044 ~00:56:58; 046): the macro windows ("0950", "1050", "1150", "1330", "1450", "1515") the macro_gate / macro_only tests use; () = every window as before
     macro_trend_off: bool = False        # T7-no-macro-trending (025 ~00:59:10): on a one-sided trending day (no retrace to the running session EQ after 10:00) the macro gate is waived
-    lunch_raid: str = "off"              # T8-lunch-raid-target (025 ~01:01:51; 064 ~01:46:02; 075): the lunch pool L - "recent" (last swing against the AM move before noon) / "am_low" (the AM extreme before 11:00) / "post_news" (the first swing after the 08:30 release) / "first_of"
+    lunch_raid: str = "after_1000"              # T8-lunch-raid-target (025 ~01:01:51; 064 ~01:46:02; 075): the lunch pool L - "recent" (last swing against the AM move before noon) / "am_low" (the AM extreme before 11:00) / "post_news" (the first swing after the 08:30 release) / "first_of"
+    lunch_range: tuple = (690, 810)      # LUNCH-WINDOW card C (9 videos): the lunch range 11:30-13:30; its high / low are PM pools from its end (A 12:00-13:00, B 12:00-13:30, D from 10:30 [our interpretation])
+    macro_grid: str = "hourly"           # MACRO-GRID card B (9 videos): macros every hour :50-:10 (07:50 .. 15:10) plus the named windows; "fixed" = the 2023 named list only (newscal.MACROS_T7)
     lunch_raid_wait: bool = False        # ... no PM entry until L traded a tick through or lunch_raid_by
     lunch_raid_by: int = 825             # 13:45
     lunch_trail_guard: bool = False      # ... an AM trade's trailed stop may not sit just beyond L
@@ -3773,7 +3775,8 @@ class Params:
                          ("fomc_minutes_mode", ("allow", "block", "pm_only")), ("post_fomc_am", ("open", "skip", "symmetry")),
                          ("fomc_whipsaw_skip", ("off", "london", "am")), ("am_search_sb", ("exempt", "include")),
                          ("macro_fail_windows", ("am", "all")), ("macro_fail_scope", ("session", "day")),
-                         ("lunch_raid", ("off", "recent", "am_low", "post_news", "first_of")),
+                         ("lunch_raid", ("off", "recent", "am_low", "post_news", "after_1000", "macro_0950", "first_of")),
+                         ("macro_grid", ("fixed", "hourly")),
                          ("am_session", ("default", "0830_1200"))):                      # caption-gap pass news_calendar_times#1/1
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")

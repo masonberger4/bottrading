@@ -38,6 +38,13 @@ def card_defaults() -> dict[str, str]:
         return {r["conflict"]: r["default"] for r in csv.DictReader(f)}
 
 
+def pending_ties() -> set[str]:
+    """Cards whose tie Mase has not picked yet: every position is a switch and the engine keeps its
+    current behaviour as the default until he decides (coordinator 2026-11-08)."""
+    with open(HERE / "defaults.csv", encoding="utf-8") as f:
+        return {r["conflict"] for r in csv.DictReader(f) if "TIE PENDING" in r["flags"]}
+
+
 def card_positions() -> dict[str, list[str]]:
     """{card: [positions]} from scorecard/positions.csv."""
     out: dict[str, list[str]] = {}
@@ -55,10 +62,11 @@ def singles_status() -> dict[tuple, str]:
 
 def default_overrides() -> dict:
     """The default position's params of every built card and every built single ("on")."""
-    d = card_defaults()
+    d, pend = card_defaults(), pending_ties()
     out: dict = {}
     for card, ps in CARDS.items():
-        out.update(ps.get(d[card], {}))
+        if card not in pend:
+            out.update(ps.get(d[card], {}))
     for key, ps in SINGLES.items():
         out.update(ps["on"])
     return out
@@ -66,12 +74,12 @@ def default_overrides() -> dict:
 
 def variants() -> dict[str, dict]:
     """Every non-default built position as a study.DECISIONS variant (overrides over Params())."""
-    d = card_defaults()
+    d, pend = card_defaults(), pending_ties()
     out: dict[str, dict] = {}
     for card, ps in CARDS.items():
-        base = ps.get(d[card])
+        base = None if card in pend else ps.get(d[card])
         for pos, kw in ps.items():
-            if pos != d[card] and kw and kw != base:
+            if (pos != d[card] or card in pend) and kw and kw != base:
                 out[f"SC-{card}-{pos}"] = dict(kw)
     for (dig, num), ps in SINGLES.items():
         if ps["off"]:
@@ -128,6 +136,7 @@ CARDS.update({
         "A": dict(nwog_days=60, ndog_life="friday", org_days=5),
         "B": dict(nwog_days=25, ndog_life="5d", org_days=5),
         "C": dict(nwog_days=60, ndog_life="friday", org_days=5),
+        "E": dict(nwog_days=60, ndog_life="friday", org_days=4),   # today + the last three; the ATH carry-on is not built
     },
     "NDOG-DEF": {"A": {}},
 })

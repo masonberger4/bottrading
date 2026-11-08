@@ -224,7 +224,7 @@ def trend_day_nr(ctx, i: int) -> bool:
 def macro_wins_for(p) -> list:
     """T7 macro_gate_set: the (start, end) windows the macro_gate / macro_only tests use (() = every window of newscal.MACROS_T7)."""
     if not p.macro_gate_set:
-        return list(NC.MACROS_T7)
+        return list(NC.macro_set(p))
     out = []
     for k in p.macro_gate_set:
         out += list(MACRO_SET[k])

@@ -443,9 +443,19 @@ def side_filter(ctx, p, session: str, sign: int, i: int, t: int):
 MACRO_LAST_HOUR_END = (945, 950)     # X3-027-pm-runner-macro (027 ~00:40:28): the 15:45-15:50 last-hour macro, a T7 window with pm_macro_runner
 
 
+MACROS_HOURLY = tuple((h * 60 - 10, h * 60 + 10) for h in range(8, 16))   # MACRO-GRID B: 07:50-08:10 .. 14:50-15:10
+
+
+def macro_set(p=None) -> tuple:
+    """The macro windows: MACRO-GRID "hourly" (default) = every :50-:10 plus the named 2023 list; "fixed" = the named list."""
+    if p is not None and getattr(p, "macro_grid", "fixed") == "hourly":
+        return tuple(sorted(set(MACROS_T7) | set(MACROS_HOURLY)))
+    return MACROS_T7
+
+
 def macro_wins(t: int, p=None) -> list[str]:
     """T7 multi-tag: every macro window minute t lies in, "HHMM" of its start. Caption-gap X3-027-pm-runner-macro: with Params.pm_macro_runner the 15:45-15:50 window is one too."""
-    wins = MACROS_T7 + ((MACRO_LAST_HOUR_END,) if (p is not None and getattr(p, "pm_macro_runner", False)) else ())
+    wins = macro_set(p) + ((MACRO_LAST_HOUR_END,) if (p is not None and getattr(p, "pm_macro_runner", False)) else ())
     return [f"{a // 60:02d}{a % 60:02d}" for a, b in wins if a <= t < b]
 
 
