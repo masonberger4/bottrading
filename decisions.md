@@ -2,7 +2,7 @@
 
 ## ACTIVE RULES DIGEST (read this first; grep the rest; this is the single home for these rules)
 1. One laptop writer at a time; call remote_control_status before touching the laptop; if another writer is active, stop and ask the coordinator.
-2. Laptop folder C:\Users\mason\bottrading only; NEVER C:\Users\mason\X; leave ict_fetch PIDs and the Silver Bullet paper bot alone; one pytest run at a time, launched detached.
+2. Laptop folder C:\Users\mason\bottrading only; NEVER C:\Users\mason\X; ict_fetch processes are owned by the download thread only (other threads leave them alone); leave the Silver Bullet paper bot alone; one pytest run at a time, launched detached.
 3. Long work (>30 min): check in and commit+push at least every 30 min; while laptop work runs, verify it is moving every 15 min and update Mase every 30.
 4. No workflows/helper agents unless Mase asks (except build-stage review); short replies.
 5. Models: threads Sonnet 5.5 at medium effort; rule-decision threads and audits Opus; coordinator Opus 5.5.

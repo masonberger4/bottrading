@@ -97,3 +97,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v91 | 2026-11-07 23:24:18Z | Run memory curator | INDEX.md | edit | sync INDEX.md to coordinator's tie-break index edit | cmsg_01FAHERC1Lsrg2bYtrKuRHmPFFBhrWGbfZX742JQBGgbTX | f775343ae8 -> 45c7f52da7 |
 | v92 | 2026-11-08 06:05:00Z | dreamer | proposals/dreamer__dream_2026-11-08.md | proposal | Seventh dream report: nothing to propose | cmsg_01FAHERC1Lsrg2bYtrKuRHmPFFBhrWGbfZX742JQBGgbTX | ABSENT -> dcdc0e7333 |
 | v93 | 2026-11-08 16:10:14Z | conflict-review-4 | proposals/conflict-review-4__decisions.md | proposal | Mase tie picks | - | ABSENT -> 1d9b910d09 |
+| v94 | 2026-11-08 16:16:09Z | Run memory curator | decisions.md | edit | apply approved X5: ict_fetch owned by download thread only | cmsg_01FAHERC1Lsrg2bYtrKuRHmPLCagAeRgWGKAVLEq9AGvBT | 27bc1d4a2d -> 7459979ef7 |
