@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-03 06:05:58Z; target: dream_2026-11-03.md; reason: Second dream report; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPCAimDmkpeAVgYXFLKo5Bej; status: open -->
+<!-- proposal by dreamer at 2026-11-03 06:05:58Z; target: dream_2026-11-03.md; reason: Second dream report; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPCAimDmkpeAVgYXFLKo5Bej; status: closed (stale; Mase 2026-11-08) -->
 # Dream report 2026-11-03 (dreamer; reviewed: list_threads since 11-01 21:58, newest 6-10 msgs of 3 threads; NOT reviewed: project chat after Oct 19, backtest thread bodies, memory-folder merge status of the 11-01 proposals)
 Previously merged (11-01 items): memory files unchanged since 11-01 22:02, so recurrence not yet testable; threads.md and status.md are already stale.
 | # | ID | Change | Evidence | Uplift |

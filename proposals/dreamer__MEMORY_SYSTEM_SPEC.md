@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-01 21:58:44Z; target: MEMORY_SYSTEM_SPEC.md; reason: Add section 10: dreaming (closed loop, cursor, apply path, structure); link: Dream 2026-11-01 (Mase request, dreaming diagram); status: open -->
+<!-- proposal by dreamer at 2026-11-01 21:58:44Z; target: MEMORY_SYSTEM_SPEC.md; reason: Add section 10: dreaming (closed loop, cursor, apply path, structure); link: Dream 2026-11-01 (Mase request, dreaming diagram); status: closed (stale; Mase 2026-11-08) -->
 ## 10. Dreaming (periodic curation batch)  [proposed addition; append after section 9]
 Goal: memory improves without agents spending turns on it. Loop (from Mase's reference diagram "How dreaming works"):
 1. Agents' daily sessions produce transcripts (threads, project chat).

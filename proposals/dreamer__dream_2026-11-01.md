@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-01 21:58:45Z; target: dream_2026-11-01.md; reason: First dream report, ranked by expected uplift; link: Dream 2026-11-01 (Mase request, dreaming diagram); status: open -->
+<!-- proposal by dreamer at 2026-11-01 21:58:45Z; target: dream_2026-11-01.md; reason: First dream report, ranked by expected uplift; link: Dream 2026-11-01 (Mase request, dreaming diagram); status: closed (stale; Mase 2026-11-08) -->
 # Dream report 2026-11-01 (first run; dreamer; sources: project chat Oct 10-19 sampled, 6 threads' newest 8-14 messages, memory folder). Not reviewed: Mentorship bot thread body (413 replies), Claude HF, Swing, most Oct 20-31 chat.
 Ranking = expected future turns saved x likelihood. IDs refer to proposals/dreamer__<file>.md.
 | # | ID | Change | Evidence | Uplift |
