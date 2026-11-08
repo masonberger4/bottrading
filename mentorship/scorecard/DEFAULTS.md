@@ -11,53 +11,53 @@ Where ICT labels a beginner vs experienced version, the experienced one is defau
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
-| LUNCH-WINDOW | **C**: 11:30-13:30 (2 hours); setup forms in the first hour | 9 | B(3) A(3) D(3) |  |
-| LUNCH-TRADE | **B**: Trade it: lunch macro is a setup with its own target (short or long against the morning) | 9 | A(2) |  |
-| LUNCH-TARGET | **B**: The FIRST swing low (bull day) / high (bear day) that formed after 10:00, looking left from 11:30 | 13 | A(4) C(4) |  |
-| MACRO-GRID | **B**: Every hour: the last 10 minutes of an hour and the first 10 of the next (:50-:10), incl. 07:50-08:10, 08:50-09:10, 13:50-14:10 | 9 | A(5) |  |
-| LAST-HOUR | **B**: Several last-hour macros (14:50-15:10, 15:15-15:45, then MOC 15:45/15:50-16:00 "supercharge"); hold runners into them | 10 | A(3) |  |
-| LONDON-MACRO | **B**: No single London macro time (2023: London kill zone; :50-:10 grid in 2026 would give 02:50-03:10, 03:50-04:10) | 1 | A(1) | tie: Mase picked; thin (<=2 videos) |
+| LUNCH-WINDOW | **C**: 11:30-13:30 (2 hours); setup forms in the first hour | 10 | B(3) A(3) D(3) |  |
+| LUNCH-TRADE | **B**: Trade it: lunch macro is a setup with its own target (short or long against the morning) | 10 | A(2) |  |
+| LUNCH-TARGET | **B**: The FIRST swing low (bull day) / high (bear day) that formed after 10:00, looking left from 11:30 | 13 | A(5) C(5) |  |
+| MACRO-GRID | **B**: Every hour: the last 10 minutes of an hour and the first 10 of the next (:50-:10), incl. 07:50-08:10, 08:50-09:10, 13:50-14:10 | 15 | A(8) |  |
+| LAST-HOUR | **B**: Several last-hour macros (14:50-15:10, 15:15-15:45, then MOC 15:45/15:50-16:00 "supercharge"); hold runners into them | 12 | A(6) |  |
+| LONDON-MACRO | **B**: No single London macro time (2023: London kill zone; :50-:10 grid in 2026 would give 02:50-03:10, 03:50-04:10) | 3 | A(1) |  |
 | ASIA | **B**: Yes: Asia protocol around the 18:00 NDOG / bread-and-butter liquidity | 6 | A(2) |  |
-| PREMARKET-ENTRY | **B**: Trade pre-market (07:00-09:00, or 07:00-08:30 into a release) when the setup is there | 16 | A(4) |  |
-| PREMARKET-RANGE | **A**: 07:00-09:00 pre-market session as one range (ends 08:30 on 08:30-news days) | 8 | G(3) C(2) D(2) F(1) H(1) E(1) B(1) |  |
+| PREMARKET-ENTRY | **B**: Trade pre-market (07:00-09:00, or 07:00-08:30 into a release) when the setup is there | 20 | A(4) |  |
+| PREMARKET-RANGE | **A**: 07:00-09:00 pre-market session as one range (ends 08:30 on 08:30-news days) | 8 | G(4) D(3) C(2) E(2) F(1) H(1) B(1) |  |
 
 ## Opening range
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
-| OPEN-RANGE-TRADE | **B**: Yes: trade at or right after the open toward the ORG CE, or the first presented FVG | 14 | A(12) C(1) D(1) |  |
-| FPFVG-DEF | **A**: By time: the first FVG on the 1m between 09:31 and 10:00 (09:31 middle candle), used all week | 15 | B(8) D(3) C(2) H(2) G(1) E(1) F(1) |  |
+| OPEN-RANGE-TRADE | **B**: Yes: trade at or right after the open toward the ORG CE, or the first presented FVG | 20 | A(12) D(2) C(1) |  |
+| FPFVG-DEF | **A**: By time: the first FVG on the 1m between 09:31 and 10:00 (09:31 middle candle), used all week | 20 | B(14) D(10) H(6) C(2) E(2) G(1) F(1) |  |
 
 ## Opening gaps
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
-| ORG-CLOSE | **A**: 16:14 last RTH 1m print / 16:15 settlement | 16 | B(1) |  |
-| ORG-CE-WINDOW | **A**: By 10:00 (first 30 minutes), ~70% of the time | 21 | B(3) D(1) C(1) |  |
-| ORG-AFTER-CE | **A**: Continue: through CE to full gap closure, then beyond (-0.5 SD; 6.5-8 SD on one-sided days) | 6 | B(4) |  |
-| ORG-SIZE | **B**: Size buckets: 20-75 handles likes CE; 75-120 gray; extreme (>120) gaps only reach the near quadrant, then "gap and go" | 6 | E(6) A(5) D(5) C(3) | tie: Mase picked |
-| GAP-LIFE | **A**: Keep NWOGs for months (every NWOG in the last 60 days; they work 6-9 months) | 7 | B(6) C(2) D(1) | margin 1 |
-| NDOG-DEF | **A**: ETH only: the 17:00 settlement (16:59 close) to the 18:00 reopen | 2 | B(1) | margin 1; thin (<=2 videos) |
+| ORG-CLOSE | **A**: 16:14 last RTH 1m print / 16:15 settlement | 24 | B(1) |  |
+| ORG-CE-WINDOW | **A**: By 10:00 (first 30 minutes), ~70% of the time | 23 | B(3) D(1) C(1) |  |
+| ORG-AFTER-CE | **A**: Continue: through CE to full gap closure, then beyond (-0.5 SD; 6.5-8 SD on one-sided days) | 7 | B(4) |  |
+| ORG-SIZE | **B**: Size buckets: 20-75 handles likes CE; 75-120 gray; extreme (>120) gaps only reach the near quadrant, then "gap and go" | 7 | E(6) A(5) D(5) C(3) | margin 1 |
+| GAP-LIFE | **A**: Keep NWOGs for months (every NWOG in the last 60 days; they work 6-9 months) | 8 | B(6) C(3) E(2) D(1) |  |
+| NDOG-DEF | **A**: ETH only: the 17:00 settlement (16:59 close) to the 18:00 reopen | 3 | B(2) | margin 1 |
 
 ## News
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
-| NEWS-WAIT | **D**: Trade off the release itself: 08:30 open/wick CE, the 08:30 candle's extreme as the draw, the release as the Judas | 9 | B(7) A(3) E(2) F(2) C(1) G(1) |  |
-| NEWS-HOLD | **B**: Yes: a pre-market trade can let the 08:30 release run into its target | 2 | A(2) | tie: Mase picked; thin (<=2 videos) |
+| NEWS-WAIT | **D**: Trade off the release itself: 08:30 open/wick CE, the 08:30 candle's extreme as the draw, the release as the Judas | 10 | B(7) A(3) E(2) F(2) C(1) G(1) H(1) |  |
+| NEWS-HOLD | **A**: No: square positions ahead of CPI/PPI; don't trade the numbers | 4 | B(2) |  |
 | FOMC-DAY | **B**: Trade the afternoon two-stage delivery: first FVG after 14:00, second wave from 14:30 (often the opposite way) | 5 | C(2) A(1) D(1) |  |
-| NFP-THU-FRI | **B**: Yes: experienced traders trade NFP Thursday and Friday (after the initial volatility) | 13 | A(14) | experienced version (overrides count) |
-| FED-SPEECH | **A**: No AM trades on a 10:00 Fed chair speech/testimony day (observe only); trade the PM 13:30-16:00 | 3 | B(2) C(2) | margin 1 |
+| NFP-THU-FRI | **B**: Yes: experienced traders trade NFP Thursday and Friday (after the initial volatility) | 15 | A(15) | experienced version (overrides count) |
+| FED-SPEECH | **A**: No AM trades on a 10:00 Fed chair speech/testimony day (observe only); trade the PM 13:30-16:00 | 3 | B(3) C(2) | TIE PENDING Mase: A/B |
 
 ## Day filters
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
-| MONDAY | **B**: Skip Mondays (accumulation/manipulation), except NFP-week Mondays or an obvious setup | 9 | A(7) C(1) |  |
+| MONDAY | **B**: Skip Mondays (accumulation/manipulation), except NFP-week Mondays or an obvious setup | 9 | A(9) C(1) | TIE PENDING Mase: B/A |
 | CPI-WEEK | **A**: Day before CPI: quiet, small risk, bread-and-butter only, then stop | 4 | B(2) C(1) |  |
-| AFTER-BIG-DAY | **B**: After a very large down day avoid the whole morning session (no trades 09:30-10:30) | 4 | A(3) | margin 1 |
-| TWO-SIDED | **A**: Stand aside (low probability); in rollover week trade very light and expect to be wrong | 2 | B(1) | margin 1; thin (<=2 videos) |
-| RANGE-REGIME | **A**: Fade: a run beyond the prior day's high/low is turtle soup back into the range; target the FVG just inside the old extreme | 2 | B(0) | thin (<=2 videos) |
+| AFTER-BIG-DAY | **B**: After a very large down day avoid the whole morning session (no trades 09:30-10:30) | 4 | A(3) C(1) | margin 1 |
+| TWO-SIDED | **A**: Stand aside (low probability); in rollover week trade very light and expect to be wrong | 6 | B(2) |  |
+| RANGE-REGIME | **A**: Fade: a run beyond the prior day's high/low is turtle soup back into the range; target the FVG just inside the old extreme | 5 | B(0) |  |
 | SEASON-ACTIVITY | **A**: Yes: measure risk Jan-Feb, start dabbling in Feb, clean late Mar-May, choppy summer, best late Aug/Sep to mid Dec | 5 | C(3) B(0) |  |
 | INSIDE-DAY | **A**: By wicks: today's high below and low above the prior day's high/low | 3 | B(2) C(1) | margin 1 |
 | HOLIDAY-WEEK | **B**: Stand aside in low-volume holiday weeks (or only the very best setups) | 2 | C(1) A(1) D(1) | margin 1; thin (<=2 videos) |
@@ -66,71 +66,74 @@ Where ICT labels a beginner vs experienced version, the experienced one is defau
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
-| TGIF-DEPTH | **A**: 20-30% (25% the midpoint); 40%+ is reversal talk outside the model | 9 | B(5) C(1) |  |
+| TGIF-DEPTH | **A**: 20-30% (25% the midpoint); 40%+ is reversal talk outside the model | 9 | B(7) C(1) |  |
 | TGIF-TIMING | **B**: From Thursday 13:00 through Friday's close (measure from the high formed after Thursday 13:00) | 5 | C(4) A(2) | margin 1 |
-| WEEK-PROFILE | **A**: Tuesday/Wednesday forms the low (high) of the week | 1 | B(1) C(1) | tie: Mase picked; thin (<=2 videos) |
+| WEEK-PROFILE | **C**: Thursday tends to create an intermediate-term high | 3 | A(1) B(1) |  |
 
 ## PD arrays
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
-| MSS-CLOSE | **A**: Wick / 1-tick trade-through is enough | 6 | B(2) |  |
-| OB-CANDLE | **A**: The series is one block; use the open of the first (highest/lowest) candle | 14 | B(3) C(1) |  |
-| OB-CLOSE | **A**: No close needed: trading through the OB open is the change in state | 9 | B(4) |  |
-| IFVG-CONFIRM | **A**: One candle close beyond the gap, then a new candle returns to it | 10 | B(5) C(1) |  |
+| MSS-CLOSE | **A**: Wick / 1-tick trade-through is enough | 6 | B(3) |  |
+| OB-CANDLE | **A**: The series is one block; use the open of the first (highest/lowest) candle | 19 | B(3) C(1) |  |
+| OB-CLOSE | **A**: No close needed: trading through the OB open is the change in state | 11 | B(4) |  |
+| IFVG-CONFIRM | **A**: One candle close beyond the gap, then a new candle returns to it | 13 | B(9) D(3) C(2) |  |
 | BREAKER-ZONE | **A**: Body of the breaker candle | 11 | B(5) |  |
-| UNICORN | **A**: An FVG inside a breaker (same location) | 4 | B(1) |  |
-| FVG-VALID | **B**: Only first-presented FVGs, or FVGs anchored to (touching) an octant/quadrant grade level | 11 | D(5) C(1) A(0) |  |
-| WICK-PRIORITY | **B**: The wick takes precedence: grade it (CE, quadrants) and set the stop beyond the wick | 3 | A(0) |  |
-| TF-CHOP | **A**: Go up (5m, 15m, then 1h/4h) to find the array the chop is working toward | 2 | B(2) | tie: Mase picked; thin (<=2 videos) |
+| UNICORN | **A**: An FVG inside a breaker (same location) | 4 | B(3) C(1) | margin 1 |
+| FVG-VALID | **B**: Only first-presented FVGs, or FVGs anchored to (touching) an octant/quadrant grade level | 15 | D(5) C(1) A(0) |  |
+| WICK-PRIORITY | **B**: The wick takes precedence: grade it (CE, quadrants) and set the stop beyond the wick | 9 | A(0) |  |
+| TF-CHOP | **A**: Go up (5m, 15m, then 1h/4h) to find the array the chop is working toward | 4 | B(3) | margin 1 |
 | OB-VALID | **B**: Only an OB sitting on an ORG gradient level (quadrant/octant); a propulsion block inherits from that parent | 2 | A(0) | thin (<=2 videos) |
-| FVG-CARRY | **A**: Yes: carry the first FVG after a turtle soup / unfilled FPFVG forward up to 20 trading days as a draw or PD array | 4 | B(0) |  |
+| FVG-CARRY | **A**: Yes: carry the first FVG after a turtle soup / unfilled FPFVG forward up to 20 trading days as a draw or PD array | 9 | D(1) C(1) B(0) |  |
+| WICK-SELECT | **A**: The lowest-reaching (for lows) or highest-reaching (for highs) wick, not simply the longest | 4 | C(2) D(2) B(1) |  |
+| PDA-LOOKBACK | **B**: Use 20, 40 and 60 trading days; beyond 40 days needs more experience | 4 | A(1) |  |
 
 ## Levels
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
-| RANGE-ANCHOR | **B**: Bodies ("the bodies tell you the real narrative") | 9 | A(3) |  |
-| LIQ-LOCATION | **A**: Beyond wick extremes: old highs/lows, relative equal highs/lows | 4 | B(4) C(1) | tie: Mase picked |
+| RANGE-ANCHOR | **B**: Bodies ("the bodies tell you the real narrative") | 13 | A(6) |  |
+| LIQ-LOCATION | **A**: Beyond wick extremes: old highs/lows, relative equal highs/lows | 6 | B(4) C(3) |  |
 | SHORT-LOCATION | **B**: Yes if a swing low of the larger run broke: the range resets and its new EQ is a short-term premium | 1 | A(1) | tie: Mase picked; thin (<=2 videos) |
 
 ## Bias and SMT
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
-| SMT-USE | **A**: Qualifier only: confirms a turn at a PD array with time and draw | 9 | B(3) C(3) D(1) E(1) |  |
-| SMT-SET | **A**: ES, NQ and YM all count | 2 | B(2) | tie: Mase picked; thin (<=2 videos) |
-| BIAS-SOURCE | **A**: Top-down: weekly, then daily draw; intraday trades follow it | 5 | B(3) D(1) C(1) |  |
-| ATH-RULE | **A**: Near all-time highs, don't pick the top: daily bias stays long; shorts only intraday and only when seasoned | 5 | B(0) |  |
+| SMT-USE | **A**: Qualifier only: confirms a turn at a PD array with time and draw | 11 | C(4) B(3) E(2) D(1) |  |
+| SMT-SET | **B**: NQ vs ES only; the Dow is down-weighted ("only 30 stocks") | 3 | A(2) | margin 1 |
+| BIAS-SOURCE | **A**: Top-down: weekly, then daily draw; intraday trades follow it | 9 | B(3) D(1) C(1) E(1) |  |
+| ATH-RULE | **A**: Near all-time highs, don't pick the top: daily bias stays long; shorts only intraday and only when seasoned | 12 | C(2) B(0) |  |
 
 ## Management
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
-| PYRAMID-WHERE | **A**: Only on the favourable side of equilibrium of the leg/range; no adds past EQ or after partials | 8 | B(3) C(2) |  |
+| PYRAMID-WHERE | **A**: Only on the favourable side of equilibrium of the leg/range; no adds past EQ or after partials | 8 | B(8) C(2) D(1) | TIE PENDING Mase: A/B |
 | PYRAMID-SIZES | **A**: Decreasing: largest first (6,3,1 / 6,3,2,1 / 5,4,3,2,1) | 5 | B(4) | margin 1 |
-| REENTRY | **A**: Yes, same narrative and same (full) size | 8 | B(4) C(4) |  |
-| MIN-ROOM | **B**: NQ 10 / ES 5 minimum move; setup needs ~20 NQ handles of room | 7 | A(6) C(3) D(2) | margin 1 |
-| FIXED-RR | **B**: A fixed 1:1 can be profitable for a skilled trader (and is the beginner drill) | 2 | A(1) | margin 1; thin (<=2 videos) |
-| STOP-MGMT | **E**: Lock a small profit early ("steak dinner") after the first target, then trail stepwise beyond defensive arrays / new lows | 7 | A(7) B(3) H(3) C(2) D(2) G(1) F(1) | tie: Mase picked |
-| EXIT-DEPTH | **B**: Lower exit threshold: close or trail tight from 75% of the projection; don't demand the exact target | 2 | A(0) | thin (<=2 videos) |
-| PARTIAL-TRIGGER | **C**: Ladder: below each intermediate low, 25% at the event horizon of two pools, leave a 20% runner | 4 | A(2) B(1) |  |
-| EXIT-STYLE | **B**: Staggered partials (chest/head, each new low) with a runner to the terminus or an extreme limit | 10 | A(4) C(2) |  |
-| OVERNIGHT-HOLD | **B**: OSOK: hold a day-of-entry position overnight to a daily FVG CE (adds after midnight) | 2 | A(1) | margin 1; thin (<=2 videos) |
-| STOP-PLACE | **G**: Beyond every nearby inefficiency: with two stacked FVGs, beyond the higher one / its CE | 8 | B(7) C(5) E(4) A(3) H(2) D(2) F(1) | margin 1 |
-| RESISTANCE-DAY | **B**: Trade both, but in high resistance frame nearer arrays, use wider stops, one contract, no trailing | 4 | A(4) C(2) | experienced version (overrides count) |
+| REENTRY | **A**: Yes, same narrative and same (full) size | 9 | B(5) C(5) |  |
+| MIN-ROOM | **B**: NQ 10 / ES 5 minimum move; setup needs ~20 NQ handles of room | 7 | A(6) C(3) D(3) | margin 1 |
+| FIXED-RR | **A**: Targets at liquidity / PD arrays (the draw), not a fixed multiple | 2 | B(2) | TIE PENDING Mase: A/B; thin (<=2 videos) |
+| STOP-MGMT | **A**: Keep the initial stop (day trade) and pay yourself with partials; trail only to structure, not early | 10 | E(8) B(3) H(3) C(2) D(2) I(1) K(1) J(1) G(1) F(1) |  |
+| EXIT-DEPTH | **B**: Lower exit threshold: close or trail tight from 75% of the projection; don't demand the exact target | 4 | A(0) |  |
+| PARTIAL-TRIGGER | **C**: Ladder: below each intermediate low, 25% at the event horizon of two pools, leave a 20% runner | 6 | A(4) B(2) |  |
+| EXIT-STYLE | **B**: Staggered partials (chest/head, each new low) with a runner to the terminus or an extreme limit | 13 | A(7) C(2) |  |
+| OVERNIGHT-HOLD | **A**: Flat by 16:00: day trades are never held overnight | 3 | B(3) | TIE PENDING Mase: A/B |
+| STOP-PLACE | **E**: Tight: one tick past a wick CE or the gap CE (low resistance days, small ranges) | 10 | G(8) B(7) C(5) A(3) D(3) H(2) I(1) F(1) |  |
+| RESISTANCE-DAY | **B**: Trade both, but in high resistance frame nearer arrays, use wider stops, one contract, no trailing | 4 | A(7) C(3) | experienced version (overrides count) |
 
 ## Data
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
-| CONTRACT | **B**: Back-adjusted continuous contract: for old highs/lows at ATHs, and (107) only to reveal volume imbalances | 4 | C(2) D(1) A(1) |  |
+| CONTRACT | **B**: Back-adjusted continuous contract: for old highs/lows at ATHs, and (107) only to reveal volume imbalances | 6 | A(6) C(2) D(1) | TIE PENDING Mase: B/A |
 
 ## Entries
 
 | Card | Default | Videos | Switches | Flag |
 |---|---|---|---|---|
-| FVG-ENTRY | **A**: Near edge or first quadrant ("buy the fair value gap high or upper quadrant"); a CE limit may never fill | 1 | B(1) | tie: Mase picked; thin (<=2 videos) |
+| FVG-ENTRY | **B**: At or beyond the CE (far half), accepting missed fills | 4 | A(2) |  |
+| VENOM-STOP | **A**: Stop below the candle that pierces back above the swept low; entry at the second candle's close or less | 1 | B(1) | TIE PENDING Mase: A/B; thin (<=2 videos) |
 
 ## One-source rules
 
@@ -186,3 +189,10 @@ Mase 2026-11-06: one video beats an engine default no video supports, so these b
 | m2026smc | 116 | default | pre-market IFVG as a holding pattern, no fade (139, 140); no matching card. |  |
 | m2026smc | 117 | default | two SIBIs joined by a VI as one array (138); one source. |  |
 | m2026smc | 119 | default | morning done if a protective low goes before the AM target (139, 140); no matching card. |  |
+| m2025 | 13 | default | suspension block definitions in L07/L09/L11 are compatible (VI at both ends, body range); new array, no counter-position. |  |
+| m2025 | 17 | switch | IOFED depth was decided on SMC 17 (Mase 2026-11-08: 1 tick past candle 1; partial short of CE a switch). 2025 L04, L05, L16, L54 describe the partial fill short of CE; L46 adds the OB+SIBI-in-IFVG drill as a separate entry model. | IOFED depth decided on SMC 17 (Mase 2026-11-08); 2025 L04/L05/L16/L54 back partial short of CE, still a switch; L46 OB+SIBI drill is a separate entry model |
+| m2025 | 23 | default | one-sided (L30, L28 ignore a doji middle candle when drawing an FVG); no video for the engine default. |  |
+| m2025 | 24 | excluded | London close window 10:00-13:00 ET is one forex source (L14). | forex London close window; engine trades index futures |
+| m2025 | 27 | default | "ETH must be confirmed in RTH" is one source (L52). |  |
+| m2025 | 28 | agrees | unfilled limit near target (L54 pride in precision vs L60 move the stop to the near-touch) is compatible, not a disagreement. | compatible statements; nothing changes |
+| m2025 | 29 | default | fading toward smooth highs after a one-way week is one source (L56). |  |
