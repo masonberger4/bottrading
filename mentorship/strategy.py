@@ -1444,7 +1444,7 @@ class Params:
     week_done_pick: str = "any"          # "any" delivered objective, or "nearest" to the week's first open
     be_counts_as_win: bool = True        # D19: no_pm_after_am_win counts a breakeven (net >= 0) as a win (the old behaviour); False = net > 0
     # B23 / X16
-    seasonal_tag: bool = True           # B23 (cc10_015 ~5:04): month map tag, HTF agreement, fail after day 10 - reported only
+    seasonal_tag: bool = False           # B23 (cc10_015 ~5:04): month map tag, HTF agreement, fail after day 10 - reported only
     seasonal_map: tuple = SEASONAL_DOW20
     seasonal_map_b: tuple = ()           # an optional second sample: the tag is "none" unless both lines agree
     seasonal_fail_day: int = 10
