@@ -72,6 +72,9 @@ FOMC-DAY,News,C,Don't trade the 14:00 release; 14:00-14:45 observation only; nor
 FOMC-DAY,News,D,Inexperienced: avoid FOMC day entirely; the day before trade the morning only (careless price),1,0,2024 1,2024-09-17,2024-09-17
 NFP-THU-FRI,News,A,No: NFP week = trade Mon-Wed to 11:00 (new traders done by 07:00 Wed); NFP Friday no live trading,14,5,"2023 5, 2024 4, 2025 2, 2026 3",2023-01-04,2026-09-30
 NFP-THU-FRI,News,B,Yes: experienced traders trade NFP Thursday and Friday (after the initial volatility),13,5,"2023 5, TE 5, 2024 2, 2026 1",2023-03-09,2026-10-02
+FED-SPEECH,News,A,No AM trades on a 10:00 Fed chair speech/testimony day (observe only); trade the PM 13:30-16:00,3,3,2023 3,2023-03-07,2023-06-21
+FED-SPEECH,News,B,Trade before the speech (before 08:00 if it is in the 09:00 hour) and be flat/funded by it; no trading while he talks and 15 min after,2,0,"2024 1, 2026 1",2024-09-30,2026-08
+FED-SPEECH,News,C,"Trade the speech itself: wait for 10:00, then enter while he talks",2,0,"Charter 1, 2026 1",2020-12,2026
 MONDAY,Day filters,A,Trade Mondays like any other day (he shows many Monday trades),7,2,"2023 2, TE 2, 2025 2, 2026 1",2023-01-30,2026
 MONDAY,Day filters,B,"Skip Mondays (accumulation/manipulation), except NFP-week Mondays or an obvious setup",9,2,"2023 2, CC 1, 2024 3, 2025 1, 2026 2",2017-08,2026-09-28
 MONDAY,Day filters,C,"Trade Mondays with rules: NFP-week Monday always; a no-news Monday only in pre-market (07:00-09:30), not after the open",1,0,2024 1,2024-10-28,2024-10-28
@@ -87,6 +90,13 @@ RANGE-REGIME,Day filters,B,Trade the break as continuation toward the next exter
 SEASON-ACTIVITY,Day filters,A,"Yes: measure risk Jan-Feb, start dabbling in Feb, clean late Mar-May, choppy summer, best late Aug/Sep to mid Dec",5,0,2026 5,2026-01-01,2026-02-28
 SEASON-ACTIVITY,Day filters,B,No calendar (engine default),0,0,,,
 SEASON-ACTIVITY,Day filters,C,Fixed start: nothing in January; start the first Tuesday (or second week) of February,3,0,2026 3,2026-01-05,2026-01-12
+INSIDE-DAY,Day filters,A,By wicks: today's high below and low above the prior day's high/low,3,2,"2023 2, 2026 1",2023-01-01,2026-09-17
+INSIDE-DAY,Day filters,B,By bodies: today's body inside the prior day's body (wicks ignored),2,0,"CC 1, 2026 1",2017-02,2026-02-27
+INSIDE-DAY,Day filters,C,Body in range: today's body inside the prior day's high-low range (wicks may poke out),1,0,2026 1,2026-02-23,2026-02-23
+HOLIDAY-WEEK,Day filters,A,"Trade it, but expect a range-bound week: fewer large flows, no sustained runs, modest targets",1,0,2024 1,2024-12-01,2024-12-01
+HOLIDAY-WEEK,Day filters,B,Stand aside in low-volume holiday weeks (or only the very best setups),2,0,2026 2,2026-01-01,2026-03-26
+HOLIDAY-WEEK,Day filters,C,The holiday distorts the week: expect cleaner delivery late in the week (Thu/Fri),1,1,2023 1,2023-07-09,2023-07-09
+HOLIDAY-WEEK,Day filters,D,Treat it like an NFP week: the higher-probability setups form early in the week; no pre-holiday Friday,1,0,2024 1,2024-08-30,2024-08-30
 TGIF-DEPTH,Weekly profile,A,20-30% (25% the midpoint); 40%+ is reversal talk outside the model,9,5,"2023 5, 2024 3, 2026 1",2023-06-16,2026-09-05
 TGIF-DEPTH,Weekly profile,B,"20-30% usually, up to 40% in extreme/rare cases (still TGIF)",5,0,"2024 1, 2026 4",2024-08-09,2026-10-19
 TGIF-DEPTH,Weekly profile,C,"Consolidation week: 40% minimum, 60% extreme (back to the middle of the weekly range)",1,0,2026 1,2026-02-28,2026-02-28

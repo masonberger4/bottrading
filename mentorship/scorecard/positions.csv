@@ -191,3 +191,13 @@ NEWS-WAIT,G,CPI/PPI 08:30: no position into the release; look for entries again 
 OPEN-RANGE-TRADE,D,Conditional: trade 09:30-10:00 only if the pre-market (07:00-09:30) read was clean; otherwise wait for 10:00
 ORG-CE-WINDOW,D,The half-gap target stays valid after 10:00 when the daily PD array points to it
 LIQ-LOCATION,C,"Graded wick: when the anchor of relative equal highs/lows has a wick, the turn can come at its lower quadrant/CE; partial there"
+FED-SPEECH,A,No AM trades on a 10:00 Fed chair speech/testimony day (observe only); trade the PM 13:30-16:00
+FED-SPEECH,B,Trade before the speech (before 08:00 if it is in the 09:00 hour) and be flat/funded by it; no trading while he talks and 15 min after
+FED-SPEECH,C,"Trade the speech itself: wait for 10:00, then enter while he talks"
+INSIDE-DAY,A,By wicks: today's high below and low above the prior day's high/low
+INSIDE-DAY,B,By bodies: today's body inside the prior day's body (wicks ignored)
+INSIDE-DAY,C,Body in range: today's body inside the prior day's high-low range (wicks may poke out)
+HOLIDAY-WEEK,A,"Trade it, but expect a range-bound week: fewer large flows, no sustained runs, modest targets"
+HOLIDAY-WEEK,B,Stand aside in low-volume holiday weeks (or only the very best setups)
+HOLIDAY-WEEK,C,The holiday distorts the week: expect cleaner delivery late in the week (Thu/Fri)
+HOLIDAY-WEEK,D,Treat it like an NFP week: the higher-probability setups form early in the week; no pre-holiday Friday

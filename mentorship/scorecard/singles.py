@@ -21,6 +21,15 @@ STATUS = {  # (digest, num): (status, reason)
     ('m2026smc', '83'): ('switch', 'nested ORGs: widest (019, Aug-Oct 2026) vs last three ORGs (BIAS-SOURCE C, Apr 2026); 1-1 tie, Mase 2026-11-08 picked last three ORGs graded; widest nested is a switch'),
     ('m2026smc', '101'): ('default, flagged', 'stop entry through the rejection block open (131); limit entries were never counted, so a count could reverse this'),
     ('m2026smc', '103'): (EXCLUDE, 'position sizing is outside the engine ($1k risk reporting)'),
+    # 2026-11-08 recheck of the remaining 2024 singles: no opposing video; other playlists agree.
+    ('m2024', '41'): ('default', 'also 2023 038, 101; CC cc10_019; SMC 036, 058'),
+    ('m2024', '43'): ('default', 'light size agrees with SMC 022, 025, 028 (seek and destroy, do not over-leverage); Monday skip is L14 only'),
+    ('m2024', '65'): ('default', 'also L35, L38, SMC 062 (prior day FPFVG as reference/draw)'),
+    ('m2024', '83'): ('default', 'also L04, L06 (cluster of NDOGs sets the direction)'),
+    ('m2024', '89'): ('default', 'also 2023 067, L49, SMC 007, 036, 037, 2025 L34, L78, TE te59'),
+    ('m2024', '91'): ('default', 'also 2023 060 (shorts only above equilibrium of inception-to-terminus)'),
+    ('m2024', '93'): ('default', 'also 2023 031, 042, 090; 2025 L80, L82; SMC 012 ("never 5 or 15")'),
+    ('m2024', '97'): ('default', 'also 2023 100, L48, SMC 071 (no entry into the 10:00 release)'),
 }
 rows = [r for r in csv.DictReader(open(os.path.join(H, 'digest_map.csv'), encoding='utf-8'))
         if 'not scored' in r['note'].lower()]
