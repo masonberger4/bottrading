@@ -1230,7 +1230,7 @@ class Params:
     # N5.4 / N5.5 / N5.6
     skip_two_drivers: bool = False       # N5.4 (100 ~50:59-1:40:56): stand aside the AM when 08:30 and 09:45 / 10:00 both release
     two_driver_gate: bool = True         # N5.4 minimal rule: no entry window ends before the day's last morning release
-    fed_chair_skip_am: bool = False      # N5.5 (default OFF: the calendar is unverified and incomplete - owner to verify / complete FED_CHAIR incl. 2026 and speeches, then switch on) (037 ~3:09; 038 ~39:59): no AM trade on a Fed chair 10:00 testimony day (calendar.FED_CHAIR, unverified)
+    fed_chair_skip_am: bool = True       # N5.5 FED-SPEECH A (Mase's tie pick 2026-11-08 21:34 UTC; calendar.FED_CHAIR is unverified and incomplete - owner to verify / complete it incl. 2026 and speeches) (037 ~3:09; 038 ~39:59): no AM trade on a Fed chair 10:00 testimony day (calendar.FED_CHAIR, unverified)
     skip_auction_am: bool = False        # N5.6 (cc10_008 ~7:29): avoid the AM on Treasury auction days (calendar.is_auction_day, approximate)
     # M9 / M9.1 news Judas. NOTE (main engine only): the news / FOMC Judas, side filters (or_bias, or_wide, pm_continue_am), or_no_entry / or_deep,
     # macro gates and fomc_observe / fomc_only_am act in the main engine's scan loop; the Silver Bullet and Ma Deuce ignore them.
@@ -1508,7 +1508,7 @@ class Params:
     # B17 neutral / no-bias conditions
     neutral_gate: tuple = ()             # B17: tests from fifty_fifty, premium_chop, draw_delivered, range_market, decoupled
     neutral_gate_mode: str = "tag"       # "tag" / "skip" / "scalp" for the tests above (premium_chop: before 09:30 only)
-    neutral_5050: str = "off"            # B17.1 (025 ~11:18; 095 ~27:33): "armed" (both sides armed in one window: stand aside) / "react" (both sides' reaction weights alike)
+    neutral_5050: str = "armed"  # TWO-SIDED A (scorecard default 2026-11-08);          # B17.1 (025 ~11:18; 095 ~27:33): "armed" (both sides armed in one window: stand aside) / "react" (both sides' reaction weights alike)
     fifty_react_ratio: float = 0.5       # "react": the smaller side's weight at least this share of the larger
     chop_mode: str = "off"               # Ep08.2 (Ep 08): "skip" (wait for 09:30) / "skip_day" / "scalp" when stuck inside an HTF array or the overnight range is narrow
     chop_on_adr: float = 0.35            # [our interpretation] narrow = overnight range < this x ADR5
@@ -2972,6 +2972,9 @@ class Params:
     rde_partials: bool = False           # X3-running-down-equity-trigger (063 ~00:26:23; 064 ~01:03:42): once progress >= rde_arm of the way to the final rung, a tranche of rde_frac at each short-term high that a later bar exceeds
     rde_arm: float = 0.75
     rde_frac: float = 0.2
+    ath_rule: str = "no_top_pick"        # ATH-RULE A (scorecard default, Mase 2026-11-08): near the all-time high no top picking - no turtle-soup / three-drive / reversal shorts (cards_rules.ath_block); "longs_only" (C) = no shorts at all; "off" (B) = follow the draw both ways
+    ath_near_frac: float = 0.02          # [our interpretation] "near" = the short's entry within 2 % under the highest high of the loaded history (or above it)
+    depth_trail: float = 0.75            # EXIT-DEPTH B (scorecard default, Mase 2026-11-08): from this share of the way to the final rung the stop trails one tick under each closed 1m bar's low (me2._depth_trail); 0 = hold for the full target (A)
     peel_singles: bool = False           # X3-020-runner-peel-singles (020 ~00:10:25 ..): after >= 75 % is closed and above the target NWOG's CE: one lot per bar at an REH poke / a higher high / halfway to the gap top; the last unit gets a pivot-low stop
     pm_macro_runner: bool = True        # X3-027-pm-runner-macro (027 ~00:40:28): a PM trade's first partial lifts the stop to +1 pt, the last unit is held to 15:50 (the 15:45-15:50 macro, newscal.macro_wins)
     hh_low_hold: bool = False            # X3-runner-swing-low-must-hold (027 ~00:43:52): after the first partial, the swing low between a pivot high and the new high that takes it out must hold; a trade under it closes hh_low_frac of the rest
@@ -3230,7 +3233,7 @@ class Params:
     trend_k: float = 0.8                 # ... [our interpretation] trending = the previous week's range >= 5 x ADR5 x trend_k and a close in its outer quarter
     missed_week_mode: str = "off"        # N10-missed-mon-wed-no-chase (cc07_006 ~00:24:29): Thu / Fri after a visibly started Mon-Wed move the bot did not trade: "nearest" (with-trend orders exit fully at the nearest pool) | "skip" (no trade)
     tgif_precond: str = "strict"         # M14-tgif-timing-and-precondition (084 ~00:15:56): "strict" = tgif_htf_array decides (an HTF array reached); "loose" = the large one-way week alone (no array needed)
-    tgif_thu: bool = False               # ... Thursday holding the week's low (high) after 10:00 with Wednesday's taken earlier: the TGIF side block applies Thursday PM
+    tgif_thu: bool = True    # TGIF-TIMING B (scorecard default 2026-11-08; acts with tgif, off);             # ... Thursday holding the week's low (high) after 10:00 with Wednesday's taken earlier: the TGIF side block applies Thursday PM
     tgif_seq: bool = False               # ... Friday sequencing: a new weekly extreme in the AM -> entries 10:00-12:00, or 13:30-15:00 when 10:00-12:00 consolidates
     tgif_consol_frac: float = 0.25       # ... [our interpretation] consolidation = the 10:00-12:00 range under this x ADR5
     tgif_no_rel: bool = False            # ... on a TGIF Friday the with-trend side does not target the relative equal highs / lows
@@ -3248,7 +3251,7 @@ class Params:
     tgif_pm_from: int = 810
     consol_pm_news_skip_am: bool = False  # N8-consolidation-pm-news (cc10_008 ~00:16:34): a consolidation day with a PM release (at / after 12:00) has no AM trade
     # --- Caption-gap pass, package bias_htf#1/7 (digests/rulebook_gaps/bias_htf_intermarket.md; bh1.py table side, bh1e.py engine side). Everything defaults off. -----------------------------------
-    drange_scalp: bool = False           # BH-B17-daily-range-scalp-regime (002 ~00:06:57; 043 ~00:06:55; ~00:13:48): in a multi-day daily consolidation every order is a scalp (one target, no adds, T1 capped at drange_t1_pts), after one side's pool ran only the opposite side trades, the day stops after drange_day_pts or two wins; after the range breaks only the breakout side trades, runners allowed
+    drange_scalp: bool = True    # RANGE-REGIME A (scorecard default 2026-11-08);         # BH-B17-daily-range-scalp-regime (002 ~00:06:57; 043 ~00:06:55; ~00:13:48): in a multi-day daily consolidation every order is a scalp (one target, no adds, T1 capped at drange_t1_pts), after one side's pool ran only the opposite side trades, the day stops after drange_day_pts or two wins; after the range breaks only the breakout side trades, runners allowed
     drange_n: int = 5                    # ... [our interpretation] the range = the last N daily closes inside the first of those days' high-low
     drange_break: str = "close"          # ... a breakout = a daily "close" beyond the range or a "wick" beyond it (undefined by the source: test both)
     drange_t1_pts: float = 5.0           # ... scalp target distance, ES points (~5 handles)
@@ -3927,6 +3930,8 @@ class Params:
         _me1_check.check_params(self)
         from . import me2 as _me2_check                  # caption-gap pass (management_exits #2/3)
         _me2_check.check_params(self)
+        from . import cards_rules as _cr_check          # scorecard cards: the new engine concepts
+        _cr_check.check_params(self)
         from . import me3 as _me3_check                  # caption-gap pass (management_exits #3/3)
         _me3_check.check_params(self)
         _me3_check.apply_presets(self)
@@ -6707,7 +6712,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             bias_by_cut: dict | None = None, meta=None, locks: list | None = None, skips: list | None = None,
             eth: dict | None = None, risk_state: dict | None = None, week: dict | None = None,
             eve: tuple | None = None, prev_full: pd.DataFrame | None = None, objective: list | None = None,
-            post_eve: pd.DataFrame | None = None, daily_all: dict | None = None) -> list[Trade]:
+            post_eve: pd.DataFrame | None = None, daily_all: dict | None = None, ath: float | None = None) -> list[Trade]:
     """Trades for one day (see `_run_day_once` for the arguments). The main loop runs BEFORE the Silver Bullet / Ma Deuce
     (they read its trades), so the session / day stops (X7c / X12 / X13a / X14b / X14d) would be one-way. With a stop
     switch on and an extra engine on, this wrapper makes them two-way by a fixed point: pass 1 as usual; its Silver Bullet
@@ -6732,7 +6737,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         _TP3.hit("pool_exit_fomc")
     kw = dict(partner=partner, live=live, bias=bias, conf=conf, gaps=gaps, closes=closes, evening=evening,
               partner2=partner2, intermarket=intermarket, equity=equity, bias_by_cut=bias_by_cut, meta=meta, eth=eth,
-              week=week, eve=eve, prev_full=prev_full, post_eve=post_eve, daily_all=daily_all)
+              week=week, eve=eve, prev_full=prev_full, post_eve=post_eve, daily_all=daily_all, ath=ath)
     if not ((_MG.any_stop_switch(p, df.index[0].date()) or p.max_trades_week or (p.london_reposition and p.sb_london)) and (p.ma_deuce or p.sb_model)
             and p.stops_passes > 1):                       # (the D19 / X15 week budget is two-way across the engines the same way)
         return _run_day_once(df, hist, symbol, p, tf, log=log, locks=locks, skips=skips, risk_state=risk_state, objective=objective, **kw)
@@ -6769,7 +6774,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             locks: list | None = None, skips: list | None = None, eth: dict | None = None,
             risk_state: dict | None = None, week: dict | None = None, eve: tuple | None = None,
             prev_full: pd.DataFrame | None = None, _ext: list | None = None, _out: dict | None = None,
-            objective: list | None = None, post_eve: pd.DataFrame | None = None, daily_all: dict | None = None) -> list[Trade]:
+            objective: list | None = None, post_eve: pd.DataFrame | None = None, daily_all: dict | None = None,
+            ath: float | None = None) -> list[Trade]:
     """Trades for one day. With `live`, a position still open at the last bar is returned
     with no exit (exit_reason "open") instead of being closed at the last price.
     equity     (#12) start-of-day equity for risk_basis="equity"
@@ -6802,6 +6808,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     ctx.bias_row = bias                                   # setups_models: htf table row (draws)
     _BD.apply_open_src(ctx, p, intermarket)               # bias_htf D22: bias_open_src "spy" / "es_map"
     ctx.eth = eth
+    ctx.ath = ath                                         # ATH-RULE (scorecard card): the highest high before today (backtest.Prepared.ath)
     ctx.daily_all = daily_all                             # caption-gap pass day_week_context#1/3: {date: close} of every completed session (season_min_rank composite; prior years only are read)
     ctx.eve = eve                                         # caption-gap new-intra-week-extreme-raid: the evening before today (Sunday's for a Monday)
     ctx.prev_full = prev_full
@@ -7799,6 +7806,11 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                         pending = None                # B17.1: 50/50 - the first side's armed order is cancelled too
             if o_ is not None:
                 why_ = _CG1.order_ok(ctx, sd, o_, session, i, p, trades)         # coverage gaps (cg1.py): per-order filters
+                if why_ is not None:
+                    _f(why_)
+                    o_ = None
+            if o_ is not None and p.ath_rule != "off":
+                why_ = _CR.ath_block(ctx, sd, o_, p)                     # ATH-RULE (scorecard card): no top picking / no shorts near the all-time high
                 if why_ is not None:
                     _f(why_)
                     o_ = None
@@ -10731,6 +10743,7 @@ from . import tp1 as _TP1  # noqa: E402  (caption-gap pass, targets_partials #1/
 from . import tp2 as _TP2  # noqa: E402  (caption-gap pass, targets_partials #2/4: engine glue)
 from . import tp3 as _TP3  # noqa: E402  (caption-gap pass, targets_partials #3/4: engine glue)
 from . import me1 as _ME1  # noqa: E402  (caption-gap pass, management_exits #1/3: engine glue)
+from . import cards_rules as _CR  # noqa: E402  (scorecard cards: the new engine concepts)
 from . import me2 as _ME2  # noqa: E402  (caption-gap pass, management_exits #2/3: engine glue)
 from . import me3 as _ME3  # noqa: E402  (caption-gap pass, management_exits #3/3: engine glue)
 from . import tp4 as _TP4  # noqa: E402  (caption-gap pass, targets_partials #4/4: engine glue)

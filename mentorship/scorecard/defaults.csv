@@ -20,7 +20,7 @@ NEWS-WAIT,News,D,10,"Trade off the release itself: 08:30 open/wick CE, the 08:30
 NEWS-HOLD,News,A,4,No: square positions ahead of CPI/PPI; don't trade the numbers,B(2),
 FOMC-DAY,News,B,5,"Trade the afternoon two-stage delivery: first FVG after 14:00, second wave from 14:30 (often the opposite way)",C(2) A(1) D(1),
 NFP-THU-FRI,News,B,15,Yes: experienced traders trade NFP Thursday and Friday (after the initial volatility),A(15),experienced version (overrides count)
-FED-SPEECH,News,D,0,Owner pick (Mase 2026-11-08): no trades before or during the speech; trade after it ends,A(3) B(3) C(2),tie: Mase picked; thin (<=2 videos)
+FED-SPEECH,News,A,3,No AM trades on a 10:00 Fed chair speech/testimony day (observe only); trade the PM 13:30-16:00,B(3) C(2) D(0),tie: Mase picked
 MONDAY,Day filters,A,9,Trade Mondays like any other day (he shows many Monday trades),B(9) C(1),tie: Mase picked
 CPI-WEEK,Day filters,A,4,"Day before CPI: quiet, small risk, bread-and-butter only, then stop",B(2) C(1),
 AFTER-BIG-DAY,Day filters,B,4,After a very large down day avoid the whole morning session (no trades 09:30-10:30),A(3) C(1),margin 1

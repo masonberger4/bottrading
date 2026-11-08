@@ -198,7 +198,7 @@ CARDS.update({
         "A": dict(nfp_day=False, nfp_thu=False, nfp_week_block=True),
         "B": dict(nfp_day=True, nfp_thu=True, nfp_week_block=False),
     },
-    "FED-SPEECH": {                            # Mase picked D (trade after the speech, 2026-11-08); not built yet, A stays a switch
+    "FED-SPEECH": {                            # Mase's tie pick 2026-11-08: A (changed from D at 21:34 UTC)
         "A": dict(fed_chair_skip_am=True),
     },
     "MONDAY": {                                # Mase's tie pick 2026-11-08: A
@@ -213,7 +213,13 @@ CARDS.update({
         "A": dict(big_day_am_skip=True, big_day_am_resume=0),     # sacrifice the AM, keep the PM
         "B": dict(big_day_am_skip=True, big_day_am_resume=630),   # no trades 09:30-10:30 [the down-day condition is not built: any very large day]
     },
-    "RANGE-REGIME": {"B": {}},
+    "RANGE-REGIME": {                          # A: drange_scalp (BH-B17 daily-range regime): in a multi-day daily range every order is a scalp and after one
+        "A": dict(drange_scalp=True),          # side's pool ran only the opposite side trades (the fade back into the range); after the range breaks the breakout side
+        "B": dict(drange_scalp=False),         # trades with runners. B: continuation through the break (the old engine)
+    },
+    "TWO-SIDED": {                             # A: both sides armed in one window = stand aside for the rest of it (B17.1 neutral_5050 "armed")
+        "A": dict(neutral_5050="armed"),
+    },
     "SEASON-ACTIVITY": {
         "A": dict(season_quality="size"),
         "B": dict(season_quality="off"),
@@ -231,7 +237,10 @@ CARDS.update({
         "A": dict(tgif_cap=0.30, tgif_stand_down=0.40),
         "B": dict(tgif_cap=0.40, tgif_stand_down=0.45),   # [our interpretation] up to 40%
     },
-    "TGIF-TIMING": {"A": {}},
+    "TGIF-TIMING": {                           # acts with the TGIF model (tgif_model, off by default)
+        "A": dict(tgif_thu=False),             # Friday only
+        "B": dict(tgif_thu=True),              # the TGIF side block from Thursday PM once Thursday holds the week's extreme after 10:00 (dwc3 #33)
+    },
     "WEEK-PROFILE": {                          # C: Thursday caps the week (N10 thu_cap)
         "C": dict(thu_cap=True),
         "A": dict(thu_cap=False),              # [our interpretation] no Thursday cap; the Tue/Wed low is the wk_profile tag
@@ -239,8 +248,6 @@ CARDS.update({
 })
 SAME_AS_ENGINE.update({
     ("NEWS-WAIT", "H"): "the release dealing range applies to 10:00 releases too",
-    ("RANGE-REGIME", "B"): "continuation through the break is the engine's default",
-    ("TGIF-TIMING", "A"): "TGIF is a Friday model in the engine",
 })
 NOT_BUILT.update({
     ("NEWS-WAIT", "E"): "fade the release's first leg on range-bound days after 10:00: no range-day release fade yet; queued",
@@ -248,17 +255,16 @@ NOT_BUILT.update({
     ("FOMC-DAY", "A"): "an FOMC AM cut-off at 10:30 is not built; queued",
     ("FOMC-DAY", "D"): "beginner version (avoid FOMC day); experienced default stands",
     ("FED-SPEECH", "B"): Q, ("FED-SPEECH", "C"): Q,
-    ("FED-SPEECH", "D"): "needs each speech's end time; calendar.FED_CHAIR is unverified and has no end times; queued",
+    ("FED-SPEECH", "D"): "dropped: Mase changed his pick to A (2026-11-08); needs each speech's end time, which calendar.FED_CHAIR lacks",
     ("MONDAY", "C"): "Monday pre-market only needs a per-day session list; queued",
     ("CPI-WEEK", "B"): Q,
     ("AFTER-BIG-DAY", "C"): "'keep expectations low' has no exact rule",
-    ("TWO-SIDED", "A"): Q, ("TWO-SIDED", "B"): Q,
-    ("RANGE-REGIME", "A"): Q,
+    ("TWO-SIDED", "B"): "pick a side at small size and scratch fast: no rule for which side; queued",
     ("SEASON-ACTIVITY", "C"): Q,
     ("HOLIDAY-WEEK", "D"): Q,
     ("HOLIDAY-WEEK", "C"): "holiday_week_thu_fri only lifts the NFP-week Thu/Fri block, which is off; a Thu/Fri preference is queued",
     ("TGIF-DEPTH", "C"): Q,
-    ("TGIF-TIMING", "B"): Q, ("TGIF-TIMING", "C"): Q,
+    ("TGIF-TIMING", "C"): Q,
     ("WEEK-PROFILE", "B"): Q,
 })
 
@@ -280,12 +286,19 @@ CARDS.update({
         "A": dict(price_frame="front_month"),
     },
     "FVG-ENTRY": {"A": dict(entry="edge"), "B": dict(entry="ce")},
+    "ATH-RULE": {                              # near the all-time high (cards_rules.ath_block; ath_near_frac)
+        "A": dict(ath_rule="no_top_pick"),     # no turtle-soup / three-drive / reversal shorts; structure shorts stay
+        "B": dict(ath_rule="off"),
+        "C": dict(ath_rule="longs_only"),
+    },
+    "TF-CHOP": {"A": {}},
 })
 SAME_AS_ENGINE.update({
     ("UNICORN", "A"): "the engine's unicorn is an FVG inside a breaker",
     ("LIQ-LOCATION", "A"): "the engine's pools are wick extremes and relative equal highs / lows",
     ("SHORT-LOCATION", "B"): "the engine has no deep-discount short block",
     ("BIAS-SOURCE", "A"): "the engine's bias is the HTF draw (daily table) that intraday trades follow",
+    ("TF-CHOP", "A"): "the engine reads the draw from the higher timeframes (5m / 15m / 1h / 4h / D arrays); it never drops below 1m",
 })
 NOT_BUILT.update({
     ("OB-CANDLE", "C"): Q, ("OB-CLOSE", "A"): Q, ("OB-CLOSE", "B"): Q,
@@ -293,7 +306,7 @@ NOT_BUILT.update({
     ("UNICORN", "B"): "market maker model stages are not built", ("UNICORN", "C"): Q,
     ("FVG-VALID", "A"): Q, ("FVG-VALID", "B"): Q, ("FVG-VALID", "C"): Q, ("FVG-VALID", "D"): Q,
     ("WICK-PRIORITY", "A"): Q, ("WICK-PRIORITY", "B"): Q,
-    ("TF-CHOP", "A"): Q, ("TF-CHOP", "B"): "sub-1m entries; the engine runs 1m / 5m bars",
+    ("TF-CHOP", "B"): "sub-1m entries; the engine runs 1m / 5m bars",
     ("OB-VALID", "A"): Q, ("OB-VALID", "B"): Q,
     ("FVG-CARRY", "A"): Q, ("FVG-CARRY", "B"): Q, ("FVG-CARRY", "C"): Q, ("FVG-CARRY", "D"): Q,
     ("WICK-SELECT", "A"): Q, ("WICK-SELECT", "B"): Q, ("WICK-SELECT", "C"): Q,
@@ -304,7 +317,6 @@ NOT_BUILT.update({
     ("SHORT-LOCATION", "A"): Q,
     ("SMT-USE", "C"): Q, ("SMT-USE", "D"): Q, ("SMT-USE", "E"): Q,
     ("BIAS-SOURCE", "B"): Q, ("BIAS-SOURCE", "C"): Q, ("BIAS-SOURCE", "D"): Q, ("BIAS-SOURCE", "E"): Q,
-    ("ATH-RULE", "A"): Q, ("ATH-RULE", "B"): Q, ("ATH-RULE", "C"): Q,
     ("CONTRACT", "C"): Q, ("CONTRACT", "D"): Q,
     ("CONTRACT", "B"): "back-adjusted prices only for old highs / lows at ATHs and to reveal VIs (front month otherwise): a per-level frame; queued",
     ("VENOM-STOP", "A"): "the Venom model is not in the engine", ("VENOM-STOP", "B"): "the Venom model is not in the engine",
@@ -332,7 +344,10 @@ CARDS.update({
         "B": dict(be_on="expansion", trail_wick_ce=True),
         "E": dict(be_on="t1", trail_wick_ce=False),
     },
-    "EXIT-DEPTH": {"A": {}},
+    "EXIT-DEPTH": {                            # [our interpretation] applied every day (the card's "difficult climate" has no exact rule)
+        "A": dict(depth_trail=0.0),            # hold for the full target
+        "B": dict(depth_trail=0.75),           # from 75 % of the way to the final rung the stop trails under each closed bar's low (me2._depth_trail)
+    },
     "PARTIAL-TRIGGER": {"A": dict(mgmt="t1t2"), "C": dict(mgmt="ladder")},
     "EXIT-STYLE": {
         "A": _LF((1.0,), (1.0,)),
@@ -353,7 +368,6 @@ CARDS.update({
 })
 SAME_AS_ENGINE.update({
     ("FIXED-RR", "A"): "targets are the draw / PD arrays",
-    ("EXIT-DEPTH", "A"): "the ladder holds for the draw",
     ("OVERNIGHT-HOLD", "A"): "flat at the session close",
 })
 NOT_BUILT.update({
@@ -363,7 +377,6 @@ NOT_BUILT.update({
     ("FIXED-RR", "B"): Q,
     ("STOP-MGMT", "C"): Q, ("STOP-MGMT", "D"): Q, ("STOP-MGMT", "F"): Q, ("STOP-MGMT", "G"): Q,
     ("STOP-MGMT", "H"): Q, ("STOP-MGMT", "I"): Q, ("STOP-MGMT", "J"): Q, ("STOP-MGMT", "K"): Q,
-    ("EXIT-DEPTH", "B"): Q,
     ("PARTIAL-TRIGGER", "B"): Q,
     ("EXIT-STYLE", "C"): Q,
     ("OVERNIGHT-HOLD", "B"): Q,
@@ -402,4 +415,5 @@ TAG_ONLY.update({
     "LUNCH-TARGET": "the lunch pool L feeds lunch_raid_wait / lunch_trail_guard (off) and a tag; not yet the lunch-macro target",
     "MACRO-GRID": "the macro windows gate only with macro_gate / macro_only / macro_done_skip (off)",
     "TGIF-DEPTH": "acts only with the TGIF model (tgif_model, off)",
+    "TGIF-TIMING": "acts only with the TGIF model (tgif, off)",
 })
