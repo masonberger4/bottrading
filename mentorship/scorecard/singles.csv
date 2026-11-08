@@ -7,7 +7,7 @@ te_charter,7,excluded,Model 7's own MSS definition (highest reaccumulation low);
 te_charter,9,excluded,Model 13 entry/stop edge is a slide-vs-audio question; needs the frames.,slide vs audio; needs the frames first
 m2024,16,excluded,beginner risk rules (1% / one trade / stop after a loss); the standing rule is the experienced version (owner #12 risk 1.2%). Re-entry part is in REENTRY.,beginner risk rules; experienced version wins (Mase 2026-11-06)
 m2024,19,excluded,stand aside until the 10:00 Silver Bullet; Silver Bullet is settled off.,Silver Bullet is settled off
-m2024,30,default,"pre-holiday Friday and post-holiday skip agree with filters.md 1.2 (L21 also skips the Tuesday after a Monday holiday, 2023 allows its PM).","post-holiday: 2023 090 skip the AM only vs 2024 L21 skip the whole Tuesday; 1-1 tie, 2023 wins: AM only, whole day a switch"
+m2024,30,tie pending,"pre-holiday Friday and post-holiday skip agree with filters.md 1.2 (L21 also skips the Tuesday after a Monday holiday, 2023 allows its PM).",post-holiday: 2023 090 skip the AM only vs 2024 L21 skip the whole Tuesday; 1-1 tie: PENDING Mase
 m2024,40,default,FVG wick tolerance of one standard deviation of the gap width is one source (L24).,
 m2024,41,default,stop for the week once the weekly HTF objective is hit is one source (L24).,
 m2024,42,default,pyramid windows (final hour 14:30-15:00 or after midnight) for an OSOK hold are one source (L23).,
@@ -16,7 +16,7 @@ m2025,2,default,00-00:30 (L80) is a new range with no 2023 counterpart; not scor
 m2025,6,agrees,reclaimed FVG vs inversion FVG wording; 2026 (106) and 2023 (026/030/091) agree a reclaimed FVG holds after a break. IFVG confirmation is in IFVG-CONFIRM.,2023 and 2026 agree; nothing changes
 m2026smc,6,default,session alternation (025/029: a trending session is followed by consolidation; rarely three trend in a row) has no opposing 2023 statement; it is a new rule.,
 m2026smc,12,default,partial ladder at grade levels (050) refines the 2023 partial rules (scale out at each pool) rather than opposing them.,
-m2026smc,17,switch,IOFED entry depth (partial short of CE vs 1 tick past candle 1) is internal to 2026 and has one source each.,"IOFED depth: 1 vs 1 inside 2026; FVG-ENTRY default (near edge) stands, the other is a switch"
+m2026smc,17,tie pending,IOFED entry depth (partial short of CE vs 1 tick past candle 1) is internal to 2026 and has one source each.,IOFED depth: 1 vs 1 inside 2026; PENDING Mase
 m2026smc,19,"default, needs threshold","HRLR/LRLR ""candles sharing a range"" needs a numeric threshold before it can be compared.","HRLR ""candles sharing a range"" needs a numeric threshold before it can be coded"
 m2026smc,28,default,wick precedence over the OB (074) is one source; compare with 2023 PD-array priority in the full review.,
 m2026smc,29,default,Projection multiples (1.25 open-to-low; fulcrum -2 SD) are single-source and not scored separately.,
@@ -26,7 +26,7 @@ m2026smc,67,default,"immediate rebalance timing (same or next day; day-2 failure
 m2026smc,72,default,the gap-fill target gate (last opposing FVG stays open = target taken; fills = not taken) is one source (124).,
 m2026smc,79,default,inside days = expansion (011) has no opposing lecture yet.,
 m2026smc,82,default,"seasonal tilt (001, 019, 020) has no opposing lecture yet.",
-m2026smc,83,default,nested ORGs widest (019) vs B4 last-three ORGs; no card for ORG nesting yet.,"nested ORGs: widest (019, Aug-Oct 2026) vs last three ORGs (BIAS-SOURCE C, Apr 2026); tie broken by date: widest"
+m2026smc,83,tie pending,nested ORGs widest (019) vs B4 last-three ORGs; no card for ORG nesting yet.,"nested ORGs: widest (019, Aug-Oct 2026) vs last three ORGs (BIAS-SOURCE C, Apr 2026); 1-1 tie: PENDING Mase"
 m2024,65,default,opening inside the previous day's first presented FVG makes that gap the day's reference (L32); one source.,
 m2024,66,default,Fed chair speech = no trading during it and 15 min after; speech in the 09:00-10:00 hour = trade before 08:00 (L37); one source.,
 m2026smc,92,default,tiny 'nub' bodies outside an FVG don't invalidate it (125); one source.,
