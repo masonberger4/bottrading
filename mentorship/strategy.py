@@ -4905,7 +4905,8 @@ class DayCtx:
 
     def __init__(self, df: pd.DataFrame, day: date, hist: list[pd.DataFrame], tf: int,
                  htf: tuple = (), closes: dict | None = None, or_minutes: int = 30,
-                 evening: pd.DataFrame | None = None, tf_lookback: dict | None = None):
+                 evening: pd.DataFrame | None = None, tf_lookback: dict | None = None,
+                 lunch_range: tuple = (720, 810)):
         prev = hist[-1]
         self.day, self.tf = day, tf
         frame = pd.concat([prev, df])
@@ -4962,9 +4963,10 @@ class DayCtx:
         ppm = prev[(pt >= 810) & (pt < 960)]
         if len(ppm):
             self.sess["prev_pm"] = (float(ppm.high.max()), float(ppm.low.min()), 0)
-        lun = df[(tt >= 720) & (tt < 810)]
+        self.lunch_end = int(lunch_range[1])   # LUNCH-WINDOW card: the lunch range (pools known from its end)
+        lun = df[(tt >= lunch_range[0]) & (tt < lunch_range[1])]
         if len(lun):
-            self.sess["lunch"] = (float(lun.high.max()), float(lun.low.min()), 810)
+            self.sess["lunch"] = (float(lun.high.max()), float(lun.low.min()), self.lunch_end)
         self.nwog = []
         self.nwog_today = False                # review fix: True when the last NWOG is today's (known at 09:30)
         for a, b in zip(hist[-21:], hist[-20:] + [df]):
@@ -6344,8 +6346,8 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
         if ctx.am_hl:
             cands += [(ctx.am_hl[0], "pool", "am_high", 1, at(810)), (ctx.am_hl[1], "pool", "am_low", -1, at(810))]
         if "lunch" in ctx.sess:
-            cands += [(ctx.sess["lunch"][0], "pool", "lunch_high", 1, at(810)),
-                      (ctx.sess["lunch"][1], "pool", "lunch_low", -1, at(810))]
+            cands += [(ctx.sess["lunch"][0], "pool", "lunch_high", 1, at(ctx.sess["lunch"][2])),
+                      (ctx.sess["lunch"][1], "pool", "lunch_low", -1, at(ctx.sess["lunch"][2]))]
     st = getattr(ctx, "round_step", 0.0)
     if st and getattr(ctx, "adj", None) is not None and kl - 1 >= 0:
         adj = float(ctx.adj[kl - 1])
@@ -6765,7 +6767,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     flat = _DW.flat_for(day, p, _eff_flat(p))                # N7.1 EARLY_CLOSE
     ff = _NC.fomc_flat_min(day, p)                        # N3 / N3.2: an FOMC day is flat at the release (0 = n/a)
     am_lo, am_hi = p.am_win                               # Ep01.10 am_from_0830
-    ctx = DayCtx(df, day, hist, tf, p.htf, closes, p.or_minutes, evening if p.globex_pool else None, tf_lookback=p.tf_lookback)
+    ctx = DayCtx(df, day, hist, tf, p.htf, closes, p.or_minutes, evening if p.globex_pool else None, tf_lookback=p.tf_lookback,
+                 lunch_range=p.lunch_range)
     ctx.conf = conf
     ctx.gaps = gaps if (p.gap_mode == "ict" and gaps is not None) else None
     ctx.equity = float(equity) if (equity is not None and p.risk_basis == "equity") else p.account_equity
@@ -6785,7 +6788,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     _attach_meta(ctx, meta, p, symbol)
     _setup_news(ctx, day, p)
     _extra_levels(ctx, df, hist, p, eth, closes)           # levels_detectors
-    pctx = DayCtx(partner[0], day, partner[1], tf) if partner is not None else None
+    pctx = DayCtx(partner[0], day, partner[1], tf, lunch_range=p.lunch_range) if partner is not None else None
     if pctx is not None:
         _setup_news(pctx, day, p)
         _extra_levels(pctx, partner[0], partner[1], p)
@@ -6811,7 +6814,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     ctx.pside = (pctx, psides, ppos)                      # setups_models M16.2 sick sister
     ctx.partner2 = None
     if partner2 is not None:
-        c2 = DayCtx(partner2[0], day, partner2[1], tf)
+        c2 = DayCtx(partner2[0], day, partner2[1], tf, lunch_range=p.lunch_range)
         _setup_news(c2, day, p)
         _extra_levels(c2, partner2[0], partner2[1], p)
         ctx.partner2 = (c2, {1: Side(1, c2.o, c2.h, c2.l, c2.c, p.pivot_n, mg, **sk),
@@ -8235,7 +8238,7 @@ def _level_created(ctx, k: str, session: str) -> int:
         a = ctx.news_dr[510]["made"]
     else:
         created = ctx.start if session in ("AM", "LUNCH") else at(810)
-        a = {"am_session": created, "lunch": created, "opening_range": at(ctx.or_end),
+        a = {"am_session": created, "lunch": created if session in ("AM", "LUNCH") else at(max(810, getattr(ctx, "lunch_end", 810))), "opening_range": at(ctx.or_end),
              "london": at(300), "or60": at(630),
              "news_range": getattr(ctx, "news_made", at(540))}.get(k, ctx.start)
     return a
@@ -10631,7 +10634,7 @@ def _smt(ctx, sd, i, key, level, session, pctx, psides, ppos, p=None):
     if p is not None and p.smt_ref_window and not _SM2.smt_ref_ok(pctx, ps, j, key, plv, p):
         return None                                      # (the partner's twin extreme too)
     at = lambda m: pctx.start + int(np.searchsorted(pctx.t[pctx.start:], m))
-    created = {"am_session": at(810), "lunch": at(810), "opening_range": at(pctx.or_end),
+    created = {"am_session": at(810), "lunch": at(max(810, getattr(pctx, "lunch_end", 810))), "opening_range": at(pctx.or_end),
                "london": at(300)}.get(key)
     if created is None:
         created = _level_created(pctx, key, session)

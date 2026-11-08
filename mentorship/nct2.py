@@ -525,6 +525,13 @@ def lunch_pools(ctx, p):
         pools["recent"] = float(sd.x(piv[-1].price))
     if k660 > a:
         pools["am_low"] = float(sd.x(sd.l[a:k660].min()))
+    k600, k690 = S._idx_at(ctx, 600), S._idx_at(ctx, 690)
+    af = [q for q in sd.pl if k600 <= q.i and q.known <= min(k690, k710) - 1]
+    if af:                                       # LUNCH-TARGET B: looking left from 11:30, the first swing (against the move) formed after 10:00
+        pools["after_1000"] = float(sd.x(af[-1].price))
+    k590, k610 = S._idx_at(ctx, 590), S._idx_at(ctx, 610)
+    if k610 > k590 >= a:                         # LUNCH-TARGET C: the extreme made in the 09:50-10:10 macro
+        pools["macro_0950"] = float(sd.x(sd.l[k590:k610].min()))
     if 510 in NC.releases(ctx.day, p):
         kR = S._idx_at(ctx, 510)
         pr = [q for q in sd.pl if q.i >= kR and q.known <= k710 - 1]

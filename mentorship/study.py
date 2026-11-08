@@ -2652,6 +2652,11 @@ SB_VARIANTS = tuple(_SB_DECISIONS)       # silver_bullet package (sb_model.py): 
 
 DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
 
+# scorecard cards (Mase 2026-11-08): every non-default card position and every one-source rule's
+# old engine behaviour as a switch over the card defaults (cards.py)
+from . import cards as _cards
+DECISIONS.update(_cards.variants())
+
 
 import os
 SRC = os.environ.get("MENTORSHIP_SRC", "histdata")      # "histdata" (SPX/NDX CFDs) or "databento"
