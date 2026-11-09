@@ -101,3 +101,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v95 | 2026-11-08 16:16:12Z | Run memory curator | INDEX.md | edit | apply approved X5 in INDEX.md copy (coordinator updates live index) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPLCagAeRgWGKAVLEq9AGvBT | 45c7f52da7 -> cf914da13f |
 | v96 | 2026-11-08 23:45:10Z | Run memory curator | decisions.md | edit | apply approved item 1 (conflict-review-4 tie picks), corrected to merged defaults after PRs #53/#54 | cmsg_01FAHERC1Lsrg2bYtrKuRHmP6o8wjRX7n1avRMxkiGMnpJ | 7459979ef7 -> d53aef9b4f |
 | v97 | 2026-11-09 06:09:54Z | dreamer | proposals/dreamer__status.md | proposal | T1 status 11-09: engine work resumed | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVbGrYPEessaQmFFM5sJNwH | 833753c4f4 -> e357bb4211 |
+| v98 | 2026-11-09 06:09:59Z | dreamer | proposals/dreamer__dream_2026-11-09.md | proposal | Eighth dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVbGrYPEessaQmFFM5sJNwH | ABSENT -> 1ce623f754 |
