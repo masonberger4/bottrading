@@ -980,7 +980,7 @@ def partial_extras(ctx, sd, i: int, p, sw: dict, entry: float, leg_hi: float, la
     if p.wick_partials:
         ws = [w for w in tf_wicks(ctx, sd, i, p, p.wick_partial_tfs, entry) if w[0] < last_v + 1e-9]
         if p.wick_partial_longest and len(ws) > 1:
-            ws = [max(ws, key=lambda w: w[1])]
+            ws = [max(ws, key=(lambda w: w[0] + w[1] / 2) if p.wick_pick == "reach" else (lambda w: w[1]))]    # WICK-SELECT A (scorecard card): the farthest-reaching wick (CE + half its length = its extreme), else the longest
         for ce, ln, src in ws:
             out.append((ce - p.exit_before_pts * p.es_pt, "wick_ce", p.wick_partial_protect))
     return out

@@ -341,7 +341,7 @@ class Params:
     # #11 Ep 07 advanced entry at the order-block bodies before the break (M1.4, D10, Ep07.2/5)
     ob_entry: str = "pre_break"          # "post_mss" = FVG after the MSS (old); "both"
     ob_entry_px: str = "body_top"        # "mt" (body midpoint) / "range_top"
-    ob_arm: str = "leave"                # [our interpretation] armed once a close leaves the bodies;
+    ob_arm: str = "intrabar_htf"         # OB-CLOSE A (scorecard default, Mase 2026-11-08): armed once price trades through the OB open (old "leave": a close leaves the bodies; "high" = B, a later candle trades above the OB high);
                                          # "touch" = the bar after the block
     ob_stop: str = "mt"                  # body MT - buffer, else the sweep extreme ("ext")
     ob_entry_cancel_on_mss: bool = False # "both": an FVG order after the MSS replaces the OB order
@@ -2559,7 +2559,7 @@ class Params:
     fvg_edge: str = "original"           # A5-partial-reprice-shrink (056 ~16:13): "original" / "remaining" (the part of the entry FVG not yet traded through - a wick into the gap from above shrinks its top)
     ob_ce_confluence: bool = False       # A12-ob-edge-at-fvg-ce (058 ~32:02): a 15m OB edge within ob_ce_tol_pts of the entry FVG's CE is the entry level
     ob_ce_tol_pts: float = 1.0
-    leg_fib: str = "wick"                # A21-intraday-fib-bodies (058 ~41:48): the leg / EQ anchors - "wick" (built) / "body" (lowest min(o,c) .. highest max(o,c))
+    leg_fib: str = "body"                # RANGE-ANCHOR B (scorecard default, Mase 2026-11-08; was "wick"). A21-intraday-fib-bodies (058 ~41:48): the leg / EQ anchors - "wick" (built) / "body" (lowest min(o,c) .. highest max(o,c))
     htf_depth_mult: tuple = (1.0, 1.0, 1.0)   # A8-htf-gap-resistance-grade (065 ~1:27:00): risk multiplier by how deep an HTF gap entry reacted: (near / ce / far); tag lv_tags htf_depth_*
     ob_need_narrative: bool = False      # A12-ob-requires-narrative (059 ~19:00; 064 ~51:56; 065 ~1:28:02): an OB qualifies only with the bias this way, a transitional event (a pool swept, or an array traded into) before or by it, and (ob_need_htf_array) lying inside an HTF array
     ob_need_htf_array: bool = True       # ... (2) the OB lies inside a same-side HTF array [our interpretation: the array contains the OB bodies, tolerance eq_tol_pts]
@@ -2975,6 +2975,30 @@ class Params:
     ath_rule: str = "no_top_pick"        # ATH-RULE A (scorecard default, Mase 2026-11-08): near the all-time high no top picking - no turtle-soup / three-drive / reversal shorts (cards_rules.ath_block); "longs_only" (C) = no shorts at all; "off" (B) = follow the draw both ways
     ath_near_frac: float = 0.02          # [our interpretation] "near" = the short's entry within 2 % under the highest high of the loaded history (or above it)
     depth_trail: float = 0.75            # EXIT-DEPTH B (scorecard default, Mase 2026-11-08): from this share of the way to the final rung the stop trails one tick under each closed engine bar's low (me2._depth_trail); 0 = hold for the full target (A)
+    fpfvg_def: str = "time"              # FPFVG-DEF A (scorecard default, Mase 2026-11-08): the FPFVG = the first engine-bar FVG whose middle candle opens 09:31-09:59, a PD array for the rest of its week ("off" = none; cards_rules.card_map)
+    fvg_carry_days: int = 20             # FVG-CARRY A (scorecard default): an unfilled FPFVG stays a PD array for up to this many trading days (0 = its week only); the turtle-soup first-FVG part is queued
+    fvg_valid: str = "first_or_grade"    # FVG-VALID B (scorecard default): an FVG entry needs the first FVG of the leg after the sweep, an active FPFVG, or a middle candle touching a grade line ("any" = A; cards_rules.array_gate)
+    ob_valid: str = "grade"              # OB-VALID B (scorecard default): an OB entry needs its body on a grade line ("any" = A)
+    grade_min_pts: float = 2.0           # [our interpretation] the grade lines: ORG octants (k = -16..24) when the ORG is at least this tall (ES pts), plus each active FPFVG's octants
+    wick_priority: bool = True           # WICK-PRIORITY B (scorecard default): a candle-1 wick at least as tall as the FVG takes precedence - entry at its CE, stop beyond the wick
+    wick_pick: str = "reach"             # WICK-SELECT A (scorecard default; acts with wick_partials): of two wicks in the path the farthest-reaching one ("longest" = the old pick)
+    range_regime: str = "fade"           # RANGE-REGIME A (scorecard default): in a range-bound market no breakout entries beyond the PDH / PDL or the multi-week range ("off" = B; cards_rules.range_gate); the FVG target is queued
+    range_regime_days: int = 20          # [our interpretation] the multi-week range = the prior 20 RTH days; range-bound = no new 20-day extreme in the last 5 days and the prior close in its 20-80 % band
+    pm_window: tuple | None = (420, 540) # PREMARKET-RANGE A (scorecard default, Mase 2026-11-08): the pre-market pools (pmh / pml) = the high / low of today's bars in [start, end) minutes (07:00-09:00); None = the whole overnight to 09:30 (cards_rules.premarket_range)
+    pm_news_cut: bool = True             # PREMARKET-RANGE A: on an 08:30-release day the window ends at 08:30
+    org_size: str = "buckets"            # ORG-SIZE B (scorecard default): today's ORG is the AM draw by its size in NQ handles - < 20 none, 20-75 the ORG play, 75-120 none (gray), > 120 the near quadrant only ("gap and go"); "same" (A) every gap, "q20" (C) < 20 the CE only, "min30" (D) / "min40" (E) none under 30 / 40; "off" = no ORG play (cards_rules.org_play)
+    org_after_ce: str = "continue"       # ORG-AFTER-CE A (scorecard default): the ORG play's draw is the far edge (full gap closure); "done" (B) = the CE; the -0.5 SD / 6.5-8 SD extension is queued
+    org_ce_by: int = 600                 # ORG-CE-WINDOW A (scorecard default): the ORG play's CE (or its near-quadrant draw) must trade by this minute (10:00) or the draw is dropped (B: 630); 0 = no limit
+    overnight_hold: str = "osok"         # OVERNIGHT-HOLD B (scorecard default, Mase 2026-11-08): a trade the session close flattened is held past it to the nearest untraded daily FVG CE ahead (backtest.run, cards_rules.osok_hold); "off" (A) = flat by the close
+    osok_days: int = 5                   # [our interpretation] OSOK: at most this many later sessions, then out at that session's last close
+    venom_model: bool = True             # the Venom model (venom.py; 2025 L22 / L39 / L43 / L51): its own AM book, built with the VENOM-STOP card (Mase 2026-11-09); False = the old engine
+    venom_stop: str = "bpr_ce"           # VENOM-STOP B (L43): just below the CE of the SIBI + BISI balanced price range; "pierce" (A, L39): below the candle that pierces back above the low
+    venom_entry: str = "open"            # VENOM-STOP B: limit at the open of the candle that completes the BISI, or less; "close" (A, L39): the displacement candle's close or less
+    venom_window: tuple = (480, 570)     # the 08:00-09:30 range (L51): its high = buy side, its low = sell side
+    venom_until: int = 630               # [our interpretation] signals and entries until 10:30 (L51: the move into 10:00-10:30)
+    venom_flat: int = 720                # [our interpretation] out by 12:00
+    venom_min_under: int = 0             # candles between the SIBI and the BISI under the low (L43 "a few candles"; L39 "one singular pass" allows none)
+    org_handle: float = 0.25             # [our interpretation] ES points per NQ handle (the ORG-SIZE thresholds are NQ handles; ES ~ NQ / 4), x es_pt for the instrument
     peel_singles: bool = False           # X3-020-runner-peel-singles (020 ~00:10:25 ..): after >= 75 % is closed and above the target NWOG's CE: one lot per bar at an REH poke / a higher high / halfway to the gap top; the last unit gets a pivot-low stop
     pm_macro_runner: bool = True        # X3-027-pm-runner-macro (027 ~00:40:28): a PM trade's first partial lifts the stop to +1 pt, the last unit is held to 15:50 (the 15:45-15:50 macro, newscal.macro_wins)
     hh_low_hold: bool = False            # X3-runner-swing-low-must-hold (027 ~00:43:52): after the first partial, the swing low between a pivot high and the new high that takes it out must hold; a trade under it closes hh_low_frac of the rest
@@ -3523,7 +3547,7 @@ class Params:
     cc_daytrade: bool = False            # new-ipda-true-day (cc08_001 ~00:16:11): the CC day-trade preset - AM leftovers out at 12:00 (am_exit), the PM session off, FOMC days PM 14:00-15:00 only
     london_dir_gate: bool = False        # new-ny-continues-london (cc09_005 ~00:30:13; taught on FX): NY continues London - with no unmet HTF array at the 07:00-09:30 high / low an AM setup against London's direction is blocked; at an array both sides are allowed
     london_dir_tag: bool = False         # ... the tag nyl_cont / nyl_rev on AM orders (the spec writes it always; kept a switch so default trade files stay unchanged)
-    htf_series: str = "adjusted"         # OT-htf-array-data-series (056 ~00:01:13; 078 ~00:35:43): the series the table's daily / weekly arrays are drawn on: "adjusted" (the back-adjusted engine frame), "raw" (the unadjusted front-month series, mapped back per day by the adj before the session), "contract" (056 exact - needs per-contract raw data: NotImplementedError)
+    htf_series: str = "raw"              # CONTRACT card B (Mase 2026-11-08; "adjusted" = the old default). OT-htf-array-data-series (056 ~00:01:13; 078 ~00:35:43): the series the table's daily / weekly arrays are drawn on: "adjusted" (the back-adjusted engine frame), "raw" (the unadjusted front-month series, mapped back per day by the adj before the session), "contract" (056 exact - needs per-contract raw data: NotImplementedError)
     htf_monthly_series: str = "raw"  # ... with htf_monthly: the series of the monthly arrays: "adjusted" (as built) / "raw" (078: the continuous unadjusted chart; the spec's default - kept off here so the built htf_monthly behaviour does not change)
     stocks_mode: bool = False            # M17 (parked): the stock watch-list modules (stocks.py / stocks_watch.py) raise unless this is on
     stock_piv_n: int = 2                 # OT-stocks-smt-weekly-screen (cc10_016 ~00:02:01): the daily pivot size of the Dow-vs-stock screen
@@ -3740,7 +3764,7 @@ class Params:
                          ("draw_lock_neutral", ("skip", "both")), ("draw_lock_levels", ("frozen", "live")),
                          ("draw_lock_pick", ("nearest", "ordered", "largest")),
                          ("ob_entry", ("pre_break", "post_mss", "both")),
-                         ("ob_entry_px", ("body_top", "mt", "range_top", "open", "high")), ("ob_arm", ("leave", "touch", "intrabar_htf")),
+                         ("ob_entry_px", ("body_top", "mt", "range_top", "open", "high")), ("ob_arm", ("leave", "touch", "high", "intrabar_htf")),
                          ("ob_stop", ("mt", "ext")), ("risk_basis", ("fixed", "equity")),
                          ("price_frame", ("front_month", "back_adjusted", "raw")),
                          ("sloppy_mode", ("off", "stand_aside", "scalp")),
@@ -4228,7 +4252,7 @@ class Params:
             raise ValueError("bias_htf#6/7: bp_leg_days in 1..5")
         # caption-gap pass bias_htf#7/7 (bh7.py / bh7e.py)
         for name, ok in (("london_confirm", ("off", "block", "half")), ("true_day", ("session", "ipda")), ("htf_series", ("adjusted", "raw", "contract")),
-                         ("htf_monthly_series", ("adjusted", "raw"))):
+                         ("htf_monthly_series", ("adjusted", "raw")), ("venom_stop", ("bpr_ce", "pierce")), ("venom_entry", ("open", "close"))):
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
         if not 0 < self.late_obj_k <= 1.0 or self.wr_lookback < 2 or self.stock_piv_n < 1 or self.stock_match_days < 0 or self.stock_near_high_pct < 0 or self.stock_ext_atr <= 0 or not 0 <= self.stock_rs_min <= 100 or self.stock_top_sectors < 1:
@@ -5786,6 +5810,10 @@ def _draw_prefs(ctx, sd, i: int, entry: float, p, session: str, keep: list) -> l
                 out.append((st["pcx"], "array", "org_far"))
             if p.org_half_draw and st["half"]:
                 out.append((st["pcx"], "array", "org_half"))
+    if session == "AM":
+        r_ = _CR.org_play(ctx, p, i)                       # ORG-SIZE / ORG-AFTER-CE / ORG-CE-WINDOW (scorecard cards): the ORG play, when the gap lies ahead
+        if r_ is not None and sd.x(ctx.org[-1][0]) > sd.x(ctx.org[-1][1]):
+            out.append((sd.x(r_[0]), "array", r_[1]))
     out += _LD4.draw_prefs(ctx, sd, i, entry, p)       # caption-gap levels_detectors #3/3 (reactionary high, parent pool, two-window IPDA pools)
     return out
 
@@ -6433,6 +6461,10 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
             sg = 1 if up_ else -1
             if hh >= sg * (pc_ + op_) / 2 and hh < sg * pc_:
                 prefs.append((pc_, "array", "org_half", 0, k570))
+    if org_pref and session == "AM" and t_lock >= 570 and k570 < len(t) and kl < len(t):
+        r_ = _CR.org_play(ctx, p, kl)                                      # ORG-SIZE / ORG-AFTER-CE / ORG-CE-WINDOW (scorecard cards): the ORG play
+        if r_ is not None:
+            prefs.append((r_[0], "array", r_[1], 0, k570))
     if p.nwog_halfway and kl - 1 >= S:                                     # L5 halfway rule
         if getattr(ctx, "gaps", None) is not None:
             zs = [(hi_, lo_) for kind, hi_, lo_, _ in ctx.gaps if kind in ("nwog", "nwog_rth")]
@@ -6712,7 +6744,8 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             bias_by_cut: dict | None = None, meta=None, locks: list | None = None, skips: list | None = None,
             eth: dict | None = None, risk_state: dict | None = None, week: dict | None = None,
             eve: tuple | None = None, prev_full: pd.DataFrame | None = None, objective: list | None = None,
-            post_eve: pd.DataFrame | None = None, daily_all: dict | None = None, ath: float | None = None) -> list[Trade]:
+            post_eve: pd.DataFrame | None = None, daily_all: dict | None = None, ath: float | None = None,
+            cards: dict | None = None) -> list[Trade]:
     """Trades for one day (see `_run_day_once` for the arguments). The main loop runs BEFORE the Silver Bullet / Ma Deuce
     (they read its trades), so the session / day stops (X7c / X12 / X13a / X14b / X14d) would be one-way. With a stop
     switch on and an extra engine on, this wrapper makes them two-way by a fixed point: pass 1 as usual; its Silver Bullet
@@ -6737,7 +6770,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         _TP3.hit("pool_exit_fomc")
     kw = dict(partner=partner, live=live, bias=bias, conf=conf, gaps=gaps, closes=closes, evening=evening,
               partner2=partner2, intermarket=intermarket, equity=equity, bias_by_cut=bias_by_cut, meta=meta, eth=eth,
-              week=week, eve=eve, prev_full=prev_full, post_eve=post_eve, daily_all=daily_all, ath=ath)
+              week=week, eve=eve, prev_full=prev_full, post_eve=post_eve, daily_all=daily_all, ath=ath, cards=cards)
     if not ((_MG.any_stop_switch(p, df.index[0].date()) or p.max_trades_week or (p.london_reposition and p.sb_london)) and (p.ma_deuce or p.sb_model)
             and p.stops_passes > 1):                       # (the D19 / X15 week budget is two-way across the engines the same way)
         return _run_day_once(df, hist, symbol, p, tf, log=log, locks=locks, skips=skips, risk_state=risk_state, objective=objective, **kw)
@@ -6775,7 +6808,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             risk_state: dict | None = None, week: dict | None = None, eve: tuple | None = None,
             prev_full: pd.DataFrame | None = None, _ext: list | None = None, _out: dict | None = None,
             objective: list | None = None, post_eve: pd.DataFrame | None = None, daily_all: dict | None = None,
-            ath: float | None = None) -> list[Trade]:
+            ath: float | None = None, cards: dict | None = None) -> list[Trade]:
     """Trades for one day. With `live`, a position still open at the last bar is returned
     with no exit (exit_reason "open") instead of being closed at the last price.
     equity     (#12) start-of-day equity for risk_basis="equity"
@@ -6808,6 +6841,8 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     ctx.bias_row = bias                                   # setups_models: htf table row (draws)
     _BD.apply_open_src(ctx, p, intermarket)               # bias_htf D22: bias_open_src "spy" / "es_map"
     ctx.eth = eth
+    _CR.premarket_range(ctx, df, p, events(day))          # PREMARKET-RANGE A (scorecard card): the pre-market pools from the 07:00-09:00 window
+    ctx.cards = cards                                     # FPFVG-DEF / FVG-CARRY / RANGE-REGIME (scorecard cards): the day's row of backtest.Prepared.cards (cards_rules.card_map)
     ctx.ath = ath                                         # ATH-RULE (scorecard card): the highest high before today (backtest.Prepared.ath)
     ctx.daily_all = daily_all                             # caption-gap pass day_week_context#1/3: {date: close} of every completed session (season_min_rank composite; prior years only are read)
     ctx.eve = eve                                         # caption-gap new-intra-week-extreme-raid: the evening before today (Sunday's for a Monday)
@@ -6817,6 +6852,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     _extra_levels(ctx, df, hist, p, eth, closes)           # levels_detectors
     pctx = DayCtx(partner[0], day, partner[1], tf, lunch_range=p.lunch_range) if partner is not None else None
     if pctx is not None:
+        _CR.premarket_range(pctx, partner[0], p, events(day))
         _setup_news(pctx, day, p)
         _extra_levels(pctx, partner[0], partner[1], p)
     mg = p.min_fvg_pts * p.es_pt
@@ -6842,6 +6878,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     ctx.partner2 = None
     if partner2 is not None and p.smt_ym:              # SMT-SET card: B (default) = NQ vs ES only, the Dow left out
         c2 = DayCtx(partner2[0], day, partner2[1], tf, lunch_range=p.lunch_range)
+        _CR.premarket_range(c2, partner2[0], p, events(day))
         _setup_news(c2, day, p)
         _extra_levels(c2, partner2[0], partner2[1], p)
         ctx.partner2 = (c2, {1: Side(1, c2.o, c2.h, c2.l, c2.c, p.pivot_n, mg, **sk),
@@ -7809,6 +7846,11 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 if why_ is not None:
                     _f(why_)
                     o_ = None
+            if o_ is not None and p.range_regime != "off":
+                why_ = _CR.range_gate(ctx, sd, o_, p)                    # RANGE-REGIME A (scorecard card): no breakout entries on a range-bound day
+                if why_ is not None:
+                    _f(why_)
+                    o_ = None
             if o_ is not None and p.ath_rule != "off":
                 why_ = _CR.ath_block(ctx, sd, o_, p)                     # ATH-RULE (scorecard card): no top picking / no shorts near the all-time high
                 if why_ is not None:
@@ -7843,6 +7885,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             from .sb_model import as_add
             sb_new = as_add(ctx, p, trades[:n_main], sb_new)     # caption-gap E12-sb-as-add (058 ~00:43:10): a same-side SB fill during an open trade is a pyramid add
         trades += sb_new
+    if p.venom_model:
+        from .venom import run_venom
+        trades += run_venom(ctx, p, day, symbol, btag)                     # the Venom model (VENOM-STOP card): its own AM book
     if p.ndog_scalp and post_eve is not None and len(post_eve):
         trades += _SM4.ndog_scalp(ctx, post_eve, p, day, symbol, btag)       # caption-gap new-ndog-asian-scalp: the Asian-evening NDOG scalp (its own window, after the day's frame)
     if p.journal_timing and len(trades) > n_main:
@@ -8029,7 +8074,7 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
                 continue
         if not lk["side"] or lk["delivered"]:
             continue
-        if lk["name"] == "org_far" and _org_break(ctx, p, i):
+        if (lk["name"] == "org_far" and _org_break(ctx, p, i)) or (str(lk["name"]).startswith("org_play") and _CR.org_play(ctx, p, i) is None):
             # L7 (review fix): the ORG acted as a breakaway (no attempt by 09:30 + org_break_min) -
             # its far edge is no longer the draw: the lock as marked at its time without it
             nl = mark_levels(ctx, (bias_by_cut or {}).get(lk["t_lock"]), lk["t_lock"], "PM" if s_ == "LH" else s_, p,
@@ -9330,6 +9375,8 @@ def _ob_pre(ctx, sd, sw, i, p, session, risk_mult):
         return None
     if p.ob_arm == "leave" and not sd.c[i] > ob["body_top"]:
         return None
+    if p.ob_arm == "high" and not sd.h[i] > ob["hi"]:
+        return None                                # OB-CLOSE B (scorecard card): a later candle must trade above the OB's high
     if p.ob_arm == "intrabar_htf":
         if not sd.h[i] > ob["body_top"]:
             return None                            # caption-gap A12-same-candle-retrace (cc04_003 ~00:04:04): the trade-through of the OB high validates it - armed at once, not at a candle close
@@ -9343,6 +9390,8 @@ def _ob_pre(ctx, sd, sw, i, p, session, risk_mult):
         entry = sw_e
     if entry >= sd.c[i]:
         entry = ob["body_top"]                     # [our interpretation] never a limit above the market
+        if p.ob_arm in ("intrabar_htf", "high") and entry >= sd.c[i]:
+            entry = sd.c[i] - p.tick               # (S2 review, OB-CLOSE A / B) armed by a trade-through on a bar that closed back under the OB open: just under the close
     mt_stop_ = p.ob_stop == "mt" or p.mt_break != "off"          # review fix (D4-mt-source-tally): mt_break also governs the pre-break OB (trade = the stop at the MT, close / warn = the far-edge stop + the MT close / warning)
     stop = ob["mt"] - p.pad if mt_stop_ else sw["ext"] - p.pad
     mt_close = (float(ob["mt"]), float(ob["lo"])) if mt_stop_ else None
@@ -9761,6 +9810,11 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
     tol = p.eq_tol_pts * p.es_pt
     sw.pop("_wide_stop", None)                       # caption-gap item 44 review fix: a stale too-wide-stop flag of an earlier call must not restore the sweep after an unrelated None return
     tags = dict(tags)
+    if p.fvg_valid != "any" or p.ob_valid != "any" or p.wick_priority:
+        entry, stop, why_ = _CR.array_gate(ctx, sd, sw, i, p, entry, stop, tags)    # FVG-VALID B / OB-VALID B / WICK-PRIORITY B (scorecard cards)
+        if why_ is not None:
+            _f(why_)
+            return None
     lvt = list(tags.pop("lv_tags", []) or [])        # levels_detectors tags (Trade.lv_tags)
     lvx = dict(tags.pop("lvx", {}) or {})            # levels_detectors exit levels (side space)
     if getattr(ctx, "counter_now", False):           # caption-gap new-counter-bias-scalp-exit (013 ~15:07): half risk, one exit at the nearest pool, flat at the midnight open
@@ -9885,6 +9939,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         stop = st_g
     if p.protect_macro_ext or p.london_ext_guard:
         stop = _SM7.stop_adjust7(ctx, sd, sw, i, p, entry, stop, tags, session)      # caption-gap setups_models #7/7: the protected macro extreme, the London-extreme stop cap
+    if tags.get("wick_first") is not None:
+        stop = tags.pop("wick_first")                # WICK-PRIORITY B (S2 review): the stop stays beyond the wick
     risk = entry - stop
     if not (p.min_risk_pts * p.es_pt <= risk <= p.max_risk_pts * p.es_pt):
         _f("x_risk_too_small" if risk < p.min_risk_pts * p.es_pt else "x_risk_too_big")

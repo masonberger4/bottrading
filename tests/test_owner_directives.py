@@ -453,13 +453,8 @@ def test_front_month_prices_inside_the_raw_contract_range():
     t = B.run(df, 5, "ES", p, meta=meta)
     old = B.run(df, 5, "ES", replace(p, price_frame="back_adjusted", round_pools=False))
     assert len(t) and len(old)
-    parts = []
-    for ch in pd.read_csv("data/mentorship/ES_1min_dbraw.csv", index_col=0, chunksize=500_000):
-        ch = ch[ch.index.str.startswith(("2022-12", "2023-01"))]
-        if len(ch):
-            parts.append(ch)
-    raw = pd.concat(parts)
-    raw.index = pd.to_datetime(raw.index, utc=True).tz_convert(B.NY)
+    raw = B.load_raw("ES", 1)                                  # (the parquet copy: the laptop's CSV was cut to its first week)
+    raw = raw[(raw.index >= "2022-12-01") & (raw.index < "2023-02-01")]
     for r in t.itertuples():
         d = raw[raw.index.date == r.date]
         assert d.low.min() - 1e-6 <= r.entry <= d.high.max() + 1e-6, (r.date, r.entry)

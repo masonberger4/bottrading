@@ -18,6 +18,7 @@ from . import tp4 as _TP4
 from . import me2 as _ME2
 from . import dwc2 as _DWC2
 from . import dwc3 as _DWC3
+from . import cards_rules as _CR
 from .entries import new_risk_state
 from .strategy import ROUND_STEP, SMT_PICKS, Params, resolve_session_close, run_day
 
@@ -196,6 +197,9 @@ def raw_series(p: Params, symbol: str, minutes: int, meta: pd.DataFrame | None, 
         return None, None
     if df is not None and len(df):
         raw = raw.loc[df.index[0]:df.index[-1]]          # review fix (cost + look-ahead): only the engine frame's own span, not the 2019-2026 history (a truncated run never sees raw bars after its cut)
+        if not len(raw) or raw.index[-1].date() < df.index[-1].date():      # (cards S4 review: htf_series="raw" is the default now) a stale raw file (paper / live day) must not drop today's table row
+            warnings.warn(f"htf_series raw: {symbol}_1min_dbraw.csv ends before the engine frame: the adjusted frame is used", stacklevel=3)
+            return None, None
     return raw, meta["adj"]
 
 
@@ -349,6 +353,7 @@ class Prepared:
     reb: dict | None = None        # caption-gap L5 nwog_rebalanced: {(high, low): (known_time, near_edge, exit_edge)} of the rebalanced NWOGs
     daily_all: dict | None = None  # caption-gap pass day_week_context#1/3 (season_min_rank): {date: RTH close} of every session (run_day reads prior years only)
     ath: dict | None = None        # ATH-RULE (scorecard card): {date: the highest high of every day frame before that date} (cards_rules.ath_map)
+    cards: dict | None = None      # FPFVG-DEF / FVG-CARRY / RANGE-REGIME (scorecard cards): {date: day context} (cards_rules.card_map)
 
 
 def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
@@ -396,9 +401,10 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
             from .levels import map_midnight
             mm = map_midnight(ref_df, df)
     da = {g.index[0].date(): float(rth(g).close.iloc[-1]) for g in ds} if p.season_min_rank > 0 else None
-    from .cards_rules import ath_map
+    from .cards_rules import ath_map, card_map
     ath = ath_map(ds) if p.ath_rule != "off" else None
-    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth, eve, mm, reb, da, ath)
+    crd = card_map(ds, p) if (p.fpfvg_def != "off" or p.range_regime != "off") else None
+    return Prepared(p, df, tf, symbol, ds, bt, cuts, og, closes, cf, meta, eth, eve, mm, reb, da, ath, crd)
 
 
 def evenings(df: pd.DataFrame) -> dict:
@@ -447,7 +453,7 @@ def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: d
                 bias_by_cut={m: t_.loc[d].to_dict() for m, t_ in pr.cuts.items() if d in t_.index},
                 meta=pr.meta, week=week, eve=(pr.eve or {}).get(d),
                 post_eve=_SM4.post_evening(pr.df, d) if p.asia_session else None,
-                ath=(pr.ath or {}).get(d),
+                ath=(pr.ath or {}).get(d), cards=(pr.cards or {}).get(d),
                 daily_all=pr.daily_all)
 
 
@@ -502,15 +508,19 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
     hist_p2: list[pd.DataFrame] = []
     rows = []
     rs = new_risk_state() if p.loss_halving else None     # E10: carried across days
+    held: list = []                                    # OVERNIGHT-HOLD B: trades still open past their entry day
     for k, g in enumerate(ds):
         d = g.index[0].date()
+        for tr in [x for x in held if x.exits[-1][0].date() < d]:
+            held.remove(tr)
+            rows.append(tr.row(p.cost_per_share))
         pa = None
         if d in pmap and len(hist_p) >= warmup:
             pa = (pmap[d], hist_p)
         pa2 = (pmap2[d], hist_p2) if d in pmap2 and len(hist_p2) >= warmup else None
         if k >= warmup:
             wk = d.isocalendar()[:2]
-            n_wk = sum(1 for r in rows if r["date"].isocalendar()[:2] == wk) if p.max_trades_week else 0
+            n_wk = (sum(1 for r in rows if r["date"].isocalendar()[:2] == wk) + sum(1 for x in held if x.date.isocalendar()[:2] == wk)) if p.max_trades_week else 0
             if p.max_trades_week and n_wk >= p.max_trades_week:
                 continue
             eq = None
@@ -549,11 +559,17 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
                                                              # the Silver Bullet / Ma Deuce: the old slice dropped the earlier trade)
                 day_trades = _DWC3.cap_day_trades(day_trades, p, wk_)           # caption-gap X15-monthly-cap: the month's budget in entry-time order
                 for tr in day_trades:
+                    if p.overnight_hold == "osok":
+                        _CR.osok_hold(tr, ds, k, p)        # OVERNIGHT-HOLD B (scorecard card): the eod-flattened lots held to a daily FVG CE
+                        if tr.exits and tr.exits[-1][0].date() > d:
+                            held.append(tr)                # (S4 review) a held trade's P&L reaches rows (equity, week / month budgets) only after its exit day
+                            continue
                     rows.append(tr.row(p.cost_per_share))
         if d in pmap:
             hist_p = (hist_p + [rth(pmap[d])])[-21:]
         if d in pmap2:
             hist_p2 = (hist_p2 + [rth(pmap2[d])])[-21:]
+    rows += [tr.row(p.cost_per_share) for tr in held]
     out = pd.DataFrame(rows)
     if len(out):                           # several setups per day: report in time order
         out = out.sort_values(["entry_time", "setup"], kind="stable").reset_index(drop=True)

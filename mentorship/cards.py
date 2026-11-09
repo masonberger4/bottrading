@@ -152,6 +152,27 @@ CARDS.update({
         "E": dict(nwog_days=60, ndog_life="friday", org_days=4),   # today + the last three; the ATH carry-on is not built
     },
     "NDOG-DEF": {"A": {}},
+    # stage S3 (Mase 2026-11-08: build every card default); the rules are in cards_rules.premarket_range / org_play
+    "PREMARKET-RANGE": {                  # the pre-market pools (pmh / pml)
+        "A": dict(pm_window=(420, 540), pm_news_cut=True),     # 07:00-09:00, to 08:30 on an 08:30-release day
+        "E": dict(pm_window=(480, 570), pm_news_cut=False),    # 08:00-09:30 (Venom)
+        "H": dict(pm_window=(0, 420), pm_news_cut=False),      # 00:00-07:00 overnight [the relative-equal-lows preference is not built]
+    },
+    "ORG-SIZE": {                         # today's ORG as the AM draw by its size in NQ handles (org_handle ES points each)
+        "A": dict(org_size="same"),
+        "B": dict(org_size="buckets"),    # < 20 none [our interpretation], 20-75 the play, 75-120 gray = none, > 120 the near quadrant then gap and go
+        "C": dict(org_size="q20"),        # < 20 handles: the CE only; quadrants (grade lines) on 20+
+        "D": dict(org_size="min30"),      # no ORG play under ~30 handles [the "wait for 10:00" part is not built]
+        "E": dict(org_size="min40"),      # 40+ handles [the "75+ preferred" part is not built]
+    },
+    "ORG-AFTER-CE": {
+        "A": dict(org_after_ce="continue"),   # the far edge (full gap closure); the -0.5 SD / 6.5-8 SD extension is queued
+        "B": dict(org_after_ce="done"),       # the CE is the draw
+    },
+    "ORG-CE-WINDOW": {                    # the ORG play's CE must trade by this minute, else the draw is dropped (relocked)
+        "A": dict(org_ce_by=600),
+        "B": dict(org_ce_by=630),
+    },
 })
 SAME_AS_ENGINE.update({
     ("LONDON-MACRO", "B"): "no London macro time; the engine has none",
@@ -160,16 +181,17 @@ SAME_AS_ENGINE.update({
 })
 NOT_BUILT.update({
     ("LONDON-MACRO", "A"): "London entries are off (london_kz); a 03:30 macro gate has nothing to gate",
-    ("PREMARKET-RANGE", "A"): Q, ("PREMARKET-RANGE", "B"): Q, ("PREMARKET-RANGE", "C"): Q,
-    ("PREMARKET-RANGE", "D"): Q, ("PREMARKET-RANGE", "E"): Q, ("PREMARKET-RANGE", "F"): Q,
-    ("PREMARKET-RANGE", "G"): Q, ("PREMARKET-RANGE", "H"): Q,
+    ("PREMARKET-RANGE", "B"): "news-week vs other-week windows need a news-week rule; queued",
+    ("PREMARKET-RANGE", "C"): "the graded, SD-projected pre-release range is not built; queued",
+    ("PREMARKET-RANGE", "D"): "three hourly 30-minute ranges and the next-30-minute opening range are not built; queued",
+    ("PREMARKET-RANGE", "F"): "the 06:00 start on NFP weeks only needs a per-week window; queued",
+    ("PREMARKET-RANGE", "G"): "'the smoothest REQ high / low' is judgment; no exact rule yet",
     ("OPEN-RANGE-TRADE", "D"): "needs a 'clean pre-market read' rule (judgment); no exact rule yet",
-    ("FPFVG-DEF", "A"): Q, ("FPFVG-DEF", "B"): Q, ("FPFVG-DEF", "C"): Q, ("FPFVG-DEF", "D"): Q,
+    ("FPFVG-DEF", "B"): Q, ("FPFVG-DEF", "C"): Q, ("FPFVG-DEF", "D"): Q,
     ("FPFVG-DEF", "E"): "sub-1m charts; the engine runs 1m / 5m bars",
     ("FPFVG-DEF", "F"): Q, ("FPFVG-DEF", "G"): Q, ("FPFVG-DEF", "H"): Q,
-    ("ORG-CE-WINDOW", "A"): Q, ("ORG-CE-WINDOW", "B"): Q, ("ORG-CE-WINDOW", "C"): Q, ("ORG-CE-WINDOW", "D"): Q,
-    ("ORG-AFTER-CE", "A"): Q, ("ORG-AFTER-CE", "B"): Q,
-    ("ORG-SIZE", "A"): Q, ("ORG-SIZE", "B"): Q, ("ORG-SIZE", "C"): Q, ("ORG-SIZE", "D"): Q, ("ORG-SIZE", "E"): Q,
+    ("ORG-CE-WINDOW", "C"): "low-resistance run days with unfinished liquidity beyond need a day-type rule; queued",
+    ("ORG-CE-WINDOW", "D"): "the daily PD array pointing at the half gap is not built; queued",
     ("GAP-LIFE", "D"): "NDOG / ORG two-week life keyed to Mon / Fri only; queued",
     ("NDOG-DEF", "B"): Q,
 })
@@ -213,7 +235,10 @@ CARDS.update({
         "A": dict(big_day_am_skip=True, big_day_am_resume=0),     # sacrifice the AM, keep the PM
         "B": dict(big_day_am_skip=True, big_day_am_resume=630),   # no trades 09:30-10:30 [the down-day condition is not built: any very large day]
     },
-    "RANGE-REGIME": {"B": {}},
+    "RANGE-REGIME": {                          # A: range-bound day = no breakout entries (cards_rules.range_gate); the "target the FVG just inside the old extreme" part is queued
+        "A": dict(range_regime="fade"),
+        "B": dict(range_regime="off"),         # continuation through the break (the old engine)
+    },
     "TWO-SIDED": {                             # A: both sides armed in one window = stand aside for the rest of it (B17.1 neutral_5050 "armed")
         "A": dict(neutral_5050="armed"),       # the rollover-week "trade very light" part is not built (queued)
     },
@@ -256,7 +281,6 @@ NOT_BUILT.update({
     ("MONDAY", "C"): "Monday pre-market only needs a per-day session list; queued",
     ("CPI-WEEK", "B"): Q,
     ("AFTER-BIG-DAY", "C"): "'keep expectations low' has no exact rule",
-    ("RANGE-REGIME", "A"): "queued (S1 review): a PDH / PDL turtle soup back into a multi-week daily range, target the FVG inside the old extreme; drange_scalp is not it",
     ("TWO-SIDED", "B"): "pick a side at small size and scratch fast: no rule for which side; queued",
     ("SEASON-ACTIVITY", "C"): Q,
     ("HOLIDAY-WEEK", "D"): Q,
@@ -280,8 +304,13 @@ CARDS.update({
     "SMT-USE": {"A": dict(smt_partial="off", smt_ym=False), "B": dict(smt_partial="a", smt_ym=True)},   # B needs the sister indices (YM too)
     "SMT-SET": {"A": dict(smt_ym=True), "B": dict(smt_ym=False)},
     "BIAS-SOURCE": {"A": {}},
-    "CONTRACT": {                              # Mase picked B (2026-11-08), which is not built yet: the engine keeps front-month prices
-        "A": dict(price_frame="front_month"),
+    "CONTRACT": {                              # Mase picked B (2026-11-08): the HTF table arrays on the front-month series (htf_series="raw"; study._bias_cache keeps the raw table on disk); the old highs / lows (PDH ..., the ATH) stay on the back-adjusted engine bars [our interpretation]; the table VIs (vi_arrays, off) follow htf_series
+        "A": dict(price_frame="front_month", htf_series="adjusted"),
+        "B": dict(price_frame="front_month", htf_series="raw"),
+    },
+    "VENOM-STOP": {                            # Mase picked B (2026-11-08); the Venom model (venom.py) is built with it (2026-11-09)
+        "A": dict(venom_stop="pierce", venom_entry="close"),
+        "B": dict(venom_stop="bpr_ce", venom_entry="open"),
     },
     "FVG-ENTRY": {"A": dict(entry="edge"), "B": dict(entry="ce")},
     "ATH-RULE": {                              # near the all-time high (cards_rules.ath_block; ath_near_frac)
@@ -290,35 +319,42 @@ CARDS.update({
         "C": dict(ath_rule="longs_only"),
     },
     "TF-CHOP": {"A": {}},
+    # stage S2 (Mase 2026-11-08: build every card default); the rules are in cards_rules.array_gate / card_map unless noted
+    "FPFVG-DEF": {"A": dict(fpfvg_def="time")},          # the first FVG with a 09:31-09:59 middle candle, a PD array all week
+    "FVG-CARRY": {                                        # an unfilled FPFVG stays a PD array for 20 trading days (the turtle-soup first-FVG part is queued)
+        "A": dict(fvg_carry_days=20),
+        "B": dict(fvg_carry_days=0),                      # [our interpretation] no carry beyond the FPFVG's own week
+    },
+    "FVG-VALID": {"A": dict(fvg_valid="any"), "B": dict(fvg_valid="first_or_grade")},
+    "OB-VALID": {"A": dict(ob_valid="any"), "B": dict(ob_valid="grade")},     # the propulsion block's inheritance from its parent is not built
+    "OB-CLOSE": {"A": dict(ob_arm="intrabar_htf"), "B": dict(ob_arm="high")},   # strategy._ob_pre
+    "WICK-PRIORITY": {"A": dict(wick_priority=False), "B": dict(wick_priority=True)},
+    "WICK-SELECT": {"A": dict(wick_pick="reach")},       # targets.partial_extras (acts with wick_partials)
+    "RANGE-ANCHOR": {"A": dict(leg_fib="wick"), "B": dict(leg_fib="body")},  # the leg / EQ anchors (es1.body_leg); the multi-day range is on bodies already (pd_body_multiday)
 })
 SAME_AS_ENGINE.update({
     ("UNICORN", "A"): "the engine's unicorn is an FVG inside a breaker",
     ("LIQ-LOCATION", "A"): "the engine's pools are wick extremes and relative equal highs / lows",
     ("SHORT-LOCATION", "B"): "the engine has no deep-discount short block",
     ("BIAS-SOURCE", "A"): "the engine's bias is the HTF draw (daily table) that intraday trades follow",
-    ("RANGE-REGIME", "B"): "continuation through the break is the engine's default",
     ("TF-CHOP", "A"): "the engine reads the draw from the higher timeframes (5m / 15m / 1h / 4h / D arrays); it never drops below 1m",
 })
 NOT_BUILT.update({
-    ("OB-CANDLE", "C"): Q, ("OB-CLOSE", "A"): Q, ("OB-CLOSE", "B"): Q,
+    ("OB-CANDLE", "C"): Q,
     ("IFVG-CONFIRM", "C"): Q, ("IFVG-CONFIRM", "D"): "anticipation from structure is judgment; no exact rule yet",
     ("UNICORN", "B"): "market maker model stages are not built", ("UNICORN", "C"): Q,
-    ("FVG-VALID", "A"): Q, ("FVG-VALID", "B"): Q, ("FVG-VALID", "C"): Q, ("FVG-VALID", "D"): Q,
-    ("WICK-PRIORITY", "A"): Q, ("WICK-PRIORITY", "B"): Q,
+    ("FVG-VALID", "C"): Q, ("FVG-VALID", "D"): Q,
     ("TF-CHOP", "B"): "sub-1m entries; the engine runs 1m / 5m bars",
-    ("OB-VALID", "A"): Q, ("OB-VALID", "B"): Q,
-    ("FVG-CARRY", "A"): Q, ("FVG-CARRY", "B"): Q, ("FVG-CARRY", "C"): Q, ("FVG-CARRY", "D"): Q,
-    ("WICK-SELECT", "A"): Q, ("WICK-SELECT", "B"): Q, ("WICK-SELECT", "C"): Q,
+    ("FVG-CARRY", "C"): Q, ("FVG-CARRY", "D"): Q,
+    ("WICK-SELECT", "B"): "the longest wick that also meets a criterion: no criterion rule yet (wick_pick='longest' is the old pick, kept as a switch)",
+    ("WICK-SELECT", "C"): Q,
     ("WICK-SELECT", "D"): "judgment (the wick price respects); no exact rule",
     ("PDA-LOOKBACK", "A"): Q,
-    ("RANGE-ANCHOR", "A"): Q, ("RANGE-ANCHOR", "B"): Q,
     ("LIQ-LOCATION", "B"): Q, ("LIQ-LOCATION", "C"): Q,
     ("SHORT-LOCATION", "A"): Q,
     ("SMT-USE", "C"): Q, ("SMT-USE", "D"): Q, ("SMT-USE", "E"): Q,
     ("BIAS-SOURCE", "B"): Q, ("BIAS-SOURCE", "C"): Q, ("BIAS-SOURCE", "D"): Q, ("BIAS-SOURCE", "E"): Q,
     ("CONTRACT", "C"): Q, ("CONTRACT", "D"): Q,
-    ("CONTRACT", "B"): "back-adjusted prices only for old highs / lows at ATHs and to reveal VIs (front month otherwise): a per-level frame; queued",
-    ("VENOM-STOP", "A"): "the Venom model is not in the engine", ("VENOM-STOP", "B"): "the Venom model is not in the engine",
 })
 
 
@@ -352,7 +388,10 @@ CARDS.update({
         "A": _LF((1.0,), (1.0,)),
         "B": _LF((0.5, 0.25, 0.25), (0.8, 0.2)),
     },
-    "OVERNIGHT-HOLD": {"A": {}},               # tie open; flat by the close is the engine
+    "OVERNIGHT-HOLD": {                        # stage S4: B = OSOK, the eod-flattened lots held to the nearest daily FVG CE (cards_rules.osok_hold; the adds after midnight are not built)
+        "A": dict(overnight_hold="off"),
+        "B": dict(overnight_hold="osok"),
+    },
     "STOP-PLACE": {
         "A": dict(stop_mode="ob_near"),        # the MT of the OB nearest the sweep low
         "B": dict(stop_mode="fvg_candle"),
@@ -367,7 +406,6 @@ CARDS.update({
 })
 SAME_AS_ENGINE.update({
     ("FIXED-RR", "A"): "targets are the draw / PD arrays",
-    ("OVERNIGHT-HOLD", "A"): "flat at the session close",
 })
 NOT_BUILT.update({
     ("PYRAMID-WHERE", "B"): Q, ("PYRAMID-WHERE", "C"): Q, ("PYRAMID-WHERE", "D"): Q,
@@ -378,7 +416,6 @@ NOT_BUILT.update({
     ("STOP-MGMT", "H"): Q, ("STOP-MGMT", "I"): Q, ("STOP-MGMT", "J"): Q, ("STOP-MGMT", "K"): Q,
     ("PARTIAL-TRIGGER", "B"): Q,
     ("EXIT-STYLE", "C"): Q,
-    ("OVERNIGHT-HOLD", "B"): Q,
     ("STOP-PLACE", "D"): Q, ("STOP-PLACE", "F"): Q, ("STOP-PLACE", "H"): Q, ("STOP-PLACE", "I"): Q,
     ("RESISTANCE-DAY", "C"): Q,
 })
@@ -415,4 +452,5 @@ TAG_ONLY.update({
     "MACRO-GRID": "the macro windows gate only with macro_gate / macro_only / macro_done_skip (off)",
     "TGIF-DEPTH": "acts only with the TGIF model (tgif_model, off)",
     "TGIF-TIMING": "acts only with the TGIF model (tgif, off)",
+    "WICK-SELECT": "acts only with the wick partials (wick_partials, off)",
 })
