@@ -47,6 +47,7 @@ SEL_WIN = {"OT-one-state-tool-pairing_expansion_ob": [("2023-09-01", "2023-10-01
 ZERO_OK = {"OT-one-state-tool-pairing_retracement_void": dict(pairing="all", state_tag=True),
            "OT-one-state-tool-pairing_consolidation_eq": dict(pairing="all", state_tag=True),
            "M13-ote-needs-bias-trigger-structure": dict(ote_need_trigger=False),
+           "DS2-monday-ideal-day_tue_wed": dict(days_mode="mon_wed"),     # (card defaults: no Tue / Wed trade in the windows; the sibling mode runs the same days_mode gate)
            # caption-gap bias_htf#1/7: these gates leave no trade in the 2024 windows (the 15m / 60m order-flow state and the three-step minimum criteria reject nearly everything); the surrogate runs the
            # sibling code on the same 60m / 15m bars without the filter (bellwether_tf: swing breaks of tf_bars; bisi60_draw: the 60m FVG helpers); tests/test_caption_gap_bh1g.py checks the real paths with junk future bars
            # caption-gap bias_htf#2/7: a trade above the CE of the session's latest 15m FVG cancels nearly every lock on the 2023-24 windows; the surrogate keeps the 60m wick-CE cancel (tests/test_caption_gap_bh2c.py checks the 15m path)

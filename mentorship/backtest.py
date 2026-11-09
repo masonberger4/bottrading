@@ -400,7 +400,7 @@ def prepare(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = N
         else:
             from .levels import map_midnight
             mm = map_midnight(ref_df, df)
-    da = {g.index[0].date(): float(rth(g).close.iloc[-1]) for g in ds} if p.season_min_rank > 0 else None
+    da = {g.index[0].date(): float(r_.close.iloc[-1]) for g in ds if len(r_ := rth(g))} if p.season_min_rank > 0 else None     # (a partial last day cut before 09:30 has no RTH close yet)
     from .cards_rules import ath_map, card_map
     ath = ath_map(ds) if p.ath_rule != "off" else None
     crd = card_map(ds, p) if (p.fpfvg_def != "off" or p.range_regime != "off") else None
