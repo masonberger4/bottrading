@@ -244,7 +244,9 @@ def premarket_range(ctx, df, p, tags: set) -> None:
         ctx.pd.pop("pmh", None)
         ctx.pd.pop("pml", None)
     tw = tt[(tt >= a) & (tt < b)]
-    for m in list(getattr(ctx, "pre_at", {})):          # (S3 review) the pre-09:30 sessions: the window as known at their start (bars starting before m, as DayCtx.pre_at)
+    for m in list(getattr(ctx, "pre_at", {})):          # (S3 review) the pre-09:30 sessions from the window's start: the window as known at their start (bars starting before m, as DayCtx.pre_at)
+        if m <= a:
+            continue                                     # (S4 review) the London / Asia sessions keep the overnight range
         q = w[np.asarray(tw < m)]
         if len(q):
             ctx.pre_at[m] = (float(q.high.max()), float(q.low.min()))
@@ -330,9 +332,10 @@ def osok_hold(tr, ds: list, k: int, p) -> None:
     hit("osok_hold")
     for g in ds[k + 1:k + 1 + p.osok_days]:
         g = g[g.index > ts0]
-        for ts, hi, lo in zip(g.index, g.high.values, g.low.values):
+        for ts, op, hi, lo in zip(g.index, g.open.values, g.high.values, g.low.values):
             if (lo <= stop) if s > 0 else (hi >= stop):
-                tr.exits[-1] = (ts, float(stop), q, "osok_stop")
+                fill = min(op, stop) if s > 0 else max(op, stop)        # (S4 review) a gap through the stop fills at the open
+                tr.exits[-1] = (ts, float(fill), q, "osok_stop")
                 hit("osok_stop")
                 return
             if (hi >= ce) if s > 0 else (lo <= ce):

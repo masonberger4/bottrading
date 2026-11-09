@@ -291,8 +291,8 @@ CURRENT.update(CARDS_S2_OLD)
 CARDS_S3_OLD = dict(pm_window=None, pm_news_cut=False, org_size="off", org_ce_by=0)
 PRE_OWNER.update(CARDS_S3_OLD)
 CURRENT.update(CARDS_S3_OLD)
-# stage S4 (2026-11-09): OSOK overnight hold, HTF arrays on the front month
-CARDS_S4_OLD = dict(overnight_hold="off", htf_series="adjusted")
+# stage S4 (2026-11-09): OSOK overnight hold
+CARDS_S4_OLD = dict(overnight_hold="off")
 PRE_OWNER.update(CARDS_S4_OLD)
 CURRENT.update(CARDS_S4_OLD)
 CURRENT.update(COVERAGE_OLD)
