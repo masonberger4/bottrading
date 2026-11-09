@@ -2681,6 +2681,18 @@ SYMS = {"histdata": ("SPX", "NDX"), "merged": ("SPX", "NDX"), "databento": ("ES"
 
 
 _BX_TABLES: dict = {}
+_CODE_HASH: list = []
+
+
+def _table_code_hash() -> str:
+    """A hash of the engine's source files (the on-disk raw table is rebuilt after any code change)."""
+    if not _CODE_HASH:
+        import hashlib
+        h = hashlib.md5()
+        for f in sorted(Path(__file__).parent.glob("*.py")):
+            h.update(f.read_bytes())
+        _CODE_HASH.append(h.hexdigest()[:8])
+    return _CODE_HASH[0]
 
 
 def _bias_cache(tf: int, cut: int = 570, vi: bool = False, flip: tuple = ("ob_mt", "wk_dc"),
@@ -2704,20 +2716,28 @@ def _bias_cache(tf: int, cut: int = 570, vi: bool = False, flip: tuple = ("ob_mt
                 r_ = B.load_raw(SYMS[0], tf)
                 if m_ is not None and r_ is not None and "adj" in m_:
                     kw_["raw"], kw_["adj"] = r_, m_["adj"]
+            df_ = B.load(SYMS[0], tf, source=SRC)
+            if "raw" in kw_ and (not len(kw_["raw"]) or kw_["raw"].index[-1].date() < df_.index[-1].date()):
+                import warnings
+                warnings.warn(f"htf_series raw: {SYMS[0]}_1min_dbraw ends before the engine frame: the adjusted table is used", stacklevel=2)
+                del kw_["raw"], kw_["adj"]                    # (review: the same stale-file fallback as backtest.raw_series)
             pk = None
-            if "raw" in kw_:            # (cards: CONTRACT B makes the raw table the default) kept on disk as a pickle, keyed by the raw file's last bar and the adj
-                rk = f"{kw_['raw'].index[-1]:%Y%m%d%H%M}_{hashlib.md5(pd.util.hash_pandas_object(kw_['adj']).values.tobytes()).hexdigest()[:8]}"
+            if "raw" in kw_:            # (cards: CONTRACT B makes the raw table the default) kept on disk as a pickle, keyed by the raw file's last bar, the adj and the table code
+                rk = f"{kw_['raw'].index[-1]:%Y%m%d%H%M}_{hashlib.md5(pd.util.hash_pandas_object(kw_['adj']).values.tobytes()).hexdigest()[:8]}_{_table_code_hash()}"
                 pk = Path(f"runs/mentorship/htf_table_{SRC}_{tf}m{tag}_raw{rk}.pkl")
             if pk is not None and pk.exists():
                 _BX_TABLES[key] = pd.read_pickle(pk)
             else:
-                _BX_TABLES[key] = htf.table(B.load(SYMS[0], tf, source=SRC), cut_min=cut, vi=vi, flip_triggers=tuple(flip), **kw_)
+                _BX_TABLES[key] = htf.table(df_, cut_min=cut, vi=vi, flip_triggers=tuple(flip), **kw_)
                 if pk is not None:
                     import os
                     pk.parent.mkdir(parents=True, exist_ok=True)
                     tmp = pk.with_suffix(f".{os.getpid()}.tmp")
-                    _BX_TABLES[key].to_pickle(tmp)
-                    os.replace(tmp, pk)                       # (workers may build the same lock-cut table at once)
+                    try:
+                        _BX_TABLES[key].to_pickle(tmp)
+                        os.replace(tmp, pk)                   # (workers may build the same lock-cut table at once)
+                    except OSError:
+                        pass                                  # (Windows: another worker has it open; it holds the same table)
         t = _BX_TABLES[key].copy()
         t.index = pd.to_datetime(t.index).date
         return t

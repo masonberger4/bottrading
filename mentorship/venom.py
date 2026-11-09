@@ -72,7 +72,7 @@ def find_signal(c5: pd.DataFrame, lo: float, hi: float, sgn: int, p) -> dict | N
                         k_open=float(o[j]), b_close=float(c[j - 1]), b_low=float(l[j - 1]), edge=float(edge))
         if c[j] < min(l[sibi["m"]], edge) - MIN1 and l[j] < l[sibi["m"]] - MIN1:
             sibi = None                                            # a new low under the SIBI candle: look for a newer SIBI [our interpretation]
-            if h[j] < l[j - 2] - MIN1 and l[j - 1] < edge - MIN1 and c[j - 1] < o[j - 1]:
+            if h[j] < l[j - 2] - MIN1 and l[j - 1] < edge - MIN1 and h[j - 1] >= edge - MIN1 and c[j - 1] < o[j - 1]:
                 sibi = dict(m=j - 1, top=float(l[j - 2]), bottom=float(h[j]))
     return None
 
@@ -122,7 +122,8 @@ def run_venom(ctx, p, day, symbol: str, btag: dict) -> list:
     stop_m = (bpr_ce(sig) if p.venom_stop == "bpr_ce" else sig["b_low"]) - p.pad
     tgt_m = (hi if sgn > 0 else -lo) - p.exit_before_pts * p.es_pt
     risk = entry_m - stop_m
-    SIGNALS.append((day, sgn, x(entry_m), x(stop_m), x(tgt_m), round(risk, 2)))
+    if len(SIGNALS) < 10_000:
+        SIGNALS.append((day, sgn, x(entry_m), x(stop_m), x(tgt_m), round(risk, 2)))
     if risk < p.min_risk_pts * p.es_pt or risk > p.max_risk_pts * p.es_pt or tgt_m - entry_m < p.min_rr * risk:
         hit("venom_x_risk")
         return []
@@ -160,8 +161,8 @@ def run_venom(ctx, p, day, symbol: str, btag: dict) -> list:
             break
         om_ = ctx.o[i] * sgn
         hm, lm = (ctx.h[i] * sgn, ctx.l[i] * sgn) if sgn > 0 else (ctx.l[i] * sgn, ctx.h[i] * sgn)
-        if i > fill_i and om_ <= stop_m:
-            exit_ = (pd.Timestamp(ctx.idx[i]), x(om_), shares, "stop_gap")
+        if om_ <= stop_m:
+            exit_ = (pd.Timestamp(ctx.idx[i]), x(om_), shares, "stop_gap")        # (review: on the fill bar too - a fill at an open beyond the stop is out at that open)
         elif lm <= stop_m:
             exit_ = (pd.Timestamp(ctx.idx[i]), x(stop_m), shares, "stop")
         elif hm >= tgt_m:

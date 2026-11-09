@@ -57,30 +57,65 @@ def _preload():
             pass
 
 
-@pytest.hookimpl(hookwrapper=True)
-def pytest_make_collect_report(collector):
-    """A legacy module is imported with strategy.Params = LegacyParams, so its `from mentorship.strategy import Params` and its
-    module-level Params(...) constants (and the helper modules it imports first) get the old defaults."""
-    if not (isinstance(collector, pytest.Module) and collector.path.stem in LEGACY_MODULES):
-        yield
-        return
-    _preload()
-    from mentorship import strategy
-    from _legacy import LegacyParams
-    orig = strategy.Params
-    strategy.Params = LegacyParams
-    try:
-        yield
-    finally:
-        strategy.Params = orig
+import importlib.abc as _iabc
+import sys as _sys
+
+
+class _TestModuleLoader(_iabc.Loader):
+    """Runs a test module with strategy.Params = LegacyParams when it is a legacy module and the real Params otherwise, whoever imports
+    it first (pytest's collection or another test module's helper import), so its `from mentorship.strategy import Params`, its own
+    `class Params(Params)` and its module-level Params(...) constants get the right defaults in any run order or subset."""
+
+    def __init__(self, inner, legacy: bool):
+        self.inner, self.legacy = inner, legacy
+
+    def create_module(self, spec):
+        return self.inner.create_module(spec)
+
+    def exec_module(self, module):
+        _preload()
+        from mentorship import strategy
+        from _legacy import LegacyParams
+        prev = strategy.Params
+        strategy.Params = LegacyParams if self.legacy else LegacyParams.__mro__[1]
+        try:
+            self.inner.exec_module(module)
+        finally:
+            strategy.Params = prev
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+
+class _TestModuleFinder(_iabc.MetaPathFinder):
+    def find_spec(self, name, path, target=None):
+        if "." in name or not name.startswith("test_"):
+            return None
+        for f in _sys.meta_path:                             # the next finder (pytest's assertion rewriter, then the path finder)
+            if f is self or not hasattr(f, "find_spec"):
+                continue
+            spec = f.find_spec(name, path, target)
+            if spec is not None:
+                if spec.loader is not None:
+                    spec.loader = _TestModuleLoader(spec.loader, name in LEGACY_MODULES)
+                return spec
+        return None
+
+
+def pytest_configure(config):
+    if not any(isinstance(f, _TestModuleFinder) for f in _sys.meta_path):
+        _sys.meta_path.insert(0, _TestModuleFinder())
 
 
 @pytest.fixture(autouse=True)
 def _legacy_defaults(request, monkeypatch):
     mod = request.module
-    if mod.__name__.rsplit(".", 1)[-1] in LEGACY_MODULES:
+    from _legacy import LegacyParams
+    legacy = mod.__name__.rsplit(".", 1)[-1] in LEGACY_MODULES
+    if isinstance(getattr(mod, "Params", None), type):
+        assert issubclass(mod.Params, LegacyParams) == legacy, f"{mod.__name__}: Params {'is not' if legacy else 'is'} the legacy one"
+    if legacy:
         import sys
-        from _legacy import LegacyParams
         from mentorship.strategy import Params
         for m in [mod] + list(sys.modules.values()):          # (test helper modules and the engine's own imports)
             if getattr(m, "Params", None) is Params:
