@@ -202,9 +202,9 @@ def test_calendar_block_rules():
     assert S.blocked(CPI_EVE, "AM", P(pre_cpi="skip")) == "pre_cpi" and S.blocked(CPI_EVE, "AM", P(skip_pre_cpi=True)) == "pre_cpi"
     assert S.blocked(CPI_EVE, "AM", P(pre_cpi="small")) is None and S.blocked(CPI_EVE, "AM", P()) is None
     ch = date(2025, 2, 11)
-    assert S.blocked(ch, "AM", P(fed_chair_skip_am=True)) == "fed_chair" and S.blocked(ch, "PM", P(fed_chair_skip_am=True)) is None
+    assert S.blocked(ch, "AM", P(fed_chair_skip_am=True)) == "fed_chair" and S.blocked(ch, "PM", P(fed_chair_skip_am=True), 810) is None      # (FED-SPEECH A: no entry before 13:30 in any session, so the PM check names its time)
     assert S.blocked(ch, "AM", P()) is None                            # default OFF (unverified calendar)
-    assert S.blocked(ch, "LON", P(fed_chair_skip_am=True)) is None     # the day rules cover the NY AM family only
+    assert S.blocked(ch, "LON", P(fed_chair_skip_am=True)) == "fed_chair"     # (cards S1 review: FED-SPEECH A blocks London too - every entry before 13:30)
     au = date(2026, 4, 8)
     assert S.blocked(au, "AM", P()) is None and S.blocked(au, "AM", P(skip_auction_am=True)) == "auction_am"
     assert S.blocked(au, "PM", P(skip_auction_am=True)) is None
