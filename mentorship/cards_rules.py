@@ -243,6 +243,13 @@ def premarket_range(ctx, df, p, tags: set) -> None:
     else:
         ctx.pd.pop("pmh", None)
         ctx.pd.pop("pml", None)
+    tw = tt[(tt >= a) & (tt < b)]
+    for m in list(getattr(ctx, "pre_at", {})):          # (S3 review) the pre-09:30 sessions: the window as known at their start (bars starting before m, as DayCtx.pre_at)
+        q = w[np.asarray(tw < m)]
+        if len(q):
+            ctx.pre_at[m] = (float(q.high.max()), float(q.low.min()))
+        else:
+            del ctx.pre_at[m]
 
 
 # --- ORG-SIZE / ORG-AFTER-CE / ORG-CE-WINDOW: the ORG play --------------------------------------------------------
@@ -282,6 +289,63 @@ def org_play(ctx, p, i: int):
     return out
 
 
+# --- OVERNIGHT-HOLD ---------------------------------------------------------------------------------------------
+def _daily_ces(ds: list, k: int, look: int = 60) -> list:
+    """The CEs of the daily FVGs (RTH bars of the day frames ds[k-look .. k]) that no later day through day k has traded back to."""
+    rows = [(float(r.high.max()), float(r.low.min())) for r in (_rth(g) for g in ds[max(0, k - look):k + 1]) if len(r)]
+    out = []
+    for j in range(2, len(rows)):
+        h0, l0 = rows[j - 2]
+        h2, l2 = rows[j]
+        if l2 > h0:
+            ce = (l2 + h0) / 2
+        elif h2 < l0:
+            ce = (h2 + l0) / 2
+        else:
+            continue
+        later = rows[j + 1:]
+        if not any(lo <= ce <= hi for hi, lo in later):
+            out.append(ce)
+    return out
+
+
+def osok_hold(tr, ds: list, k: int, p) -> None:
+    """OVERNIGHT-HOLD B (OSOK, "hold ... overnight to a daily FVG CE"): a trade the session close flattened ("eod") keeps its remaining lots past the
+    close when an untraded daily FVG CE lies ahead of the close; the later day frames (ds[k+1 ..], the engine's bars only: the 16:00-04:00 hours are
+    not in them) are walked until the CE (exit there), the stop (the initial stop, break-even once a partial was taken [our interpretation]; the stop
+    first when one bar holds both) or osok_days sessions (exit at that day's last close). The adds after midnight are not built. The exposure of the
+    held lots is not counted against later trades [our interpretation]. Edits tr.exits in place."""
+    if not tr.exits or tr.exits[-1][3] != "eod" or k + 1 >= len(ds):
+        return
+    ts0, px0, q, _ = tr.exits[-1]
+    s = 1 if tr.side == "long" else -1
+    ahead = [c for c in _daily_ces(ds, k) if s * (c - px0) > 0]
+    if not ahead:
+        hit("osok_none")
+        return
+    ce = min(ahead, key=lambda c: abs(c - px0))
+    stop = tr.entry if len(tr.exits) > 1 else tr.stop
+    if s * (px0 - stop) <= 0:
+        return
+    hit("osok_hold")
+    for g in ds[k + 1:k + 1 + p.osok_days]:
+        g = g[g.index > ts0]
+        for ts, hi, lo in zip(g.index, g.high.values, g.low.values):
+            if (lo <= stop) if s > 0 else (hi >= stop):
+                tr.exits[-1] = (ts, float(stop), q, "osok_stop")
+                hit("osok_stop")
+                return
+            if (hi >= ce) if s > 0 else (lo <= ce):
+                tr.exits[-1] = (ts, float(ce), q, "osok_ce")
+                hit("osok_ce")
+                return
+        if len(g):
+            last = (g.index[-1], float(g.close.iloc[-1]))
+    if "last" in locals():
+        tr.exits[-1] = (last[0], last[1], q, "osok_time")
+        hit("osok_time")
+
+
 def check_params(p) -> None:
     """Validation (strategy.Params.__post_init__)."""
     if p.ath_rule not in ("off", "no_top_pick", "longs_only"):
@@ -300,3 +364,5 @@ def check_params(p) -> None:
         raise ValueError("org_size off / same / buckets / q20 / min30 / min40; org_after_ce continue / done")
     if p.org_handle <= 0 or not (p.org_ce_by == 0 or 571 <= p.org_ce_by <= 960):
         raise ValueError("org_handle > 0; org_ce_by 0 or 571..960")
+    if p.overnight_hold not in ("off", "osok") or p.osok_days < 1:
+        raise ValueError("overnight_hold off / osok; osok_days >= 1")

@@ -304,8 +304,8 @@ CARDS.update({
     "SMT-USE": {"A": dict(smt_partial="off", smt_ym=False), "B": dict(smt_partial="a", smt_ym=True)},   # B needs the sister indices (YM too)
     "SMT-SET": {"A": dict(smt_ym=True), "B": dict(smt_ym=False)},
     "BIAS-SOURCE": {"A": {}},
-    "CONTRACT": {                              # Mase picked B (2026-11-08), which is not built yet: the engine keeps front-month prices
-        "A": dict(price_frame="front_month"),
+    "CONTRACT": {                              # stage S4: B = the HTF table arrays on the front-month series; the old highs / lows (PDH ..., the ATH) stay on the back-adjusted engine bars [our interpretation]; B's back-adjusted daily VIs are not built (the table VIs follow htf_series)
+        "B": dict(htf_series="raw"),
     },
     "FVG-ENTRY": {"A": dict(entry="edge"), "B": dict(entry="ce")},
     "ATH-RULE": {                              # near the all-time high (cards_rules.ath_block; ath_near_frac)
@@ -350,8 +350,8 @@ NOT_BUILT.update({
     ("SMT-USE", "C"): Q, ("SMT-USE", "D"): Q, ("SMT-USE", "E"): Q,
     ("BIAS-SOURCE", "B"): Q, ("BIAS-SOURCE", "C"): Q, ("BIAS-SOURCE", "D"): Q, ("BIAS-SOURCE", "E"): Q,
     ("CONTRACT", "C"): Q, ("CONTRACT", "D"): Q,
-    ("CONTRACT", "B"): "back-adjusted prices only for old highs / lows at ATHs and to reveal VIs (front month otherwise): a per-level frame; queued",
-    ("VENOM-STOP", "A"): "the Venom model is not in the engine", ("VENOM-STOP", "B"): "the Venom model is not in the engine",
+    ("CONTRACT", "A"): "front-month old highs / lows and ATH need per-contract highs; queued (the HTF arrays on the front month are B, htf_series='raw')",
+    ("VENOM-STOP", "A"): "the Venom model is not in the engine", ("VENOM-STOP", "B"): "the Venom model (08:00-09:30 range, SIBI + BISI BPR) is not in the engine: its stop has no model to apply to; queued with the model",
 })
 
 
@@ -385,7 +385,10 @@ CARDS.update({
         "A": _LF((1.0,), (1.0,)),
         "B": _LF((0.5, 0.25, 0.25), (0.8, 0.2)),
     },
-    "OVERNIGHT-HOLD": {"A": {}},               # tie open; flat by the close is the engine
+    "OVERNIGHT-HOLD": {                        # stage S4: B = OSOK, the eod-flattened lots held to the nearest daily FVG CE (cards_rules.osok_hold; the adds after midnight are not built)
+        "A": dict(overnight_hold="off"),
+        "B": dict(overnight_hold="osok"),
+    },
     "STOP-PLACE": {
         "A": dict(stop_mode="ob_near"),        # the MT of the OB nearest the sweep low
         "B": dict(stop_mode="fvg_candle"),
@@ -400,7 +403,6 @@ CARDS.update({
 })
 SAME_AS_ENGINE.update({
     ("FIXED-RR", "A"): "targets are the draw / PD arrays",
-    ("OVERNIGHT-HOLD", "A"): "flat at the session close",
 })
 NOT_BUILT.update({
     ("PYRAMID-WHERE", "B"): Q, ("PYRAMID-WHERE", "C"): Q, ("PYRAMID-WHERE", "D"): Q,
@@ -411,7 +413,6 @@ NOT_BUILT.update({
     ("STOP-MGMT", "H"): Q, ("STOP-MGMT", "I"): Q, ("STOP-MGMT", "J"): Q, ("STOP-MGMT", "K"): Q,
     ("PARTIAL-TRIGGER", "B"): Q,
     ("EXIT-STYLE", "C"): Q,
-    ("OVERNIGHT-HOLD", "B"): Q,
     ("STOP-PLACE", "D"): Q, ("STOP-PLACE", "F"): Q, ("STOP-PLACE", "H"): Q, ("STOP-PLACE", "I"): Q,
     ("RESISTANCE-DAY", "C"): Q,
 })

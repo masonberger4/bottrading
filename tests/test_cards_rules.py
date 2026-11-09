@@ -158,3 +158,21 @@ def test_org_play_by_size_after_ce_and_window():
 def test_card_defaults_of_stage_s3():
     p = Params()
     assert (p.pm_window, p.pm_news_cut, p.org_size, p.org_after_ce, p.org_ce_by) == ((420, 540), True, "buckets", "continue", 600)
+
+
+def test_osok_holds_an_eod_exit_to_the_daily_fvg_ce():
+    from mentorship.strategy import Trade
+
+    def day(d, o, h, l, c):
+        ix = pd.date_range(f"{d} 09:30", periods=3, freq="5min")
+        return pd.DataFrame({"open": o, "high": [h, h - 1, h - 1], "low": [l, l + 1, l + 1], "close": c}, index=ix)
+    ds = [day("2024-01-02", 120, 125, 115, 120), day("2024-01-03", 112, 113, 100, 102), day("2024-01-04", 95, 98, 90, 96),   # bearish daily FVG 98 .. 115, CE 106.5
+          day("2024-01-05", 96, 101, 94, 98), day("2024-01-08", 99, 108, 97, 107)]
+    tr = Trade(date=ds[3].index[0].date(), symbol="ES", session="AM", setup="x", side="long", swept="", unicorn=False, smt=None,
+               armed=ds[3].index[0], entry_time=ds[3].index[0], entry=95.0, stop=93.0, t1=99.0, t2=None, shares=1)
+    tr.exits = [(ds[3].index[-1], 98.0, 1, "eod")]
+    CR.osok_hold(tr, ds, 3, Params(overnight_hold="osok", osok_days=5))
+    assert tr.exits[-1][1:] == (106.5, 1, "osok_ce") and tr.exits[-1][0] == ds[4].index[0]
+    tr.exits = [(ds[3].index[-1], 98.0, 1, "t1")]
+    CR.osok_hold(tr, ds, 3, Params())
+    assert tr.exits[-1][3] == "t1"                                            # only an eod exit is held

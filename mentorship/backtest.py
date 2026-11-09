@@ -18,6 +18,7 @@ from . import tp4 as _TP4
 from . import me2 as _ME2
 from . import dwc2 as _DWC2
 from . import dwc3 as _DWC3
+from . import cards_rules as _CR
 from .entries import new_risk_state
 from .strategy import ROUND_STEP, SMT_PICKS, Params, resolve_session_close, run_day
 
@@ -551,6 +552,8 @@ def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,
                                                              # the Silver Bullet / Ma Deuce: the old slice dropped the earlier trade)
                 day_trades = _DWC3.cap_day_trades(day_trades, p, wk_)           # caption-gap X15-monthly-cap: the month's budget in entry-time order
                 for tr in day_trades:
+                    if p.overnight_hold == "osok":
+                        _CR.osok_hold(tr, ds, k, p)        # OVERNIGHT-HOLD B (scorecard card): the eod-flattened lots held to a daily FVG CE
                     rows.append(tr.row(p.cost_per_share))
         if d in pmap:
             hist_p = (hist_p + [rth(pmap[d])])[-21:]

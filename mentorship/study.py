@@ -291,6 +291,10 @@ CURRENT.update(CARDS_S2_OLD)
 CARDS_S3_OLD = dict(pm_window=None, pm_news_cut=False, org_size="off", org_ce_by=0)
 PRE_OWNER.update(CARDS_S3_OLD)
 CURRENT.update(CARDS_S3_OLD)
+# stage S4 (2026-11-09): OSOK overnight hold, HTF arrays on the front month
+CARDS_S4_OLD = dict(overnight_hold="off", htf_series="adjusted")
+PRE_OWNER.update(CARDS_S4_OLD)
+CURRENT.update(CARDS_S4_OLD)
 CURRENT.update(COVERAGE_OLD)
 LEGACY_1PCT_2PCT = dict(risk_dollars=1000.0, max_total_risk=2000.0)   # E8 / owner #12 preset
 # setups_models review: the FVG-path variants need the FVG path to trade at all - post_mss with the

@@ -2989,6 +2989,8 @@ class Params:
     org_size: str = "buckets"            # ORG-SIZE B (scorecard default): today's ORG is the AM draw by its size in NQ handles - < 20 none, 20-75 the ORG play, 75-120 none (gray), > 120 the near quadrant only ("gap and go"); "same" (A) every gap, "q20" (C) < 20 the CE only, "min30" (D) / "min40" (E) none under 30 / 40; "off" = no ORG play (cards_rules.org_play)
     org_after_ce: str = "continue"       # ORG-AFTER-CE A (scorecard default): the ORG play's draw is the far edge (full gap closure); "done" (B) = the CE; the -0.5 SD / 6.5-8 SD extension is queued
     org_ce_by: int = 600                 # ORG-CE-WINDOW A (scorecard default): the ORG play's CE (or its near-quadrant draw) must trade by this minute (10:00) or the draw is dropped (B: 630); 0 = no limit
+    overnight_hold: str = "osok"         # OVERNIGHT-HOLD B (scorecard default, Mase 2026-11-08): a trade the session close flattened is held past it to the nearest untraded daily FVG CE ahead (backtest.run, cards_rules.osok_hold); "off" (A) = flat by the close
+    osok_days: int = 5                   # [our interpretation] OSOK: at most this many later sessions, then out at that session's last close
     org_handle: float = 0.25             # [our interpretation] ES points per NQ handle (the ORG-SIZE thresholds are NQ handles; ES ~ NQ / 4), x es_pt for the instrument
     peel_singles: bool = False           # X3-020-runner-peel-singles (020 ~00:10:25 ..): after >= 75 % is closed and above the target NWOG's CE: one lot per bar at an REH poke / a higher high / halfway to the gap top; the last unit gets a pivot-low stop
     pm_macro_runner: bool = True        # X3-027-pm-runner-macro (027 ~00:40:28): a PM trade's first partial lifts the stop to +1 pt, the last unit is held to 15:50 (the 15:45-15:50 macro, newscal.macro_wins)
@@ -3538,7 +3540,7 @@ class Params:
     cc_daytrade: bool = False            # new-ipda-true-day (cc08_001 ~00:16:11): the CC day-trade preset - AM leftovers out at 12:00 (am_exit), the PM session off, FOMC days PM 14:00-15:00 only
     london_dir_gate: bool = False        # new-ny-continues-london (cc09_005 ~00:30:13; taught on FX): NY continues London - with no unmet HTF array at the 07:00-09:30 high / low an AM setup against London's direction is blocked; at an array both sides are allowed
     london_dir_tag: bool = False         # ... the tag nyl_cont / nyl_rev on AM orders (the spec writes it always; kept a switch so default trade files stay unchanged)
-    htf_series: str = "adjusted"         # OT-htf-array-data-series (056 ~00:01:13; 078 ~00:35:43): the series the table's daily / weekly arrays are drawn on: "adjusted" (the back-adjusted engine frame), "raw" (the unadjusted front-month series, mapped back per day by the adj before the session), "contract" (056 exact - needs per-contract raw data: NotImplementedError)
+    htf_series: str = "raw"              # CONTRACT B (scorecard default, Mase 2026-11-08: the HTF arrays on the front month; the engine bars stay back-adjusted). OT-htf-array-data-series (056 ~00:01:13; 078 ~00:35:43): the series the table's daily / weekly arrays are drawn on: "adjusted" (the back-adjusted engine frame), "raw" (the unadjusted front-month series, mapped back per day by the adj before the session), "contract" (056 exact - needs per-contract raw data: NotImplementedError)
     htf_monthly_series: str = "raw"  # ... with htf_monthly: the series of the monthly arrays: "adjusted" (as built) / "raw" (078: the continuous unadjusted chart; the spec's default - kept off here so the built htf_monthly behaviour does not change)
     stocks_mode: bool = False            # M17 (parked): the stock watch-list modules (stocks.py / stocks_watch.py) raise unless this is on
     stock_piv_n: int = 2                 # OT-stocks-smt-weekly-screen (cc10_016 ~00:02:01): the daily pivot size of the Dow-vs-stock screen
@@ -6452,7 +6454,7 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
             sg = 1 if up_ else -1
             if hh >= sg * (pc_ + op_) / 2 and hh < sg * pc_:
                 prefs.append((pc_, "array", "org_half", 0, k570))
-    if org_pref and session == "AM" and t_lock >= 570 and k570 < len(t):
+    if org_pref and session == "AM" and t_lock >= 570 and k570 < len(t) and kl < len(t):
         r_ = _CR.org_play(ctx, p, kl)                                      # ORG-SIZE / ORG-AFTER-CE / ORG-CE-WINDOW (scorecard cards): the ORG play
         if r_ is not None:
             prefs.append((r_[0], "array", r_[1], 0, k570))
