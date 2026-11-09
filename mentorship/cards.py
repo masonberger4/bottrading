@@ -304,8 +304,13 @@ CARDS.update({
     "SMT-USE": {"A": dict(smt_partial="off", smt_ym=False), "B": dict(smt_partial="a", smt_ym=True)},   # B needs the sister indices (YM too)
     "SMT-SET": {"A": dict(smt_ym=True), "B": dict(smt_ym=False)},
     "BIAS-SOURCE": {"A": {}},
-    "CONTRACT": {                              # Mase picked B (2026-11-08), not built as the default: see NOT_BUILT
-        "A": dict(price_frame="front_month"),
+    "CONTRACT": {                              # Mase picked B (2026-11-08): the HTF table arrays on the front-month series (htf_series="raw"; study._bias_cache keeps the raw table on disk); the old highs / lows (PDH ..., the ATH) stay on the back-adjusted engine bars [our interpretation]; the table VIs (vi_arrays, off) follow htf_series
+        "A": dict(price_frame="front_month", htf_series="adjusted"),
+        "B": dict(price_frame="front_month", htf_series="raw"),
+    },
+    "VENOM-STOP": {                            # Mase picked B (2026-11-08); the Venom model (venom.py) is built with it (2026-11-09)
+        "A": dict(venom_stop="pierce", venom_entry="close"),
+        "B": dict(venom_stop="bpr_ce", venom_entry="open"),
     },
     "FVG-ENTRY": {"A": dict(entry="edge"), "B": dict(entry="ce")},
     "ATH-RULE": {                              # near the all-time high (cards_rules.ath_block; ath_near_frac)
@@ -350,8 +355,6 @@ NOT_BUILT.update({
     ("SMT-USE", "C"): Q, ("SMT-USE", "D"): Q, ("SMT-USE", "E"): Q,
     ("BIAS-SOURCE", "B"): Q, ("BIAS-SOURCE", "C"): Q, ("BIAS-SOURCE", "D"): Q, ("BIAS-SOURCE", "E"): Q,
     ("CONTRACT", "C"): Q, ("CONTRACT", "D"): Q,
-    ("CONTRACT", "B"): "the HTF arrays on the front month exist as htf_series='raw' (study variant), but as the default it puts the table in Params.bx, which bypasses the bias CSV cache and every bx == '' check (S4 review): needs a cache key for the raw table first; queued",
-    ("VENOM-STOP", "A"): "the Venom model is not in the engine", ("VENOM-STOP", "B"): "the Venom model (08:00-09:30 range, SIBI + BISI BPR) is not in the engine: its stop has no model to apply to; queued with the model",
 })
 
 

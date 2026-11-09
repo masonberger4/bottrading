@@ -351,7 +351,7 @@ def test_ob_arm_intrabar_trade_through_arms_at_once():
     base = one(day(rows, spike=True), hist)
     assert base == [] or base[0].entry_time.minute != 50                                               # built: no close over the bodies on 09:45
     tr = one(day(rows, spike=True), hist, ob_arm="intrabar_htf")
-    assert len(tr) == 1 and tr[0].entry == pytest.approx(100.0) and tr[0].entry_time.minute == 50          # armed on the trade-through bar (09:45), filled from the next one
+    assert len(tr) == 1 and tr[0].entry == pytest.approx(99.9 - 0.25) and tr[0].entry_time.minute == 50     # armed on the trade-through bar (09:45), filled from the next one; (cards S2 review) that bar closed under the OB open: the limit is a tick under its close
     assert one(day(A_ROWS, spike=True), hist, ob_arm="intrabar_htf")[0].entry == pytest.approx(100.0)
 
 

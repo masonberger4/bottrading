@@ -17,11 +17,14 @@ LEGACY = dict(
     fed_chair_skip_am=False, depth_trail=0.0, ath_rule="off", tgif_thu=False, neutral_5050="off",
     fpfvg_def="off", fvg_carry_days=0, fvg_valid="any", ob_valid="any", wick_priority=False, wick_pick="longest", range_regime="off", ob_arm="leave", leg_fib="wick",
     pm_window=None, pm_news_cut=False, org_size="off", org_after_ce="continue", org_ce_by=0, overnight_hold="off",
+    htf_series="adjusted", venom_model=False,
 )
 
 
-class LegacyParams(Params):
-    """Params with the pre-card defaults (no @dataclass: the fields, __post_init__ and replace() are Params')."""
+import dataclasses as _dc
 
-    def __init__(self, **kw):
-        super().__init__(**{**LEGACY, **kw})
+_F = {f.name: f for f in _dc.fields(Params)}
+# Params with the pre-card defaults as real dataclass field defaults, so a test module's own `@dataclass class Params(Params)`
+# subclass (adding a field) keeps them; __post_init__ and replace() are Params'.
+LegacyParams = _dc.make_dataclass("LegacyParams", [(k, _F[k].type, _dc.field(default=v)) for k, v in LEGACY.items()], bases=(Params,))
+LegacyParams.__doc__ = "Params with the pre-card defaults."

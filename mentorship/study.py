@@ -292,7 +292,7 @@ CARDS_S3_OLD = dict(pm_window=None, pm_news_cut=False, org_size="off", org_ce_by
 PRE_OWNER.update(CARDS_S3_OLD)
 CURRENT.update(CARDS_S3_OLD)
 # stage S4 (2026-11-09): OSOK overnight hold
-CARDS_S4_OLD = dict(overnight_hold="off")
+CARDS_S4_OLD = dict(overnight_hold="off", htf_series="adjusted", venom_model=False)
 PRE_OWNER.update(CARDS_S4_OLD)
 CURRENT.update(CARDS_S4_OLD)
 CURRENT.update(COVERAGE_OLD)
@@ -2672,6 +2672,7 @@ DEC_BASE = dict(AM_SPY, pm=Params().pm, skip_news=False)
 # old engine behaviour as a switch over the card defaults (cards.py)
 from . import cards as _cards
 DECISIONS.update(_cards.variants())
+DECISIONS["SC-VENOM-off"] = dict(venom_model=False)             # the Venom model's own contribution (built with the VENOM-STOP card)
 
 
 import os
@@ -2703,7 +2704,20 @@ def _bias_cache(tf: int, cut: int = 570, vi: bool = False, flip: tuple = ("ob_mt
                 r_ = B.load_raw(SYMS[0], tf)
                 if m_ is not None and r_ is not None and "adj" in m_:
                     kw_["raw"], kw_["adj"] = r_, m_["adj"]
-            _BX_TABLES[key] = htf.table(B.load(SYMS[0], tf, source=SRC), cut_min=cut, vi=vi, flip_triggers=tuple(flip), **kw_)
+            pk = None
+            if "raw" in kw_:            # (cards: CONTRACT B makes the raw table the default) kept on disk as a pickle, keyed by the raw file's last bar and the adj
+                rk = f"{kw_['raw'].index[-1]:%Y%m%d%H%M}_{hashlib.md5(pd.util.hash_pandas_object(kw_['adj']).values.tobytes()).hexdigest()[:8]}"
+                pk = Path(f"runs/mentorship/htf_table_{SRC}_{tf}m{tag}_raw{rk}.pkl")
+            if pk is not None and pk.exists():
+                _BX_TABLES[key] = pd.read_pickle(pk)
+            else:
+                _BX_TABLES[key] = htf.table(B.load(SYMS[0], tf, source=SRC), cut_min=cut, vi=vi, flip_triggers=tuple(flip), **kw_)
+                if pk is not None:
+                    import os
+                    pk.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = pk.with_suffix(f".{os.getpid()}.tmp")
+                    _BX_TABLES[key].to_pickle(tmp)
+                    os.replace(tmp, pk)                       # (workers may build the same lock-cut table at once)
         t = _BX_TABLES[key].copy()
         t.index = pd.to_datetime(t.index).date
         return t

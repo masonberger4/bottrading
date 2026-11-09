@@ -2991,6 +2991,13 @@ class Params:
     org_ce_by: int = 600                 # ORG-CE-WINDOW A (scorecard default): the ORG play's CE (or its near-quadrant draw) must trade by this minute (10:00) or the draw is dropped (B: 630); 0 = no limit
     overnight_hold: str = "osok"         # OVERNIGHT-HOLD B (scorecard default, Mase 2026-11-08): a trade the session close flattened is held past it to the nearest untraded daily FVG CE ahead (backtest.run, cards_rules.osok_hold); "off" (A) = flat by the close
     osok_days: int = 5                   # [our interpretation] OSOK: at most this many later sessions, then out at that session's last close
+    venom_model: bool = True             # the Venom model (venom.py; 2025 L22 / L39 / L43 / L51): its own AM book, built with the VENOM-STOP card (Mase 2026-11-09); False = the old engine
+    venom_stop: str = "bpr_ce"           # VENOM-STOP B (L43): just below the CE of the SIBI + BISI balanced price range; "pierce" (A, L39): below the candle that pierces back above the low
+    venom_entry: str = "open"            # VENOM-STOP B: limit at the open of the candle that completes the BISI, or less; "close" (A, L39): the displacement candle's close or less
+    venom_window: tuple = (480, 570)     # the 08:00-09:30 range (L51): its high = buy side, its low = sell side
+    venom_until: int = 630               # [our interpretation] signals and entries until 10:30 (L51: the move into 10:00-10:30)
+    venom_flat: int = 720                # [our interpretation] out by 12:00
+    venom_min_under: int = 0             # candles between the SIBI and the BISI under the low (L43 "a few candles"; L39 "one singular pass" allows none)
     org_handle: float = 0.25             # [our interpretation] ES points per NQ handle (the ORG-SIZE thresholds are NQ handles; ES ~ NQ / 4), x es_pt for the instrument
     peel_singles: bool = False           # X3-020-runner-peel-singles (020 ~00:10:25 ..): after >= 75 % is closed and above the target NWOG's CE: one lot per bar at an REH poke / a higher high / halfway to the gap top; the last unit gets a pivot-low stop
     pm_macro_runner: bool = True        # X3-027-pm-runner-macro (027 ~00:40:28): a PM trade's first partial lifts the stop to +1 pt, the last unit is held to 15:50 (the 15:45-15:50 macro, newscal.macro_wins)
@@ -3540,7 +3547,7 @@ class Params:
     cc_daytrade: bool = False            # new-ipda-true-day (cc08_001 ~00:16:11): the CC day-trade preset - AM leftovers out at 12:00 (am_exit), the PM session off, FOMC days PM 14:00-15:00 only
     london_dir_gate: bool = False        # new-ny-continues-london (cc09_005 ~00:30:13; taught on FX): NY continues London - with no unmet HTF array at the 07:00-09:30 high / low an AM setup against London's direction is blocked; at an array both sides are allowed
     london_dir_tag: bool = False         # ... the tag nyl_cont / nyl_rev on AM orders (the spec writes it always; kept a switch so default trade files stay unchanged)
-    htf_series: str = "adjusted"         # OT-htf-array-data-series (056 ~00:01:13; 078 ~00:35:43): the series the table's daily / weekly arrays are drawn on: "adjusted" (the back-adjusted engine frame), "raw" (the unadjusted front-month series, mapped back per day by the adj before the session), "contract" (056 exact - needs per-contract raw data: NotImplementedError)
+    htf_series: str = "raw"              # CONTRACT card B (Mase 2026-11-08; "adjusted" = the old default). OT-htf-array-data-series (056 ~00:01:13; 078 ~00:35:43): the series the table's daily / weekly arrays are drawn on: "adjusted" (the back-adjusted engine frame), "raw" (the unadjusted front-month series, mapped back per day by the adj before the session), "contract" (056 exact - needs per-contract raw data: NotImplementedError)
     htf_monthly_series: str = "raw"  # ... with htf_monthly: the series of the monthly arrays: "adjusted" (as built) / "raw" (078: the continuous unadjusted chart; the spec's default - kept off here so the built htf_monthly behaviour does not change)
     stocks_mode: bool = False            # M17 (parked): the stock watch-list modules (stocks.py / stocks_watch.py) raise unless this is on
     stock_piv_n: int = 2                 # OT-stocks-smt-weekly-screen (cc10_016 ~00:02:01): the daily pivot size of the Dow-vs-stock screen
@@ -4245,7 +4252,7 @@ class Params:
             raise ValueError("bias_htf#6/7: bp_leg_days in 1..5")
         # caption-gap pass bias_htf#7/7 (bh7.py / bh7e.py)
         for name, ok in (("london_confirm", ("off", "block", "half")), ("true_day", ("session", "ipda")), ("htf_series", ("adjusted", "raw", "contract")),
-                         ("htf_monthly_series", ("adjusted", "raw"))):
+                         ("htf_monthly_series", ("adjusted", "raw")), ("venom_stop", ("bpr_ce", "pierce")), ("venom_entry", ("open", "close"))):
             if getattr(self, name) not in ok:
                 raise ValueError(f"{name} {getattr(self, name)!r}: expected one of {ok}")
         if not 0 < self.late_obj_k <= 1.0 or self.wr_lookback < 2 or self.stock_piv_n < 1 or self.stock_match_days < 0 or self.stock_near_high_pct < 0 or self.stock_ext_atr <= 0 or not 0 <= self.stock_rs_min <= 100 or self.stock_top_sectors < 1:
@@ -7878,6 +7885,9 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
             from .sb_model import as_add
             sb_new = as_add(ctx, p, trades[:n_main], sb_new)     # caption-gap E12-sb-as-add (058 ~00:43:10): a same-side SB fill during an open trade is a pyramid add
         trades += sb_new
+    if p.venom_model:
+        from .venom import run_venom
+        trades += run_venom(ctx, p, day, symbol, btag)                     # the Venom model (VENOM-STOP card): its own AM book
     if p.ndog_scalp and post_eve is not None and len(post_eve):
         trades += _SM4.ndog_scalp(ctx, post_eve, p, day, symbol, btag)       # caption-gap new-ndog-asian-scalp: the Asian-evening NDOG scalp (its own window, after the day's frame)
     if p.journal_timing and len(trades) > n_main:

@@ -70,7 +70,7 @@ def run(df, hist, p, rows=None, **kw):
 
 
 def ctx_for(df, hist, p, **kw):
-    ctx = S.DayCtx(df, df.index[0].date(), hist, 5, or_minutes=p.or_minutes)
+    ctx = S.DayCtx(df, df.index[0].date(), hist, 5, or_minutes=p.or_minutes, lunch_range=p.lunch_range)     # (as the engine builds it)
     ctx.gaps = kw.get("gaps")
     S._setup_news(ctx, ctx.day, p)
     S._extra_levels(ctx, df, hist, p, kw.get("eth"), kw.get("closes"))

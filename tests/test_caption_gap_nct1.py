@@ -368,7 +368,7 @@ def test_lunch_raid_pool_and_wait():
     lp = N2.lunch_pools(ctx, p)
     assert lp["d"] == 1 and lp["pools"] == {"recent": 103.5}                          # the 12:05 swing is ignored; 11:35 is the last swing before noon
     assert N2.lunch_pools(ctx, Params(**BASE, lunch_raid="am_low"))["pools"] == {"am_low": 100.0}
-    assert set(N2.lunch_pools(ctx, Params(**BASE, lunch_raid="first_of"))["pools"]) == {"recent", "am_low"}
+    assert set(N2.lunch_pools(ctx, Params(**BASE, lunch_raid="first_of"))["pools"]) == {"recent", "am_low", "after_1000", "macro_0950"}     # (cards stage b: the LUNCH-TARGET pools join first_of)
     assert N2.lunch_pools(ctx, Params(**BASE)) is None
     assert not N2.lunch_raided(ctx, p, at(ctx, "13:30")) and N2.lunch_raided(ctx, p, at(ctx, "13:40"))
     assert N2.gate2(ctx, p, NORMAL, "PM", 811, at(ctx, "13:30"), 840, [], {"PM": False}, {}, None, None)[0] == "x_lunch_raid_wait"
