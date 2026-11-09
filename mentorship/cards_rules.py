@@ -76,7 +76,7 @@ def _rth(g):
 
 def card_map(ds: list, p) -> dict:
     """{date: dict(fpfvg=[active FPFVGs], rr=(range high, range low, PDH, PDL, range-bound))}. An FPFVG is active through the rest of its ISO week
-    (FPFVG-DEF A) and, while unfilled (a later RTH low through a bullish one's bottom / high through a bearish one's top), for fvg_carry_days trading
+    (FPFVG-DEF A, filled or not) and, while unfilled (a later RTH low through a bullish one's bottom / high through a bearish one's top), for fvg_carry_days trading
     days (FVG-CARRY A). Today's own FPFVG is listed with its ts (usable after that bar). The history is what the run loaded [our interpretation]."""
     out, live, hist = {}, [], []
     for g in ds:
@@ -85,7 +85,7 @@ def card_map(ds: list, p) -> dict:
         row = dict(fpfvg=[], rr=None)
         if p.fpfvg_def != "off":
             wk = d.isocalendar()[:2]
-            live = [z for z in live if not z["filled"] and (z["wk"] == wk or z["age"] < p.fvg_carry_days)]
+            live = [z for z in live if z["wk"] == wk or (not z["filled"] and z["age"] < p.fvg_carry_days)]     # (S2 review: the week's FPFVG stays all week, filled or not)
             row["fpfvg"] = [dict(z) for z in live]
             z = fpfvg_of(g)
             if z is not None:
@@ -113,8 +113,8 @@ def card_map(ds: list, p) -> dict:
 
 def _lines(ctx, p, i: int, fps: list, sd=None, sw=None) -> list:
     """The grade lines (raw prices) [our interpretation]: the octants of the setup's dealing range (the sweep extreme .. the swing high the run into it
-    began from, "OB below the dealing range lower quadrant"), today's ORG octants k = -16..24 once the 09:30 bar has closed (an ORG at least
-    grade_min_pts tall) and the octants of each active FPFVG."""
+    began from, "OB below the dealing range lower quadrant"), today's ORG quadrants (k/4, -4..6 ORG heights: the gap and two heights either side)
+    once the 09:30 bar has closed (an ORG at least grade_min_pts tall) and the octants of each active FPFVG."""
     from . import bh5e as _BH5E
     out = []
     if sw is not None and sw.get("ref_px") is not None and sw["ref_px"] > sw["ext"]:
@@ -123,7 +123,7 @@ def _lines(ctx, p, i: int, fps: list, sd=None, sw=None) -> list:
     og = _BH5E.org_now(ctx, p, i)
     if og is not None and abs(og[1] - og[0]) >= p.grade_min_pts * p.es_pt:
         a, b = min(og), max(og)
-        out += [a + k * (b - a) / 8 for k in range(-16, 25)]
+        out += [a + k * (b - a) / 4 for k in range(-8, 13)]
     for z in fps:
         out += [z["bottom"] + k * (z["top"] - z["bottom"]) / 8 for k in range(9)]
     return out
@@ -136,21 +136,33 @@ def active_fpfvgs(ctx, i: int) -> list:
 
 
 FVG_KINDS = ("fvg",)
-OB_KINDS = ("ob_pre", "ob_anchor", "cisd_ob", "release_ob", "recap_ob", "reaper_ob", "ts_cc_1h_ob")
+def is_ob_kind(kind: str) -> bool:
+    """ob_pre, ob_anchor, cisd_ob, release_ob, recap_ob, reaper_ob, ts_cc_1h_ob, arr_ob, arr_ob_post, arr_cons_ob_open, ... (S2 review: every OB kind)."""
+    return "ob" in kind.split("_")
 
 
 def array_gate(ctx, sd, sw: dict, i: int, p, entry: float, stop: float, tags: dict):
     """FVG-VALID B / OB-VALID B / WICK-PRIORITY B at the head of strategy._finish_order (side space) -> (entry, stop, funnel key or None).
     FVG-VALID B: "either first presentation, and if not first presented, always anchored to an octant or a quadrant" - the first FVG of the leg after
-    the sweep, or one overlapping an active FPFVG of its side, or one whose middle candle touches a grade line. OB-VALID B: the OB zone on a grade line."""
+    the sweep, or one overlapping an active FPFVG of its side, or one whose gap holds a grade line (S2 review: the middle candle's whole range passed
+    nearly every gap). OB-VALID B: the OB zone (body low .. entry / zone top) holds a grade line. FPFVG-DEF / FVG-CARRY act through these two gates
+    (and the fvg_on_fpfvg / grade lines); the FPFVG is not an entry or target array of its own [our interpretation]."""
     kind = str(tags.get("entry_kind") or "")
     if kind in FVG_KINDS and tags.get("fvg_i") is not None:
         fi = int(tags["fvg_i"])
         g = next((z for z in sd.gaps if z.i == fi), None)
         if g is None:
+            hit("fvg_gap_unknown")             # (S2 review: an FVG entry whose gap is not in sd.gaps skips both rules)
             return entry, stop, None
         if p.wick_priority:
+            e0 = entry
             entry, stop = _wick_first(sd, g, i, p, entry, stop)
+            if entry != e0:                    # (S2 review) the order's zone is now the wick: CE holds, aborts, adds and the ladder read it
+                k = g.i - 2
+                bt = float(max(sd.o[k], sd.c[k]))
+                tags.update(fvg_bottom=bt, fvg_ce=float(entry), zone_top=float(sd.h[k]), ce_hold=False, wick_first=float(stop))
+                tags.pop("ladder", None)
+                tags.pop("ladder_fracs", None)
         if p.fvg_valid != "any":
             hit("eval_fvg_valid")
             first = min((z.i for z in sd.gaps if z.i - 2 >= sw["ext_i"] and z.i <= i), default=None) == fi
@@ -160,13 +172,11 @@ def array_gate(ctx, sd, sw: dict, i: int, p, entry: float, stop: float, tags: di
             if first or on_fp:
                 hit("fvg_first" if first else "fvg_on_fpfvg")
                 return entry, stop, None
-            m = fi - 1
-            mlo, mhi = sorted((sd.x(sd.l[m]), sd.x(sd.h[m])))
-            if not any(mlo <= v <= mhi for v in _lines(ctx, p, i, fps, sd, sw)):
+            if not any(lo <= v <= hi for v in _lines(ctx, p, i, fps, sd, sw)):
                 hit("fvg_not_valid")
                 return entry, stop, "x_fvg_not_valid"
             hit("fvg_grade")
-    elif kind in OB_KINDS and p.ob_valid != "any" and tags.get("fvg_bottom") is not None:
+    elif is_ob_kind(kind) and p.ob_valid != "any" and tags.get("fvg_bottom") is not None:
         hit("eval_ob_valid")
         top = tags.get("zone_top")
         top = entry if top is None else max(entry, float(top))
@@ -198,15 +208,15 @@ def _wick_first(sd, g, i: int, p, entry: float, stop: float):
 
 
 def range_gate(ctx, sd, o: dict, p) -> str | None:
-    """RANGE-REGIME A: on a range-bound day ("never trade outside the range", "I'm not teaching buy a breakout") no long entry above the PDH or the
-    multi-week range high and no short below the PDL or the range low; the turtle soups back into the range stay. None = allowed."""
+    """RANGE-REGIME A: on a range-bound day ("never trade outside the range", "I'm not teaching buy a breakout") no long entry above the PDH and
+    no short below the PDL; the turtle soups back into the range stay. None = allowed."""
     rr = (getattr(ctx, "cards", None) or {}).get("rr")
     if rr is None or not rr[4]:
         return None
     hit("eval_range_regime")
-    hi, lo, pdh, pdl, _ = rr
+    _, _, pdh, pdl, _ = rr
     e = sd.x(o["entry"])
-    if (sd.sign > 0 and e > min(pdh, hi)) or (sd.sign < 0 and e < max(pdl, lo)):
+    if (sd.sign > 0 and e > pdh) or (sd.sign < 0 and e < pdl):            # (the PDH / PDL sit inside the multi-week range, so they are the tighter edge)
         hit("range_breakout")
         return "x_range_breakout"
     return None

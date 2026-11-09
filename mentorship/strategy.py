@@ -9361,6 +9361,8 @@ def _ob_pre(ctx, sd, sw, i, p, session, risk_mult):
         entry = sw_e
     if entry >= sd.c[i]:
         entry = ob["body_top"]                     # [our interpretation] never a limit above the market
+        if p.ob_arm in ("intrabar_htf", "high") and entry >= sd.c[i]:
+            entry = sd.c[i] - p.tick               # (S2 review, OB-CLOSE A / B) armed by a trade-through on a bar that closed back under the OB open: just under the close
     mt_stop_ = p.ob_stop == "mt" or p.mt_break != "off"          # review fix (D4-mt-source-tally): mt_break also governs the pre-break OB (trade = the stop at the MT, close / warn = the far-edge stop + the MT close / warning)
     stop = ob["mt"] - p.pad if mt_stop_ else sw["ext"] - p.pad
     mt_close = (float(ob["mt"]), float(ob["lo"])) if mt_stop_ else None
@@ -9908,6 +9910,8 @@ def _finish_order(ctx, sd, i, p, session, sw, entry, stop, risk_mult, leg_hi, ta
         stop = st_g
     if p.protect_macro_ext or p.london_ext_guard:
         stop = _SM7.stop_adjust7(ctx, sd, sw, i, p, entry, stop, tags, session)      # caption-gap setups_models #7/7: the protected macro extreme, the London-extreme stop cap
+    if tags.get("wick_first") is not None:
+        stop = tags.pop("wick_first")                # WICK-PRIORITY B (S2 review): the stop stays beyond the wick
     risk = entry - stop
     if not (p.min_risk_pts * p.es_pt <= risk <= p.max_risk_pts * p.es_pt):
         _f("x_risk_too_small" if risk < p.min_risk_pts * p.es_pt else "x_risk_too_big")
