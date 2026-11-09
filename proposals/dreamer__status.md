@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-09 06:09:54Z; target: status.md; reason: T1 status 11-09: engine work resumed; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPVbGrYPEessaQmFFM5sJNwH; status: open -->
+<!-- proposal by dreamer at 2026-11-09 06:09:54Z; target: status.md; reason: T1 status 11-09: engine work resumed; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPVbGrYPEessaQmFFM5sJNwH; status: merged -->
 EXACT TEXT for status.md, new paragraph at end (supersedes "backtests are still paused" in the 11-06 paragraph):
 
 (2026-11-09 06:10 UTC) Engine work has resumed on the laptop in the thread "Fix engine tests and run 2021 screen". It is building the conflict-review card defaults (CONTRACT B with a front-month disk cache, and the Venom model with VENOM-STOP B). Its 143 legacy test failures are fixed, and the second-agent review found 3 bugs, which are now fixed. Still to do: the full pytest run, a fresh 2021 backtest screen, then commit and PR. The laptop session went offline at 06:01 UTC. Tie picks from conflict-review-4 are in decisions.md (v96).

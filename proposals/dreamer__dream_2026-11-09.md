@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-09 06:09:59Z; target: dream_2026-11-09.md; reason: Eighth dream report; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPVbGrYPEessaQmFFM5sJNwH; status: open -->
+<!-- proposal by dreamer at 2026-11-09 06:09:59Z; target: dream_2026-11-09.md; reason: Eighth dream report; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPVbGrYPEessaQmFFM5sJNwH; status: merged (T1 applied) -->
 # Dream report 2026-11-09 (reviewed: list_threads since 11-08 06:08 (curator, engine thread newest 6 msgs), CHANGELOG v92-v96)
 | # | ID | Change | Uplift |
 |---|----|--------|--------|
