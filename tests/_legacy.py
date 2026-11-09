@@ -16,6 +16,7 @@ LEGACY = dict(
     holiday_week_skip=False, smt_ym=True, add_cut="", lunch_range=(720, 810), macro_grid="fixed", season_quality="off",
     fed_chair_skip_am=False, depth_trail=0.0, ath_rule="off", tgif_thu=False, neutral_5050="off",
     fpfvg_def="off", fvg_carry_days=0, fvg_valid="any", ob_valid="any", wick_priority=False, wick_pick="longest", range_regime="off", ob_arm="leave", leg_fib="wick",
+    pm_window=None, pm_news_cut=False, org_size="off", org_after_ce="continue", org_ce_by=0,
 )
 
 

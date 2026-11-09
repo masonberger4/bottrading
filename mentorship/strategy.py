@@ -2984,6 +2984,12 @@ class Params:
     wick_pick: str = "reach"             # WICK-SELECT A (scorecard default; acts with wick_partials): of two wicks in the path the farthest-reaching one ("longest" = the old pick)
     range_regime: str = "fade"           # RANGE-REGIME A (scorecard default): in a range-bound market no breakout entries beyond the PDH / PDL or the multi-week range ("off" = B; cards_rules.range_gate); the FVG target is queued
     range_regime_days: int = 20          # [our interpretation] the multi-week range = the prior 20 RTH days; range-bound = no new 20-day extreme in the last 5 days and the prior close in its 20-80 % band
+    pm_window: tuple | None = (420, 540) # PREMARKET-RANGE A (scorecard default, Mase 2026-11-08): the pre-market pools (pmh / pml) = the high / low of today's bars in [start, end) minutes (07:00-09:00); None = the whole overnight to 09:30 (cards_rules.premarket_range)
+    pm_news_cut: bool = True             # PREMARKET-RANGE A: on an 08:30-release day the window ends at 08:30
+    org_size: str = "buckets"            # ORG-SIZE B (scorecard default): today's ORG is the AM draw by its size in NQ handles - < 20 none, 20-75 the ORG play, 75-120 none (gray), > 120 the near quadrant only ("gap and go"); "same" (A) every gap, "q20" (C) < 20 the CE only, "min30" (D) / "min40" (E) none under 30 / 40; "off" = no ORG play (cards_rules.org_play)
+    org_after_ce: str = "continue"       # ORG-AFTER-CE A (scorecard default): the ORG play's draw is the far edge (full gap closure); "done" (B) = the CE; the -0.5 SD / 6.5-8 SD extension is queued
+    org_ce_by: int = 600                 # ORG-CE-WINDOW A (scorecard default): the ORG play's CE (or its near-quadrant draw) must trade by this minute (10:00) or the draw is dropped (B: 630); 0 = no limit
+    org_handle: float = 0.25             # [our interpretation] ES points per NQ handle (the ORG-SIZE thresholds are NQ handles; ES ~ NQ / 4), x es_pt for the instrument
     peel_singles: bool = False           # X3-020-runner-peel-singles (020 ~00:10:25 ..): after >= 75 % is closed and above the target NWOG's CE: one lot per bar at an REH poke / a higher high / halfway to the gap top; the last unit gets a pivot-low stop
     pm_macro_runner: bool = True        # X3-027-pm-runner-macro (027 ~00:40:28): a PM trade's first partial lifts the stop to +1 pt, the last unit is held to 15:50 (the 15:45-15:50 macro, newscal.macro_wins)
     hh_low_hold: bool = False            # X3-runner-swing-low-must-hold (027 ~00:43:52): after the first partial, the swing low between a pivot high and the new high that takes it out must hold; a trade under it closes hh_low_frac of the rest
@@ -5795,6 +5801,10 @@ def _draw_prefs(ctx, sd, i: int, entry: float, p, session: str, keep: list) -> l
                 out.append((st["pcx"], "array", "org_far"))
             if p.org_half_draw and st["half"]:
                 out.append((st["pcx"], "array", "org_half"))
+    if session == "AM":
+        r_ = _CR.org_play(ctx, p, i)                       # ORG-SIZE / ORG-AFTER-CE / ORG-CE-WINDOW (scorecard cards): the ORG play, when the gap lies ahead
+        if r_ is not None and sd.x(ctx.org[-1][0]) > sd.x(ctx.org[-1][1]):
+            out.append((sd.x(r_[0]), "array", r_[1]))
     out += _LD4.draw_prefs(ctx, sd, i, entry, p)       # caption-gap levels_detectors #3/3 (reactionary high, parent pool, two-window IPDA pools)
     return out
 
@@ -6442,6 +6452,10 @@ def mark_levels(ctx, row: dict | None, t_lock: int, session: str, p, spent=(), o
             sg = 1 if up_ else -1
             if hh >= sg * (pc_ + op_) / 2 and hh < sg * pc_:
                 prefs.append((pc_, "array", "org_half", 0, k570))
+    if org_pref and session == "AM" and t_lock >= 570 and k570 < len(t):
+        r_ = _CR.org_play(ctx, p, kl)                                      # ORG-SIZE / ORG-AFTER-CE / ORG-CE-WINDOW (scorecard cards): the ORG play
+        if r_ is not None:
+            prefs.append((r_[0], "array", r_[1], 0, k570))
     if p.nwog_halfway and kl - 1 >= S:                                     # L5 halfway rule
         if getattr(ctx, "gaps", None) is not None:
             zs = [(hi_, lo_) for kind, hi_, lo_, _ in ctx.gaps if kind in ("nwog", "nwog_rth")]
@@ -6818,6 +6832,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     ctx.bias_row = bias                                   # setups_models: htf table row (draws)
     _BD.apply_open_src(ctx, p, intermarket)               # bias_htf D22: bias_open_src "spy" / "es_map"
     ctx.eth = eth
+    _CR.premarket_range(ctx, df, p, events(day))          # PREMARKET-RANGE A (scorecard card): the pre-market pools from the 07:00-09:00 window
     ctx.cards = cards                                     # FPFVG-DEF / FVG-CARRY / RANGE-REGIME (scorecard cards): the day's row of backtest.Prepared.cards (cards_rules.card_map)
     ctx.ath = ath                                         # ATH-RULE (scorecard card): the highest high before today (backtest.Prepared.ath)
     ctx.daily_all = daily_all                             # caption-gap pass day_week_context#1/3: {date: close} of every completed session (season_min_rank composite; prior years only are read)
@@ -6828,6 +6843,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     _extra_levels(ctx, df, hist, p, eth, closes)           # levels_detectors
     pctx = DayCtx(partner[0], day, partner[1], tf, lunch_range=p.lunch_range) if partner is not None else None
     if pctx is not None:
+        _CR.premarket_range(pctx, partner[0], p, events(day))
         _setup_news(pctx, day, p)
         _extra_levels(pctx, partner[0], partner[1], p)
     mg = p.min_fvg_pts * p.es_pt
@@ -6853,6 +6869,7 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
     ctx.partner2 = None
     if partner2 is not None and p.smt_ym:              # SMT-SET card: B (default) = NQ vs ES only, the Dow left out
         c2 = DayCtx(partner2[0], day, partner2[1], tf, lunch_range=p.lunch_range)
+        _CR.premarket_range(c2, partner2[0], p, events(day))
         _setup_news(c2, day, p)
         _extra_levels(c2, partner2[0], partner2[1], p)
         ctx.partner2 = (c2, {1: Side(1, c2.o, c2.h, c2.l, c2.c, p.pivot_n, mg, **sk),
@@ -8045,7 +8062,7 @@ def _lock_step(ctx, p, lock_t, i, t, bias_by_cut, done, spent, all_locks, pendin
                 continue
         if not lk["side"] or lk["delivered"]:
             continue
-        if lk["name"] == "org_far" and _org_break(ctx, p, i):
+        if (lk["name"] == "org_far" and _org_break(ctx, p, i)) or (str(lk["name"]).startswith("org_play") and _CR.org_play(ctx, p, i) is None):
             # L7 (review fix): the ORG acted as a breakaway (no attempt by 09:30 + org_break_min) -
             # its far edge is no longer the draw: the lock as marked at its time without it
             nl = mark_levels(ctx, (bias_by_cut or {}).get(lk["t_lock"]), lk["t_lock"], "PM" if s_ == "LH" else s_, p,

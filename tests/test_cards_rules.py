@@ -111,3 +111,50 @@ def test_wick_priority_moves_the_limit_to_the_candle1_wick_ce():
     assert e == 102.5 and s == 101.0 - p.pad
     e, s = CR._wick_first(sd, Zone("bull", top=108.0, bottom=104.0, i=3), 3, p, 104.0, 99.0)   # a 4-pt gap outgrows the wick: unchanged
     assert (e, s) == (104.0, 99.0)
+
+
+def test_premarket_range_is_the_0700_0900_window_and_ends_0830_on_news():
+    ix = pd.date_range("2024-01-09 04:00", "2024-01-09 09:29", freq="1min")
+    hi = pd.Series(100.0, index=ix)
+    hi[pd.Timestamp("2024-01-09 05:00")] = 130.0           # an overnight high outside the window
+    hi[pd.Timestamp("2024-01-09 08:45")] = 112.0           # after 08:30
+    hi[pd.Timestamp("2024-01-09 08:10")] = 108.0
+    df = pd.DataFrame({"open": 100.0, "high": hi, "low": 99.0, "close": 100.0}, index=ix)
+    ctx = SimpleNamespace(pd={"pmh": 130.0, "pml": 99.0})
+    CR.premarket_range(ctx, df, Params(pm_window=(420, 540), pm_news_cut=True), set())
+    assert ctx.pd["pmh"] == 112.0
+    CR.premarket_range(ctx, df, Params(pm_window=(420, 540), pm_news_cut=True), {"cpi"})
+    assert ctx.pd["pmh"] == 108.0
+    ctx = SimpleNamespace(pd={"pmh": 130.0, "pml": 99.0})
+    CR.premarket_range(ctx, df, Params(pm_window=None), {"cpi"})
+    assert ctx.pd["pmh"] == 130.0                           # None = the overnight range as it was
+
+
+def _org_ctx(pc, op, highs, tf=5):
+    import numpy as np
+    t = np.array([570 + tf * k for k in range(len(highs))])
+    h = np.array(highs, dtype=float)
+    return SimpleNamespace(org_today=True, org=[(pc, op)], start=0, t=t, h=h, l=h - 1.0)
+
+
+def test_org_play_by_size_after_ce_and_window():
+    p = Params(es_pt=1.0, org_size="buckets", org_after_ce="continue", org_ce_by=600)
+    # gap down 10 ES pts = 40 NQ handles: the play, far edge (the prior close) while the CE (95) is not yet late
+    ctx = _org_ctx(100.0, 90.0, [91, 92, 96, 97, 97, 97, 97, 97])
+    assert CR.org_play(ctx, p, 2) == (100.0, "org_play_far")
+    assert CR.org_play(ctx, p, 7) == (100.0, "org_play_far")              # the CE traded at 09:40: kept after 10:00
+    late = _org_ctx(100.0, 90.0, [91, 92, 93, 93, 93, 93, 96, 96])
+    assert CR.org_play(late, p, 5) is not None and CR.org_play(late, p, 7) is None   # the CE only at 10:00: dropped
+    assert CR.org_play(late, Params(es_pt=1.0, org_ce_by=630), 7) is not None         # ORG-CE-WINDOW B
+    assert CR.org_play(ctx, Params(es_pt=1.0, org_after_ce="done"), 2) == (95.0, "org_play_ce")
+    assert CR.org_play(_org_ctx(100.0, 96.0, [97] * 3), p, 1) is None                 # 16 handles: none
+    assert CR.org_play(_org_ctx(100.0, 80.0, [81] * 3), p, 1) is None                 # 80 handles: gray
+    assert CR.org_play(_org_ctx(140.0, 100.0, [101] * 3), p, 1) == (110.0, "org_play_q1")   # 160 handles: the near quadrant
+    assert CR.org_play(_org_ctx(100.0, 96.0, [97] * 3), Params(es_pt=1.0, org_size="q20"), 1) == (98.0, "org_play_ce")
+    assert CR.org_play(_org_ctx(100.0, 92.0, [93] * 3), Params(es_pt=1.0, org_size="min40"), 1) is None   # 32 handles
+    assert CR.org_play(ctx, Params(es_pt=1.0, org_size="off"), 2) is None
+
+
+def test_card_defaults_of_stage_s3():
+    p = Params()
+    assert (p.pm_window, p.pm_news_cut, p.org_size, p.org_after_ce, p.org_ce_by) == ((420, 540), True, "buckets", "continue", 600)

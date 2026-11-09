@@ -152,6 +152,27 @@ CARDS.update({
         "E": dict(nwog_days=60, ndog_life="friday", org_days=4),   # today + the last three; the ATH carry-on is not built
     },
     "NDOG-DEF": {"A": {}},
+    # stage S3 (Mase 2026-11-08: build every card default); the rules are in cards_rules.premarket_range / org_play
+    "PREMARKET-RANGE": {                  # the pre-market pools (pmh / pml)
+        "A": dict(pm_window=(420, 540), pm_news_cut=True),     # 07:00-09:00, to 08:30 on an 08:30-release day
+        "E": dict(pm_window=(480, 570), pm_news_cut=False),    # 08:00-09:30 (Venom)
+        "H": dict(pm_window=(0, 420), pm_news_cut=False),      # 00:00-07:00 overnight [the relative-equal-lows preference is not built]
+    },
+    "ORG-SIZE": {                         # today's ORG as the AM draw by its size in NQ handles (org_handle ES points each)
+        "A": dict(org_size="same"),
+        "B": dict(org_size="buckets"),    # < 20 none [our interpretation], 20-75 the play, 75-120 gray = none, > 120 the near quadrant then gap and go
+        "C": dict(org_size="q20"),        # < 20 handles: the CE only; quadrants (grade lines) on 20+
+        "D": dict(org_size="min30"),      # no ORG play under ~30 handles [the "wait for 10:00" part is not built]
+        "E": dict(org_size="min40"),      # 40+ handles [the "75+ preferred" part is not built]
+    },
+    "ORG-AFTER-CE": {
+        "A": dict(org_after_ce="continue"),   # the far edge (full gap closure); the -0.5 SD / 6.5-8 SD extension is queued
+        "B": dict(org_after_ce="done"),       # the CE is the draw
+    },
+    "ORG-CE-WINDOW": {                    # the ORG play's CE must trade by this minute, else the draw is dropped (relocked)
+        "A": dict(org_ce_by=600),
+        "B": dict(org_ce_by=630),
+    },
 })
 SAME_AS_ENGINE.update({
     ("LONDON-MACRO", "B"): "no London macro time; the engine has none",
@@ -160,16 +181,17 @@ SAME_AS_ENGINE.update({
 })
 NOT_BUILT.update({
     ("LONDON-MACRO", "A"): "London entries are off (london_kz); a 03:30 macro gate has nothing to gate",
-    ("PREMARKET-RANGE", "A"): Q, ("PREMARKET-RANGE", "B"): Q, ("PREMARKET-RANGE", "C"): Q,
-    ("PREMARKET-RANGE", "D"): Q, ("PREMARKET-RANGE", "E"): Q, ("PREMARKET-RANGE", "F"): Q,
-    ("PREMARKET-RANGE", "G"): Q, ("PREMARKET-RANGE", "H"): Q,
+    ("PREMARKET-RANGE", "B"): "news-week vs other-week windows need a news-week rule; queued",
+    ("PREMARKET-RANGE", "C"): "the graded, SD-projected pre-release range is not built; queued",
+    ("PREMARKET-RANGE", "D"): "three hourly 30-minute ranges and the next-30-minute opening range are not built; queued",
+    ("PREMARKET-RANGE", "F"): "the 06:00 start on NFP weeks only needs a per-week window; queued",
+    ("PREMARKET-RANGE", "G"): "'the smoothest REQ high / low' is judgment; no exact rule yet",
     ("OPEN-RANGE-TRADE", "D"): "needs a 'clean pre-market read' rule (judgment); no exact rule yet",
     ("FPFVG-DEF", "B"): Q, ("FPFVG-DEF", "C"): Q, ("FPFVG-DEF", "D"): Q,
     ("FPFVG-DEF", "E"): "sub-1m charts; the engine runs 1m / 5m bars",
     ("FPFVG-DEF", "F"): Q, ("FPFVG-DEF", "G"): Q, ("FPFVG-DEF", "H"): Q,
-    ("ORG-CE-WINDOW", "A"): Q, ("ORG-CE-WINDOW", "B"): Q, ("ORG-CE-WINDOW", "C"): Q, ("ORG-CE-WINDOW", "D"): Q,
-    ("ORG-AFTER-CE", "A"): Q, ("ORG-AFTER-CE", "B"): Q,
-    ("ORG-SIZE", "A"): Q, ("ORG-SIZE", "B"): Q, ("ORG-SIZE", "C"): Q, ("ORG-SIZE", "D"): Q, ("ORG-SIZE", "E"): Q,
+    ("ORG-CE-WINDOW", "C"): "low-resistance run days with unfinished liquidity beyond need a day-type rule; queued",
+    ("ORG-CE-WINDOW", "D"): "the daily PD array pointing at the half gap is not built; queued",
     ("GAP-LIFE", "D"): "NDOG / ORG two-week life keyed to Mon / Fri only; queued",
     ("NDOG-DEF", "B"): Q,
 })

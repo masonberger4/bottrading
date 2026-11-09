@@ -3,6 +3,8 @@
 Each function sits behind its Params switch; interpretations the card does not pin down are marked [our interpretation]. `HITS` counts the code paths that ran (tests)."""
 from __future__ import annotations
 
+import numpy as np
+
 HITS: dict[str, int] = {}
 
 
@@ -121,7 +123,8 @@ def _lines(ctx, p, i: int, fps: list, sd=None, sw=None) -> list:
         a, b = sw["ext"], sw["ref_px"]
         out += [float(sd.x(a + k * (b - a) / 8)) for k in range(9)]
     og = _BH5E.org_now(ctx, p, i)
-    if og is not None and abs(og[1] - og[0]) >= p.grade_min_pts * p.es_pt:
+    qmin = max(p.grade_min_pts, 20 * p.org_handle if p.org_size == "q20" else 0.0) * p.es_pt     # ORG-SIZE C: quadrants only on a gap of 20+ handles
+    if og is not None and abs(og[1] - og[0]) >= qmin:
         a, b = min(og), max(og)
         out += [a + k * (b - a) / 4 for k in range(-8, 13)]
     for z in fps:
@@ -222,6 +225,63 @@ def range_gate(ctx, sd, o: dict, p) -> str | None:
     return None
 
 
+# --- PREMARKET-RANGE --------------------------------------------------------------------------------------------
+def premarket_range(ctx, df, p, tags: set) -> None:
+    """PREMARKET-RANGE A: the pre-market pools ctx.pd pmh / pml are the high / low of today's bars that start in pm_window (07:00-09:00, to 08:30 on an
+    08:30-release day with pm_news_cut) instead of the whole overnight to 09:30. No bar in the window = no pre-market pools."""
+    if p.pm_window is None:
+        return
+    from .strategy import NEWS_0830
+    a, b = p.pm_window
+    if p.pm_news_cut and tags & NEWS_0830:
+        b = min(b, 510)
+    tt = df.index.hour * 60 + df.index.minute
+    w = df[(tt >= a) & (tt < b)]
+    if len(w):
+        hit("pm_window")
+        ctx.pd["pmh"], ctx.pd["pml"] = float(w.high.max()), float(w.low.min())
+    else:
+        ctx.pd.pop("pmh", None)
+        ctx.pd.pop("pml", None)
+
+
+# --- ORG-SIZE / ORG-AFTER-CE / ORG-CE-WINDOW: the ORG play --------------------------------------------------------
+def org_play(ctx, p, i: int):
+    """Today's ORG as the AM draw at bar i (bars before i are closed) -> (price, name) or None.
+    ORG-SIZE picks by the gap's size in NQ handles (org_handle ES points each): B "20-75 handles likes the odds of trading to mid-gap, 75-120 gray,
+    over 120 ... up to about a quarter ... then gap and go" -> < 20 and 75-120 none [our interpretation], > 120 the near quadrant (25 %); D / E none under
+    30 / 40 handles; C the CE only under 20 handles. ORG-AFTER-CE: "continue" = the far edge (the prior close, full gap closure), "done" = the CE.
+    ORG-CE-WINDOW: from org_ce_by on, the draw stays only if the CE (the near quadrant for an extreme gap) traded 09:30 .. org_ce_by."""
+    if p.org_size == "off" or not (getattr(ctx, "org_today", False) and ctx.org):
+        return None
+    pc, op = ctx.org[-1]
+    if pc == op:
+        return None
+    k0 = int(ctx.start + np.searchsorted(ctx.t[ctx.start:], 570))
+    if i < k0:
+        return None
+    hnd = abs(pc - op) / (p.org_handle * p.es_pt)
+    ce, q1 = (pc + op) / 2, op + 0.25 * (pc - op)
+    m = p.org_size
+    if (m == "buckets" and (hnd < 20 or 75 <= hnd < 120)) or (m == "min30" and hnd < 30) or (m == "min40" and hnd < 40):
+        hit("org_size_none")
+        return None
+    if m == "buckets" and hnd >= 120:
+        out, gate = (q1, "org_play_q1"), q1
+    elif (m == "q20" and hnd < 20) or p.org_after_ce == "done":
+        out, gate = (ce, "org_play_ce"), ce
+    else:
+        out, gate = (pc, "org_play_far"), ce
+    if p.org_ce_by and ctx.t[i] >= p.org_ce_by:
+        kb = int(ctx.start + np.searchsorted(ctx.t[ctx.start:], p.org_ce_by))
+        hi, lo = ctx.h[k0:min(i, kb)], ctx.l[k0:min(i, kb)]
+        if not len(hi) or not (hi.max() >= gate if pc > op else lo.min() <= gate):
+            hit("org_ce_late")
+            return None
+    hit(out[1])
+    return out
+
+
 def check_params(p) -> None:
     """Validation (strategy.Params.__post_init__)."""
     if p.ath_rule not in ("off", "no_top_pick", "longs_only"):
@@ -234,3 +294,9 @@ def check_params(p) -> None:
         raise ValueError("wick_pick reach / longest; range_regime off / fade")
     if p.fvg_carry_days < 0 or p.range_regime_days < 6 or p.grade_min_pts < 0:
         raise ValueError("fvg_carry_days >= 0, range_regime_days >= 6, grade_min_pts >= 0")
+    if p.pm_window is not None and not (len(p.pm_window) == 2 and 0 <= p.pm_window[0] < p.pm_window[1] <= 570):
+        raise ValueError("pm_window None or (start, end) minutes with 0 <= start < end <= 570")
+    if p.org_size not in ("off", "same", "buckets", "q20", "min30", "min40") or p.org_after_ce not in ("continue", "done"):
+        raise ValueError("org_size off / same / buckets / q20 / min30 / min40; org_after_ce continue / done")
+    if p.org_handle <= 0 or not (p.org_ce_by == 0 or 571 <= p.org_ce_by <= 960):
+        raise ValueError("org_handle > 0; org_ce_by 0 or 571..960")
