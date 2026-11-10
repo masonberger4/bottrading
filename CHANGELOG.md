@@ -106,3 +106,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v100 | 2026-11-10 00:49:33Z | Run memory curator | results.md | append | record cards screen 2026-11-09 (Mase approved) | cmsg_01FAHERC1Lsrg2bYtrKuRHmP3GVWzwRJCsgkCXWuNjtmJd | b059abd39b -> 311974c673 |
 | v101 | 2026-11-10 01:20:56Z | Run memory curator, part 2 | ACL.json | edit | add successor curator thread to writers (via PR; curator could not self-add) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVZGd1SmC3x6F6RsU8SKpK8 | 9331d5ae72 -> 431a57bcbd |
 | v102 | 2026-11-10 06:09:21Z | dreamer | proposals/dreamer__status.md | proposal | S1 status 11-10 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPDbwftrPdo3nKjgAAR3KTLm | 4cbe1bc005 -> e8dc0698c1 |
+| v103 | 2026-11-10 06:09:25Z | dreamer | proposals/dreamer__data.md | proposal | S2 Databento holdings and roll facts | cmsg_01FAHERC1Lsrg2bYtrKuRHmPDbwftrPdo3nKjgAAR3KTLm | ABSENT -> edf122dc1b |
