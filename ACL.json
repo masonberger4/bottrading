@@ -4,9 +4,11 @@
     "Mase",
     "coordinator",
     "Organize project memory into folder",
-    "Run memory curator"
+    "Run memory curator",
+    "Run memory curator, part 2"
   ],
   "notes": {
-    "Run memory curator": "role: curator; applies only changes Mase approves in chat; Mase 2026-11-03"
+    "Run memory curator": "role: curator; applies only changes Mase approves in chat; Mase 2026-11-03",
+    "Run memory curator, part 2": "role: curator (successor to 'Run memory curator'); applies only changes Mase approves in chat; added 2026-11-10 when Mase asked for a fresh curator thread"
   }
 }
