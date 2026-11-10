@@ -103,3 +103,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v97 | 2026-11-09 06:09:54Z | dreamer | proposals/dreamer__status.md | proposal | T1 status 11-09: engine work resumed | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVbGrYPEessaQmFFM5sJNwH | 833753c4f4 -> e357bb4211 |
 | v98 | 2026-11-09 06:09:59Z | dreamer | proposals/dreamer__dream_2026-11-09.md | proposal | Eighth dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmPVbGrYPEessaQmFFM5sJNwH | ABSENT -> 1ce623f754 |
 | v99 | 2026-11-09 18:02:51Z | Run memory curator | status.md | edit | apply approved T1 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPUTjkWgLa7Hr7yje5sVB7ZA | 72c50c1738 -> 5dceeebbc5 |
+| v100 | 2026-11-10 00:49:33Z | Run memory curator | results.md | append | record cards screen 2026-11-09 (Mase approved) | cmsg_01FAHERC1Lsrg2bYtrKuRHmP3GVWzwRJCsgkCXWuNjtmJd | b059abd39b -> 311974c673 |
