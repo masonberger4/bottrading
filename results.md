@@ -144,3 +144,10 @@ Open decisions and next steps at conversation end:
 
 ## Phase 1 screen (2021, all variants): results (append rankings here; both threads use this heading)
 Laptop: 9 of 1,332 jobs at 21:38 UTC 2026-11-01 (bias-cache build). Cloud: ~55 jobs per 10 min at 21:26. Add: variant, trades, $ at $1k risk, movers vs default.
+
+## Cards screen 2026-11-09 (Mase asked to record, 2026-11-10)
+Engine f5dbfe0 (mentorship 16aea32 + PR #59), ES 5m Databento, $1k risk. Both runs read the complete parquet (2016-01-03 to 2026-10-16, 760,505 five-minute bars).
+- Defaults baseline 2019-26: 168 trades, +$810 total; 2019-22 -$5,901, 2023-26 +$6,711. By year (trades/$): 2019 13/+459, 2020 21/-3442, 2021 17/+101, 2022 28/-3019, 2023 32/+847, 2024 15/-1656, 2025 22/+6354, 2026 20/+1166. Venom fired 2x in 8 years.
+- 2021 card screen: 72 single-switch variants, 43 identical to defaults. Best PREMARKET-ENTRY A +$1,120 vs defaults, STOP-MGMT B +$697; worst LUNCH-TRADE A -$824. All noise-sized at ~17 trades/yr.
+- Full suite 5315 pass, 3 skipped; 2 stale tests fixed in PR #59. Handoff: mentorship/handoff_cards5_2026-11-09.md on branch claude/project-thread-kekmm5.
+- Data note: laptop data\mentorship\ES_1min_dbraw.csv is truncated to its first week; the parquet copy is complete.
