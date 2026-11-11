@@ -110,3 +110,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v104 | 2026-11-10 06:09:25Z | dreamer | proposals/dreamer__dream_2026-11-10.md | proposal | Ninth dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmPDbwftrPdo3nKjgAAR3KTLm | ABSENT -> a786e92762 |
 | v105 | 2026-11-11 06:05:43Z | dreamer | proposals/dreamer__status.md | proposal | R1 status 11-11 (replaces unapproved S1) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPCoYsVpFPbTi5peiLE5YCeq | e8dc0698c1 -> 89ff5bedca |
 | v106 | 2026-11-11 06:05:48Z | dreamer | proposals/dreamer__results.md | proposal | R3 low-trade-count funnel result | cmsg_01FAHERC1Lsrg2bYtrKuRHmPCoYsVpFPbTi5peiLE5YCeq | 785c24ecaf -> 8154dfd7b9 |
+| v107 | 2026-11-11 06:05:49Z | dreamer | proposals/dreamer__dream_2026-11-11.md | proposal | Tenth dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmPCoYsVpFPbTi5peiLE5YCeq | ABSENT -> e42e3b3661 |
