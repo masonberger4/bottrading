@@ -9,7 +9,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 import pandas as pd
 
-OUT = Path("C:/Users/mason/bottrading/runs/trade_count_2026-11-11/out")
+OUT = Path(os.environ.get("FUNNEL_OUT", "C:/Users/mason/bottrading/runs/trade_count_2026-11-11/out"))
+YEARS = [int(y) for y in os.environ.get("FUNNEL_YEARS", "2019,2020,2021,2022,2023,2024,2025,2026").split(",")]
 
 
 def job(j):
@@ -26,7 +27,11 @@ def job(j):
         cap.setdefault("attrs", t.attrs)
         return t
     B.run = run
+    from collections import Counter
+    from mentorship import strategy as ST
+    ST.FUNNEL = Counter()                  # strategy's own setup funnel (stage keys "1_..." and rejections "x_...")
     t = S._dec_job((tf, year, name))
+    pd.Series(ST.FUNNEL, dtype="int64").sort_values(ascending=False).to_csv(OUT / f"funnel_{name}_{year}.csv", header=["n"])
     at = cap.get("attrs", {})
     sk = pd.DataFrame(at.get("skips", []), columns=["day", "symbol", "stage", "reason"][:len(at["skips"][0])] if at.get("skips") else ["day", "symbol", "stage", "reason"])
     days = at.get("days")
@@ -39,7 +44,7 @@ if __name__ == "__main__":
     for a in sys.argv[1:]:
         n, v = a.split("=", 1); variants[n] = eval(v)
     OUT.mkdir(parents=True, exist_ok=True)
-    jobs = [(5, y, n, kw) for n, kw in variants.items() for y in range(2019, 2027)]
+    jobs = [(5, y, n, kw) for n, kw in variants.items() for y in YEARS]
     todo = [j for j in jobs if not (OUT / f"trades_{j[2]}_{j[1]}.csv").exists()]
     print(len(jobs), "jobs,", len(todo), "to do", flush=True)
     from mentorship import study as S
