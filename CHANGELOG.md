@@ -108,3 +108,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v102 | 2026-11-10 06:09:21Z | dreamer | proposals/dreamer__status.md | proposal | S1 status 11-10 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPDbwftrPdo3nKjgAAR3KTLm | 4cbe1bc005 -> e8dc0698c1 |
 | v103 | 2026-11-10 06:09:25Z | dreamer | proposals/dreamer__data.md | proposal | S2 Databento holdings and roll facts | cmsg_01FAHERC1Lsrg2bYtrKuRHmPDbwftrPdo3nKjgAAR3KTLm | ABSENT -> edf122dc1b |
 | v104 | 2026-11-10 06:09:25Z | dreamer | proposals/dreamer__dream_2026-11-10.md | proposal | Ninth dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmPDbwftrPdo3nKjgAAR3KTLm | ABSENT -> a786e92762 |
+| v105 | 2026-11-11 06:05:43Z | dreamer | proposals/dreamer__status.md | proposal | R1 status 11-11 (replaces unapproved S1) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPCoYsVpFPbTi5peiLE5YCeq | e8dc0698c1 -> 89ff5bedca |
