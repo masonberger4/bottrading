@@ -55,3 +55,20 @@ carried forward.
    week's direction, which none of these fully is.
 2. Rerun wd_pwhl (and wd_off) with the AM and PM 14:00-15:00 setups switched off as a real run, not post hoc.
 3. Lunch is the engine's edge and it is lumpy (2024 -9.3k with week-done off): look at lunch 2024 before trusting it.
+
+## Step 4: real rerun with am_mm and pm_sb switched off (2026-11-12, coordinator's go-ahead while Mase is away)
+
+Runner `funnel_x.py` (`run3.ps1`): `funnel.py` plus `_excl`, which drops an order in `strategy._finish_order` when its
+setup is `am_mm` or `pm_sb`, before it is placed. Runner-side only, no engine change. The 11 `release_ob` trades also
+vanish (their orders leave `_finish_order` named `am_mm`).
+
+| variant | trades | $ | 2019-22 | 2023-26 | max DD | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 | 2026 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| defaults | 166 | -490 | -5,902 | +5,412 | -9,803 | 459 | -3,444 | 93 | -3,011 | 365 | -1,923 | 5,981 | 989 |
+| wd_pwhl | 338 | +4,441 | +2,099 | +2,342 | -13,224 | 5,246 | -182 | -355 | -2,609 | -2,091 | -2,545 | 5,332 | 1,646 |
+| pwhl_x (wd_pwhl, am_mm + pm_sb off) | 276 | +7,441 | +3,838 | +3,603 | -10,999 | 3,780 | 1,568 | 595 | -2,106 | -813 | -3,583 | 6,048 | 1,951 |
+| wd_off | 899 | -2,106 | +4,937 | -7,043 | -20,521 | 5,075 | -987 | 82 | 767 | 4,132 | -12,844 | -324 | 1,993 |
+| off_x (wd_off, am_mm + pm_sb off) | 664 | +10,213 | +8,965 | +1,248 | -16,460 | 1,800 | 1,099 | 2,260 | 3,806 | 6,304 | -10,169 | 2,655 | 2,457 |
+
+Choosing on 2019-22 picks off_x; it holds up in 2023-26 (+1,248) but only just, with 2024 at -10,169 (lunch). pwhl_x is
+steadier (+3.8k / +3.6k, smaller DD, 5 of 8 years up). The other setups barely change when the two are removed.
