@@ -46,3 +46,13 @@ one-bar move).
 `data/mentorship/NQ_1min_dbmeta.parquet` and `YM_1min_dbmeta.parquet` only cover 2019-01-01 onward. Their `_1min_db`
 files start in 2016, so 1.03M NQ bars and 1.02M YM bars have no adj / instrument_id (ES meta is complete). The new folder has
 full meta for all three.
+
+## Switch (2026-11-11, Mase asked)
+
+`switch.py` moved the engine's old ES / NQ / YM files (`<S>_1min_db`, `_dbmeta`, `_dbraw`, `<S>_5min_db`, `_dbmeta`,
+CSV and parquet) to `data/mentorship/backup_pre_rollfix_2026-11-10/` (22 files), wrote the new CSVs in the old layout and
+copied the fixed parquets in, newer than the CSVs. `verify_switch.py`: the engine's `load`, `load_meta` and `load_raw`
+return the fixed series for 1 and 5 minutes, raw + adj = adjusted, and the session counts match the old files (ES 2,692,
+NQ 2,692, YM 2,689). NQ and YM now have full 2016-26 meta and a `_1min_dbraw.parquet`.
+
+To undo: `.venv\Scripts\python.exe runs\roll_fix_2026-11-10\switch.py --undo`.
