@@ -41,7 +41,7 @@ def main():
     ok = R[R.n_h1 >= mint]
     print(f"\n{len(R)} combinations, {len(ok)} with at least {mint} trades in 2019-22.")
     print(f"Positive in 2019-22: {np.mean(ok.h1 > 0):.0%}; positive in 2023-26: {np.mean(ok.h2 > 0):.0%}; positive in both: {np.mean((ok.h1 > 0) & (ok.h2 > 0)):.0%}")
-    print(f"Rank correlation of 2019-22 total with 2023-26 total across combinations: {ok.h1.corr(ok.h2, method='spearman'):+.2f}")
+    print(f"Rank correlation of 2019-22 total with 2023-26 total across combinations: {ok.h1.rank().corr(ok.h2.rank()):+.2f}")
     print(f"Best t-stat of any combination: {R.t.max():.2f}; combinations a random filter beats less than 5% of the time: {int((ok.rand_as_good < .05).sum())} of {len(ok)}")
     cols = ["combo", "trades", "total", "h1", "h2", "h1_yrs_up", "t", "rand_as_good"]
     fmt = lambda d: d[cols].round({"total": 0, "h1": 0, "h2": 0, "t": 2, "rand_as_good": 2}).to_string(index=False)
