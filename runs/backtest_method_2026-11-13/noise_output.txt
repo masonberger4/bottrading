@@ -1,0 +1,11 @@
+(run 2026-11-13 on runs/weekly_rule_2026-11-12/out, engine 2101d04, ES 5m fixed-roll, $1k risk, 2019-26)
+variant      trades  total   mean/trade  sd/trade  t-stat  90% range of total (weekly-block bootstrap)  costs
+defaults       166    -490      -3.0       612     -0.06   [-13,524, +12,848]                            2,744
+wd_pwhl        338  +4,441     +13.1       661      0.37   [-13,589, +23,317]                            5,522
+pwhl_x         276  +7,441     +27.0       719      0.62   [ -9,843, +25,370]                            4,546
+wd_off         899  -2,106      -2.3       602     -0.12   [-31,318, +27,513]                           14,719
+off_x          664 +10,213     +15.4       670      0.59   [-16,492, +38,031]                           10,944
+wd_nearest     383    -372      -1.0       657     -0.03   [-19,884, +18,836]                            6,240
+random-filter test: wd_off -> wd_pwhl actual +4,441; random day subsets with the same trade count: mean -866, sd 8,690; 27% of random subsets do as well or better
+random-filter test: off_x -> pwhl_x actual +7,441; random: mean +4,266, sd 8,600; 35% do as well or better
+cost stress (net at 1x / 2x / 3x the modelled cost of 0.10 pt per side): pwhl_x +7,441 / +2,894 / -1,652; off_x +10,213 / -731 / -11,674
