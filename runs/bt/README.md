@@ -31,7 +31,8 @@ $ at "$1k risk", 2019-26 (full table with years in `results_2026-11-13/report.tx
 - Every variant loses on NQ and on YM, and all three markets together lose in every variant. The ES gains look like luck.
 - With the week rule off (most trades), the three-market loss is large enough to be real (t = -2.7): the setups as
   built lose money after costs.
-- The week rule does help in all three markets (paired difference to wd_off: t = 2.0 to 2.7 per market), but it helps
+- The week rule (wd_pwhl) does better than no week rule in all three markets (paired weekly difference: t = 0.5 on ES,
+  2.1 on NQ, 2.4 on YM, 2.7 together), but it helps
   by trading less of a losing set, not by making it profitable.
 - By setup, week rule off, all three markets (`by_setup.txt`): lunch 1,658 trades / -$53.5k; AM 387 / -$12.0k; PM
   Silver Bullet 355 / -$18.8k (t = -3.1); last hour 215 / -$1.3k. ES lunch +$5.8k is the outlier (NQ -$24.8k, YM -$34.5k).
