@@ -1,4 +1,4 @@
-<!-- proposal by Trim the memory index at 2026-11-13 00:55:45Z; target: laptop_ops.md; reason: Trim index: move non-universal entries verbatim into laptop_ops.md (Mase approved); link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPCBXrXP5uuZtZNULyBH5Yjw; status: open -->
+<!-- proposal by Trim the memory index at 2026-11-13 00:55:45Z; target: laptop_ops.md; reason: Trim index: move non-universal entries verbatim into laptop_ops.md (Mase approved); link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPCBXrXP5uuZtZNULyBH5Yjw; status: merged -->
 EXACT TEXT for laptop_ops.md, new section at end:
 
 ## Moved from the MEMORY.md index 2026-11-13 (Mase approved trimming the index, 2026-11-13 00:52 UTC; entries verbatim as they stood in the index on 2026-11-12)

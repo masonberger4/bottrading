@@ -1,4 +1,4 @@
-<!-- proposal by Trim the memory index at 2026-11-13 00:55:46Z; target: INDEX.md; reason: Trimmed index text, about 3.9 KB (Mase approved); link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPCBXrXP5uuZtZNULyBH5Yjw; status: open -->
+<!-- proposal by Trim the memory index at 2026-11-13 00:55:46Z; target: INDEX.md; reason: Trimmed index text, about 3.9 KB (Mase approved); link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPCBXrXP5uuZtZNULyBH5Yjw; status: merged -->
 EXACT TEXT for INDEX.md and for the live project-memory index (replace the whole file; coordinator applies the live index only after the four topic-file proposals are merged):
 
 - MEMORY LAYOUT (trimmed 2026-11-13, Mase approved): this index holds only what every thread needs. Detail lives in /mnt/project-files/memory/ (README.md explains). Read only the file your task needs and grep it; append new facts there with date + who decided. Entries moved out of this index sit in each file under "Moved from the MEMORY.md index 2026-11-13", keeping their old capitalised names (grep the name).
