@@ -1,0 +1,43 @@
+id|src|date|sym|side|t_entry|entry|stop|exits|setup
+E01|mt23-007|2023-01-09|ES|long|09:46-09:50|3941.5||3951.50@09:59;3956.50@10:16;3951.75@10:24 stop|09:38 sweep under swing low and 5m breaker, 1m FVG inside bullish breaker
+E02|mt23-009|2023-01-17|ES|long|09:44|4014.50|4011.50|4030.75@10:02|09:40 sell-side sweep, 1m FVG, stop under OB mean threshold, adds 09:51 and 09:56
+E03|mt23-010|2023-01-18|ES|short|15:08|3966.75||3954.25;3949;3943.75@15:57|PM: lunch FVG hit, 1m equal lows broken 15:00, retrace short, pyramid
+E04|mt23-034|2023-01-24|ES|long|09:40-09:46|4013.5||4030.75@09:53|09:30 drop under 4013 lows to ~4009, long in 1m box, exit through buy-side 4027.75
+E05|mt23-012|2023-01-25|ES|short|09:40-09:45|3992||3963.25@10:40 (limit 3962.75 missed)|Judas above short-term high into 15m FVG, pyramid
+E06|mt23-013|2023-01-26|ES|long|15:46|4063.25||4072.75@15:56;4072.00 stop|last hour: sweep of 15:24 low, add 4065 in FVG (15s chart), daily target 4072.75
+E07|mt23-018|2023-01-30|ES|long|09:21|4054.25|4052.25|4059.25@09:30|pre-open: 5m FVG on bullish breaker, draw 03:00 London FVG
+E08|mt23-020|2023-01-31|ES|long|15:35-15:38|4068.25||4080.50@15:50;4083.25|last hour: +OB entry, draw NWOG CE 4080.50
+E09|mt23-025|2023-02-08|ES|short|10:22-10:27|4158||4146.00@10:30|run above pre-NY equal highs into 15m SIBI, short 1m volume imbalance, target NWOG high
+E10|mt23-026|2023-02-09|ES|short|AM|4147.75|4144 (trailed)|4105.25@14:17;4103@14:24;4107@14:30|AM short at NWOG high 4146, held all day into PM
+E11|mt23-032|2023-02-15|ES|short|07:50-08:29|4133||4118.00@08:30|pre-market: NDOG tag, return to prev NWOG low, FVG short, cover into 08:30 release
+E12|mt23-040|2023-03-09|ES|long|08:30-08:53|3997.75|3991.50|4007.50|post-08:30 release long, 1m OB add
+E13|mt23-041|2023-03-09|ES|long|09:37|4007.50|4004.00|4018.75|ORG CE dip 09:25-09:32, 1m FVG / mitigation block, draw NWOG
+E14|mt23-050|2023-05-04|ES|short|08:45-09:05|4095.60||4075.00@09:46;4085.00@09:54 stop|claims spike into 5m VI under 15m bearish OB
+E15|mt23-050|2023-05-04|ES|short|10:00|4083.70||4073.50@10:17;4069.25;4066.25@10:26;4076.50@10:46 stop|return to old NWOG
+E16|mt23-050|2023-05-04|ES|short|11:30|4076.25||4062.50@12:08;4065.75@12:14;4072.25@12:17 stop|5m bearish breaker near daily FVG top
+E17|mt23-050|2023-05-04|ES|short|13:55-14:00|4085.25||4071.50@14:52|PM rally to NDOG / NWOG top
+E18|mt23-057|2023-05-22|ES|short|10:05|4206.25|4208.25|4198.00;4196.25;4193.50@10:08|AM Silver Bullet: sell-side run by 1 tick, 1m FVG limit, target NWOG high
+E19|mt23-061|2023-06-02|ES|long|10:00-10:30|4265.25||4283.00@11:01;4285.75@11:04;4280.25@11:38|NFP Friday: 1m FVG on the 10:00 surge, draw weekly volume imbalance
+E20|mt23-061|2023-06-02|ES|long|PM|4283.00||4292.50@13:21;4285.50@14:07|second position at 0.25 of weekly gap
+E21|mt23-067|2023-06-21|ES|long|13:32-13:46|4413.6|4409.75|4417.00@13:52;4419.00@13:57;4420.75@14:13;4422.50@14:15|PM: lunch low stop hunt 13:00, 15s OB / IFVG entries, 30 lots
+E22|mt23-085|2023-08-18|ES|short|10:31|4359.75|4363.25|4361.50@10:33 (loss)|short toward sell-side 4358
+E23|mt23-085|2023-08-18|ES|long|10:33-10:42|4363.00|4359.25|4366.75@10:50 trailed stop|sell-side / BISI zone long, pyramid 5/4/3/2/1
+E24|mt23-085|2023-08-18|ES|long|10:51|4365.75|4364.00|4373.75@11:00|re-entry at IFVG CE, exit above buy-side 4372.75
+E25|mt23-105|2023-12-08|ES|long|08:31|4567.50|4561.25|4585.75@08:41;4585.25@08:55;4593.50@10:00;4599.00@10:00|NFP: spike fails at highs, drop into 4h FVG in discount
+N01|mt23-003|2023-01-04|NQ|long|10:40|10901||10987@11:28;11018.25@11:31;11048@11:36;11045@11:58 stop|10:05 sweep, short-term low retaken, pyramid, FOMC day
+N02|mt23-049|2023-05-02|NQ|short|10:00|13281.50||13257.25@10:07|inside 5m OB
+N03|mt23-053|2023-05-08|NQ|long|09:45-10:00|13258||13327;13340|OB + FVG below 0.79 (sick sister model)
+N04|mt23-065B|2023-06-14|NQ|long|14:25|15018.75||15141.75|FOMC: last down-close candle after the 14:00 drop, add 15050.25
+N05|mt23-071|2023-07-07|NQ|short|14:10|15326.00|15323.75|15303.50@14:42;15295.75@14:45;15289.25;15287.75|NFP Friday PM short, add 15316.25 14:38
+N06|mt23-076|2023-07-18|NQ|long|10:40|15781.00||15902.50@12:55|09:30 Judas drop, Silver Bullet window entry in inversion FVG
+N07|mt23-088|2023-09-01|NQ|short|09:33|15635.25|||NFP short at the open
+N08|mt23-097|2023-09-21|NQ|short|09:45|14977.50||14942.25|bearish FVG 30s chart
+N09|mt23-097|2023-09-21|NQ|long|12:55|14960.75|14950.75|14985@13:14|post-lunch IFVG long to 11:45 / 11:00 highs
+N10|mt23-096|2023-09-22|NQ|long|07:47-08:01||14917.25|14927.75;14930.25|pre-market: sell-side run, bullish breaker / OB, 15s pyramid
+N11|M24-03|2024-08-07|NQ|short|12:42-13:00|18321.25||18223|OB that failed the FVG CE, add 18291.25, exit below London low
+N12|M24-05|2024-08-08|NQ|long|19:00|18559.75||18607.5|Asia: bullish OB into NDOG
+N13|M24-11|2024-08-19|NQ|long|10:00|19580.50||NWOG high|sweep under equal lows into NDOG, IOFED at 10:00 FVG
+N14|M24-14|2024-08-21|NQ|short||19894.50|||consecutive-candle OB, add at NDOG low
+N15|M24-41|2024-10-03|NQ|short||20010.75||19964.5;19925;19882.25;19941.5 stop|15s inversion FVG under SIBI, add 4
+N16|M24-51|2024-12-05|NQ|short||||21490;21526 stop|short after 08:00 high taken and bodies broke
+N17|te65|2026-09-01|NQ|long||29067.50||29118.50|live tape reading (hypothetical fills)

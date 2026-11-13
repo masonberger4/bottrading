@@ -1,0 +1,42 @@
+E01 2023-01-09 ES entry 3941.5 in window 09:43-09:54: YES 09:45..09:45 | exit 3951.5@09:59: ok | exit 3956.5@10:16: ok | exit 3951.75@10:24: ok
+E02 2023-01-17 ES entry 4014.5 in window 09:41-09:48: YES 09:41..09:43 | exit 4030.75@10:02: ok
+E03 2023-01-18 ES entry 3966.75 in window 15:05-15:12: YES 15:11..15:12 | exit 3943.75@15:57: ok
+E04 2023-01-24 ES entry 4013.5 in window 09:37-09:50: YES 09:37..09:45 | exit 4030.75@09:53: ok
+E05 2023-01-25 ES entry 3992.0 in window 09:37-09:49: YES 09:40..09:43 | exit 3963.25@10:40: ok
+E06 2023-01-26 ES entry 4063.25 in window 15:43-15:50: YES 15:45..15:46 | exit 4072.75@15:56: ok
+E07 2023-01-30 ES entry 4054.25 in window 09:18-09:25: YES 09:20..09:24 | exit 4059.25@09:30: ok
+E08 2023-01-31 ES entry 4068.25 in window 15:32-15:42: YES 15:32..15:36 | exit 4080.5@15:50: ok
+E09 2023-02-08 ES entry 4158.0 in window 10:19-10:31: YES 10:22..10:28 | exit 4146.0@10:30: ok
+E10 2023-02-09 ES entry 4147.75 in window 09:27-12:04: YES 10:25..11:02 | exit 4105.25@14:17: ok | exit 4103.0@14:24: ok | exit 4107.0@14:30: ok
+E11 2023-02-15 ES entry 4133.0 in window 07:47-08:33: YES 07:50..08:01 | exit 4118.0@08:30: ok
+E12 2023-03-09 ES entry 3997.75 in window 08:27-08:57: YES 08:33..08:57
+E13 2023-03-09 ES entry 4007.5 in window 09:34-09:41: YES 09:34..09:41
+E14 2023-05-04 ES entry 4095.6 in window 08:42-09:09: YES 08:48..09:00 | exit 4075.0@09:46: ok | exit 4085.0@09:54: ok
+E15 2023-05-04 ES entry 4083.7 in window 09:57-10:04: YES 09:57..10:03 | exit 4073.5@10:17: ok | exit 4066.25@10:26: ok | exit 4076.5@10:46: ok
+E16 2023-05-04 ES entry 4076.25 in window 11:27-11:34: YES 11:29..11:34 | exit 4062.5@12:08: ok | exit 4065.75@12:14: ok | exit 4072.25@12:17: ok
+E17 2023-05-04 ES entry 4085.25 in window 13:52-14:04: YES 13:53..14:04 | exit 4071.5@14:52: ok
+E18 2023-05-22 ES entry 4206.25 in window 10:02-10:09: YES 10:02..10:05 | exit 4193.5@10:08: ok
+E19 2023-06-02 ES entry 4265.25 in window 09:57-10:34: YES 10:12..10:32 | exit 4283.0@11:01: ok | exit 4285.75@11:04: ok | exit 4280.25@11:38: ok
+E20 2023-06-02 ES entry 4283.0 in window 11:57-16:04: YES 12:01..12:33 | exit 4292.5@13:21: ok | exit 4285.5@14:07: ok
+E21 2023-06-21 ES entry 4413.6 in window 13:29-13:50: YES 13:33..13:45 | exit 4417.0@13:52: ok | exit 4419.0@13:57: ok | exit 4420.75@14:13: ok | exit 4422.5@14:15: ok
+E22 2023-08-18 ES entry 4359.75 in window 10:28-10:35: YES 10:28..10:33 | exit 4361.5@10:33: ok
+E23 2023-08-18 ES entry 4363.0 in window 10:30-10:46: YES 10:34..10:35 | exit 4366.75@10:50: ok
+E24 2023-08-18 ES entry 4365.75 in window 10:48-10:55: YES 10:51..10:54 | exit 4373.75@11:00: ok
+E25 2023-12-08 ES entry 4567.5 in window 08:28-08:35: NO (range 4614.25-4640.50) | touched that day at never | exit 4585.75@08:41: NO | exit 4585.25@08:55: NO | exit 4593.5@10:00: NO | exit 4599.0@10:00: NO
+N01 2023-01-04 NQ entry 10901.0 in window 10:37-10:44: YES 10:39..10:42 | exit 10987.0@11:28: ok | exit 11018.25@11:31: ok | exit 11048.0@11:36: ok | exit 11045.0@11:58: ok
+N02 2023-05-02 NQ entry 13281.5 in window 09:57-10:04: YES 09:58..10:04 | exit 13257.25@10:07: ok
+N03 2023-05-08 NQ entry 13258.0 in window 09:42-10:04: NO (range 13261.25-13289.75) | touched that day at 10:34..10:35 n=2
+N04 2023-06-14 NQ entry 15018.75 in window 14:22-14:29: YES 14:22..14:28
+N05 2023-07-07 NQ entry 15326.0 in window 14:07-14:14: YES 14:10..14:14 | exit 15303.5@14:42: ok | exit 15295.75@14:45: ok
+N06 2023-07-18 NQ entry 15781.0 in window 10:37-10:44: YES 10:40..10:43 | exit 15902.5@12:55: ok
+N07 2023-09-01 NQ entry 15635.25 in window 09:30-09:37: YES 09:30..09:34
+N08 2023-09-21 NQ entry 14977.5 in window 09:42-09:49: YES 09:45..09:48
+N09 2023-09-21 NQ entry 14960.75 in window 12:52-12:59: YES 12:54..12:54 | exit 14985.0@13:14: ok
+N10 2023-09-22 NQ 
+N11 2024-08-07 NQ entry 18321.25 in window 12:39-13:04: YES 12:44..12:47
+N12 2024-08-08 NQ entry 18559.75 in window 18:57-19:04: YES 18:58..19:02
+N13 2024-08-19 NQ entry 19580.5 in window 09:57-10:04: YES 09:59..10:04
+N14 2024-08-21 NQ entry 19894.5 in window 00:00-16:59: YES 10:00..16:10
+N15 2024-10-03 NQ entry 20010.75 in window 00:00-16:59: YES 09:54..16:07
+N16 2024-12-05 NQ 
+N17 2026-09-01 NQ entry 29067.5 in window 00:00-16:59: YES 09:31..14:58
