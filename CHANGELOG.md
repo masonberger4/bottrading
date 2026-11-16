@@ -145,3 +145,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v139 | 2026-11-16 22:31:57Z | Run memory curator, part 3 | results.md | edit | PR #67 is merged (stale OPEN phrase); add ndog scalp price check (PR #79) and 1m entry study (PR #80), numbers checked against the PR bodies | PR #79, PR #80 | 691fac4d7a -> 09ff6ac4a4 |
 | v140 | 2026-11-16 22:31:58Z | Run memory curator, part 3 | data.md | append | cloud paths for fixed-roll parquets and 1m trades (paths checked to exist) | PR #80 | 9f26c1869e -> 3401c3cf06 |
 | v141 | 2026-11-16 22:31:59Z | Run memory curator, part 3 | lessons.md | append | lesson from the 1m entries thread | coordinator relay 2026-11-16 21:00 | 29260f1a07 -> 6dd4468adb |
+| v142 | 2026-11-16 22:33:17Z | Run memory curator, part 3 | INDEX.md | edit | re-sync INDEX.md to the live index after PRs #78-#80 merged | coordinator relay 2026-11-16 22:33 | 04dcaf66bd -> 957225b446 |
