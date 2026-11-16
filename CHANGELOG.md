@@ -126,3 +126,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v120 | 2026-11-13 06:06:04Z | dreamer | proposals/dreamer__dream_2026-11-13.md | proposal | Eleventh dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmP2uMud85T9vhdUjLTfMciK8 | ABSENT -> c2054b485b |
 | v121 | 2026-11-16 16:01:50Z | Backtest DXY and bond switches | proposals/backtest-dxy-and-bond-switches__results.md | proposal | new backtest result | PR #72, cmsg_01FAHERC1Lsrg2bYtrKuRHmPSMxJSxsyNKdsJCq3Giszr6 | ABSENT -> 3e7961b46e |
 | v122 | 2026-11-16 17:32:05Z | Run memory curator, part 2 | status.md | append | apply approved Q1 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPJhwLmkZd8hwXh1QGcNoUJz | 5dceeebbc5 -> 8894f2f2aa |
+| v123 | 2026-11-16 17:32:07Z | Run memory curator, part 2 | results.md | append | apply approved Q2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPJhwLmkZd8hwXh1QGcNoUJz | 923d8174ff -> 2b62035de8 |
