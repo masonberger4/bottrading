@@ -23,10 +23,15 @@ def stats(t, rng):
     bw = np.array([rng.choice(wk, len(wk)).sum() for _ in range(3000)])
     eq = t.sort_values("exit_time").net.cumsum().values
     by = t.groupby("year").net.sum()
+    ts = t.sort_values("exit_time"); eqR = ts.R.cumsum().values; risk = (t.entry - t.stop).abs() * t.shares
+    peak = np.maximum.accumulate(np.maximum(eq, 0)); d = pd.to_datetime(ts.exit_time.astype(str).str[:10]).values
+    last_peak = pd.Series(np.where(eq >= peak, np.arange(len(eq)), np.nan)).ffill().fillna(0).astype(int).values     # longest stretch below a prior equity high, in days
+    dd_days = int(((d - d[last_peak]) / np.timedelta64(1, "D")).max()) if len(d) else 0
     return dict(trades=n, total=x.sum(), h1=t.net[t.year <= 2022].sum(), h2=t.net[t.year >= 2023].sum(), yrs_up=f"{int((by > 0).sum())}/{len(by)}",
                 maxdd=(eq - np.maximum.accumulate(np.maximum(eq, 0))).min(), t=x.mean() / x.std() * n ** .5 if n > 1 and x.std() else 0.0,
                 lo=np.percentile(bw, 5), hi=np.percentile(bw, 95), x2=t.gross.sum() - 2 * t.costs.sum(), R=t.R.sum() if "R" in t else np.nan,
-                med_risk=((t.entry - t.stop).abs() * t.shares).median(), **{str(y): by.get(y, 0.0) for y in range(2019, 2027)})
+                med_risk=risk.median(), max_risk=risk.max(), maxdd_R=(eqR - np.maximum.accumulate(np.maximum(eqR, 0))).min(),
+                dd_days=dd_days, worst_year=by.min(), **{str(y): by.get(y, 0.0) for y in range(2019, 2027)})
 
 def main():
     out = sys.argv[1]; base = sys.argv[sys.argv.index("--base") + 1] if "--base" in sys.argv else None

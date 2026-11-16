@@ -9,6 +9,7 @@ Markets: ES is the engine's own setup (ES traded, NQ and YM as partners). NQ / Y
 es_pt by the price ratio to ES (what the engine's own two-market combine does) and charge the same $5 a side per
 contract (ES 0.10 pt, NQ 0.25 pt, YM 1.0 pt). Each market keeps its own table cache (runs/mentorship under
 OUTDIR/_work/<SYM>), because the engine's cache file name does not include the symbol.
+Sizing: no position-size cap by default (Mase 2026-11-16); set BT_CAP=on for the engine's $400k notional cap.
 Output: OUTDIR/trades_<SYM>_<name>_<year>.csv (+ skips_...). Finished jobs are skipped on a rerun. Report: report.py."""
 import argparse, os, sys, subprocess
 from pathlib import Path
@@ -33,6 +34,8 @@ def job(j):
         ST._finish_order = fo
     ST._bt_excl = excl
     base = dict(risk_dollars=1000.0)
+    if os.environ.get("BT_CAP", "off") == "off":            # Mase 2026-11-16: no limit on sizing, so every trade risks the full $1,000
+        base["max_notional"] = 1e12                         # (BT_CAP=on keeps the engine's $400k notional cap, as in the 2026-11-13 runs)
     if sym != "ES":
         es, me = B.load("ES", 5, source="databento"), B.load(sym, 5, source="databento")
         base.update(es_pt=round(float(me.close.median() / es.close.median()), 2), cost_per_share=COST[sym])
