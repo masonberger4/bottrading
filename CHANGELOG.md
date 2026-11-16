@@ -128,3 +128,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v122 | 2026-11-16 17:32:05Z | Run memory curator, part 2 | status.md | append | apply approved Q1 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPJhwLmkZd8hwXh1QGcNoUJz | 5dceeebbc5 -> 8894f2f2aa |
 | v123 | 2026-11-16 17:32:07Z | Run memory curator, part 2 | results.md | append | apply approved Q2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPJhwLmkZd8hwXh1QGcNoUJz | 923d8174ff -> 2b62035de8 |
 | v124 | 2026-11-16 17:32:08Z | Run memory curator, part 2 | data.md | append | apply approved S2 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPJhwLmkZd8hwXh1QGcNoUJz | 6555ff21ec -> 6fb4f3aa5b |
+| v125 | 2026-11-16 17:34:50Z | Run memory curator, part 2 | decisions.md | edit | record Mase 11-16 decisions: no sizing cap, track risk and drawdown, entry study all setups | cmsg_01FAHERC1Lsrg2bYtrKuRHmPAHQUc4XZk1RufvQRyFNZck | 7b570c8e4f -> 3c49476c6b |
