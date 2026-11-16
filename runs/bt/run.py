@@ -1,8 +1,8 @@
 """Standard backtest runner (2026-11-13). One engine commit, per-year trade files cached, any market, any switch set.
 
 Run from an engine checkout (cwd = repo root of the pinned mentorship commit):
-    python <path>/runs/bt/run.py --out OUTDIR [--sym ES,NQ,YM] [--years 2019-2026] [--workers 4] name="dict(...)" ...
-"defaults" always runs. A variant dict may hold "_excl": a tuple of setup names whose orders are dropped before they
+    python <path>/runs/bt/run.py --out OUTDIR [--sym ES,NQ,YM] [--years 2019-2026] [--workers 4] [--tf 5|1] [--no-defaults] name="dict(...)" ...
+"defaults" always runs (unless --no-defaults). --tf 1 runs the engine on 1-minute bars (use a separate OUTDIR per bar size). A variant dict may hold "_excl": a tuple of setup names whose orders are dropped before they
 are placed (runner-side, no engine change), e.g.  pwhl_x="dict(week_done_on_draw='skip',week_done_levels=('pwh','pwl'),_excl=('am_mm','pm_sb'))".
 
 Markets: ES is the engine's own setup (ES traded, NQ and YM as partners). NQ / YM runs put that market first, scale
@@ -20,7 +20,7 @@ ORDER = {"ES": ("ES", "NQ", "YM"), "NQ": ("NQ", "ES", "YM"), "YM": ("YM", "ES", 
 
 
 def job(j):
-    sym, year, name, kw = j
+    sym, year, name, kw, tf = j
     import pandas as pd
     from dataclasses import replace  # noqa
     from mentorship import study as S, backtest as B, strategy as ST
@@ -37,7 +37,7 @@ def job(j):
     if os.environ.get("BT_CAP", "off") == "off":            # Mase 2026-11-16: no limit on sizing, so every trade risks the full $1,000
         base["max_notional"] = 1e12                         # (BT_CAP=on keeps the engine's $400k notional cap, as in the 2026-11-13 runs)
     if sym != "ES":
-        es, me = B.load("ES", 5, source="databento"), B.load(sym, 5, source="databento")
+        es, me = B.load("ES", 5, source="databento"), B.load(sym, 5, source="databento")    # the price ratio is taken on 5m for every --tf (same es_pt)
         base.update(es_pt=round(float(me.close.median() / es.close.median()), 2), cost_per_share=COST[sym])
     S.DEC_BASE.update(base)
     S.DECISIONS[name] = kw
@@ -48,7 +48,7 @@ def job(j):
             t = run0(*a, **k); B._bt_cap.setdefault("attrs", t.attrs); return t
         B.run, B._bt_wrapped = run, True
     B._bt_cap = cap
-    t = S._dec_job((5, year, name))
+    t = S._dec_job((tf, year, name))
     at = cap.get("attrs", {})
     sk = at.get("skips") or []
     sk = pd.DataFrame(sk, columns=["day", "symbol", "stage", "reason"][:len(sk[0])] if sk else ["day", "symbol", "stage", "reason"])
@@ -60,6 +60,7 @@ def job(j):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True); ap.add_argument("--sym", default="ES"); ap.add_argument("--years", default="2019-2026")
+    ap.add_argument("--tf", type=int, default=5, help="bar size in minutes: 5 (default) or 1"); ap.add_argument("--no-defaults", action="store_true")
     ap.add_argument("--workers", type=int, default=4); ap.add_argument("--one-sym", default=None, help=argparse.SUPPRESS)
     ap.add_argument("variants", nargs="*")
     a = ap.parse_args()
@@ -78,7 +79,8 @@ def main():
                     except OSError:                         # Windows without symlink rights: a junction
                         subprocess.run(["cmd", "/c", "mklink", "/J", str(w / d), str(eng / d)], check=True)
             r = subprocess.run([sys.executable, "-W", "ignore", str(Path(__file__).resolve()), "--out", str(out), "--one-sym", sym,
-                                "--years", a.years, "--workers", str(a.workers), *a.variants], cwd=w)
+                                "--years", a.years, "--workers", str(a.workers), "--tf", str(a.tf),
+                                *(["--no-defaults"] if a.no_defaults else []), *a.variants], cwd=w)
             if r.returncode:
                 sys.exit(r.returncode)
         return
@@ -86,10 +88,10 @@ def main():
     os.environ["MENTORSHIP_SRC"] = "databento"
     sys.path.insert(0, os.getcwd())
     y0, _, y1 = a.years.partition("-"); years = range(int(y0), int(y1 or y0) + 1)
-    variants = {"defaults": {}}
+    variants = {} if a.no_defaults else {"defaults": {}}
     for v in a.variants:
         n, e = v.split("=", 1); variants[n] = eval(e)
-    jobs = [(sym, y, n, kw) for n, kw in variants.items() for y in years]
+    jobs = [(sym, y, n, kw, a.tf) for n, kw in variants.items() for y in years]
     path = lambda j, k="trades": out / f"{k}_{j[0]}_{j[2]}_{j[1]}.csv"
     todo = [j for j in jobs if not path(j).exists()]
     print(f"{sym}: {len(jobs)} jobs, {len(todo)} to do", flush=True)
@@ -98,7 +100,7 @@ def main():
     from concurrent.futures import ProcessPoolExecutor, as_completed
     from mentorship import study as S
     S.SYMS = ORDER[sym]
-    S._bias_cache(5, kw=S.B.table_kw(S.Params()))           # build this market's bias table once, before the workers
+    S._bias_cache(a.tf, kw=S.B.table_kw(S.Params()))           # build this market's bias table once, before the workers
     bad = 0
     with ProcessPoolExecutor(a.workers, max_tasks_per_child=1) as ex:
         futs = {ex.submit(job, j): j for j in todo}
