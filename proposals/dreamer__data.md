@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-10 06:09:24Z; target: data.md; reason: S2 Databento holdings and roll facts; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPDbwftrPdo3nKjgAAR3KTLm; status: open -->
+<!-- proposal by dreamer at 2026-11-10 06:09:24Z; target: data.md; reason: S2 Databento holdings and roll facts; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPDbwftrPdo3nKjgAAR3KTLm; status: merged -->
 EXACT TEXT for data.md, new section at end:
 
 ## databento-holdings-and-roll (2026-11-10)
