@@ -6,6 +6,9 @@ Layout (all in /mnt/project-files/memory/):
 - data.md — data sources, file paths, purchases, credit, DXY/COT notes.
 - laptop_ops.md — laptop and cloud rules: folders, processes to leave alone, how runs are started, monitoring cadence.
 - lessons.md — stalls, drops, what fixed them.
+- status.md — live status: one current paragraph (older ones are in git history).
+- threads.md — the standing threads; the live thread list is the source for everything else.
+- INDEX.md — the approved copy of the project-memory index, used for the drift check.
 - skill_drafts/ — draft skills for Mase to add in claude.ai settings (threads cannot install skills).
 
 Project memory (MEMORY.md) is now a short index: current status, standing rules, pointers here. Old per-topic memory files were moved verbatim into these files, one section each, with their source name and date; nothing was dropped.
@@ -13,7 +16,7 @@ Project memory (MEMORY.md) is now a short index: current status, standing rules,
 How threads use it:
 1. Read MEMORY.md, then only the file(s) your task needs (grep for a keyword; the files are long).
 2. Only writers may change top-level files; everyone else uses scratch/ or `propose` (see Permissions below).
-3. Update the "NOW" line in MEMORY.md only for status that other threads need; keep MEMORY.md under ~3 KB.
+3. Update the "NOW" line in MEMORY.md only for status that other threads need; keep MEMORY.md short (about 4.5 KB as of 2026-11-16; only what every thread needs).
 4. Put detail in the topic file, not in MEMORY.md. Never store secrets.
 5. Long sections that become stale: summarize in place and mark with the date; don't delete decisions.
 
@@ -34,6 +37,7 @@ Full spec for reuse in other repos: MEMORY_SYSTEM_SPEC.md. GitHub: branch `memor
 - Top-level files (index topic files, README, ACL.json, tools/, skill_drafts/): writers only. Everyone else reads.
 - `scratch/<your-slug>/`: your own free scratch pad. Edit it any time with `memsave.py save scratch/<slug>/FILE --base $(memsave.py hash ...) ...` (unversioned, git-ignored). Slug = your thread name lowercased, non-alphanumerics to "-" (e.g. "Run full backtests in cloud" -> run-full-backtests-in-cloud). Other agents' scratch pads are not yours to edit.
 - Want a top-level change? `echo "text" | python3 tools/memsave.py propose decisions.md --agent "<you>" --reason "why" --link "..."` creates versioned `proposals/<slug>__decisions.md`. A writer reviews, merges with `save`, and notes "merged vN" in the proposal.
+- Approvals (Mase 2026-11-16): the curator may apply factual status, results and data entries without Mase's approval. Rules and decisions (decisions.md, ACL.json, the rules in this README, the index) still need his approval in chat. Only Mase merges PRs.
 - `python3 tools/memsave.py verify` lists any file edited outside the tool (exit 5).
 Honest limits: identity is self-declared via --agent (not authenticated); the shared mount ignores chmod so file permissions cannot enforce read-only; a raw `echo >> file` works but `verify` and git expose it and `rollback` repairs it; the platform project-memory index tool is writable by every thread and cannot be restricted by us.
 

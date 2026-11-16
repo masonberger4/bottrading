@@ -5,15 +5,16 @@
 2. Laptop folder C:\Users\mason\bottrading only; NEVER C:\Users\mason\X; ict_fetch processes are owned by the download thread only (other threads leave them alone); leave the Silver Bullet paper bot alone; one pytest run at a time, launched detached.
 3. Long work (>30 min): check in and commit+push at least every 30 min; while laptop work runs, verify it is moving every 15 min and update Mase every 30.
 4. No workflows/helper agents unless Mase asks (except build-stage review); short replies.
-5. Models: threads Sonnet 5.5 at medium effort; rule-decision threads and audits Opus; coordinator Opus 5.5.
+5. Models: project default Opus 5.5 (Mase 2026-11-05).
 6. Free downloads pre-approved; paid purchases need Mase's OK in the thread that buys.
 7. "Exactly what ICT says", full detail, experienced-trader version default, most distinct videos wins (experienced version beats the count; ties go to Mase to decide); where ICT uses judgment label it "our interpretation".
 8. Every owner answer is a backtestable switch; defaults first, alternatives as switches.
-9. Report $ at $1k risk, by half and day type; choose on 2019-22, check on 2023-26.
+9. Report $ at $1k risk, by half and day type; choose on 2019-22, check on 2023-26. No sizing cap in backtests (max_notional lifted); always report risk per trade and drawdown (Mase 2026-11-16).
 10. Silver Bullet is settled (no edge, off by default): don't re-propose.
 11. Don't re-offer: cloud video processing, cloud stage tests, a parallel laptop task.
 12. Mase-only actions (agents hand him the exact steps up front, don't try first): merge PRs, copy files to the laptop, run taskkill, edit GitHub rulesets/branch protection, one-time pushes from the laptop. Cloud sessions can push only to their designated branch (other pushes and GitHub API writes return 403).
 13. Only Mase and the coordinator write the project-memory index; threads don't call update_memory.
+14. Memory approvals (Mase 2026-11-16): the curator may apply factual status, results and data entries without Mase's approval. Rules and decisions (decisions.md, ACL.json, README rules, the index) still need his approval in chat. Only Mase merges PRs.
 
 - (Mase 2026-11-02 04:46 UTC) Stop all backtesting until all four ict_fetch playlists (Trade Executions 71, Charter Content 34, playlist PLVgHx4Z63pabpjlduWBaEsn8VMtALhjGV, 58 videos, assumed Core Content, 2024 Mentorship 51) are downloaded and transcribed; engine is built from all of them. Download work gets its own thread and is the single laptop writer. (Set has since grown: 2025 Lectures 83 and 2026 SMC 143 are in it too.)
 - (Mase 2026-11-02, updated 11-04 22:32 UTC) Browser cookies for yt-dlp: ONLY from a spare Google account, never the main one. The current route is the spare account signed in to YouTube in Firefox on the laptop (Mase agreed to do this at home). The Chrome-profile and Edge-extension routes were dropped because the extension is blocked on the work PC. Use cookies only when slow pacing and backoff do not clear the bot check.
@@ -34,7 +35,7 @@ Append new decisions at the bottom of the first section as `- (Mase, YYYY-MM-DD 
 - LONG-WORK RULE (Mase 20:59 UTC 2026-11-01, in project instructions): see ACTIVE RULES DIGEST item 3.
 - DXY decisions D1-D4 FINAL (Mase 05:47 UTC 2026-10-31): scalp, hard block, staged, no purchase; other modes stay switches. See dxy-intraday-spec below.
 - Silver Bullet SETTLED: no edge as coded. OFF by default. Don't re-propose.
-- Guiding rules (Mase): "exactly what ICT says", full detail, never simplified; where ICT uses judgment, write the closest exact rule labelled "our interpretation". Experienced-trader version default, beginner a switch. 2023 beats older videos. Test defaults first, then alternatives as switches.
+- Guiding rules (Mase): "exactly what ICT says", full detail, never simplified; where ICT uses judgment, write the closest exact rule labelled "our interpretation". Experienced-trader version default, beginner a switch. 2023 beats older videos (SUPERSEDED 2026-11-06: the position backed by the most distinct videos is the default, see digest item 7). Test defaults first, then alternatives as switches.
 - Owner directives (2026-10-18): risk 1.2% at entry/1.3% with adds; Ep 07 advanced OB-body entry default; last hour 15:00-15:50; PM session 13:30-16:15; 5 handles minimum room; breaker full range; front-month prices. Year-end move goes AGAINST December's direction; stand aside only on sloppy days (calendar block a switch). FVG behind the trade is resistance and an add zone, never a target; opposing FVG between price and draw is a speed bump by default.
 - Experienced defaults: NFP Friday traded from 9:30; NFP-week Wed PM-Fri unblocked; FOMC PM entries from 14:45; reversing after a loss allowed; 5 points minimum room; week gaps kept 60 days; Mondays traded.
 - Definitions: daily bias from HTF draws on liquidity, FVGs, OBs and daily/weekly opening gaps. Week gap = Fri 4:59pm close to Sun 6pm open, kept 60 trading days. Day gaps Mon-Thu 5pm-6pm. Opening range gap = prior close (ES 4:15pm) to 9:30 open. Opening range 9:30-10:00, no trades inside it. Closed candles only; structure shift needs a close; CE exit off by default. 3-candle swings; one OB definition. ES/NQ/YM SMT is a qualifier only. 1m main chart with 5m zones. Conviction score is a label, not a filter.
@@ -127,7 +128,7 @@ Spec: /mnt/project-files/mentorship/dxy_intraday_spec_2026-10-31.md (Opus thread
 - Covers coverage_gaps section C intraday DXY items, B17.5 sym gate (`sym_gate`), and the daily/hourly items (DXY turtle-soup raid, daily MT regime, DXY weekly objective via `week_done_levels`, ES+DXY end-day via `obj_stop`). All new switch names checked as unused.
 - Highs/lows: default `dxy_bars="udx_shape"` (spot close + HistData UDX in-minute shape; 1m change corr 0.95). Free FX-pair rebuild ("bound") recommended: real H/L, EURUSD/GBPUSD for the 045 exit, stale column, maybe 2016-18.
 - Data holes: spot file stale on 2023-03-07 10:00-10:55 (ICT's 037 unicorn example; UDX has no bars then either) plus 16 flagged hours listed in the spec. No 1m DXY for 2016-18 or 2026, so these switches are judged on 2019-25 (check set 2023-25).
-- Decisions FINAL (Mase 05:47 UTC 2026-10-31, "final for now but they can be toggled for back testing"): D1 sym_gate scalp; D2 dxy_states hard block; D3 staged bank-then-close (fx_nonconf any time); D4 no DX 1m purchase now. All other modes stay switches.
+- Decisions FINAL (Mase 05:47 UTC 2026-10-31, "final for now but they can be toggled for back testing"): D1 sym_gate scalp; D2 dxy_states hard block; D3 staged bank-then-close (fx_nonconf any time); D4 no DX 1m purchase now. All other modes stay switches. UPDATE 2026-11-16 (PR #72): all DXY and bond switches are OFF in the engine defaults, including sym_gate and dxy_states; D1-D3 only set the mode used when a switch is turned on.
 - Found: rulebook-gap "093 says asymmetric still tradable" conflict is not in the 093 caption.
 
 **Why:** most-cited unbuilt 2023 material. **How to apply:** build from this file; don't re-read the cites. Related: [[coverage-audit-2026-10-31]], [[databento-extra-data]].

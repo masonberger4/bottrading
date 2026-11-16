@@ -3,12 +3,12 @@
   "writers": [
     "Mase",
     "coordinator",
-    "Organize project memory into folder",
-    "Run memory curator",
-    "Run memory curator, part 2"
+    "Run memory curator, part 2",
+    "Run memory curator, part 3"
   ],
   "notes": {
-    "Run memory curator": "role: curator; applies only changes Mase approves in chat; Mase 2026-11-03",
-    "Run memory curator, part 2": "role: curator (successor to 'Run memory curator'); applies only changes Mase approves in chat; added 2026-11-10 when Mase asked for a fresh curator thread"
+    "Run memory curator, part 2": "role: curator; added 2026-11-10. Mase 2026-11-16: may apply factual status, results and data entries without approval; rules and decisions need Mase's approval in chat",
+    "Run memory curator, part 3": "role: curator (successor to part 2, same rules); added 2026-11-16 when Mase asked for fresh threads",
+    "removed 2026-11-16": "closed threads 'Organize project memory into folder' and 'Run memory curator' (Mase approved)"
   }
 }

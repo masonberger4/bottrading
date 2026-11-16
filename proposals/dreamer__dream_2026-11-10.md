@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-10 06:09:25Z; target: dream_2026-11-10.md; reason: Ninth dream report; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPDbwftrPdo3nKjgAAR3KTLm; status: open -->
+<!-- proposal by dreamer at 2026-11-10 06:09:25Z; target: dream_2026-11-10.md; reason: Ninth dream report; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmPDbwftrPdo3nKjgAAR3KTLm; status: closed (superseded by Q1,Q2,S2) -->
 # Dream report 2026-11-10 (reviewed: list_threads since 11-09 06:12 (13 threads; newest 3 messages of 4 active ones), CHANGELOG v97-v101. Not reviewed: the rule-card build threads and the curator part 2 thread in full.)
 | # | ID | Change | Uplift |
 |---|----|--------|--------|
