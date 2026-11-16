@@ -203,6 +203,8 @@ class Params:
     skip_monday: bool = False      # D20 test (NFP / FOMC weeks still traded)
     no_pm_after_am_win: bool = False   # D19 test
     max_trades_week: int = 0           # D19 test (0 = no cap)
+    session_trades: int = 1            # ICT video trades (2023-05-04: four shorts in a day; 2023-08-18: three AM trades inside 20 minutes): fills allowed per session slot. 1 = one trade
+                                       # per session (the built behaviour: only the loss re-entry / reversal switches re-open it); N > 1 re-opens the slot after each close, either side, until N trades closed there
     reentry_half: bool = True     # D18 test: one same-direction re-entry at half risk after a loss
     conf_min_n: int = 0            # min number of timeframes (1m..monthly) with a PD array at the
     conf_min_top: str = ""         # sweep extreme / highest such timeframe (confluence.py); 0/"" off
@@ -3628,6 +3630,8 @@ class Params:
         _sb_check(self)
         if self.unicorn_sides not in ("both", "long", "short"):
             raise ValueError(f"unicorn_sides {self.unicorn_sides!r}")
+        if int(self.session_trades) < 1:
+            raise ValueError("session_trades >= 1")
         if self.breaker_zone not in L.BREAKER_MODES:
             raise ValueError(f"breaker_zone {self.breaker_zone!r}")
         if self.breaker_mt_mode not in ("range", "body"):
@@ -5929,6 +5933,11 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
             for k in list(done):
                 done[k] = True
             state["day_done"] = True
+    if p.session_trades > 1:                          # session_trades: the slot stays open until N trades closed in it (not past a day stop / a stopped session)
+        n_ = state.setdefault("ses_n", {})
+        n_[key] = n_.get(key, 0) + 1
+        if n_[key] < p.session_trades and not state.get("day_done") and not _MG.blocked_now(state, tr.session):
+            done[key] = False
     return lost
 
 
