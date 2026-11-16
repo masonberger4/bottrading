@@ -203,6 +203,11 @@ class Params:
     skip_monday: bool = False      # D20 test (NFP / FOMC weeks still traded)
     no_pm_after_am_win: bool = False   # D19 test
     max_trades_week: int = 0           # D19 test (0 = no cap)
+    mss_on_fvg: bool = False           # ICT video entries (mt23-009 2023-01-17 09:44; 057 2023-05-22 10:05; 085 2023-08-18): he is filled on the FIRST return into the first 1m FVG the displacement leaves off the
+                                       # sweep extreme, before the swing high (mss_ref) is broken. True = a gap completed at this bar, wholly after the sweep extreme, counts as the shift, so the FVG order arms at once.
+                                       # Acts only with ob_entry "post_mss" / "both" (the default "pre_break" has no FVG entry after the break)
+    session_trades: int = 1            # ICT video trades (2023-05-04: four shorts in a day; 2023-08-18: three AM trades inside 20 minutes): fills allowed per session slot. 1 = one trade
+                                       # per session (the built behaviour: only the loss re-entry / reversal switches re-open it); N > 1 re-opens the slot after each close, either side, until N trades closed there
     reentry_half: bool = True     # D18 test: one same-direction re-entry at half risk after a loss
     conf_min_n: int = 0            # min number of timeframes (1m..monthly) with a PD array at the
     conf_min_top: str = ""         # sweep extreme / highest such timeframe (confluence.py); 0/"" off
@@ -3628,6 +3633,8 @@ class Params:
         _sb_check(self)
         if self.unicorn_sides not in ("both", "long", "short"):
             raise ValueError(f"unicorn_sides {self.unicorn_sides!r}")
+        if int(self.session_trades) < 1:
+            raise ValueError("session_trades >= 1")
         if self.breaker_zone not in L.BREAKER_MODES:
             raise ValueError(f"breaker_zone {self.breaker_zone!r}")
         if self.breaker_mt_mode not in ("range", "body"):
@@ -5929,6 +5936,11 @@ def _after_close(pos, trades, p, done, state, i=None, ctx=None):
             for k in list(done):
                 done[k] = True
             state["day_done"] = True
+    if p.session_trades > 1:                          # session_trades: the slot stays open until N trades closed in it (not past a day stop / a stopped session)
+        n_ = state.setdefault("ses_n", {})
+        n_[key] = n_.get(key, 0) + 1
+        if n_[key] < p.session_trades and not state.get("day_done") and not _MG.blocked_now(state, tr.session):
+            done[key] = False
     return lost
 
 
@@ -8632,6 +8644,9 @@ def _scan_core(ctx, sd: Side, i, p: Params, session, w0, pctx, psides, ppos, ris
         else:
             gate_fail = fi is not None   # the follow-through failed
             raw = i > sw["ext_i"] and (h[i] if wick_mss else c[i]) > ref
+            if not raw and p.mss_on_fvg and i > sw["ext_i"] and any(g.i == i and g.i - 2 >= sw["ext_i"] for g in sd.gaps):
+                raw = True                   # mss_on_fvg: the displacement off the sweep extreme left a fair value gap at this bar - that is the shift (the FVG path arms now, not at the later break of the swing high)
+                _f("2_mss_on_fvg")
             brk = raw
             if brk and p.displacement_mult:  # M1.2 option: the breaking candle must displace
                 body = abs(c[i] - sd.o[i])
