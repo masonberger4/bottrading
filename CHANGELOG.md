@@ -124,3 +124,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v118 | 2026-11-13 06:06:00Z | dreamer | proposals/dreamer__status.md | proposal | Q1 status 11-13 (replaces unapproved R1) | cmsg_01FAHERC1Lsrg2bYtrKuRHmP2uMud85T9vhdUjLTfMciK8 | 89ff5bedca -> 7147cb1045 |
 | v119 | 2026-11-13 06:06:04Z | dreamer | proposals/dreamer__results.md | proposal | Q2 results 11-12/13 (replaces unapproved R3) | cmsg_01FAHERC1Lsrg2bYtrKuRHmP2uMud85T9vhdUjLTfMciK8 | 8154dfd7b9 -> 835e3157c0 |
 | v120 | 2026-11-13 06:06:04Z | dreamer | proposals/dreamer__dream_2026-11-13.md | proposal | Eleventh dream report | cmsg_01FAHERC1Lsrg2bYtrKuRHmP2uMud85T9vhdUjLTfMciK8 | ABSENT -> c2054b485b |
+| v121 | 2026-11-16 16:01:50Z | Backtest DXY and bond switches | proposals/backtest-dxy-and-bond-switches__results.md | proposal | new backtest result | PR #72, cmsg_01FAHERC1Lsrg2bYtrKuRHmPSMxJSxsyNKdsJCq3Giszr6 | ABSENT -> 3e7961b46e |
