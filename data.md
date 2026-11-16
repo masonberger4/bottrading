@@ -60,3 +60,7 @@ Laptop test-run lessons:
 
 ## databento-credit (2026-11-16)
 - Databento credit left is about $23.90: the roughly $28 quoted on 2026-11-10 less the $4.12 roll-fix purchase. This replaces the "about $28" in the roll-fix quotes bullet above. Still not confirmed on the portal's Billing page (the API does not show the balance).
+
+
+## cloud-engine-data (2026-11-16)
+- The fixed-roll engine parquets were not in the cloud shared folder; threads staged them read-only from the laptop on 2026-11-16. They are now at /mnt/project-files/mentorship/data/fixed_roll_2026-11-10/ (ES, NQ, YM: 1min_db, 1min_dbmeta, 1min_dbraw, 5min_db, 5min_dbmeta). The 1-minute study trades are at /mnt/project-files/mentorship/runs/bt_1m_2026-11-16/ (README.md, trades_and_skips.tgz). The cloud runner run.py takes --tf 1 for 1-minute bars (PR #80).
