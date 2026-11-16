@@ -1,0 +1,100 @@
+trades 76 | price checks: 1m open == entry: 76 | raw 1m open == entry - adj: 76 | roll evenings: 4 | missing entry minute: 1
+5m engine exit vs 1m replay (touch):
+m1_touch     asia_end  stop  t1
+exit_reason                    
+asia_end            5     0   0
+stop                0    31   0
+t1                  0     0  40
+target only touched, never traded through: 0 of 40
+median risk in ticks: {'ES': 12.0, 'NQ': 62.4, 'YM': 15.9} | median cost in R: 0.06995 | median 1-tick in R: 0.05265
+contracts-equivalent volume in the entry minute, median: {'ES': 119.5, 'NQ': 93.5, 'YM': 14.0}
+
+## All evenings 2016-26
+[R_eng]
+      n evenings  avg_R total_R    usd  win     t t_evening max_dd_usd max_dd_R
+all  76       60  0.445    33.8  33800  55%  2.63      2.16      -8100     -8.1
+ES   26       26  0.074     1.9   1900  38%  0.24      0.24      -7600     -7.6
+NQ   30       30  0.409    12.3  12300  57%  1.67      1.67      -4800     -4.8
+YM   20       20   0.98    19.6  19600  75%  3.08      3.08      -2200     -2.2
+[R_thru]
+      n evenings  avg_R total_R    usd  win     t t_evening max_dd_usd max_dd_R
+all  76       60  0.445    33.8  33800  55%  2.63      2.16      -8100     -8.1
+ES   26       26  0.074     1.9   1900  38%  0.24      0.24      -7600     -7.6
+NQ   30       30  0.409    12.3  12300  57%  1.67      1.67      -4800     -4.8
+YM   20       20   0.98    19.6  19600  75%  3.08      3.08      -2200     -2.2
+[R_slip]
+      n evenings  avg_R total_R    usd  win     t t_evening max_dd_usd max_dd_R
+all  76       60  0.356    27.1  27100  55%  2.07      1.72      -9500     -9.5
+ES   26       26 -0.076    -2.0  -2000  38% -0.24     -0.24      -8800     -8.8
+NQ   30       30  0.375    11.2  11200  57%  1.51      1.51      -5100     -5.1
+YM   20       20  0.891    17.8  17800  75%  2.76      2.76      -2400     -2.4
+
+## By period (choose 2019-22, check 2023-26; 2016-18 = extra)
+[R_eng]
+          n evenings  avg_R total_R    usd  win     t t_evening max_dd_usd max_dd_R
+2016-18  22       15  0.376     8.3   8300  55%  1.17      0.86      -6000     -6.0
+2019-22  20       15  0.919    18.4  18400  75%  3.09      2.18      -2100     -2.1
+2023-26  34       30  0.209     7.1   7100  44%  0.81      0.79      -8100     -8.1
+[R_thru]
+          n evenings  avg_R total_R    usd  win     t t_evening max_dd_usd max_dd_R
+2016-18  22       15  0.376     8.3   8300  55%  1.17      0.86      -6000     -6.0
+2019-22  20       15  0.919    18.4  18400  75%  3.09      2.18      -2100     -2.1
+2023-26  34       30  0.209     7.1   7100  44%  0.81      0.79      -8100     -8.1
+[R_slip]
+          n evenings  avg_R total_R    usd  win     t t_evening max_dd_usd max_dd_R
+2016-18  22       15   0.28     6.2   6200  55%  0.85      0.63      -7400     -7.4
+2019-22  20       15  0.829    16.6  16600  75%  2.71      1.96      -2600     -2.6
+2023-26  34       30  0.128     4.3   4300  44%  0.49      0.48      -9500     -9.5
+
+## Taken by the full engine run (2019-26) vs evenings the engine's day rules skipped
+[R_eng]
+                         n evenings  avg_R total_R    usd  win     t t_evening max_dd_usd max_dd_R
+engine took             50       42  0.518    25.9  25900  56%  2.45      2.08      -7000     -7.0
+engine skipped 2019-26   4        4 -0.103    -0.4   -400  50% -0.18     -0.18      -2200     -2.2
+2016-18 (not run)       22       15  0.376     8.3   8300  55%  1.17      0.86      -6000     -6.0
+[R_thru]
+                         n evenings  avg_R total_R    usd  win     t t_evening max_dd_usd max_dd_R
+engine took             50       42  0.518    25.9  25900  56%  2.45      2.08      -7000     -7.0
+engine skipped 2019-26   4        4 -0.103    -0.4   -400  50% -0.18     -0.18      -2200     -2.2
+2016-18 (not run)       22       15  0.376     8.3   8300  55%  1.17      0.86      -6000     -6.0
+[R_slip]
+                         n evenings  avg_R total_R    usd  win     t t_evening max_dd_usd max_dd_R
+engine took             50       42  0.435    21.7  21700  56%  2.03      1.73      -8300     -8.3
+engine skipped 2019-26   4        4 -0.204    -0.8   -800  50% -0.33     -0.33      -2500     -2.5
+2016-18 (not run)       22       15   0.28     6.2   6200  55%  0.85      0.63      -7400     -7.4
+
+## Without roll evenings
+[R_eng]
+          n evenings  avg_R total_R    usd  win     t t_evening max_dd_usd max_dd_R
+no roll  72       56  0.418    30.1  30100  54%  2.39      1.95      -7200     -7.2
+[R_thru]
+          n evenings  avg_R total_R    usd  win     t t_evening max_dd_usd max_dd_R
+no roll  72       56  0.418    30.1  30100  54%  2.39      1.95      -7200     -7.2
+[R_slip]
+          n evenings  avg_R total_R    usd  win     t t_evening max_dd_usd max_dd_R
+no roll  72       56  0.331    23.9  23900  54%  1.86      1.53      -8500     -8.5
+
+## By side
+[R_eng]
+        n evenings  avg_R total_R    usd  win    t t_evening max_dd_usd max_dd_R
+long   43       32  0.394    16.9  16900  53%  1.8      1.31      -5000     -5.0
+short  33       28   0.51    16.8  16800  58%  1.9      1.85      -5300     -5.3
+[R_slip]
+        n evenings  avg_R total_R    usd  win     t t_evening max_dd_usd max_dd_R
+long   43       32   0.31    13.3  13300  53%  1.39      1.03      -6000     -6.0
+short  33       28  0.416    13.7  13700  58%  1.53      1.49      -6100     -6.1
+
+## By year
+[R_eng]
+       n evenings  avg_R total_R    usd   win     t t_evening max_dd_usd max_dd_R
+2016  10        7 -0.019    -0.2   -200   50% -0.05     -0.05      -2500     -2.5
+2017   1        1  1.213     1.2   1200  100%   NaN       NaN          0      0.0
+2018  11        7   0.66     7.3   7300   55%   1.2       0.8      -4700     -4.7
+2019   3        3  0.964     2.9   2900  100%  9.16      9.16          0      0.0
+2020   8        6  0.461     3.7   3700   62%  0.95      0.83      -1200     -1.2
+2021   3        2  0.514     1.5   1500   67%  0.64       NaN      -1100     -1.1
+2022   6        4  1.711    10.3  10300   83%  2.86      1.42      -1100     -1.1
+2023  10        9 -0.194    -1.9  -1900   30% -0.57     -0.52      -3100     -3.1
+2024  10        7 -0.563    -5.6  -5600   20% -1.71     -1.71      -6300     -6.3
+2025   9        9  1.487    13.4  13400   78%  2.49      2.49      -1100     -1.1
+2026   5        5  0.262     1.3   1300   60%  0.46      0.46      -2300     -2.3
