@@ -141,3 +141,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v135 | 2026-11-16 19:12:47Z | Run memory curator, part 2 | results.md | edit | review fix E + factual entries v129, v130 (PRs #75, #77 merged) | cmsg_01FAHERC1Lsrg2bYtrKuRHmPQLLfkB6Xre2G6b2AG19ZB1 | 7d93f9b8f1 -> 691fac4d7a |
 | v136 | 2026-11-16 19:12:47Z | Run memory curator, part 2 | ACL.json | edit | review fix E: remove two closed threads from writers; add successor curator part 3 | cmsg_01FAHERC1Lsrg2bYtrKuRHmPQLLfkB6Xre2G6b2AG19ZB1 | 431a57bcbd -> eda499b3f6 |
 | v137 | 2026-11-16 19:12:48Z | Run memory curator, part 2 | INDEX.md | edit | review fix F: sync to live index text from coordinator | cmsg_01FAHERC1Lsrg2bYtrKuRHmPQLLfkB6Xre2G6b2AG19ZB1 | adf0d779b3 -> 03bb5720ba |
+| v138 | 2026-11-16 22:31:55Z | Run memory curator, part 3 | INDEX.md | edit | sync INDEX.md to the live index (curator now part 3) | coordinator relay 2026-11-16 19:14 | 03bb5720ba -> 04dcaf66bd |
