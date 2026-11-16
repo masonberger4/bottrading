@@ -43,6 +43,32 @@ def run(*a, **k):
 
 
 B.run_day, B.run = run_day, run
+if os.environ.get("ICT_ORACLE"):
+    # Entry-model test: the sweep / shift / entry scan runs ONLY on ICT's days, on HIS side, from 45 minutes before his
+    # entry to 15 minutes after it.  It takes the direction and the time from him, so what is left is whether the
+    # engine's entry model finds his entry.  Runner-side only (no engine switch): this is a measurement, not a strategy.
+    import re
+    _i2 = pd.read_csv(os.path.dirname(os.path.abspath(__file__)) + "/ict_trades.csv", sep="|", dtype=str).fillna("")
+    _win = {}
+    for _x in _i2[_i2.sym == sym].itertuples():
+        _ts = re.findall(r"\d\d:\d\d", _x.t_entry)
+        _m = [int(v[:2]) * 60 + int(v[3:]) for v in _ts]
+        _lo, _hi = (_m[0] - 45, _m[-1] + 15) if _m else {"AM": (525, 720), "PM": (720, 960)}.get(_x.t_entry, (480, 960))
+        _win.setdefault(_x.date, []).append((1 if _x.side == "long" else -1, _lo, _hi))
+    _scan0, _orders = ST._scan, []
+
+    def _scan(ctx, sd, i, *a, **k):
+        w = _win.get(str(ctx.day))
+        if not w or not any(sg == sd.sign and lo <= ctx.t[i] <= hi for sg, lo, hi in w):
+            return None
+        o = _scan0(ctx, sd, i, *a, **k)
+        if o is not None:                    # every order the scan armed on his side (filled or not), in contract prices
+            adj = float(ctx.adj[i]) if getattr(ctx, "adj", None) is not None else 0.0
+            _orders.append((str(ctx.day), f"{int(ctx.t[i]) // 60:02d}:{int(ctx.t[i]) % 60:02d}", sd.sign, o.get("setup"), o.get("entry_kind"),
+                            round(float(sd.x(o["entry"])) - adj, 2), round(float(sd.x(o["stop"])) - adj, 2)))
+        return o
+
+    ST._scan = _scan
 t0 = time.time()
 if sym == "ES":
     S.DECISIONS[name] = kw
@@ -64,4 +90,6 @@ pd.DataFrame(rows, columns=["day", "symbol", "key", "n"]).to_csv(f"{out}/funnel_
 if os.environ.get("ICT_TRACE"):
     tr = pd.DataFrame(ST.TRACE, columns=["day", "t", "session", "side", "label"])
     tr.groupby(["day", "t", "session", "side", "label"], dropna=False).size().rename("n").reset_index().to_csv(f"{out}/trace_{tag}.csv", index=False)
+if os.environ.get("ICT_ORACLE"):
+    pd.DataFrame(_orders, columns=["day", "armed", "side", "setup", "entry_kind", "entry", "stop"]).to_csv(f"{out}/orders_{tag}.csv", index=False)
 print(tag, f"tf{tf}", len(t), "trades", round(time.time() - t0), "s", flush=True)
