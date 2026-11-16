@@ -57,3 +57,6 @@ Laptop test-run lessons:
 - Roll-fix PURCHASED (Mase approved 2026-11-10 ~18:45 UTC: ES, NQ and YM, next contract's 1-minute bars for the 2 weeks before each expiry, quoted $4.12); the engine switched to the fixed-roll data in PR #65.
 - Roll-fix quotes (Databento get_cost, 2019 to 2026-10-16): the next contract's 1-minute bars for the 2 weeks before each expiry cost $1.57 for ES only or $4.12 for ES, NQ and YM. ES.v.1 in full costs $3.61. Every contract's 1-minute bars for the whole period cost $15.98 for ES or $42.43 for all three. Daily bars per contract cost $0.15 for ES or $0.34 for all three. The credit left is about $28, which is unverified (the balance shows only on the portal's Billing page).
 - Chart notes: ICT's opening range gap uses the 16:14 close, not 16:00, and a video's upload date can be a day after the session it shows.
+
+## databento-credit (2026-11-16)
+- Databento credit left is about $23.90: the roughly $28 quoted on 2026-11-10 less the $4.12 roll-fix purchase. This replaces the "about $28" in the roll-fix quotes bullet above. Still not confirmed on the portal's Billing page (the API does not show the balance).
