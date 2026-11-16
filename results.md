@@ -185,3 +185,10 @@ The setups were switched off in the test script, not in the engine (this also re
 - 42 dated ICT trades (25 ES, 17 NQ, 2023-26). 38 of the 40 with a readable entry price match our data at his price in his stated minutes; 1 miss is a roll difference (2023-12-08).
 - The engine took 0 of 41 under the defaults (the weekly rule had closed the week on 35; holiday-week, holiday-eve, Fed-chair and chop filters stopped the rest) and 4 with the day filters off, with 1 true match (the 2023-05-22 Silver Bullet short).
 - Main gaps: the engine never enters on a fair value gap (about half of ICT's entries are a 1-minute gap after a sweep and shift); half the engine's trades are at lunch (ICT: 4 of 41); the afternoon closes once the morning target is hit; big-gap and news rules block mornings he traded; the defaults trade ES only, while he trades NQ in nearly every video from mid-2023. The report lists 7 switches to test, with the 1-minute gap entry and the weekly rule first.
+
+## DXY and bond switches (2026-11-16, PR #72, runs/dxy_bond_2026-11-16/README.md, ES + NQ + YM 5m, engine 2101d04, old $400k sizing cap)
+- Every DXY and bond switch is off in the engine defaults, including sym_gate and dxy_states (decisions D1-D3 of 2026-10-31 only set the mode used when they are on).
+- Change against the base in R, 2019-22 then 2023-25. On the defaults: DXY +7.3 / -13.4, bonds +4.8 / -3.4, both +1.4 / -9.5 (too few trades to say anything). With the week rule off: DXY +56.5 (t 2.3) / +5.9 (t 0.2), bonds +34.9 / +21.1, both +65.6 (t 2.2) / +38.6 (t 1.2).
+- The gain is mostly from taking 17% fewer trades of a losing set: dropping 17% at random would give about +34 R and +28 R. The set still loses (-137 R, then -123 R). No real edge, so no case for turning them on by default.
+- The 1-minute DXY file ends in 2025, so the DXY switches do nothing in 2026.
+- Trade files: /mnt/project-files/mentorship/runs/dxy_bond_2026-11-16/.
