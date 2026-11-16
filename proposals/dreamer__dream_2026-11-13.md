@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-13 06:06:04Z; target: dream_2026-11-13.md; reason: Eleventh dream report; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmP2uMud85T9vhdUjLTfMciK8; status: open -->
+<!-- proposal by dreamer at 2026-11-13 06:06:04Z; target: dream_2026-11-13.md; reason: Eleventh dream report; link: cmsg_01FAHERC1Lsrg2bYtrKuRHmP2uMud85T9vhdUjLTfMciK8; status: merged -->
 # Dream report 2026-11-13 (reviewed: list_threads since 11-12 06:06 (8 threads; newest 2 messages of 3 result threads), CHANGELOG v108-v117 (index trim applied). Not reviewed: the trim thread and the curator part 2 thread in full.)
 R1 and R3 (11-11) were never approved. Q1 and Q2 replace them; S2 is unchanged and still pending.
 | # | ID | Change | Uplift |

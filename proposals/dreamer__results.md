@@ -1,4 +1,4 @@
-<!-- proposal by dreamer at 2026-11-13 06:06:04Z; target: results.md; reason: Q2 results 11-12/13 (replaces unapproved R3); link: cmsg_01FAHERC1Lsrg2bYtrKuRHmP2uMud85T9vhdUjLTfMciK8; status: open -->
+<!-- proposal by dreamer at 2026-11-13 06:06:04Z; target: results.md; reason: Q2 results 11-12/13 (replaces unapproved R3); link: cmsg_01FAHERC1Lsrg2bYtrKuRHmP2uMud85T9vhdUjLTfMciK8; status: merged -->
 EXACT TEXT for results.md, new sections at end:
 
 ## Low trade count funnel (2026-11-11, PR #66, fixed-roll data, ES 5m, 2019-26)
