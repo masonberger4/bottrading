@@ -38,6 +38,22 @@ observation before any hit rate or t-stat, because they are nearly the same bet.
 **Reading:** with the features he names, as far as they can be coded, neither the side nor the one-way day shows up.
 That matches PR #82. The pipeline works end to end, so C can be answered in minutes once A and B land.
 
+## Rerun with option A's columns (PR #83), 2026-11-17
+
+A's 30 engine bias columns (`/mnt/project-files/mentorship/runs/bias_direction_2026-11-16/bias_cols.csv`) joined
+through `--a-cols`; output `out/report_with_A.txt`. 57 signed columns in all.
+
+- Still 0 of 57 columns with |t| > 2 in 2019-22.
+- Direction model, 2023-26: 09:30-11:30 logistic 49.6% (t = -1.3), trees 47.9% (t = -2.5); 09:30-16:00 52.6% and 52.8%,
+  level with always-long (52.7%). Adding A's columns makes the fit years look better and the check years no better.
+- His picks: side model 56% of 32, exactly what always-long gets. A's `pdhl` points his way on 70% of 27 days, just
+  outside the coin band, and A shows it has no edge on the market.
+- The +0.035 ADR (t = +1.8) on "days most like his" in the first run is gone: -0.014 (t = -0.8). It was noise.
+
+So A's answer carries over: the side cannot be read from the codable rules, alone or combined, and a model cannot
+recover his side from them. C now rests entirely on B. If B's calls made before the fact are not clearly better than
+a coin, C should stop here.
+
 ## How A and B plug in
 
 - **A** (bias rules): a CSV with `day`, `market` (optional) and columns named `s_<name>` (signed, + = bullish) or
