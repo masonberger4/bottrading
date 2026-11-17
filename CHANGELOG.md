@@ -151,3 +151,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v145 | 2026-11-17 00:05:45Z | Run memory curator, part 3 | data.md | append | cloud setup note for the fixed-roll parquets | coordinator relay 2026-11-17 00:04 | 3401c3cf06 -> e165fac615 |
 | v146 | 2026-11-17 00:11:56Z | Run memory curator, part 3 | results.md | append | ICT live calls set 1 (PR #87), numbers checked against the PR body | PR #87 | 36b72ff66a -> 91f0cc1289 |
 | v147 | 2026-11-17 00:19:19Z | Run memory curator, part 3 | results.md | append | narrow NQ morning engine result (PR #89), numbers checked against the PR body | PR #89 | 91f0cc1289 -> c48f38d261 |
+| v148 | 2026-11-17 00:19:21Z | Run memory curator, part 3 | lessons.md | append | lesson from the narrow NQ engine thread | PR #89; coordinator relay 2026-11-17 00:18 | 6dd4468adb -> 319f2680b3 |
