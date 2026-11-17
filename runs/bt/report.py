@@ -27,7 +27,8 @@ def stats(t, rng):
     peak = np.maximum.accumulate(np.maximum(eq, 0)); d = pd.to_datetime(ts.exit_time.astype(str).str[:10]).values
     last_peak = pd.Series(np.where(eq >= peak, np.arange(len(eq)), np.nan)).ffill().fillna(0).astype(int).values     # longest stretch below a prior equity high, in days
     dd_days = int(((d - d[last_peak]) / np.timedelta64(1, "D")).max()) if len(d) else 0
-    return dict(trades=n, total=x.sum(), h1=t.net[t.year <= 2022].sum(), h2=t.net[t.year >= 2023].sum(), yrs_up=f"{int((by > 0).sum())}/{len(by)}",
+    bad = int((np.where(t.side == "long", 1, -1) * (t.entry - t.stop) <= 0).sum())      # stop not on the loss side of the entry (PR #95): must be 0, such "trades" stop out at a profit
+    return dict(trades=n, bad_stop=bad, total=x.sum(), h1=t.net[t.year <= 2022].sum(), h2=t.net[t.year >= 2023].sum(), yrs_up=f"{int((by > 0).sum())}/{len(by)}",
                 maxdd=(eq - np.maximum.accumulate(np.maximum(eq, 0))).min(), t=x.mean() / x.std() * n ** .5 if n > 1 and x.std() else 0.0,
                 lo=np.percentile(bw, 5), hi=np.percentile(bw, 95), x2=t.gross.sum() - 2 * t.costs.sum(), R=t.R.sum() if "R" in t else np.nan,
                 med_risk=risk.median(), max_risk=risk.max(), maxdd_R=(eqR - np.maximum.accumulate(np.maximum(eqR, 0))).min(),
@@ -49,10 +50,12 @@ def main():
                 r["diff_vs_base"], r["diff_t"] = d.sum(), d.mean() / d.std() * len(d) ** .5
             rows.append(r)
     R = pd.DataFrame(rows)
-    num = [c for c in R.columns if c not in ("market", "variant", "yrs_up", "trades", "t", "R", "diff_t")]
+    num = [c for c in R.columns if c not in ("market", "variant", "yrs_up", "trades", "bad_stop", "t", "R", "diff_t")]
     R[num] = R[num].round(0).astype("Int64"); R[[c for c in ("t", "R", "diff_t") if c in R]] = R[[c for c in ("t", "R", "diff_t") if c in R]].round(2)
     R.to_csv(f"{out}/report.csv", index=False)
     print(f"engine {open(f'{out}/ENGINE.txt').read().strip()}; {T.variant.nunique()} variants in this folder (count every variant ever tried when judging a winner)\n")
+    if R.bad_stop.sum():
+        print(f"WARNING: {int(R[R.market != 'ALL'].bad_stop.sum())} trades have their stop on the profit side of the entry (column bad_stop); those results are not real\n")
     print(R.to_markdown(index=False) if "--md" in sys.argv else R.to_string(index=False))
 
 if __name__ == "__main__":

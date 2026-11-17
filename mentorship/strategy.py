@@ -102,6 +102,7 @@ class Params:
     eq_tol_pts: float = 0.5        # relative equal highs/lows tolerance, ES points
     exit_before_pts: float = 0.5   # exit this far in front of a liquidity target
     min_risk_pts: float = 1.0
+    fill_stop_guard: bool = True   # stop-side guard (Mase 2026-11-17): an order whose fill price is at or beyond its own stop is cancelled, not filled (False = the old behaviour, kept for comparison only)
     max_risk_pts: float = 15.0
     min_rr: float = 1.0
     partial: float = 0.5
@@ -7508,6 +7509,10 @@ def _run_day_once(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Pa
                 _f("x_daily_loss")
             elif pending.get("mtf_gap") is not None and i - 1 > pending["i"] and _ES1.mtf_pending_dead(ctx, sd, pending, i - 1, p):
                 pending = None                       # review fix A5-multitf-hold-test (064 ~1:32:01): two or more 1-4m closes inside the 5m entry gap while the limit rests cancel it
+            elif (pos is None and p.fill_stop_guard and _NC.fill_ok(pending, t, tf) and _fill_at(sd, pending, i) is not None
+                  and _fill_at(sd, pending, i) <= pending["stop"] + 1e-12):
+                pending = None                       # stop-side guard (2026-11-17, PR #95 finding): the fill price is at or beyond the order's stop (the market had already traded
+                _f("x_fill_past_stop")               # through the stop when the limit filled) - not a trade; without it the "stop" is hit at once at a profit
             elif (pos is None and _NC.fill_ok(pending, t, tf) and _fill_at(sd, pending, i) is not None
                   and _retrace_ok(sd, pending, i, p)):
                 o = pending
