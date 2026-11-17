@@ -1,0 +1,30 @@
+== NEW calls: 14 logged, 11 same-day 07:00-15:00 with data; right 8 of 11
+   read agrees: right 1 of 3 | read disagrees: right 7 of 8
+   plain entry, $1k risk  agrees:   2 trades +1.41R  $  2,812  maxDD $      0 | disagrees:   8 trades +0.16R  $  1,266  maxDD $ -2,017
+   back across the overnight range : right 0 of 2 | plain entry   1 trades +0.82R  $    824  maxDD $      0
+   from the middle third           : right 3 of 3 | plain entry   3 trades +1.53R  $  4,593  maxDD $      0
+   toward the extreme price is at  : right 5 of 6 | plain entry   6 trades -0.22R  $ -1,339  maxDD $ -3,326
+    id       date sym   ref  side  win  vote    ag  ext  R_his
+ CX-01 2023-01-06  ES 10:08     1    1  -1.0 False 0.69   1.99
+ CX-03 2023-01-26  ES 10:43    -1    1  -4.0  True 0.51   1.99
+ CX-04 2023-06-23  ES 09:00    -1    0   3.0 False 0.94  -1.01
+CTE-01 2023-12-07  NQ 08:32     1    1  -2.0 False 0.80  -1.01
+CTE-02 2023-12-29  NQ 09:56    -1    1   0.0 False 0.40   1.99
+CTE-03 2024-01-10  ES 10:25     1    1  -3.0 False 0.51   0.61
+CTE-05 2024-01-25  NQ 10:55     1    1  -4.0 False 0.70   0.70
+CTE-06 2024-05-13  NQ 08:05    -1    0  -4.0  True 0.04   0.82
+CTE-07 2024-06-10  NQ 13:20    -1    0  -4.0  True 0.23    NaN
+CTE-08 2024-06-24  NQ 08:50    -1    1   4.0 False 0.83  -1.01
+ CX-05 2025-05-01  NQ 09:47     1    1  -2.0 False 0.69  -1.01
+== OLD calls (for comparison): 114 logged, 83 same-day 07:00-15:00 with data; right 62 of 83
+   read agrees: right 43 of 52 | read disagrees: right 19 of 31
+   plain entry, $1k risk  agrees:  49 trades +0.56R  $ 27,442  maxDD $ -4,019 | disagrees:  30 trades +0.27R  $  7,950  maxDD $ -5,017
+   back across the overnight range : right 30 of 37 | plain entry  36 trades +0.68R  $ 24,407  maxDD $ -2,017
+   from the middle third           : right 14 of 20 | plain entry  18 trades +0.51R  $  9,194  maxDD $ -3,769
+   toward the extreme price is at  : right 18 of 26 | plain entry  25 trades +0.07R  $  1,791  maxDD $ -5,251
+== ALL calls: 128 logged, 94 same-day 07:00-15:00 with data; right 70 of 94
+   read agrees: right 44 of 55 | read disagrees: right 26 of 39
+   plain entry, $1k risk  agrees:  51 trades +0.59R  $ 30,254  maxDD $ -4,019 | disagrees:  38 trades +0.24R  $  9,216  maxDD $ -5,017
+   back across the overnight range : right 30 of 39 | plain entry  37 trades +0.68R  $ 25,231  maxDD $ -2,017
+   from the middle third           : right 17 of 23 | plain entry  21 trades +0.66R  $ 13,787  maxDD $ -2,010
+   toward the extreme price is at  : right 23 of 32 | plain entry  31 trades +0.01R  $    453  maxDD $ -8,577

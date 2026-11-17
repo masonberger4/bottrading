@@ -35,7 +35,7 @@ d['ext'] = np.where(d.side > 0, d.on_pos, 1 - d.on_pos)            # 0 = far sid
 FL = ['c_news', 'c_nfp', 'c_cpi', 'c_fomc', 'c_ppi', 'c_holiday_eve', 'c_fri', 'c_prev_big', 'c_small_gap', 'c_on_big']
 
 # ---- 1. his call days against his stated no-trade days
-c = pd.read_csv('out/calls_feats.csv', parse_dates=['date']); c = c[c.same_day == 1]
+c = pd.read_csv('out/calls_feats.csv', parse_dates=['date']); c = c[(c.same_day == 1) & (c.new == 0)]  # the calls report_c.txt was built on
 call = set(zip(c.sym, c.date))
 nt = pd.concat([pd.read_csv(f, sep='|') for f in sorted(glob.glob('../ict_calls_2026-11-17/nocall_20??.csv'))])
 nt = nt[nt.kind == 'no trade']; nt['date'] = pd.to_datetime(nt.date); nt['sym'] = np.where(nt.date.dt.year == 2023, 'ES', 'NQ')

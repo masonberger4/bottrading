@@ -132,3 +132,36 @@ Mase asked for A, B and C after PR #101. A and B run in their own threads. This 
 and it adds a little to the read at the open. His choice of moment is still not coded. The best all-days rule so far is
 "the read at 09:30 on days he would not skip", about +0.07 R a trade with drawdowns of $12k to $27k: a lead for
 thread B to test inside the engine, not something to trade.
+
+## Update 2026-11-17: the two-kinds split on new calls only (option A)
+
+14 more calls were logged (Trade Executions and X posts; `../ict_calls_2026-11-17/README.md`, Set 5). 11 are same-day
+calls between 07:00 and 15:00, all made before the read existed, so they are a clean test. `python build.py;
+python analyze_new.py` writes `out/report_new.txt`. `analyze.py` still reports on the first 114 calls only.
+
+| on the 11 new same-day calls | new | old (83 calls) |
+|---|---|---|
+| the read picks his side | 3 of 11 (27%) | 52 of 83 (63%) |
+| he is right when the read agrees | 1 of 3 | 43 of 52 (83%) |
+| he is right when it disagrees | 7 of 8 | 19 of 31 (61%) |
+| back across the overnight range: right, plain entry at $1k risk | 0 of 2; 1 trade, +$0.8k, DD $0 | 30 of 37; 36 trades, +0.68R, +$24.4k, DD -$2.0k |
+| from the middle third | 3 of 3; 3 trades, +$4.6k, DD $0 | 14 of 20; 18 trades, +0.51R, +$9.2k, DD -$3.8k |
+| toward the extreme price already sits at | 5 of 6; 6 trades, -0.22R, -$1.3k, DD -$3.3k | 18 of 26; 25 trades, +0.07R, +$1.8k, DD -$5.3k |
+
+**Not confirmed.** What the new calls say:
+
+- The read does not reproduce his side on new calls: 3 of 11. If the old 63% were real, 3 or fewer of 11 happens about
+  2 times in 100. The four features were picked after seeing the old calls, and this looks like that.
+- "Right more often when the read agrees" went the other way (1 of 3 against 7 of 8). With 11 calls that is not
+  evidence of the opposite either (15 in 100 by chance).
+- By where price sits, the money side still leans the old way: the 6 calls toward the extreme lost money with the
+  plain entry (-0.22R a trade) although 5 of 6 were right at his horizon, and the 4 others made +1.35R a trade. Only 2
+  of the 11 new calls were back across the overnight range, so that kind was hardly tested.
+- All calls together (94 same-day): back across 37 trades +0.68R, +$25.2k, DD -$2.0k; middle 21 trades +0.66R, +$13.8k,
+  DD -$2.0k; toward the extreme 31 trades +0.01R, +$0.5k, DD -$8.6k.
+
+So the one part that survives is narrow: **his calls toward the extreme price already sits at do not pay with a plain
+entry** (31 trades, about zero). The stronger claim, that a coded read tells his good calls from his bad ones, is not
+supported by the new calls. The new set is small, is all 2023-25, and is made of trades he chose to publish, so it
+cannot settle it; about 40 more same-day calls would. The cheapest source is the 43 silent Trade Executions videos
+(date and often side in the title; the minute needs the frames on the laptop).

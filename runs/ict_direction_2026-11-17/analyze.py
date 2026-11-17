@@ -14,7 +14,8 @@ def st(x, money=False):
         e = (x * 1000).cumsum(); s += f" ${1000 * x.sum():>9,.0f} maxDD ${min((e - e.cummax()).min(), 0):>9,.0f}"
     return s
 
-c = pd.read_csv('out/calls_feats.csv', parse_dates=['date']); s = c[(c.same_day == 1) & c.p.notna()].sort_values(['date', 'T']).copy()
+c = pd.read_csv('out/calls_feats.csv', parse_dates=['date']); c = c[c.new == 0]  # the 114 calls the read was built on; new ones are in analyze_new.py
+s = c[(c.same_day == 1) & c.p.notna()].sort_values(['date', 'T']).copy()
 P(f"== 1. His calls: {len(c)} one-sided calls, {len(s)} same-day calls between 07:00 and 15:00 with data. Right at his horizon {s.win.mean():.0%}, long {np.mean(s.side > 0):.0%}")
 P("feature      days it has a side / points his way / he was right when it agreed / when it did not")
 for f in F:

@@ -32,14 +32,14 @@ def main():
 
     # his calls, features at his call time
     C = []
-    for fn in sorted(glob.glob(str(HERE.parent / "ict_calls_2026-11-17" / "calls_20??_scored.csv"))):
+    for fn in sorted(glob.glob(str(HERE.parent / "ict_calls_2026-11-17" / "calls_*_scored.csv"))):
         c = pd.read_csv(fn, sep="|"); C.append(c)
     C = pd.concat(C, ignore_index=True)
     C["sym"] = C["sym"].fillna("NQ")
     rows = []
     for r in C.itertuples():
         d = pd.Timestamp(r.date).date(); T = mins(r.ref)
-        row = dict(id=r.id, date=r.date, sym=r.sym, ref=r.ref, T=T, side=1 if r.dir == "up" else -1, end_day=r.end_day,
+        row = dict(new=int(not str(r.id)[1:3].isdigit()), id=r.id, date=r.date, sym=r.sym, ref=r.ref, T=T, side=1 if r.dir == "up" else -1, end_day=r.end_day,
                    end=r.end, before=r.before, win=r.win_end, target=r.target, what=r.what)
         same_day = r.end_day == 0 and 420 <= T <= 900
         row["same_day"] = int(same_day)
