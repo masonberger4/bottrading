@@ -33,10 +33,21 @@ def main():
     out = sys.argv[1]; T = load(out); rows = []
     for (mk, v), t in T.groupby(["market", "variant"], sort=False):
         rows.append(dict(market=mk, variant=v, **stat(t)))
+    if T.market.nunique() > 1:
+        for v, t in T.groupby("variant", sort=False):
+            rows.append(dict(market="ALL", variant=v, **stat(t)))
     R = pd.DataFrame(rows)
     R.to_csv(f"{out}/summary.csv", index=False)
     txt = ("Columns: R = average result a trade in units of its own risk (x $1,000 = $ a trade); t = t-stat; 1 = 2019-22 (chosen on), 2 = 2023-26 (check), 0 = 2016-18 (second check, not in the totals);\ntrades, win, R, t, total, maxdd, yrs_up, worst_yr, x2cost are 2019-26;\n"
            "maxdd in $ and in R; x2cost = total at twice the costs; med_risk / max_risk = $ risked a trade; cost_R = costs a trade in R.\n\n" + R.to_string(index=False) + "\n")
+    txt += "\nBase by year, $ (trades):\n"
+    for mk, M in T[T.variant == "base"].groupby("market"):
+        g = M.groupby("year").net.agg(["sum", "count"])
+        txt += f"  {mk}: " + "  ".join(f"{y} {v['sum']:+,.0f} ({int(v['count'])})" for y, v in g.iterrows()) + "\n"
+    b = T[(T.variant == "base") & (T.year >= 2019)]
+    for col in ("exit_reason", "side", "swept"):
+        g = b.groupby(col).R.agg(["count", "mean"])
+        txt += f"Base 2019-26, all markets, by {col}: " + "; ".join(f"{k} {int(v['count'])} trades {v['mean']:+.3f} R" for k, v in g.iterrows()) + "\n"
     for mk, M in R.groupby("market"):
         one = M[~M.variant.isin(["pick"])]
         txt += (f"\n{mk}: {len(one)} variants; positive R in 2019-22: {(one.R1 > 0).sum()}, in 2023-26: {(one.R2 > 0).sum()}, in both: {((one.R1 > 0) & (one.R2 > 0)).sum()}, in 2016-18: {(one.R0 > 0).sum()}; "
