@@ -68,3 +68,7 @@ Laptop test-run lessons:
 
 ## smc-2026-note-dates (2026-11-17)
 - The 2026 SMC playlist is not in date order and many per-video notes carry inferred dates, some wrong. Pin a session's date by matching the prices ICT says out loud to the NQ 1-minute file (09:30 open, 16:14 settlement, session highs and lows). Dates corrected this way (PR #90, runs/ict_calls_2026-11-17/README.md): 006/007 = Tue Sep 29 (not Thanksgiving week); 018 = Thu Sep 3 (not NFP Friday Sep 4); 138 = Thu Jan 29 (not Jan 8); 089 = Wed May 13; 027 = Tue Aug 25; 055 = Tue Jul 21 (the same trade 054 reviews); 030 = Thu Aug 20; 067 = Wed Jul 8; 095 = Tue Apr 21 (the pre-market short 097 mentions).
+
+## ict-frames-and-macro-dates (2026-11-17)
+- Frames for the Trade Executions playlist exist on the laptop for videos 6-71: C:\Users\mason\bottrading\data\ict_frames\PLVgHx4Z63paYhYt0DTyeBBxQomkeCEIq1\NN_<id>\tHHMMSS.s.webp (the file name is the position in the video as h m s). Videos 1-5 (2023-11-20 to 11-30) have none. Cloud threads can read them read-only with the folder tools, with no laptop writes (thread "Log ICT's calls from silent videos", PR #107): copy 4-7 frames per video, build 2-column contact sheets at 800x450, read the date, chart clock, fills and limit orders, then pin the fill price in the 1-minute file.
+- data/mentorship/macro_risk_dates.csv is not in git (reported by the coordinator 2026-11-17, not checked by the curator), so cloud backtests fall back to the built-in news calendar and test N8.2 fails in the cloud only. Adding the file to the repo is proposed and awaits Mase.
