@@ -146,3 +146,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v140 | 2026-11-16 22:31:58Z | Run memory curator, part 3 | data.md | append | cloud paths for fixed-roll parquets and 1m trades (paths checked to exist) | PR #80 | 9f26c1869e -> 3401c3cf06 |
 | v141 | 2026-11-16 22:31:59Z | Run memory curator, part 3 | lessons.md | append | lesson from the 1m entries thread | coordinator relay 2026-11-16 21:00 | 29260f1a07 -> 6dd4468adb |
 | v142 | 2026-11-16 22:33:17Z | Run memory curator, part 3 | INDEX.md | edit | re-sync INDEX.md to the live index after PRs #78-#80 merged | coordinator relay 2026-11-16 22:33 | 04dcaf66bd -> 957225b446 |
+| v143 | 2026-11-17 00:03:47Z | Test whether ICT's bias rules call direction | proposals/test-whether-ict-s-bias-rules-call-direction__results.md | proposal | Option A result, PR #83 | https://github.com/masonberger4/bottrading/pull/83 | ABSENT -> 34a5d71c8e |
