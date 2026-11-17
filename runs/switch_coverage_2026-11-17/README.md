@@ -16,6 +16,7 @@ engine), testing is sufficient, with a short list of exceptions below.**
 
 - The engine has 2,616 switches (`Params`, mentorship @ e68ef84). 30 have been run to the standard (11 of them in this
   PR), 9 more on fixed-roll data but with the old sizing cap or on ES only, 24 only in the ICT replication runs.
+  The other 11 are runner settings, not rules (costs, sizing, symbols): 30 + 9 + 24 + 1,896 + 646 + 11 = 2,616.
 - 1,896 were last run in the old one-year screen (2021, ES only, old late rolls, $400k cap, engine before the
   2026-11-09 rebuild). 646 have never been run at all (404 have a variant defined, 242 do not; the 242 are mostly
   numeric thresholds).
