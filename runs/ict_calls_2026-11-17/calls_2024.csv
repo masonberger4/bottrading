@@ -1,0 +1,26 @@
+id|date|src|ref|dir|end_day|end|target|tgt_px|tgt_by|trade|before|evidence|what
+C24-01|2024-08-05|m24-01|08:50|up|0|11:30|relative equal highs|17820.75|16:00|none|yes|caption 0:48, note|Pre-open: smooth relative equal highs above are the draw
+C24-02|2024-08-06|m24-02|09:30|up|0|11:30|relative equal highs formed after 07:00||16:00|none|unclear|note|Relative equal highs targeted after a disruption lower
+C24-03|2024-08-07|m24-03|12:45|down|0|16:00|London low|london_low|16:00|live demo short, win|yes|caption clock 12:42, note|PM short 18,321.25 toward London lows and the NDOG below
+C24-04|2024-08-08|m24-04|08:25|up|0|11:30|Wed and Tue NDOGs above||16:00|none|yes|caption 0:20|Gap cluster above price, so the 08:30 run should be up
+C24-05|2024-08-12|m24-06|07:50|down|0|11:30|deferred TGIF 20-30% retrace, NDOG CE||16:00|live short, stopped on trailed stop in profit|yes|note|Monday should give the retracement Friday did not
+C24-06|2024-08-13|m24-07|12:00|up|3|16:00|daily volume imbalance CE|19160|16:00|none|unclear|note|Named as the higher-timeframe objective during a no-trade day
+C24-07|2024-08-15|m24-09|10:30|down|0|16:00|09:30 opening price|open930|16:00|none|yes|note 0:34, 1:02|Gap up is too rich to buy; price should come back to the opening price, after lunch if not before
+C24-08|2024-08-19|m24-11|10:00|up|0|12:00|NWOG lower quadrant||12:00|live long, win|yes|note|Long after the sell-side sweep into Friday's NDOG
+C24-09|2024-09-06|m24-24|08:25|up|0|09:30|minor buy-side||09:30|none|yes|caption 0:54|NFP release more likely to run the buy-side first
+C24-10|2024-09-09|m24-25|10:15|down|0|11:30|ORG mid-gap|org_mid|12:00|none (framed)|partly|note|Premium gap too expensive to buy; short framed toward the mid-gap
+C24-11|2024-09-17|m24-29|09:33|down|0|10:00|ORG mid-gap|org_mid|10:00|none|yes|caption 0:05|Premium gap over 100 handles, bias toward the mid-gap by 10:00
+C24-12|2024-09-19|m24-31|09:49|down|0|11:30|retracement after the opening high||12:00|live micro short, small win|yes|note|Short at the first presented gap after a very large gap up
+C24-13|2024-09-23|m24-33|09:35|up|0|10:30|0.25 extension||10:30|live long, win|yes|note|One early long, then stood aside
+C24-14|2024-09-24|m24-34|09:35|down|0|10:00|sell-side 20,085|20085|10:00|none|yes|note|Wants the 20,085 sell-side swept before the 10:00 news
+C24-15|2024-09-25|m24-35|09:40|up|0|11:30|Aug 22 daily high||12:00|live long, win|yes|note|Draw is the Aug 22 daily high
+C24-16|2024-09-27|m24-36|09:50|down|0|11:30|ORG mid-gap|org_mid|12:00|none (framed)|partly|caption 0:21, note|Lackluster Friday; short framed off the first presented gap
+C24-17|2024-09-30|m24-37|10:00|down|4|16:00|weekly BISI CE, daily relative equal lows||16:00|none (framed short, first target hit, second failed)|yes|caption 0:09, note|Wants the short of the week
+C24-18|2024-10-01|m24-38|09:30|down|0|11:30|15m relative equal lows||12:00|about ten one-contract drills, wins and losses|yes|note|Drill trades aimed lower
+C24-19|2024-10-07|m24-43|09:30|up|0|10:00|ORG mid-gap 20,179.5|org_mid|10:00|none|yes|caption 0:03, 0:10|Discount gap, bullish to the mid-gap in the first 30 minutes
+C24-20|2024-10-15|m24-44|09:10|up|0|16:00|daily SIBI (CE 20,568, upper quadrant 20,646.75)||16:00|none|yes|caption 0:03|Higher-timeframe bullish, drawing up into the daily SIBI
+C24-21|2024-10-16|m24-45|09:50|up|0|10:30|first presented gap, opening range||10:30|none|yes|note|NQ should come back up into its range after the unconfirmed lower low
+C24-22|2024-10-17|m24-46|08:30|up|0|16:00|20,640s then Tuesday's high|20659.25|16:00|none|yes|caption 0:07|Bullish, draw to nested relative equal highs and Tuesday's high
+C24-23|2024-10-21|m24-47|09:30|up|0|10:00|ORG mid-gap|org_mid|10:00|none|yes|caption 0:27|Discount gap, bullish 09:30 to 10:00 until half the gap fills
+C24-24|2024-10-25|m24-48|10:00|up|0|12:00|relative equal highs in the 20,600s||12:00|none|partly|caption 0:21|Bullish, draw to smooth highs (says he tweeted it Thursday)
+C24-25|2024-12-01|m24-50|18:00|up|5|16:00|21,580.25 above November's high|21580.25|16:00|none|yes|note|Weekly outlook: favors higher
