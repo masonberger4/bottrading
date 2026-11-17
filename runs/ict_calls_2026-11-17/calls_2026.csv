@@ -1,0 +1,43 @@
+id|date|src|ref|dir|end_day|end|target|tgt_px|tgt_by|trade|before|evidence|what|sym
+C26-01|2026-01-05|s26-141|09:17|up|0|11:30|buy side above the pre-market and overnight highs, Friday's first gap||16:00|live demo long, half off at the minor buy side|yes|caption 0:03, 0:09 (4.5 minutes before the bell)|Pre-open long from the pre-market first gap toward the highs above|NQ
+C26-02|2026-01-29|s26-138|08:34|up|0|09:30|minor buy side above the .375 level and the gap above it||09:30|none|yes|caption 0:09; date pinned by the 09:30 low 26,122.50 (note said Jan 8)|Pre-market: the smooth side is up, expects the run into the minor buy side|NQ
+C26-03|2026-02-10|s26-134|09:24|down|0|11:30|smooth relative equal lows below (posted on X)|25292.25|16:00|live small entries on the 15s chart|yes|caption 0:05 (X post), 0:19, 0:25|Buy side went first, so the relative equal lows are the next draw|NQ
+C26-04|2026-02-11|s26-133|09:37|down|0|10:00|half of the premium opening gap, 25,326.75|org_mid|10:00|none|yes|caption 0:09 to 0:13|NFP Wednesday: premium gap, watching for the half gap by 10:00|NQ
+C26-05|2026-02-27|s26-129|08:16|down|0|16:00|sell side below the short-term low and older daily lows||16:00|none|yes|caption 0:06, 0:09|PPI morning: "I'm bearish, I want to see lower prices"|NQ
+C26-06|2026-03-08|s26-127|18:00|down|5|16:00|March-contract daily lows||16:00|none|yes|note|Sunday outlook: NQ is the weak index, bearish|NQ
+C26-07|2026-03-09|s26-126|10:25|up|0|11:30|today's intraday high|6693.75|16:00|live paper long, one micro|yes|caption 0:00|ES long from an inversion gap to run the shorts from the open|ES
+C26-08|2026-03-13|s26-121|16:30|down|1|16:00|a gap lower on Sunday, then the low||16:00|none|yes|caption 0:24|Friday review: "I anticipate and expect a gap lower opening on Sunday", stay heavy|NQ
+C26-09|2026-03-17|s26-120|09:34|down|0|11:30|engineered relative equal lows below||16:00|none|partly|caption 0:04, 0:18; note|Tape read, no trade: only interested in the sell side below|NQ
+C26-10|2026-04-06|s26-114|09:50|down|0|11:30|09:30 open, sell side, half gap, full gap|org_mid|16:00|none|partly|note; caption 0:21, 0:49|Premium gap after Good Friday: reads the run above the highs as a false break back to the gap|NQ
+C26-11|2026-04-08|s26-110|09:33|down|0|11:30|low of the daily suspension block||16:00|live short, stepped partials|yes|caption 0:05|Huge premium gap: the only target this morning is the block low|NQ
+C26-12|2026-04-10|s26-108|09:40|down|0|10:00|CPI low, half gap 25,275.75|org_mid|10:00|none|yes|caption 0:04, 0:14|CPI Friday: premium gap, still drawing lower to the mid-gap|NQ
+C26-13|2026-04-13|s26-106|09:54|up|0|11:30|minor buy side, then halfway to the weekly gap high||16:00|live long|yes|note (09:54), caption|Neutral at the open, then a long from an inversion gap|NQ
+C26-14|2026-04-16|s26-101|09:30|down|0|10:00|half of the premium opening gap|org_mid|10:00|live short, late fill|unclear|note|Premium gap after nine up days: short toward the gap in the first 30 minutes|NQ
+C26-15|2026-04-17|s26-100|08:25|up|0|16:00|all-time high 26,859 (halfway mark 26,711)|26859|16:00|none|yes|caption 0:02 (clock 08:25)|Friday plan: next objective is the all-time high|NQ
+C26-16|2026-04-21|s26-095|08:10|down|0|09:30|relative equal lows 26,830 and 26,805|26805|09:30|live short, partials, runner stopped|yes|caption 0:01, 0:02|Pre-market short after the run stalled just under the all-time high|NQ
+C26-17|2026-04-28|s26-092|09:45|down|0|11:30|morning relative equal lows 27,069 (posted on X)|27069|16:00|live short, target hit|yes|caption 0:05, 0:07; entry 27,227.75 traded 09:42 to 09:48|Short at 75% of the opening gap toward the morning lows|NQ
+C26-18|2026-05-13|s26-089|09:46|up|0|11:30|the 08:30 candle high, 29,360|29360|16:00|live long, stopped once, re-entered, last piece stopped|yes|caption 0:01; date pinned by the 08:30 high 29,360.75|Long fading the 08:30 news drop|NQ
+C26-19|2026-05-26|s26-087|15:15|up|0|16:00|smooth relative equal highs above||16:00|live long|yes|caption 0:07, 0:14|ES last-hour long into the highs|ES
+C26-20|2026-06-08|s26-079|10:05|up|0|11:30|Friday's daily volume imbalance, about 29,560|29560|16:00|live paper long, 20 lots|yes|note, caption|Bought under the relative equal lows for a run back up into Friday's gap|NQ
+C26-21|2026-06-22|s26-076|09:31|down|0|11:30|sell side near the open||16:00|live paper short, covered within minutes|yes|note|Short at the open "for the stops"|NQ
+C26-22|2026-06-22|s26-076|09:38|up|0|11:30|halfway to the 1-hour minor buy side||16:00|live paper long, closed by accident near target|yes|note|Then long from a reclaimed gap|NQ
+C26-23|2026-07-01|s26-073|10:05|down|0|11:30|sell-side pools, new low of the day||16:00|live short|yes|note|Short in the 09:50-10:10 window at the daily block|NQ
+C26-24|2026-07-02|s26-072|10:15|down|0|11:30|old lows (partials halfway)||16:00|live short|yes|note, caption 0:07, 0:14|Short after the 09:30 run up, read as a false move|NQ
+C26-25|2026-07-06|s26-071|10:02|down|0|11:30|lower||16:00|live short, $1,800 loss|yes|note, caption 0:02|No-bias day: short after the 10:00 news|NQ
+C26-26|2026-07-06|s26-071|10:10|up|0|11:30|halfway mark 30,037.5|30037.5|16:00|live long, scaled out|yes|note|Reversed long after the loss|NQ
+C26-27|2026-07-07|s26-069|09:27|down|0|11:30|relative equal lows into the lower 15m gap||16:00|none|yes|note, caption 0:03|Wants the gap to fail and price to run the lows|NQ
+C26-28|2026-07-13|s26-066|09:27|up|0|16:00|Friday's settlement 30,048.5 and the weekly gap|30048.5|16:00|live paper probes, one contract|yes|caption 0:12|Mild long bias toward Friday's settlement (he says no hard bias)|NQ
+C26-29|2026-07-14|s26-065|08:00|up|0|16:00|half of Monday's opening gap, about 29,881.5|29881.5|16:00|none|yes|note, caption 0:00|CPI pre-market: expects up into Monday's gap|NQ
+C26-30|2026-07-14|s26-064|10:00|down|0|11:30|08:30 low, then the 29,545 pool|29545|16:00|live short, last piece stopped|yes|caption 0:00 (clock 10:00)|Short at 10:00 from the prior day's half gap|NQ
+C26-31|2026-07-16|s26-060|18:30|down|1|16:00|daily relative equal lows 28,512|28512|16:00|none|partly|caption 0:00, 0:03 (recorded Thursday evening)|Review: price could gravitate below the daily lows tomorrow, with a Friday caveat|NQ
+C26-32|2026-07-21|s26-055|09:31|down|0|10:00|relative equal lows, then the half gap|org_mid|10:00|live short, stopped, re-entered, net small|yes|caption 0:09, 0:13; date pinned (premium gap after Monday's short)|Enormous premium gap: short at the open toward the half gap by 10:00|NQ
+C26-33|2026-08-06|s26-042|07:05|up|0|11:30|relative equal highs and the daily wick midpoint||16:00|live long|yes|note, caption 0:03|Pre-market long from a daily inversion gap|NQ
+C26-34|2026-08-10|s26-040|09:35|up|0|11:30|Monday's midnight opening price 29,878.25|29878.25|16:00|live long, 5 of 7 off near target|yes|note|Long near the open to the midnight opening price|NQ
+C26-35|2026-08-17|s26-032|08:22|down|0|11:30|weekly opening gap high, about 30,170|30170|16:00|live short, target not reached on the video, small profit|yes|note, caption 0:01|Monday short aiming for the untouched weekly gap|NQ
+C26-36|2026-08-25|s26-027|08:22|down|0|09:30|lower inside the 07:00-09:00 range||09:30|live short, partials|yes|note; date pinned (above the weekly gap 29,392 at 08:18, then failed)|Pre-market short after price failed above the weekly gap|NQ
+C26-37|2026-08-27|s26-024|10:00|up|0|11:30|just under the morning high||16:00|live long, 5 of 6 off, runner stopped|yes|note, caption 0:16|Long in the 09:50-10:10 window after the low was swept|NQ
+C26-38|2026-09-01|s26-020|09:35|up|0|11:30|29,212|29212|16:00|live paper longs, one small loss|yes|caption 0:17 (about 09:46), 0:29; hit 10:33|Huge discount gap: favors longs back up into the gap|NQ
+C26-39|2026-09-03|s26-018|09:48|down|0|11:30|flush relative equal lows, 29,178 minimum|29178|16:00|live short, recording stops mid-trade|yes|caption 0:00, 0:26; date pinned by the gap levels 29,249.5 / 29,194.25 (note said Sep 4)|Short looking for a run down through the opening gap|NQ
+C26-40|2026-09-04|s26-017|10:40|down|0|11:06|NFP low under 29,500, stretch 29,471.25|29471.25|16:00|live short, closed by hand about $6,470|yes|caption 0:05, 0:09, 0:15|NFP Friday short already on, "they're going to come down"|NQ
+C26-41|2026-09-08|s26-014|09:31|down|0|10:00|sell side just past the half gap|org_mid|10:00|live paper short, one contract|yes|caption 0:02|Premium gap after Labor Day: short at the opening wick|NQ
+C26-42|2026-09-29|s26-006|19:45|up|1|16:00|half of Monday's opening gap, 30,805|30805|16:00|live evening long, partials, runner stopped|yes|caption 006 0:00, 007 0:03, 0:07|Evening long, expects a move up into Monday's gap|NQ
