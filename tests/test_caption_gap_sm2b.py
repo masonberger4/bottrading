@@ -129,7 +129,8 @@ def _es(a="2023-09-05", b="2023-11-10"):
 @pytest.mark.parametrize("group", ["gates", "arrays", "turtle", "setups"])
 def test_look_ahead_es_switches(group):
     """ES 5m with confluence, the HTF table and the overnight sessions (a 10 week window): the order gates that need the Confluence object and the day tables."""
-    df, meta = _es()
+    # gates: window moved for the fixed-roll price files (2026-11-10), the default one no longer reaches dfvg_half
+    df, meta = _es("2023-07-11", "2023-09-15") if group == "gates" else _es()
     base = dict(es_pt=1.0, lot=1, max_notional=1e12, cost_per_share=0.1, ob_entry="post_mss", leg_pd=0, min_draw_pts=0, htf_resist_cap=False, draw_lock="off",
                 htf_bias="combo", nwog_regime="tag")
     p = Params(**{**base, **GROUPS[group]})

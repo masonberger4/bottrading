@@ -129,7 +129,7 @@ ES_CASES = {
                                 lc_second_swipe=True, lc_tag=True, recovery_exit="new", late_week_flat=True, recover_trail=True, offside_exit=True, offside_flip=True, runner_stop_no_reentry=True,
                                 reentry_after_trail_win=True, trail=True),
                 ("abort_half", "reentry_count", "flat_week", "runner_stop", "abort_blocks_side", "eval_recovery", "eval_late_week_flat")),
-    "stops": (W8, ES_NB, dict(SMP, session_fail_flatten=True, session_stop_after_fails=3, pd3_pm_window=True, trader_mode="new", pm_after_am_win="draw_open", conflicted_mode="one_win",
+    "stops": (("2023-03-06", "2023-05-01"), ES_NB, dict(SMP, session_fail_flatten=True, session_stop_after_fails=3, pd3_pm_window=True, trader_mode="new", pm_after_am_win="draw_open", conflicted_mode="one_win",
                               reverse_after_loss=False, lost_side_scope="session", am_idea_fail=True, chop_scalp_pts=2.5, sloppy_mode="scalp", scalp_mode="fixed_1to1"),
               ("conflicted_one_win", "new_day_positive", "scalp_1to1", "new_am_or_pm", "eval_session_fail", "eval_pm_window")),
     "stops_bias": (W8, ES_NB, dict(SMP, am_idea_fail=True, htf_bias="combo", session_fail_flatten=True, session_stop_after_fails=3, pd3_pm_window=True, reverse_after_loss=False,

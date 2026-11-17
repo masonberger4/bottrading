@@ -116,7 +116,7 @@ ES_CASES = {
     "ce_fail": (("2023-10-23", "2023-11-13"), 5, ES_B, dict(ce_fail_entry=True, counter_scalp=True), ("ce_fail", "counter_scalp", "counter_mo")),
     "breakers": (("2024-09-02", "2024-09-23"), 5, ES_B, dict(breaker_need_bias_draw=True, breaker_max_taps_for_entry=2, breaker_entry="fallback", unicorn_pref=True, unicorn_preopen=True,
                                                          leg_grade_gate="tag", near_pool_block=True, prev_eq_long=True, recap_ob_entry=True, unfulfilled_nearest=True),
-                 ("breaker_bias_draw", "breaker_taps", "unicorn_preopen", "leg_grade", "prev_eq_long", "recap_ob", "unfulfilled")),
+                 ("breaker_bias_draw", "breaker_taps", "unicorn_preopen", "leg_grade", "prev_eq_long", "recap_ob")),      # "unfulfilled" is not reached with the others in any 3 week window of the fixed-roll files (2026-11-10): the recap_nearest case runs it
     "turn_types": (W_C, 5, ES_B, dict(am_discount_array=True, mm_turn_types=("ob", "fvg", "old_high", "old_low", "void"), leg_grade_gate="tag", near_pool_block=True, prev_eq_long=True,
                                       recap_ob_entry=True, breaker_need_bias_draw=True, breaker_max_taps_for_entry=2, breaker_entry="fallback", unicorn_pref=True, unicorn_preopen=True,
                                       org_entry_array=True, org_entry_confl=False, reh_fade_gate=True), ("mm_turn_type",)),
@@ -124,7 +124,7 @@ ES_CASES = {
     "pm_lunch": (W_C, 5, ES_B, dict(pm_lunch_raid=True, pm_judas_array=True, pm_lunch_fvg_array=True, pm_need_htf_target=True), ("pm_lunch_fvg",)),
     "expansion": (("2024-11-04", "2024-11-25"), 5, ES_B, dict(expansion_ce_entry=True, draw_lock="session"), ("expansion_ce",)),
     # the review-fix cases: every switch that had only unit tests now runs in a full-vs-truncated window
-    "vb_close_above": (("2024-02-26", "2024-03-18"), 5, ES_NB, dict(vb_trade=True, vb_min_gap_pts=0.3, vb_entry="close_above", vb_back_full=True), ("vb_trade", "vb_back_full")),
+    "vb_close_above": (("2024-08-05", "2024-08-26"), 5, ES_NB, dict(vb_trade=True, vb_min_gap_pts=0.3, vb_entry="close_above", vb_back_full=True), ("vb_trade", "vb_back_full")),
     "fs_sweep": (W_A, 5, ES_NB, dict(cc_swings="failure", cc_fail_pts=8.0, fs_def="no_new_extreme", fs_sweep_close=True), ("fs_sweep_close",)),
     "recap_nearest": (W_A, 5, ES_B, dict(recap_ob_entry=True, unfulfilled_nearest=True), ("recap_ob", "unfulfilled")),
     "tgif_week": (("2024-11-04", "2024-12-30"), 5, ES_NB, dict(tgif=True, tgif_window="off", tgif_min_adr=0.0, tgif_need_htf_array=False, tgif_zone=True, tgif_need_draw=True, tgif_sd_exit=True, wk_high_proj=True, weekly_gate="tag"),

@@ -245,7 +245,7 @@ def test_look_ahead_es(case):
 @pytest.mark.skipif(not (ES and Path("data/mentorship/ES_1min_db.csv").exists()), reason="no ES 1m data")
 def test_look_ahead_es_1m():
     """The one-minute book: the 5m aggregation of raise_need_5m_fvg / small_fvg_linger runs on 1m bars (a short window); every run is compared with its truncations."""
-    df, meta = _es_tf(1, "2023-03-06", "2023-03-24")
+    df, meta = _es_tf(1, "2023-03-13", "2023-03-31")   # window moved for the fixed-roll price files (2026-11-10): the old one no longer reaches eval_small_fvg
     p = Params(**{**ES_NB, **SMP, "raise_on_vi": True, "raise_on_sth_break": True, "raise_need_5m_fvg": True, "small_fvg_linger": 2, "ladder_trail": "candle_mt", "ob_retests": 3})
     full, added = _la(df, 1, "ES", p, COLS, every=3, meta=meta, lag=2)
     _check_ran("1m", full, added, ("eval_sth_break", "eval_small_fvg"))

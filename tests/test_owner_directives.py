@@ -503,13 +503,15 @@ def test_day_target_stops_the_day():
 def test_pre_owner_switches_reproduce_the_old_engine():
     """Golden regression: every owner default switched back (study.PRE_OWNER) gives exactly the
     engine of commit 833350f (numbers recorded from that commit on this window, SB and Ma Deuce
-    on): 23 trades, net 4693.52."""
+    on): 23 trades, net 4693.52. Re-recorded on the fixed-roll price files (2026-11-10): 24 trades, net 3206.72 - the same
+    trades except on 2024-03-08 to 03-12, the sessions the roll fix moved to the next contract (one more trade on 03-08 AM,
+    03-12 AM a stop instead of t1)."""
     from mentorship.study import PRE_OWNER
     df = B.load("ES", 5, source="databento")
     df = df[(df.index >= "2024-01-01") & (df.index < "2024-04-01")]
     p = replace(Params(**FUT, leg_pd=0, min_draw_pts=0, sb_model=True, ma_deuce=True), **PRE_OWNER)
     t = B.run(df, 5, "ES", p)
-    assert len(t) == 23 and round(t.net.sum(), 2) == 4693.52
+    assert len(t) == 24 and round(t.net.sum(), 2) == 3206.72
     assert list(t.entry_time.astype(str).str[:16])[:3] == ["2024-01-09 10:25", "2024-01-10 15:30", "2024-01-11 10:00"]
 
 

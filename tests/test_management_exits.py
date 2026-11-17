@@ -1001,7 +1001,8 @@ def test_sb_day_and_session_stops_block_orders_and_pm_consolidation(monkeypatch)
 MD_ES = Path("data/mentorship/ES_5min_db.csv").exists() and Path("data/mentorship/NQ_5min_db.csv").exists()
 
 
-def _md_run(flat=3746.65, hi_pad=0.2, upto="11:00", **kw):
+# the hand-set prices below are 23.00 lower since the fixed-roll price files (2026-11-10): the whole back-adjusted window moved by that
+def _md_run(flat=3723.65, hi_pad=0.2, upto="11:00", **kw):
     from test_setups_models import _es, ES_BASE
     df, pa, meta = _es("2020-02-03", "2020-03-04")
     d = df.copy()
@@ -1024,10 +1025,10 @@ def test_ma_deuce_time_stop_refs_bulk_meander_and_invalidations():
     assert list(_md_run(time_stop_min=10, time_stop_ref="leg_high").exit_reason) == ["time"]         # ... the leg high was not
     assert list(_md_run(time_stop_min=10, time_stop_extras=False).exit_reason) == ["am_exit"]
     assert list(_md_run(am_bulk_t=540).exit_reason) == ["am_bulk+am_exit"]                           # X10b in Ma Deuce
-    # X8g meander: closes INSIDE the inverted FVG (below its top 3746.25, above the stop) three bars in a row
-    assert list(_md_run(flat=3745.9, meander_bars=3).exit_reason) == ["meander"]
-    assert list(_md_run(flat=3745.9, meander_bars=3, invalidations_extras=False).exit_reason) == ["am_exit"]
-    assert list(_md_run(flat=3745.9).exit_reason) == ["am_exit"]
+    # X8g meander: closes INSIDE the inverted FVG (below its top 3723.25, above the stop) three bars in a row
+    assert list(_md_run(flat=3722.9, meander_bars=3).exit_reason) == ["meander"]
+    assert list(_md_run(flat=3722.9, meander_bars=3, invalidations_extras=False).exit_reason) == ["am_exit"]
+    assert list(_md_run(flat=3722.9).exit_reason) == ["am_exit"]
 
 
 # --- two-way day / session stops between the main engine and the Silver Bullet / Ma Deuce ------------------------------
