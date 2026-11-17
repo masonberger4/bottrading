@@ -1,4 +1,4 @@
-# ICT's calls made before the fact, scored (option B of PR #82). Sets 1 to 3: 2024 Mentorship, 2026 SMC, 2025 Lectures (2026-11-17)
+# ICT's calls made before the fact, scored (option B of PR #82). Sets 1 to 4: 2024 Mentorship, 2026 SMC, 2025 Lectures, 2023 Mentorship (2026-11-17)
 
 Asked by Mase ("Start A through E"). Log and results only: no engine code, default or data changed.
 
@@ -246,7 +246,7 @@ No-trade, no-call and no-data sessions: `nocall_2026.csv`.
 - The split matches Sets 1 and 2. The three morning-window calls were all right (Sep 19 live short, Oct 1 half-gap,
   Nov 24 at the bell). The seven evening, next-day and weekly outlooks went 3 of 7.
 - Up calls 4 of 5, down calls 3 of 7. Price targets: 4 given, 2 hit by the deadline.
-- All three sets together: **55 of 79 right (70%) against 49% for the same guess on other days**; morning-window
+- Sets 1 to 3 together (2024, 2026, 2025): **55 of 79 right (70%) against 49% for the same guess on other days**; morning-window
   calls 44 of 54 (81%); calls that run to the close or longer 11 of 25.
 
 | date | ref | side | call | target | horizon | move his way | result | trade shown live |
@@ -282,18 +282,128 @@ Notes on this set:
   or price in the captions, and the Oct 14 "called the low on X" post has no time. The laptop frames would fix both.
 - No-trade days: May 2 (NFP), May 7 (FOMC), May 16, Jun 12 and 13 (CPI/PPI week), Sep 26.
 
+## Set 4: 2023 Mentorship (added 2026-11-17)
+
+Same method, same scorer. 105 notes read (videos 001-105, Jan to Dec 2023). 34 dated videos carried a call made
+before the move, 20 days were stated no-trade days, 8 videos had no call that can be scored, and the rest are
+reviews and lectures recorded after the fact (not scored). Market is ES unless he was on NQ (7 calls, from July).
+
+- **35 calls, 24 right at his horizon (69%).** The same guess on neighbouring days wins 52%. About a 2% chance of
+  that by luck.
+- **All four sets together: 79 of 114 (69%) against 50% by chance.** Morning-window calls: 56 of 71 (79%). See `summary_all.md`.
+- Sets 1, 2 and 4 together (2024, 2026, 2023): 72 of 102 (71%) against 50% by chance. Morning-window calls: 53 of 68 (78%).
+- **The split by horizon is the main finding.** Same-day calls: 17 of 22 (77%). Evening and weekly outlooks:
+  7 of 13 (54%), no better than a coin flip, and the misses are large (-0.7% to -2.9%).
+- Same-day calls by time: before the open 4 of 4, 09:30 to 12:00 8 of 13, afternoon 5 of 5.
+- Moves are small again: median +0.29%, mean +0.26%.
+- Price targets: 27 given, 25 reached by the deadline (93%). Three live trades (Jan 17, Mar 9, May 22) reached
+  their target and paid, but are scored wrong because price had come back by 11:30.
+- 14 calls came with a trade taken live (10 right, 71%); 21 without a trade were 14 right (67%).
+- At the 16:00 close instead of his horizon, same-day calls are 11 of 22 (50%). The information is gone by the close,
+  as in the other two sets.
+
+| group | calls | right at the horizon end | same call on other days | first to +0.25% vs -0.25% | mean move | median move |
+|---|---|---|---|---|---|---|
+| all calls | 35 | 24 (69%) | 52% | 23 of 33 (70%) | +0.26% | +0.29% |
+| clearly before the move | 34 | 23 (68%) | 52% | 23 of 33 (70%) | +0.27% | +0.31% |
+| up calls | 19 | 15 (79%) | 54% | 14 of 19 (74%) | +0.36% | +0.33% |
+| down calls | 16 | 9 (56%) | 48% | 9 of 14 (64%) | +0.14% | +0.18% |
+| with a live trade | 14 | 10 (71%) | 52% | 13 of 14 (93%) | +0.23% | +0.20% |
+| no trade taken | 21 | 14 (67%) | 52% | 10 of 19 (53%) | +0.28% | +0.39% |
+| same-day horizon | 22 | 17 (77%) | 52% | 17 of 20 (85%) | +0.32% | +0.27% |
+| morning window only (end by 12:00) | 17 | 12 (71%) | 51% | 13 of 15 (87%) | +0.21% | +0.21% |
+
+Price targets: 27 given, 27 not yet reached at the call; of those 25 hit by the deadline (93%). Median distance 0.25%.
+
+How much depends on the estimated call time (same-day calls):
+
+| ref shift (min) | calls | right at horizon end | first to +0.25% | right at 16:00 |
+|---|---|---|---|---|
+| -30 | 22 | 18 (82%) | 14 of 20 | 13 (59%) |
+| -15 | 22 | 19 (86%) | 16 of 21 | 13 (59%) |
+| +0 | 22 | 17 (77%) | 17 of 20 | 11 (50%) |
+| +15 | 22 | 16 (73%) | 14 of 19 | 10 (45%) |
+| +30 | 20 | 13 (65%) | 10 of 14 | 10 (50%) |
+
+### How dates and times were pinned
+
+Every live fill or spoken level was compared with the 1-minute file (entry price at the stated minute, targets,
+session highs and lows). All 35 agree with the note headers; no date had to be moved in this set. Two things to know:
+- Dec 8: the data file had already rolled to the March 2024 contract (about 48.5 points above his December prices),
+  so his 4593.50 target is scored as 4642.
+- Evening and weekend outlooks use the 18:00 reopen as the call time. May 24 was recorded from about 16:00, minutes
+  before an after-hours earnings jump that closed the gap he named; it is logged at 16:15 and counted right.
+
+### The calls
+
+| date | ref | market | side | call | horizon | move his way | result | trade shown live |
+|---|---|---|---|---|---|---|---|---|
+| 2023-01-09 | 19:45 | ES | down | Evening review: bearish for the rest of the week | to Friday | -2.86% | wrong | none |
+| 2023-01-15 | 18:00 | ES | up | Weekly outlook: wants ES to expand up into 4030 after Friday took 4020 | to Friday | -0.80% | wrong | none |
+| 2023-01-17 | 09:44 | ES | up | Live long after the 09:40 sweep of the 09:20 lows, target 4030 | to 11:30 | -0.14% | wrong | live long, 14 lots, out at 4030.75 |
+| 2023-01-30 | 09:22 | ES | up | Pre-open long from the 5m gap and breaker toward the 03:00 gap he tweeted | to 11:30 | +0.11% | right | live long, 5 off at 4059.25 |
+| 2023-01-31 | 15:38 | ES | up | Last-hour long: market maker buy model into the new week opening gap | to 16:00 | +0.50% | right | live long 25 lots, 80% off at 4080.50 |
+| 2023-02-01 | 14:25 | ES | up | FOMC: the 14:30 move is the real one and it should take the buy side | to 16:00 | +1.47% | right | none (FOMC, told students not to trade) |
+| 2023-02-07 | 08:50 | ES | down | Pre-market: the overnight short should still reach the 03:00 low | to 09:30 | +0.13% | right | none |
+| 2023-02-09 | 14:05 | ES | down | PM: short from the morning still has lower objectives | to 16:00 | +0.47% | right | live short held from the morning, partials 4105.25 and 4103 |
+| 2023-02-10 | 15:32 | ES | up | Last hour: long framed off the 1m gap toward the day's high | to 16:00 | +0.16% | right | none (hypothetical long taught live) |
+| 2023-02-13 | 09:42 | ES | up | Held the opening gap midpoint, so the morning should run the buy side | to 11:30 | +0.61% | right | none |
+| 2023-02-15 | 09:47 | ES | up | Choppy day, but expects the run into the highs at 4136.50 | to 11:30 | +0.21% | right | none (told students to sit on their hands) |
+| 2023-02-16 | 10:05 | ES | up | After the sweep of the weekly gap low, wants price back above the breaker and into the buy side | to 11:30 | +0.64% | right | none |
+| 2023-02-26 | 18:00 | ES | down | Weekly outlook: ES lower | to Friday | -1.83% | wrong | none |
+| 2023-03-06 | 09:33 | ES | up | Slow Monday: grind up to the old opening gap low | to 11:30 | +0.33% | right | none shown |
+| 2023-03-09 | 09:37 | ES | up | Long back into the 09:00-09:30 range after the bounce at the opening gap midpoint | to 11:30 | -0.26% | wrong | live long 15 lots, scaled out to 4018.75 (and an 08:30 long in video 040) |
+| 2023-03-21 | 10:00 | ES | down | Gap up into a premium: waits 30 minutes, then wants the sell side | to 11:30 | +0.24% | right | live demo short 1 lot at 4023.75 about 10:10, out at 4013.75 |
+| 2023-03-30 | 10:06 | ES | down | First Silver Bullet session: short below the bearish breaker | to 11:30 | -0.00% | wrong | none (called, not executed) |
+| 2023-04-12 | 18:00 | ES | down | Evening after CPI: lower into tomorrow | next day | -1.35% | wrong | none |
+| 2023-04-13 | 09:42 | ES | up | Bullish toward the old new week opening gap | to 11:30 | +0.39% | right | none |
+| 2023-05-17 | 18:00 | ES | up | Evening: the weekly candle should expand up by Friday | 2 days | +0.80% | right | none |
+| 2023-05-22 | 10:03 | ES | down | Live Silver Bullet short | to 11:30 | -0.16% | wrong | live short 10 lots at 4206.25, all out by 4193.50 |
+| 2023-05-24 | 16:15 | ES | up | Evening: price should trade back up through the opening gap tonight | next day | +0.73% | right | none |
+| 2023-07-02 | 18:00 | ES | up | Weekly outlook: ES higher through the June 16 high | to Friday | -1.13% | wrong | none |
+| 2023-07-07 | 14:38 | NQ | down | PM short from above the 12:30 gap | to 16:00 | +0.83% | right | live sim short 6 lots |
+| 2023-07-09 | 18:00 | ES | up | Weekly outlook: ES retraces, then expands up | to Friday | +2.29% | right | none |
+| 2023-08-13 | 18:00 | NQ | down | Weekly outlook: NQ lower, with an August chop warning | to Friday | +2.34% | right | none |
+| 2023-08-16 | 18:00 | NQ | down | Evening review: NQ should still reach the sell side below | next day | +1.12% | right | none |
+| 2023-08-18 | 10:31 | ES | down | Short into the gap below, closed when it stalled | to 11:30 | -0.29% | wrong | live short 5 lots, cut for a small loss |
+| 2023-08-18 | 10:33 | ES | up | Reversed long from the sell side toward the buy side | to 11:30 | +0.29% | right | live long, 20 lots out at 4373.50-4373.75 |
+| 2023-08-20 | 18:00 | ES | down | Weekly outlook: lower | to Friday | -0.74% | wrong | none |
+| 2023-09-01 | 09:34 | NQ | down | NFP Friday short after the buy side run, toward the 08:30 low | to 11:30 | +0.79% | right | live short 10 lots at 15,635.25, about +$15,400 |
+| 2023-09-21 | 08:10 | NQ | down | Pre-market Thursday: equities soft into Friday's close | next day | +0.75% | right | none |
+| 2023-09-22 | 07:48 | NQ | up | Pre-market long after the run under the 07:30 lows | to 09:30 | +0.10% | right | live paper long, pyramided on the 15s chart |
+| 2023-10-22 | 18:00 | NQ | down | Weekly outlook: stays bearish | to Friday | +2.82% | right | none |
+| 2023-12-08 | 08:32 | ES | up | NFP: long from the 4h gap after the 08:30 spike and drop | to 11:30 | +0.58% | right | live long 10 lots, average 4567.50 |
+
+### No-trade days (20) and no-call videos (8)
+
+In `nocall_2023.csv`. Four no-trade days also carry a call (Feb 1, 7, 13 and 15), as in
+Set 1: he named a side but told students not to trade it. Oct 16-19 are days he sat out because his weekly dollar
+filter never triggered (stated before in video 102, confirmed in 103).
+
+### Caveats for this set
+
+- Three recordings are silent or narrated afterwards (Jan 17, Aug 18, Sep 1); the fills on screen are the evidence.
+  Feb 7 is marked "not clearly before" because the short leg began overnight.
+- Statements are picked from long tape-reading streams. Where he named the same side several times in one session
+  only the first is logged; where he flipped (Aug 18) both are.
+- Review videos that claim an earlier Twitter call (for example Jan 26, Jun 26, Sep 14) are not scored: the call
+  itself is not in the set.
+- Horizon choice for pre-market live trades: a scalp closed before the open ends 09:30 (Sep 22); a trade held
+  through the open ends 11:30 (Jan 30, Dec 8).
+
 ## Files
 
 - `calls_2024.csv`: the log (id, date, source video, ref, side, horizon, target, trade shown, before, evidence, what).
 - `nocall_2024.csv`: no-trade and no-call sessions.
 - `calls_2024_scored.csv`, `summary_2024.md`, `sens_2024.md`: outputs.
 - `score.py`, `sens.py`: scorer and the call-time sensitivity check.
-- `calls_2026.csv`, `nocall_2026.csv`, `calls_2026_scored.csv`, `summary_2026.md`, `sens_2026.md`, `summary_all.md`: Set 2 and both sets together.
-- `calls_2025.csv`, `nocall_2025.csv`, `calls_2025_scored.csv`, `summary_2025.md`, `sens_2025.md`: Set 3; `summary_all.md` now covers all three sets.
+- `calls_2026.csv`, `nocall_2026.csv`, `calls_2026_scored.csv`, `summary_2026.md`, `sens_2026.md`, `summary_all.md`: Set 2; `summary_all.md` is all sets together.
+- `calls_2025.csv`, `nocall_2025.csv`, `calls_2025_scored.csv`, `summary_2025.md`, `sens_2025.md`: Set 3 (2025 Lectures).
+- `calls_2023.csv`, `nocall_2023.csv`, `calls_2023_scored.csv`, `summary_2023.md`, `sens_2023.md`: Set 4 (2023 Mentorship). `summary_all.md` now covers all four sets.
 - `calls_for_option_c.csv`: date, market, side, before, source (also at
   `/mnt/project-files/mentorship/runs/ict_calls_2026-11-17/calls.csv`).
 
 ## Not done yet
 
-2023 Mentorship (about 60 sessions, in progress in its own thread), Trade Executions and Charter. Same method, one
+Trade Executions and Charter. Same method, one
 set per thread. Handoff: `/mnt/project-files/mentorship/handoff_ict_calls_2026-11-17b.md`.
