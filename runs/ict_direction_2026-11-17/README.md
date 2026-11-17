@@ -85,3 +85,50 @@ Data: copy `NQ_1min_db`, `NQ_1min_dbraw`, `ES_1min_db`, `ES_1min_dbraw` (.parque
   market test above says not to expect an edge in 2019-22.
 - C. Work on the missing part, the choice of day and moment, using the 43 stated no-trade days and what he says on
   them (news days, the day after a large range, small gaps, "no bias").
+
+## Option C: how he picks the day and the moment (added 2026-11-17, `dayfilter.py`, `out/report_c.txt`)
+
+Mase asked for A, B and C after PR #101. A and B run in their own threads. This is C.
+
+1. **His call days differ from his stated no-trade days in a few plain ways.** 79 call days against 39 no-trade days
+   (2023-26). He calls when the night has already moved and there is a gap, and he passes on quiet days:
+
+   | | call days | no-trade days | all other days |
+   |---|---|---|---|
+   | opening gap, median (share of the daily range) | 0.35 | 0.24 | 0.29 |
+   | gap under 0.10 | 11% | 28% | 19% |
+   | overnight range, median | 0.75 | 0.57 | 0.65 |
+   | Friday | 18% | 33% | 20% |
+   | CPI or FOMC day | 4% | 15% | 8% |
+   | NFP day | 9% | 8% | 4% |
+   | day after a range over 1.5x normal | 11% | 10% | 12% |
+   | any of: NFP / CPI / FOMC / PPI, holiday eve, day after a big range, small gap | 33% | 51% | 40% |
+
+   The split is real but soft: these conditions would have kept him out of a third of the days he did call.
+   He says "the morning after a large range day" is a skip, but his call days show it as often as any other day.
+2. **Those skip conditions help the coded read a little, at 09:30 only.** The read (PR #101) traded at the 09:30
+   open, on days with none of the four skip conditions, $1,000 risk:
+
+   | | 2019-22 | 2023-26 |
+   |---|---|---|
+   | NQ, days he would not skip | 534 trades, +0.06 R, +$32.9k, drawdown -$19.8k | 532, +0.06 R, +$29.9k, -$26.7k |
+   | NQ, days he would skip | 346, +0.09 R, +$30.4k, -$14.2k | 325, -0.08 R, -$26.2k, -$36.8k |
+   | ES, days he would not skip | 532, +0.08 R, +$41.6k, -$12.5k | 516, +0.17 R, +$86.3k, -$17.1k |
+   | ES, days he would skip | 354, -0.06 R, -$19.7k, -$41.2k | 344, -0.01 R, -$3.4k, -$24.3k |
+
+   Positive in all four cells, which nothing else in this study is. By day (both markets averaged): +0.06 R, t 1.3 in
+   2019-22 and +0.09 R, t 1.7 in 2023-26; all eight years +0.07 R, t 2.1. It is weak: negative on NQ in 4 of 8 years,
+   and it was found after trying about ten conditions, so some of it is selection. The one condition that helps most
+   consistently is skipping the day after a big range (those days lose in 7 of 8 market, time and half cells).
+3. **At 10:00 nothing rescues it.** With or without the skip conditions the read at 10:00 loses in 2019-22 on both
+   markets (t -1.7 to -3.3) and wins in 2023-26.
+4. **The "kind of call" split does not carry over to every day.** On his own calls, trades back across the overnight
+   range made +0.68 R and trades toward the extreme +0.07 R. On every day the coded read shows no such pattern
+   (back across the range at 09:30: NQ +0.00 and -0.04 R, ES -0.03 and +0.11 R). So that split describes *his* calls;
+   it is not a market rule. Whatever makes his reversal calls work is in the moment he chooses, and position in the
+   overnight range does not capture it.
+
+**Where C leaves it.** His choice of day can be roughly copied (active night, a real gap, not CPI or FOMC, not Friday)
+and it adds a little to the read at the open. His choice of moment is still not coded. The best all-days rule so far is
+"the read at 09:30 on days he would not skip", about +0.07 R a trade with drawdowns of $12k to $27k: a lead for
+thread B to test inside the engine, not something to trade.
