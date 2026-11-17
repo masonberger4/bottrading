@@ -19,7 +19,19 @@ his live NQ videos, not from the rulebook count:
      (no pool: skip the trade).
   8. Flat at nar_flat (12:00). One position at a time, nar_max_trades a day.
   9. Direction filter (nar_bias): "none" (the sweep decides), "midnight" / "open830" (longs only below that opening
-     price, shorts only above), "prevday" (with the prior RTH day's open-to-close direction), "anti_prevday".
+     price, shorts only above), "prevday" (with the prior RTH day's open-to-close direction), "anti_prevday",
+     "read" (PR #101: only with the coded ICT direction read, ict_read.py, taken from the bars before the entry bar;
+     no read = no trade).
+ 10. nar_on_block (0 = off; 0.67): no long while price sits above that share of the range since 18:00, no short
+     while it sits below 1 - that share (a trade toward the overnight extreme price is already at).
+ 11. nar_entry "open" (PR #103, option C): no sweep / shift / gap. Buy or sell the open of the first bar of nar_win
+     in the direction of the read, stop nar_open_stop_pct % of price away, target and flat time as above.
+ 12. nar_day_skip: days ICT says he passes on. Any of "news" (an event in nar_skip_news), "holiday_eve", "prev_big"
+     (yesterday's range over nar_prev_big x the 20-day average), "small_gap" (the 09:30 open within nar_small_gap x
+     the average range of yesterday's settlement), "friday". Empty = off.
+
+"read", nar_on_block, "open", "prev_big" and "small_gap" need the bars before today (run_day `past`, see
+ict_read.past_bars; backtest.day_kwargs passes them). Without them the day is skipped ("no_past").
 
 Every decision uses closed bars only: a swing is known nar_shift_n bars after it, a gap after its third candle, the
 reaction after its bar closes, and the market entry is the next bar's open. Prices are mirrored for shorts, so one set
@@ -31,12 +43,15 @@ from collections import Counter
 
 import numpy as np
 
+from . import ict_read as _RD
+
 FUNNEL = Counter()        # how far the setups got (per process; the runner prints it): sweep / shift / gap / order / trade
 
 MODES = ("off", "am")
-ENTRIES = ("react", "limit")
+ENTRIES = ("react", "limit", "open")
 STOPS = ("ext", "gap")
-BIASES = ("none", "midnight", "open830", "prevday", "anti_prevday")
+BIASES = ("none", "midnight", "open830", "prevday", "anti_prevday", "read")
+SKIPS = ("news", "holiday_eve", "prev_big", "small_gap", "friday")
 POOLS = ("pd", "on", "lon", "pre", "sw")
 
 
@@ -55,6 +70,18 @@ def check_params(p) -> None:
         raise ValueError(f"nar_pools {p.nar_pools!r}")
     if int(p.nar_shift_n) < 1 or int(p.nar_max_trades) < 1:
         raise ValueError("nar_shift_n / nar_max_trades >= 1")
+    if not set(p.nar_day_skip) <= set(SKIPS):
+        raise ValueError(f"nar_day_skip {p.nar_day_skip!r}")
+    if p.nar_on_block and not 0.5 <= float(p.nar_on_block) < 1.0:
+        raise ValueError(f"nar_on_block {p.nar_on_block!r}: 0 (off) or 0.5 to 1")
+    if not float(p.nar_open_stop_pct) > 0:
+        raise ValueError(f"nar_open_stop_pct {p.nar_open_stop_pct!r}")
+
+
+def needs_past(p) -> bool:
+    """True when the switches read bars from before today (the caller passes run_day `past`)."""
+    return p.narrow != "off" and (p.nar_bias == "read" or p.nar_entry == "open" or bool(p.nar_on_block)
+                                  or bool({"prev_big", "small_gap"} & set(p.nar_day_skip)))
 
 
 class _S:
@@ -127,7 +154,7 @@ def _swing_pools(s: _S, t, i: int, p, tick):
 
 
 def _bias_ok(s: _S, kind: str, entry: float, t, hist) -> bool:
-    if kind == "none":
+    if kind in ("none", "read"):                  # "read" is checked in run_day (it needs the bars before today)
         return True
     if kind in ("midnight", "open830"):
         k = 0 if kind == "midnight" else int(np.searchsorted(t, 510))
@@ -165,8 +192,9 @@ def _target(s: _S, t, hist, p, i: int, entry: float, risk: float, tick: float):
     return lv - tick, nm                           # one tick in front of the pool
 
 
-def run_day(df, hist, symbol, p, tf, equity=None, skips=None, live=False):
-    """Trades of one day for the narrow morning engine. df: the day's bars from midnight; hist: prior RTH frames."""
+def run_day(df, hist, symbol, p, tf, equity=None, skips=None, live=False, past=None):
+    """Trades of one day for the narrow morning engine. df: the day's bars from midnight; hist: prior RTH frames;
+    past: the bars before midnight (ict_read.past_bars), needed only by the switches in needs_past()."""
     from . import strategy as ST
     day = df.index[0].date()
     t = (df.index.hour * 60 + df.index.minute).to_numpy()
@@ -193,6 +221,45 @@ def run_day(df, hist, symbol, p, tf, equity=None, skips=None, live=False):
         if skips is not None:
             skips.append((day, symbol, "narrow", why))
 
+    # --- the coded direction read (ict_read.py): bars before today + today's bars, read as of bar i (bars < i only)
+    need = needs_past(p)
+    arr, cache = [], {}
+
+    def rd(i):
+        if i not in cache:
+            if not arr:
+                cols = [past[k].to_numpy(dtype=float) for k in ("open", "high", "low", "close")]
+                arr.append([np.r_[_RD.minutes(past.index), _RD.minutes(df.index)]]
+                           + [np.r_[a, b] for a, b in zip(cols, (o, h, l, c))])
+            cache[i] = _RD.read(*arr[0], len(past) + i)
+        return cache[i]
+
+    if need and (past is None or not len(past)):
+        skip("no_past")
+        return []
+    if p.nar_day_skip:
+        from . import calendar as _CAL
+        ds_ = set(p.nar_day_skip)
+        why = None
+        if "news" in ds_ and _CAL.events(day) & set(p.nar_skip_news):
+            why = "news"
+        elif "holiday_eve" in ds_ and _CAL.is_holiday_eve(day):
+            why = "holiday_eve"
+        elif "friday" in ds_ and day.weekday() == 4:
+            why = "friday"
+        elif ds_ & {"prev_big", "small_gap"}:
+            i930 = int(np.searchsorted(t, 570))
+            r = rd(i930) if i930 < n else None       # as of the 09:30 open: bars before it, and that bar's open
+            if r is None:
+                why = "no_history"
+            elif "prev_big" in ds_ and r["prev_rng"] > p.nar_prev_big:
+                why = "prev_big"
+            elif "small_gap" in ds_ and abs(o[i930] - r["settle"]) < p.nar_small_gap * r["adr"]:
+                why = "small_gap"
+        if why:
+            skip("day_" + why)
+            return []
+
     def open_trade(s, i, entry, stop, meta):
         risk = entry - stop
         if risk < rmin or risk > rmax:
@@ -201,6 +268,18 @@ def run_day(df, hist, symbol, p, tf, equity=None, skips=None, live=False):
         if not _bias_ok(s, p.nar_bias, entry, t, hist):
             skip("bias")
             return None
+        if p.nar_bias == "read" or p.nar_on_block:
+            r = rd(i)
+            if r is None:
+                skip("no_history")
+                return None
+            if p.nar_bias == "read" and r["side"] != s.sign:
+                skip("bias")
+                return None
+            x = float(p.nar_on_block)
+            if x and (r["on_pos"] > x if s.sign > 0 else r["on_pos"] < 1 - x):
+                skip("on_ext")
+                return None
         tgt, tname = _target(s, t, hist, p, i, entry, risk, tick)
         if tgt is None:
             skip("no_target")
@@ -229,6 +308,15 @@ def run_day(df, hist, symbol, p, tf, equity=None, skips=None, live=False):
         # --- orders decided on the previous bar's close: a market order fills at this bar's open, a resting limit
         #     fills when this bar prints through it
         fill_bar = False
+        if p.nar_entry == "open" and i == w0 and i < flat_i:       # option C: the read's side at the window's first open
+            r = rd(i)
+            if r is None or r["side"] == 0:
+                skip("no_history" if r is None else "no_read")
+            else:
+                s = sides[0] if r["side"] > 0 else sides[1]
+                e_ = float(s.o[i])
+                pos = open_trade(s, i, e_, e_ - p.nar_open_stop_pct / 100.0 * abs(e_),
+                                 dict(swept="read", shift_i=i, ext=e_))
         if pos is None and pending is not None:
             s, stop, meta = pending
             if i < flat_i and s.o[i] > stop:
@@ -271,6 +359,8 @@ def run_day(df, hist, symbol, p, tf, equity=None, skips=None, live=False):
                     close(i, float(pos["s"].c[i]), "eod")
         if pos is not None:
             continue
+        if p.nar_entry == "open":
+            break
         if i >= w1 or len(trades) >= p.nar_max_trades or i + 1 >= min(n, flat_i):
             break
         # --- look for the setup on each side (bar i is closed)
