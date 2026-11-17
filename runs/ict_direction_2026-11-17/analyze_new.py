@@ -10,7 +10,7 @@ def st(x):
     e = (x * 1000).cumsum()
     return f"{n:3d} trades {x.mean():+.2f}R  ${1000 * x.sum():>7,.0f}  maxDD ${min((e - e.cummax()).min(), 0):>7,.0f}"
 c = pd.read_csv('out/calls_feats.csv', parse_dates=['date'])
-for name, q in (("NEW calls", c[c.new == 1]), ("OLD calls (for comparison)", c[c.new == 0]), ("ALL calls", c)):
+for name, q in (("NEW silent-video calls (CTS)", c[c.id.str.startswith("CTS")]), ("NEW calls", c[c.new == 1]), ("OLD calls (for comparison)", c[c.new == 0]), ("ALL calls", c)):
     s = q[(q.same_day == 1) & q.p.notna()].sort_values(['date', 'T']).copy()
     s['vote'] = s[V].fillna(0).sum(axis=1); s['ag'] = np.sign(s.vote) == s.side
     s['ext'] = np.where(s.side > 0, s.on_pos, 1 - s.on_pos)

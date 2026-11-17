@@ -43,7 +43,7 @@ def main():
                    end=r.end, before=r.before, win=r.win_end, target=r.target, what=r.what)
         same_day = r.end_day == 0 and 420 <= T <= 900
         row["same_day"] = int(same_day)
-        if same_day and d in M[r.sym].k:
+        if same_day and r.sym in M and d in M[r.sym].k:
             f = M[r.sym].feats(d, T)
             if f:
                 row.update({k: v for k, v in f.items() if k not in ("date", "T")})
