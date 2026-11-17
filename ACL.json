@@ -4,11 +4,13 @@
     "Mase",
     "coordinator",
     "Run memory curator, part 2",
-    "Run memory curator, part 3"
+    "Run memory curator, part 3",
+    "Run memory curator, part 4"
   ],
   "notes": {
     "Run memory curator, part 2": "role: curator; added 2026-11-10. Mase 2026-11-16: may apply factual status, results and data entries without approval; rules and decisions need Mase's approval in chat",
     "Run memory curator, part 3": "role: curator (successor to part 2, same rules); added 2026-11-16 when Mase asked for fresh threads",
-    "removed 2026-11-16": "closed threads 'Organize project memory into folder' and 'Run memory curator' (Mase approved)"
+    "removed 2026-11-16": "closed threads 'Organize project memory into folder' and 'Run memory curator' (Mase approved)",
+    "Run memory curator, part 4": "role: curator (successor to part 3, same rules); added 2026-11-17 because part 3's context grew large (Mase's short-threads rule)"
   }
 }
