@@ -407,3 +407,39 @@ filter never triggered (stated before in video 102, confirmed in 103).
 
 Trade Executions and Charter. Same method, one
 set per thread. Handoff: `/mnt/project-files/mentorship/handoff_ict_calls_2026-11-17b.md`.
+
+## Set 5: Trade Executions, Charter and X posts (2026-11-17, option A of PR #101)
+
+Asked by Mase ("Do A B C"). Files: `calls_te.csv`, `calls_x.csv`, `nocall_te.csv`, `nocall_x.csv` and their `_scored` copies.
+
+- **14 new calls, 11 right at his horizon (79%; the same guess on nearby days wins 49%).** All 12 price targets were hit
+  by their deadline. 13 are same-day calls (10 of 13 right).
+- **Trade Executions: 9 calls from 11 videos, 7 right.** The playlist has 71 videos. 14 are already in the 2023 and 2026
+  sets, 43 have no speech (the title gives the date and often the side, but the minute needs the frames on the laptop),
+  and 2 of the 11 with speech have no usable call (`nocall_te.csv`).
+- **Charter: no calls.** All 34 lessons are 2018-19 forex models (pound, euro, franc) with no dated index call.
+- **X posts: 5 calls, 4 right.** Only posts that the notes quote with a clock time and a side are logged. 7 more are
+  quoted without a time or with two legs (`nocall_x.csv`); pinning them needs the posts themselves.
+- **This set is not a fair sample of his hit rate.** Trade Executions videos are trades he chose to publish, and the X
+  posts are the ones he later reviewed. Read the 79% as "nothing contradicts sets 1 to 4", not as new proof.
+- Call minutes come from prices he reads out matched to the 1-minute file (within a few minutes on 9 calls). CTE-03,
+  CTE-05 and CTE-07 are estimated to about 15 minutes; CX-02 is an evening post with no hour given (18:00 assumed).
+
+| id | date | ref | side | call | horizon | move his way | result |
+|---|---|---|---|---|---|---|---|
+| CTE-01 | 2023-12-07 | 08:32 | up | NQ long after the 08:30 raid, to the clean highs | 09:30 | +0.49% | right |
+| CTE-02 | 2023-12-29 | 09:56 | down | NQ "looking for 17,000 today" | 11:30 | +0.95% | right |
+| CTE-03 | 2024-01-10 | 10:25 | up | ES to the 15-minute relative equal highs | 11:30 | +0.10% | right |
+| CTE-04 | 2024-01-17 | 15:42 | up | NQ through the high into the close, 16,860 | 16:00 | +0.19% | right |
+| CTE-05 | 2024-01-25 | 10:55 | up | NQ to the relative equal highs in the 10:50 macro | 11:30 | +0.18% | right |
+| CTE-06 | 2024-05-13 | 08:05 | down | NQ pre-market short to 18,304.75 (target hit, price back up by 09:30) | 09:30 | -0.08% | wrong |
+| CTE-07 | 2024-06-10 | 13:20 | down | NQ short under the low, 19,062 (target hit, price back up by 16:00) | 16:00 | -0.13% | wrong |
+| CTE-08 | 2024-06-24 | 08:50 | down | NQ short to the 08:00 and 08:30 lows | 11:30 | +0.12% | right |
+| CTE-09 | 2024-08-27 | 06:46 | down | NQ pre-market short to the new day opening gap | 09:30 | +0.32% | right |
+| CX-01 | 2023-01-06 | 10:08 | up | ES fast move above 3,875 | 11:30 | +0.79% | right |
+| CX-02 | 2023-01-25 | 18:00 | up | ES next day to 4,072.75 | next day 16:00 | +1.09% | right |
+| CX-03 | 2023-01-26 | 10:43 | down | ES under the 09:56 low, 4,035.25 | 11:30 | +0.25% | right |
+| CX-04 | 2023-06-23 | 09:00 | down | ES to the daily gap, 4,381.75 (touched 15:00, closed 1.5 points higher) | 16:00 | -0.03% | wrong |
+| CX-05 | 2025-05-01 | 09:47 | up | NQ to the buy-side at 19,996.25 | 11:30 | +0.57% | right |
+
+All five sets: 128 calls, 90 right (70%). The shared `calls.csv` and `calls_for_option_c.csv` now have 171 rows (128 calls, 43 no-trade days).
