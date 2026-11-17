@@ -1,0 +1,101 @@
+joined 30 columns from option A: /mnt/project-files/mentorship/runs/bias_direction_2026-11-16/bias_cols.csv
+day table: 7293 market-days, 2432 days, 2017-01-17 to 2026-10-16, 57 signed and 25 day columns
+
+== 1. Each signed column alone: trade its side every day it is not zero ==
+   09:30 to 11:30 (o_am), days / hit % / mean ADR / t-stat.  Both halves must agree for a column to count.
+   column                                   2019-22                            2023-26   same sign
+   s_pd20                 1001  48.9% +0.009 t=+0.9           943  47.3% +0.007 t=+0.7   yes
+   s_pd60                 1001  48.5% +0.014 t=+1.4           943  46.1% +0.004 t=+0.4   yes
+   s_draw20               1001  51.1% -0.009 t=-0.9           943  52.7% -0.007 t=-0.7   yes
+   s_iof5                  969  51.4% -0.001 t=-0.1           919  51.3% +0.003 t=+0.3   no
+   s_pday                 1001  51.3% -0.008 t=-0.8           943  50.2% -0.002 t=-0.2   yes
+   s_3close                410  45.4% -0.012 t=-0.6           417  50.1% +0.001 t=+0.0   no
+   s_outside               220  50.5% -0.009 t=-0.3           209  51.2% -0.005 t=-0.2   yes
+   s_fvg_d                1001  48.6% +0.011 t=+1.2           943  47.3% -0.007 t=-0.7   no
+   s_wk_iof                956  50.3% -0.016 t=-1.5           924  51.9% +0.002 t=+0.2   no
+   s_wk_last              1001  50.0% -0.003 t=-0.3           943  50.8% -0.006 t=-0.6   yes
+   s_wk_open              1001  53.4% -0.004 t=-0.4           943  49.7% -0.000 t=-0.0   yes
+   s_pw_draw              1001  53.3% +0.000 t=+0.0           943  50.9% -0.011 t=-1.2   no
+   s_mid                  1001  51.4% +0.004 t=+0.4           943  50.1% -0.002 t=-0.2   no
+   s_830                  1000  52.1% -0.006 t=-0.6           943  47.3% -0.004 t=-0.4   yes
+   s_org                  1001  50.6% -0.005 t=-0.5           943  47.6% -0.015 t=-1.5   yes
+   s_nwog                 1001  53.2% -0.003 t=-0.3           943  50.3% +0.000 t=+0.0   no
+   s_pre_raid              807  49.4% +0.010 t=+0.8           755  50.9% +0.018 t=+1.4   yes
+   s_lon_pos              1001  46.9% -0.004 t=-0.4           943  50.7% +0.008 t=+0.8   no
+   s_lon_dir               878  52.8% +0.003 t=+0.3           869  49.8% +0.002 t=+0.1   yes
+   s_smt                   298  49.3% +0.015 t=+0.7           330  52.4% +0.032 t=+1.7   yes
+   s_seas                  656  50.9% +0.005 t=+0.4           607  50.1% -0.015 t=-1.1   no
+   s_seas_agreed           321  51.1% -0.005 t=-0.3           278  51.8% +0.002 t=+0.1   no
+   s_cot                  1001  49.7% +0.006 t=+0.7           943  48.9% +0.008 t=+1.0   yes
+   s_wr15                 1001  49.7% +0.009 t=+0.9           943  47.9% +0.003 t=+0.3   yes
+   s_dxy                   995  50.9% +0.007 t=+0.6           943  50.2% +0.001 t=+0.1   yes
+   s_zb                    995  50.5% +0.002 t=+0.1           930  51.0% +0.013 t=+1.2   yes
+   s_trend250             1001  50.8% -0.008 t=-0.8           943  53.8% -0.001 t=-0.1   yes
+   s_a_react               992  52.8% -0.007 t=-0.7           935  50.6% -0.015 t=-1.6   yes
+   s_a_draw               1001  50.3% +0.012 t=+1.5           943  49.5% -0.015 t=-1.8   no
+   s_a_pd                  874  46.1% -0.015 t=-1.5           876  50.7% +0.012 t=+1.2   no
+   s_a_combo               997  52.4% -0.008 t=-0.9           938  49.9% -0.017 t=-1.9   yes
+   s_a_flip               1001  50.0% -0.013 t=-1.4           943  53.3% +0.000 t=+0.0   no
+   s_a_draw_ord           1001  49.4% +0.014 t=+1.6           943  47.1% -0.009 t=-1.1   no
+   s_a_bc_D               1001  49.5% +0.005 t=+0.6           943  50.2% +0.001 t=+0.1   yes
+   s_a_bc_W               1001  50.2% +0.008 t=+0.9           943  50.9% +0.006 t=+0.6   yes
+   s_a_pd20               1001  48.5% +0.008 t=+0.8           943  46.8% +0.003 t=+0.3   yes
+   s_a_iof                 975  49.1% -0.010 t=-1.0           926  51.0% -0.004 t=-0.4   yes
+   s_a_combo2             1001  52.4% -0.005 t=-0.6           943  51.7% -0.016 t=-1.7   yes
+   s_a_wk_bias            1001  51.4% -0.006 t=-0.6           943  52.4% -0.015 t=-1.6   yes
+   s_a_ob_mt              1001  49.3% -0.011 t=-1.3           943  51.7% -0.005 t=-0.5   yes
+   s_a_mwd                1001  51.2% -0.007 t=-0.7           943  51.4% -0.013 t=-1.5   yes
+   s_a_mwd_w              1001  50.0% -0.012 t=-1.2           943  50.7% -0.007 t=-0.9   yes
+   s_a_mwd_d              1001  51.3% -0.006 t=-0.6           943  50.2% -0.011 t=-1.2   yes
+   s_a_wk_dir             1001  49.9% -0.012 t=-1.3           943  52.6% -0.008 t=-0.9   yes
+   s_a_nwog_bias           811  51.4% -0.003 t=-0.3           759  52.2% +0.005 t=+0.4   no
+   s_a_draw_pd             563  47.4% -0.012 t=-0.8           601  50.1% +0.013 t=+0.9   no
+   s_a_qs_trend           1001  50.9% -0.007 t=-0.7           943  53.1% -0.003 t=-0.3   yes
+   s_a_howlow              297  50.5% -0.009 t=-0.4           293  50.5% +0.003 t=+0.2   no
+   s_a_mid_above          1001  51.4% +0.004 t=+0.4           943  50.1% -0.002 t=-0.2   no
+   s_a_o830_above         1000  52.1% -0.006 t=-0.6           943  47.3% -0.004 t=-0.4   yes
+   s_a_wo_above           1001  53.2% -0.005 t=-0.5           943  50.2% +0.003 t=+0.3   no
+   s_a_bias_mid            610  52.1% -0.017 t=-1.1           601  50.4% -0.019 t=-1.3   yes
+   s_a_bias_830            683  51.7% +0.005 t=+0.3           654  52.0% -0.016 t=-1.1   no
+   s_a_prev_candle        1001  51.3% -0.006 t=-0.6           943  50.9% +0.002 t=+0.2   no
+   s_a_pdhl                951  52.3% +0.002 t=+0.2           900  50.1% -0.002 t=-0.2   no
+   s_a_agree3              313  53.0% +0.026 t=+1.3           333  49.5% -0.040 t=-2.0   no
+   s_a_cot                1001  49.7% +0.006 t=+0.7           943  48.9% +0.008 t=+1.0   yes
+   always long            1001  52.7% -0.001 t=-0.1           943  53.6% +0.002 t=+0.1
+   0 of 57 columns have |t| > 2 in 2019-22 (about 2.9 expected by chance); 0 of those repeat with |t| > 2 in 2023-26.
+
+== 2. Direction model on all columns (fit 2019-22, checked 2023-26) ==
+   'all days' = take the model's side every day; 'surest fifth' = only days as confident as the top 20% of 2019-22.
+   target 09:30-11:30  (logistic penalty C=0.001)
+     logistic  2019-22 fit  1001  57.2% +0.026 t=+2.8 | 2023-26 all days   943  49.6% -0.013 t=-1.3  AUC 0.488 | surest fifth   325  49.5% -0.028 t=-1.4
+     trees     2019-22 fit  1001  72.1% +0.129 t=+16.2 | 2023-26 all days   943  47.9% -0.023 t=-2.5  AUC 0.474 | surest fifth   277  46.9% -0.034 t=-1.7
+     always long        2023-26 all days   943  53.6% +0.002 t=+0.1
+   target 09:30-16:00  (logistic penalty C=0.001)
+     logistic  2019-22 fit  1001  55.4% +0.028 t=+1.8 | 2023-26 all days   943  52.6% +0.005 t=+0.3  AUC 0.499 | surest fifth   320  52.8% -0.019 t=-0.6
+     trees     2019-22 fit  1001  69.5% +0.140 t=+10.7 | 2023-26 all days   943  52.8% +0.008 t=+0.6  AUC 0.505 | surest fifth   273  50.9% -0.004 t=-0.1
+     always long        2023-26 all days   943  52.7% +0.010 t=+0.6
+   target side of the day's largest move  (logistic penalty C=0.001)
+     logistic  2019-22 fit  1001  56.3% +0.077 t=+5.1 | 2023-26 all days   943  52.1% +0.023 t=+1.4  AUC 0.524 | surest fifth   331  52.0% +0.015 t=+0.4
+     trees     2019-22 fit  1001  71.1% +0.195 t=+13.4 | 2023-26 all days   943  53.0% +0.019 t=+1.3  AUC 0.521 | surest fifth   311  51.4% +0.012 t=+0.3
+     always long        2023-26 all days   943  50.5% -0.034 t=-1.8
+   largest logistic weights (09:30-11:30): s_3close -0.05, c_roll_week -0.04, c_mid_news -0.04, c_wk_obj -0.04, c_regime +0.04, s_a_pd -0.04, s_a_ob_mt -0.03, s_a_pdhl +0.03
+
+== 3. Day model: can a one-way morning be told apart at 09:30? (fit 2019-22, checked 2023-26) ==
+   one-way morning (ends 60%+ of its range from the open): base rate 36.3%, AUC 2023-26 0.489, rate on the model's top fifth 34.9% (631 rows)
+   big morning (range above the 2019-22 median): base rate 57.7%, AUC 2023-26 0.684, rate on the model's top fifth 79.6% (530 rows)
+
+== 4. Learning ICT's own picks  (calls file: /mnt/project-files/mentorship/runs/ict_calls_2026-11-17/calls.csv) ==
+   157 rows -> 110 market-days with a side (4 with both sides, left out of the side model), 43 stated no-trade days, 145 rows marked as said before the move.
+   matched to the day table: 95 one-sided market-days, 2023-01-09 to 2026-09-29
+   4a. Share of his one-sided days where each signed column pointed his way (zero days left out):
+       s_a_agree3 71% of 14; s_wk_iof 65% of 71; s_wk_open 37% of 95; s_a_wo_above 37% of 95; s_a_bc_W 62% of 95; s_a_bc_D 62% of 94; s_nwog 39% of 95; s_a_flip 61% of 95; s_seas 40% of 53; s_org 40% of 95
+       (with 95 days, anything between about 40% and 60% is indistinguishable from a coin)
+       the part-2 market model (o_am) picks his side on 51% of them
+       the part-2 market model (o_day) picks his side on 51% of them
+       he was long on 49% of them; the market's 09:30-11:30 move went his way on 64% and 09:30-16:00 on 61%
+   4b. Side model (signed columns only, heavy penalty), each day predicted from the others: 56% of 95 right (always-short gets 51%)
+   4c. Day model: 99 of his market-days against 30 market-days on the other dates of the same months, each month predicted from the others: AUC 0.506 (0.5 = no better than chance)
+   4d. Both models run on the market in 2019-2022 (years with none of his calls in them):
+       o_am: his-side model every day  1001  49.0% -0.005 t=-0.5 | on the fifth of days most like his   306  46.7% -0.022 t=-1.1 | on the rest   901  50.1% -0.004 t=-0.4
+       o_day: his-side model every day  1001  51.4% +0.015 t=+1.1 | on the fifth of days most like his   306  47.4% +0.003 t=+0.1 | on the rest   901  53.4% +0.017 t=+1.1
+       mornings on the days most like his: one-way 38.5% vs 34.1% on the rest; range 0.56 vs 0.55 ADR

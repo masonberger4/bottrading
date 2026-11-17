@@ -54,6 +54,37 @@ So A's answer carries over: the side cannot be read from the codable rules, alon
 recover his side from them. C now rests entirely on B. If B's calls made before the fact are not clearly better than
 a coin, C should stop here.
 
+## Final rerun with option B's call log, 2026-11-17
+
+All four sets B scored (`/mnt/project-files/mentorship/runs/ict_calls_2026-11-17/calls.csv`, 157 rows: 114 one-sided
+calls, 43 stated no-trade days, 145 said before the move, 2023-01 to 2026-09), with A's columns joined. Output
+`out/report_calls_all.txt`. 95 one-sided market-days match the day table (the rest are after the data ends on
+2026-10-16, or days with opposite calls).
+
+- **His calls do carry something.** On those 95 days the market's 09:30-11:30 move went his way 64% of the time and
+  09:30-16:00 61% (B's own scoring at his horizon: 79 of 114). A coin on 95 days stays inside 40% to 60%.
+- **The columns do not see what he sees.** Best single column agrees with him 65% of 71 days (`s_wk_iof`), most sit
+  at 40% to 62%. The market direction model picks his side on 51% of the days.
+- **A model cannot recover his side.** Each day predicted from the others: 56% of 95, where always-short gets 51%.
+  That is inside the coin band (plus or minus 10 points).
+- **Nor his days.** His call days against his 43 stated no-trade days: AUC 0.506, the same as chance.
+- **On the market, the copy of him is worth nothing.** Run on 2019-22 (none of his calls): 49.0% of mornings right
+  (t = -0.5), and on the fifth of days most like his 46.7% (t = -1.1). To the close 51.4% (t = +1.1).
+
+**Conclusion: stop option C.** B shows his before-the-fact calls are better than a coin, so there is something in his
+read. But it is not in the 57 codable side columns or the 25 day columns: a model trained on them cannot tell which
+side he will take or which days he will pass, and the copy has no edge on years he did not call. More of the same
+kind of column is unlikely to change that (A's 30 engine columns added nothing). What he uses is either on the
+chart in ways we have not coded (the reaction after 09:30, which draw he means that day) or in his head.
+
+What would reopen it: a new kind of input that agrees with his side well outside the coin band on these 95 days
+(for example, his stated draw level per day from the transcripts, or intraday columns at his call time instead of
+09:30). The pipeline takes it through `--a-cols` in minutes.
+
+Caveats: 95 days is enough to rule out a strong link (a column that agreed with him 70% or more would show), not a
+weak one. B's reference times are estimates (plus or minus 15 to 30 minutes), and my outcome windows are fixed
+09:30-11:30 and 09:30-16:00, not his horizon.
+
 ## How A and B plug in
 
 - **A** (bias rules): a CSV with `day`, `market` (optional) and columns named `s_<name>` (signed, + = bullish) or
