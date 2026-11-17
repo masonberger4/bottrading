@@ -155,3 +155,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v149 | 2026-11-17 00:28:54Z | Run memory curator, part 3 | results.md | append | ICT live calls set 2 (PR #90), numbers checked against the PR body | PR #90 | c48f38d261 -> 1e96ab1596 |
 | v150 | 2026-11-17 00:28:56Z | Run memory curator, part 3 | data.md | append | 2026 SMC note date corrections, checked against the PR #90 README | PR #90 | e165fac615 -> 0cd9a99c2c |
 | v151 | 2026-11-17 00:39:18Z | Run memory curator, part 3 | results.md | append | ICT live calls: 2025 Lectures (PR #91), 2023 Mentorship (PR #92), four-set sum; numbers checked against the PR bodies | PR #91, PR #92 | 1e96ab1596 -> 35f8341a20 |
+| v152 | 2026-11-17 00:39:53Z | Run memory curator, part 3 | results.md | append | option C final rerun (PR #93), numbers checked against the PR body | PR #93 | 35f8341a20 -> 341329ea8c |
