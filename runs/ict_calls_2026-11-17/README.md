@@ -1,8 +1,8 @@
-# ICT's calls made before the fact, scored (option B of PR #82). Set 1: 2024 Mentorship (2026-11-17)
+# ICT's calls made before the fact, scored (option B of PR #82). Sets 1 and 2: 2024 Mentorship, 2026 SMC (2026-11-17)
 
 Asked by Mase ("Start A through E"). Log and results only: no engine code, default or data changed.
 
-## Short answer
+## Short answer (Set 1, 2024 Mentorship; Set 2 is in its own section below)
 
 - In the 2024 Mentorship live streams (Aug 5 to Oct 28 2024, plus one December outlook) ICT made **25 dated directional
   calls** on NQ and stood aside on **13 stated no-trade days**. 5 more sessions had no call.
@@ -116,17 +116,138 @@ off, rest stopped), Aug 21 (4 of 10 stopped), Aug 29 pre-session short (stopped,
 - "Right at the horizon" ignores his stop. A call can be right at 11:30 and still stop a tight entry first.
 - 5 calls are marked `partly` or `unclear` on whether they came before the move; results are shown with and without.
 
+## Set 2: 2026 SMC lecture series (added 2026-11-17)
+
+Same method, same scorer. 131 notes read; 40 dated videos carried a call made before the move, 4 were stated
+no-trade days, 11 had no call, 2 fall after the NQ file ends (Oct 19 and Oct 28), and the rest are reviews and
+lectures recorded after the fact (not scored).
+
+- **42 calls, 30 right at his horizon (71%).** The same guess on neighbouring days wins 48%. About a 0.2% chance of
+  that by luck. Counting only calls clearly stated before the move: 26 of 38 (68%).
+- **Both sets together: 48 of 67 (72%) against 49% by chance.** Morning-window calls: 41 of 51 (80%).
+- Moves are still small: median +0.26% (about 75 NQ points at 2026 prices), mean +0.22%.
+- Price targets: 24 given, 19 reached by the deadline (79%).
+- Shifting every call time by 15 to 30 minutes either way gives 62% to 71% right (table below), so the edge survives
+  the timing uncertainty but is smaller than the headline.
+- 30 of the 42 calls came with a trade taken live on the stream (23 right, 77%); the 12 without a trade were 7
+  right (58%).
+
+| group | calls | right at the horizon end | same call on other days | first to +0.25% vs -0.25% | mean move | median move |
+|---|---|---|---|---|---|---|
+| all calls | 42 | 30 (71%) | 48% | 29 of 38 (76%) | +0.22% | +0.26% |
+| clearly before the move | 38 | 26 (68%) | 49% | 26 of 34 (76%) | +0.18% | +0.24% |
+| up calls | 17 | 13 (76%) | 53% | 9 of 14 (64%) | +0.24% | +0.29% |
+| down calls | 25 | 17 (68%) | 45% | 20 of 24 (83%) | +0.20% | +0.23% |
+| with a live trade | 30 | 23 (77%) | 49% | 22 of 28 (79%) | +0.24% | +0.26% |
+| no trade taken | 12 | 7 (58%) | 46% | 7 of 10 (70%) | +0.16% | +0.23% |
+| same-day horizon | 38 | 29 (76%) | 48% | 26 of 34 (76%) | +0.26% | +0.26% |
+| morning window only (end by 12:00) | 33 | 26 (79%) | 48% | 23 of 30 (77%) | +0.29% | +0.26% |
+
+| ref shift (min) | calls | right at horizon end | first to +0.25% | right at 16:00 |
+|---|---|---|---|---|
+| -30 | 38 | 27 (71%) | 22 of 35 | 25 (66%) |
+| -15 | 38 | 26 (68%) | 23 of 35 | 22 (58%) |
+| 0 | 38 | 29 (76%) | 26 of 34 | 27 (71%) |
+| +15 | 38 | 26 (68%) | 20 of 27 | 23 (61%) |
+| +30 | 32 | 20 (62%) | 20 of 28 | 22 (69%) |
+
+### Dates were pinned from prices
+
+The playlist is not in date order and many notes had inferred dates. Prices he says out loud were matched against
+the NQ 1-minute file (09:30 open, 16:14 settlement, session highs and lows). That confirmed most dates and moved these:
+
+- 006/007: Tue Sep 29 (09:30 open 30,708.75), not Thanksgiving week.
+- 018: Thu Sep 3 (opening gap 29,194.25 to 29,249.5), not NFP Friday Sep 4. The recording stops mid-trade and NQ
+  then rallied about 200 points against the short.
+- 138: Thu Jan 29 (discount open 26,133.5, 09:30 low near 26,122.5), not Jan 8.
+- 089: Wed May 13 (08:30 candle high 29,360.75). 027: Tue Aug 25. 055: Tue Jul 21 (the same trade 054 reviews).
+  030: Thu Aug 20. 067: Wed Jul 8. 095: Tue Apr 21 (the pre-market short 097 mentions).
+
+### Horizon rules (fixed before scoring)
+
+A deadline he names is used (by 10:00, the first 30 minutes, "until 11:06"). Otherwise: a morning setup or live
+morning trade ends 11:30; a pre-market call about the 07:00-09:30 move ends 09:30; an afternoon call or a
+whole-day direction ends 16:00; an evening outlook ends the next day 16:00; a weekly outlook ends Friday 16:00.
+
+### The 2026 calls
+
+| date | ref | mkt | side | call | horizon | move his way | result | target | trade shown live |
+|---|---|---|---|---|---|---|---|---|---|
+| 2026-01-05 | 09:17 | NQ | up | Pre-open long from the pre-market first gap toward the highs above | to 11:30 | +0.29% | right |  | live demo long, half off at the minor buy side |
+| 2026-01-29 | 08:34 | NQ | up | Pre-market: the smooth side is up, expects the run into the minor buy side | to 09:30 | -0.18% | wrong |  | none |
+| 2026-02-10 | 09:24 | NQ | down | Buy side went first, so the relative equal lows are the next draw | to 11:30 | +0.17% | right | hit | live small entries on the 15s chart |
+| 2026-02-11 | 09:37 | NQ | down | NFP Wednesday: premium gap, watching for the half gap by 10:00 | to 10:00 | +0.22% | right | hit | none |
+| 2026-02-27 | 08:16 | NQ | down | PPI morning: "I'm bearish, I want to see lower prices" | to 16:00 | -0.34% | wrong |  | none |
+| 2026-03-08 | 18:00 | NQ | down | Sunday outlook: NQ is the weak index, bearish | to Friday | -0.71% | wrong |  | none |
+| 2026-03-09 | 10:25 | ES | up | ES long from an inversion gap to run the shorts from the open | to 11:30 | +0.68% | right | hit | live paper long, one micro |
+| 2026-03-13 | 16:30 | NQ | down | Friday review: "I anticipate and expect a gap lower opening on Sunday", stay heavy | next day | -1.23% | wrong |  | none |
+| 2026-03-17 | 09:34 | NQ | down | Tape read, no trade: only interested in the sell side below | to 11:30 | +0.23% | right |  | none |
+| 2026-04-06 | 09:50 | NQ | down | Premium gap after Good Friday: reads the run above the highs as a false break back to the gap | to 11:30 | +0.34% | right | hit | none |
+| 2026-04-08 | 09:33 | NQ | down | Huge premium gap: the only target this morning is the block low | to 11:30 | +0.56% | right |  | live short, stepped partials |
+| 2026-04-10 | 09:40 | NQ | down | CPI Friday: premium gap, still drawing lower to the mid-gap | to 10:00 | -0.05% | wrong | missed by 15.12 | none |
+| 2026-04-13 | 09:54 | NQ | up | Neutral at the open, then a long from an inversion gap | to 11:30 | +0.27% | right |  | live long |
+| 2026-04-16 | 09:30 | NQ | down | Premium gap after nine up days: short toward the gap in the first 30 minutes | to 10:00 | +0.45% | right | hit | live short, late fill |
+| 2026-04-17 | 08:25 | NQ | up | Friday plan: next objective is the all-time high | to 16:00 | +0.88% | right | hit | none |
+| 2026-04-21 | 08:10 | NQ | down | Pre-market short after the run stalled just under the all-time high | to 09:30 | +0.26% | right | hit | live short, partials, runner stopped |
+| 2026-04-28 | 09:45 | NQ | down | Short at 75% of the opening gap toward the morning lows | to 11:30 | +0.62% | right | hit | live short, target hit |
+| 2026-05-13 | 09:46 | NQ | up | Long fading the 08:30 news drop | to 11:30 | +0.49% | right | hit | live long, stopped once, re-entered, last piece stopped |
+| 2026-05-26 | 15:15 | ES | up | ES last-hour long into the highs | to 16:00 | +0.19% | right |  | live long |
+| 2026-06-08 | 10:05 | NQ | up | Bought under the relative equal lows for a run back up into Friday's gap | to 11:30 | +0.91% | right | hit | live paper long, 20 lots |
+| 2026-06-22 | 09:31 | NQ | down | Short at the open "for the stops" | to 11:30 | +0.96% | right |  | live paper short, covered within minutes |
+| 2026-06-22 | 09:38 | NQ | up | Then long from a reclaimed gap | to 11:30 | -0.95% | wrong |  | live paper long, closed by accident near target |
+| 2026-07-01 | 10:05 | NQ | down | Short in the 09:50-10:10 window at the daily block | to 11:30 | -0.26% | wrong |  | live short |
+| 2026-07-02 | 10:15 | NQ | down | Short after the 09:30 run up, read as a false move | to 11:30 | +1.80% | right |  | live short |
+| 2026-07-06 | 10:02 | NQ | down | No-bias day: short after the 10:00 news | to 11:30 | -0.29% | wrong |  | live short, $1,800 loss |
+| 2026-07-06 | 10:10 | NQ | up | Reversed long after the loss | to 11:30 | +0.23% | right | hit | live long, scaled out |
+| 2026-07-07 | 09:27 | NQ | down | Wants the gap to fail and price to run the lows | to 11:30 | +0.93% | right |  | none |
+| 2026-07-13 | 09:27 | NQ | up | Mild long bias toward Friday's settlement (he says no hard bias) | to 16:00 | -0.81% | wrong | missed by 296 | live paper probes, one contract |
+| 2026-07-14 | 08:00 | NQ | up | CPI pre-market: expects up into Monday's gap | to 16:00 | +0.51% | right | hit | none |
+| 2026-07-14 | 10:00 | NQ | down | Short at 10:00 from the prior day's half gap | to 11:30 | -0.35% | wrong | missed by 22.5 | live short, last piece stopped |
+| 2026-07-16 | 18:30 | NQ | down | Review: price could gravitate below the daily lows tomorrow, with a Friday caveat | next day | +1.29% | right | hit | none |
+| 2026-07-21 | 09:31 | NQ | down | Enormous premium gap: short at the open toward the half gap by 10:00 | to 10:00 | +0.11% | right | missed by 94.75 | live short, stopped, re-entered, net small |
+| 2026-08-06 | 07:05 | NQ | up | Pre-market long from a daily inversion gap | to 11:30 | +0.72% | right |  | live long |
+| 2026-08-10 | 09:35 | NQ | up | Long near the open to the midnight opening price | to 11:30 | +0.12% | right | hit | live long, 5 of 7 off near target |
+| 2026-08-17 | 08:22 | NQ | down | Monday short aiming for the untouched weekly gap | to 11:30 | +0.01% | right | hit | live short, target not reached on the video, small profit |
+| 2026-08-25 | 08:22 | NQ | down | Pre-market short after price failed above the weekly gap | to 09:30 | +0.26% | right |  | live short, partials |
+| 2026-08-27 | 10:00 | NQ | up | Long in the 09:50-10:10 window after the low was swept | to 11:30 | +0.32% | right |  | live long, 5 of 6 off, runner stopped |
+| 2026-09-01 | 09:35 | NQ | up | Huge discount gap: favors longs back up into the gap | to 11:30 | +0.46% | right | hit | live paper longs, one small loss |
+| 2026-09-03 | 09:48 | NQ | down | Short looking for a run down through the opening gap | to 11:30 | -0.66% | wrong | missed by 63.75 | live short, recording stops mid-trade |
+| 2026-09-04 | 10:40 | NQ | down | NFP Friday short already on, "they're going to come down" | to 11:06 | +0.26% | right | hit | live short, closed by hand about $6,470 |
+| 2026-09-08 | 09:31 | NQ | down | Premium gap after Labor Day: short at the opening wick | to 10:00 | +0.53% | right | hit | live paper short, one contract |
+| 2026-09-29 | 19:45 | NQ | up | Evening long, expects a move up into Monday's gap | next day | -0.01% | wrong | hit | live evening long, partials, runner stopped |
+
+No-trade, no-call and no-data sessions: `nocall_2026.csv`.
+
+### What Set 2 adds
+
+1. The rate repeats on a second, independent set two years later (71% against 72%), in a market that went both ways.
+2. Longer calls are still the weak ones: whole-day, next-day and weekly calls were 3 of 8 right (the weekly outlook
+   on Mar 8, the "gap lower on Sunday" call on Mar 13, Feb 27, Jul 13 and Sep 29 were wrong). Morning-window calls
+   were 26 of 33.
+3. Day selection again: on Mar 27 he declined to short a one-sided Friday that fell another 1.5%.
+4. A live trade is the stronger signal (77% against 58% without one), but that group has the selection problem below.
+
+### Extra caveats for Set 2
+
+- **Which sessions get recorded and kept is his choice.** 018 stops mid-trade on a losing day; other losing sessions
+  may never have been posted. Live-trade calls are the most exposed to this.
+- Call times are still estimates (stream start worked back from clock mentions, price touches and video length).
+- Four calls are marked `partly` or `unclear`. Two sessions carry two opposite calls minutes apart (Jun 22, Jul 6);
+  both are logged.
+- Two ES calls (Mar 9, May 26) are scored on ES.
+- A horizon-end result ignores his exit: Jul 1 is scored wrong at 11:30 although the short paid first.
+
 ## Files
 
 - `calls_2024.csv`: the log (id, date, source video, ref, side, horizon, target, trade shown, before, evidence, what).
 - `nocall_2024.csv`: no-trade and no-call sessions.
 - `calls_2024_scored.csv`, `summary_2024.md`, `sens_2024.md`: outputs.
 - `score.py`, `sens.py`: scorer and the call-time sensitivity check.
+- `calls_2026.csv`, `nocall_2026.csv`, `calls_2026_scored.csv`, `summary_2026.md`, `sens_2026.md`, `summary_all.md`: Set 2 and both sets together.
 - `calls_for_option_c.csv`: date, market, side, before, source (also at
   `/mnt/project-files/mentorship/runs/ict_calls_2026-11-17/calls.csv`).
 
 ## Not done yet
 
-2026 SMC (about 67 live or pre-market sessions, many with dates still to pin), 2023 Mentorship (about 60), 2025
-Lectures (about 18 live), Trade Executions and Charter. Same method, about a day each for the first two. Handoff:
-`/mnt/project-files/mentorship/handoff_ict_calls_2026-11-17.md`.
+2023 Mentorship (about 60 sessions), 2025 Lectures (about 18 live), Trade Executions and Charter. Same method, one
+set per thread. Handoff: `/mnt/project-files/mentorship/handoff_ict_calls_2026-11-17b.md`.
