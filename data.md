@@ -64,3 +64,4 @@ Laptop test-run lessons:
 
 ## cloud-engine-data (2026-11-16)
 - The fixed-roll engine parquets were not in the cloud shared folder; threads staged them read-only from the laptop on 2026-11-16. They are now at /mnt/project-files/mentorship/data/fixed_roll_2026-11-10/ (ES, NQ, YM: 1min_db, 1min_dbmeta, 1min_dbraw, 5min_db, 5min_dbmeta). The 1-minute study trades are at /mnt/project-files/mentorship/runs/bt_1m_2026-11-16/ (README.md, trades_and_skips.tgz). The cloud runner run.py takes --tf 1 for 1-minute bars (PR #80).
+- The cloud container needs `pip install pyarrow` before it can read the fixed-roll parquets (noted 2026-11-17).
