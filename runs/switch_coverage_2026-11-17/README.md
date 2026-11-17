@@ -84,9 +84,29 @@ order block's midpoint lands on the wrong side. The other arming modes move such
   order logic shows up as the best "winner". Any future broad screen needs a guard that rejects orders whose stop is
   not on the loss side.
 
-The next seven movers of the old screen are running the same way (results are added to `spot_check.txt` and to this
-section when they finish): HTF resistance cap off, draw re-lock, full market-maker plan, volume-imbalance draw lock,
-three drives required, SMT needs an array, PM lunch order flow.
+**The next seven movers of the old screen, same runs** (trades with a wrong-side stop removed; R a trade, t in
+brackets; last column is the paired weekly difference to the base):
+
+| switch | old screen 2021 | trades | total | R a trade (t) | 2019-22 | 2023-26 | vs base, weekly t |
+|---|---|---|---|---|---|---|---|
+| base (week rule off) | | 2,896 | -$306k | -0.13 (-4.5) | -0.14 | -0.11 | |
+| arm on touch (`ob_arm='touch'`) | +$50.6k | 2,597 | -$159k | -0.11 (-1.9) | -0.14 | -0.07 | +0.6 |
+| HTF resistance cap off (`htf_resist_cap=False`) | +$21.9k | 2,998 | -$278k | -0.11 (-3.2) | -0.14 | -0.09 | +0.5 |
+| draw re-lock (`draw_relock`) | +$20.6k | 3,770 | -$480k | -0.15 (-5.8) | -0.15 | -0.15 | -2.9 |
+| full market-maker plan (`mm_plan='full'`, `mmxm_ctx`) | +$16.4k | 3,049 | -$200k | -0.08 (-1.8) | -0.13 | -0.03 | +1.2 |
+| volume-imbalance draw lock (`vi_arrays`, `vi_htf_draw`) | +$14.2k | 3,092 | -$312k | -0.12 (-4.0) | -0.13 | -0.10 | +0.1 |
+| three drives required (`three_drives='require'`) | +$13.5k | 426 | -$44k | -0.14 (-1.7) | -0.13 | -0.15 | +3.9 |
+| SMT needs an array (`smt_min=1`, `smt_need_array`) | +$12.0k | 347 | -$37k | -0.13 (-1.3) | -0.17 | -0.09 | +4.2 |
+| PM lunch order flow (`pm_lunch_org`) | +$11.7k | 2,315 | -$186k | -0.09 (-3.0) | -0.10 | -0.09 | +3.4 |
+
+- All eight of the old screen's best results lose in both halves, at about the same -0.08 to -0.15 R a trade as the
+  base. None has a positive half. Only the touch switch produced wrong-side stops; the other seven are clean.
+- The three that "beat the base" (three drives, SMT array, PM lunch order flow) do it by taking fewer of the same
+  losing trades, the pattern seen with the week rule and the DXY switches.
+- So one good year on ES in the old screen predicted nothing. That is the strongest evidence here that the 1,896
+  switches seen only in that screen are not hiding an edge.
+- Runs: engine e68ef84, 5m, 192 jobs, 0 failed, about 55 minutes in the cloud. The base is the saved PR #76 run
+  (engine 2101d04); a rerun of ES 2021 on e68ef84 gave 104 trades against 103 saved (one extra AM trade).
 
 ## 4. Under-tested areas, and whether an edge is plausible there
 
@@ -111,7 +131,7 @@ morning window. That is not a switch-testing problem.
 2. **Add the stop-side guard** (small engine fix plus one test): reject, or count and report, any order whose stop is
    not on the loss side, and make `report.py` print the count. Fix the `ob_arm='touch'` path. Cheap, and it protects
    every later run. Needs Mase's OK because it changes engine code.
-3. **Finish this spot-check** (running now, no further cost): the seven other top movers of the old screen.
+3. ~~Finish this spot-check~~ Done: all eight lose in both halves (section 3).
 4. **Only if Mase wants the switch space formally closed:** rerun the roughly 980 old-screen variants that changed
    something, plus the 404 never run, on the current engine with the guard, 5m, three markets, 2019-22 only, and check
    survivors on 2023-26. About 50 to 70 hours of cloud time on 4 cores. With about 1,400 variants, roughly 70 will
