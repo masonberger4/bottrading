@@ -1,4 +1,4 @@
-# ICT's calls made before the fact, scored (option B of PR #82). Sets 1 and 2: 2024 Mentorship, 2026 SMC (2026-11-17)
+# ICT's calls made before the fact, scored (option B of PR #82). Sets 1 to 3: 2024 Mentorship, 2026 SMC, 2025 Lectures (2026-11-17)
 
 Asked by Mase ("Start A through E"). Log and results only: no engine code, default or data changed.
 
@@ -237,6 +237,51 @@ No-trade, no-call and no-data sessions: `nocall_2026.csv`.
 - Two ES calls (Mar 9, May 26) are scored on ES.
 - A horizon-end result ignores his exit: Jul 1 is scored wrong at 11:30 although the short paid first.
 
+## Set 3: 2025 Lecture Series (added 2026-11-17)
+
+- The 83 videos of the 2025 playlist are mostly after-the-fact reviews. Only **12 dated calls** could be logged
+  (Mar 23 to Nov 24 2025, all NQ), plus 6 stated no-trade days and 7 sessions with no usable call.
+- **7 of the 12 were right at his horizon (58%); the same guess on neighbouring days wins 50%.** That is not
+  distinguishable from luck on its own. Counting only the 10 clearly stated before the move: 6 of 10.
+- The split matches Sets 1 and 2. The three morning-window calls were all right (Sep 19 live short, Oct 1 half-gap,
+  Nov 24 at the bell). The seven evening, next-day and weekly outlooks went 3 of 7.
+- Up calls 4 of 5, down calls 3 of 7. Price targets: 4 given, 2 hit by the deadline.
+- All three sets together: **55 of 79 right (70%) against 49% for the same guess on other days**; morning-window
+  calls 44 of 54 (81%); calls that run to the close or longer 11 of 25.
+
+| date | ref | side | call | target | horizon | move his way | result | trade shown live |
+|---|---|---|---|---|---|---|---|---|
+| 2025-03-23 | Sun 18:00 | down | Weekly outlook: patch-up rally into the daily volume imbalance, then roll over | below the March lows | to Friday | +2.94% | right | none |
+| 2025-03-28 | 16:55 | down | Expects Sunday to open at or below the weekly projection | Sunday open | next day 16:00 | -0.40% | wrong | none |
+| 2025-04-04 | 16:45 | down | Expects a gap lower on Sunday and a run below Friday's low | below 17,387.50 | next day 16:00 | -0.25% | wrong | none |
+| 2025-04-21 | 16:30 | down | Looking for 17,700 and just below overnight or tomorrow | 17,699.75 | next day 16:00 | -2.67% | wrong | none |
+| 2025-04-30 | 16:30 | up | Higher on the daily chart into NFP Friday | daily wick CE, volume imbalance | to Friday | +1.74% | right | none |
+| 2025-05-07 | 09:30 | up | FOMC morning: stay away today, but likely up to the relative equal highs | relative equal highs | 3 days | +5.28% | right | none |
+| 2025-05-18 | Sun 18:00 | up | Sunday outlook: wants it to stay bullish | 21,941.75 | to Friday | -1.56% | wrong | none |
+| 2025-06-20 | 04:50 | down | Pre-market X video: bearish, no new highs before the weekend | new week opening gap | to 16:00 | +0.19% | right | short after 09:30, shown afterwards |
+| 2025-09-19 | 10:28 | down | Live short at the reclaimed gap | 24,735 | to 11:30 | +0.27% | right | live short, partials, last two stopped |
+| 2025-10-01 | 09:25 | up | Pre-open: push higher, half the discount gap by 10:00 | ORG mid-gap | to 10:00 | +0.01% | right | none |
+| 2025-11-14 | 09:00 | down | Daily chart drawing to the relative equal lows | sell side below 24,602 | to 16:00 | -1.57% | wrong | none |
+| 2025-11-24 | 09:32 | up | At the bell: upside objective for the morning | hourly balanced price range | to 11:30 | +1.12% | right | none |
+
+Notes on this set:
+- **Mar 28 and Apr 4 are scored wrong by the horizon rule but the thing he actually called happened.** Sunday opened
+  lower both times (19,319.75 against 19,361.00, and 17,100.00 against 17,483.25) and ran below Friday's low; both
+  Mondays then recovered above Friday's last price by 16:00. Scored at the Sunday open they are right, which would
+  make the set 9 of 12. The rule was kept the same as Set 2 (C26-08).
+- Mar 23 is logged as a down weekly call because the net view was "still lower prices". The first leg he described
+  (up into the daily volume imbalance) also happened, Monday to Wednesday, before the drop.
+- May 18 is soft: he says the Sunday opening price decides and gives the gap-down scenario too. It gapped down.
+- Jun 20 is his own evening report of an X video posted at 04:50, so it is marked `partly` and left out of the
+  "clearly before" row. Calls he reports later are more likely to be ones that worked.
+- Nov 14: the stream's clock time cannot be recovered from the captions. The call is wrong for any time from 07:00
+  to 09:35, so the result does not depend on the guess. May 7's time is also a guess (he says "FOMC later today").
+- Dates pinned from prices: Apr 21, Apr 30, May 6-7, May 16-18, Jun 20, Sep 19, Oct 1, Oct 14 all matched the
+  1-minute file. No note header was wrong in this set, but 5 dates the notes marked "inferred" are now confirmed.
+- Not scoreable: six live or voice-over trade videos from January to April (58, 64, 70, 72, 75, 76) carry no date
+  or price in the captions, and the Oct 14 "called the low on X" post has no time. The laptop frames would fix both.
+- No-trade days: May 2 (NFP), May 7 (FOMC), May 16, Jun 12 and 13 (CPI/PPI week), Sep 26.
+
 ## Files
 
 - `calls_2024.csv`: the log (id, date, source video, ref, side, horizon, target, trade shown, before, evidence, what).
@@ -244,10 +289,11 @@ No-trade, no-call and no-data sessions: `nocall_2026.csv`.
 - `calls_2024_scored.csv`, `summary_2024.md`, `sens_2024.md`: outputs.
 - `score.py`, `sens.py`: scorer and the call-time sensitivity check.
 - `calls_2026.csv`, `nocall_2026.csv`, `calls_2026_scored.csv`, `summary_2026.md`, `sens_2026.md`, `summary_all.md`: Set 2 and both sets together.
+- `calls_2025.csv`, `nocall_2025.csv`, `calls_2025_scored.csv`, `summary_2025.md`, `sens_2025.md`: Set 3; `summary_all.md` now covers all three sets.
 - `calls_for_option_c.csv`: date, market, side, before, source (also at
   `/mnt/project-files/mentorship/runs/ict_calls_2026-11-17/calls.csv`).
 
 ## Not done yet
 
-2023 Mentorship (about 60 sessions), 2025 Lectures (about 18 live), Trade Executions and Charter. Same method, one
+2023 Mentorship (about 60 sessions, in progress in its own thread), Trade Executions and Charter. Same method, one
 set per thread. Handoff: `/mnt/project-files/mentorship/handoff_ict_calls_2026-11-17b.md`.
