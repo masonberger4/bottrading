@@ -1,0 +1,48 @@
+id,video,frame,date,contract_on_chart,tf,item,ict_value,our_value,diff,verdict,note
+1,mt23-002 GHaD0mebgMU,00-00-20,2023-01-03,ESH2023,1D,daily O/H/L,3895.00/3906.75/3814.50,3895.00/3906.75/3814.50,0,match,clock 16:08:53; live C 3840.75 inside our 16:08 bar (3840.75-3841.75)
+2,TE-06 g-k1xZSpBj0,t341.8,2023-12-01,ESZ2023,2m,09:50 bar OHLC,4571.25/4572.00/4568.75/4570.75,4571.25/4572.00/4568.75/4571.00,0 (C live),match,clock 09:51:57 bar still forming
+3,TE-06 g-k1xZSpBj0,t341.8,2023-12-01,ESZ2023,2m,overnight high (label),4584.50,4584.50 @04:34,0,match,
+4,mt23-013 V1thfpo-R9U,00-21-20,2023-01-26,ESH2023,1m,11:43 bar O/L,4041.00/4040.25,4041.00/4040.25,0,match,clock 11:43:30 bar forming (our H 4042.25 vs 4042.00 so far)
+5,mt23-013 V1thfpo-R9U,00-21-20,2023-01-26,ESH2023,1m,'4035 ES sellside' line (09:56 low),4035.25,4035.25 @09:56,0,match,
+6,mt23-029 dwJcsi3ddFg,00-54-40,2023-02-13,ESH2023,1m,10:21 bar O/L,4123.50/4123.25,4123.50/4123.25,0,match,clock 10:21:06 bar forming
+7,mt23-029 dwJcsi3ddFg,00-54-40,2023-02-13,ESH2023,1m,buyside liquidity label (10:00 high),4125.00,4125.00 @10:00,0,match,
+8,mt23-043 NkwqJBzgQwo,00-11-20,2023-03-27,ESM2023,1m,New York midnight open label,4022.25,4022.25,0,match,
+9,mt23-043 NkwqJBzgQwo,00-11-20,2023-03-27,ESM2023,1m,opening range gap low label (prior 16:14 close),4004.25,4004.25,0,match,ICT uses the 16:14 close; our 16:00 close is 4002.00
+10,mt23-047 441vklRYYR4,00-06-40,2023-04-12,ESM2023,15m,16:45 bar OHLC,4116.50/4117.50/4116.50/4117.25,4116.50/4117.50/4116.50/4117.25,0,match,
+11,mt23-055 qiv8pkcNvGk,00-16-40,2023-05-17,ESM2023,1m,20:15 bar O/H/L,4169.50/4170.25/4169.50,4169.50/4170.25/4169.50,0,match,clock 20:15:43 live bar
+12,mt23-064 _YTK5uXBe4o,t5330.4,2023-06-13,ESU2023,15s,live price at 09:02:23,4412.75,4366.75 (ESM3 09:02 close),-46.0,MISS,late roll: ICT on Sep contract; our series stays on ESM3 until 06-13 20:00 ET (roll spread +45.25)
+13,mt23-064 _YTK5uXBe4o,t5330.4,2023-06-13,ESU2023,15s,CPI 08:30 spike high (line),4407.00,4362.00 (ESM3),-45.0,MISS,late roll (same as above)
+14,mt23-064 _YTK5uXBe4o,t5330.4,2023-06-13,ESU2023,15s,CPI 08:30 spike low (wick),~4381.5,4335.75 (ESM3),~-45.75,MISS,late roll; wick read off axis
+15,mt23-081 0xYpeVRi_qs,t637.7,2023-08-15,ESU2023,1h,16:00 bar OHLC,4454.00/4455.75/4451.50/4452.50,4454.00/4455.75/4451.50/4452.50,0,match,
+16,mt23-081 0xYpeVRi_qs,t637.7,2023-08-15,NQU2023,1h,16:00 bar OHLC,15105.50/15116.75/15096.50/15110.00,15105.25/15116.75/15096.50/15110.00,O -0.25,match,one tick on the open only
+17,mt23-090 bhYcXBI3z9U,t7626.2,2023-09-05,ESU2023,1m,10:35 bar O/L (forming),4504.00/4503.75,4504.00/4503.75,0,match,clock 10:35:37
+18,mt23-090 bhYcXBI3z9U,t7626.2,2023-09-05,NQU2023,1m,10:35 bar O/L (forming),15482.00/15481.75,15482.00/15481.75,0,match,clock 10:35:37
+19,TE-32 ouisWztKpDU,t955.1,2024-01-31,ESH2024,1m,08:50 bar OHLC (hovered),4927.00/4927.75/4926.75/4927.50,4927.00/4927.75/4926.75/4927.50,0,match,
+20,TE-32 ouisWztKpDU,t955.1,2024-01-31,ESH2024,1m,08:30 spike high / 09:48 low (axis),~4937.0/~4915.5,4937.00/4915.50,0,match,read off axis
+21,TE-41 My9wQ8_UtZk,t144.8,2024-05-06,ESM2024,15s,11:30-12:12 high/low (axis),~5187.0/~5180.75,5186.75/5181.00,~0.25,match,read off a 15s chart axis (+-0.25)
+22,TE-52 ypkWB8EpO5s,t155.1,2024-08-27,ESU2024,1m,06:30 bar OHLC (hovered),5633.50/5634.25/5633.25/5633.75,5633.50/5634.25/5633.25/5633.75,0,match,
+23,TE-52 ypkWB8EpO5s,t155.1,2024-08-27,ESU2024,1m,live price 08:43:37,5623.75,08:43 bar 5623.25-5624.50,0,match,
+24,M24-29 fhBnnU44A6E,t2520.4,2024-09-17,ESZ2024,1m,10:10 live price,5728.75,5669.00 (ESU4),-59.75,MISS,late roll: ICT on Dec contract; we stay on ESU4 until 09-17 20:00 ET (roll spread +61.50)
+25,M24-29 fhBnnU44A6E,t2520.4,2024-09-17,ESZ2024,1m,10:08 high / 09:54 low (axis),~5732.5/~5711.5,5671.00/5650.25 (ESU4),-61.5/-61.25,MISS,late roll; shape and timing identical; offset = roll spread
+26,SMC26-037 KEqzv2yOAf0,t2408.7,2026-08-11,ESU2026,15s,14:06 open (15s header O),7755.50,7755.50 (1m open),0,match,video uploaded 08-12 but recorded 08-11 (title date is upload date)
+27,SMC26-037 KEqzv2yOAf0,t2408.7,2026-08-11,ESU2026,15s,sellside liquidity label (13:15 low),7747.75,7747.75,0,match,
+28,SMC26-087 7zlblhLGraA,t255.5,2026-05-26,ES continuous (B-ADJ; front ESM2026),1m,15:20 bar O/L (forming),7527.75/7527.50,7527.75/7527.50,0,match,TradingView back-adjusted continuous equals the front contract for current dates
+29,SMC26-087 7zlblhLGraA,t255.5,2026-05-26,ES continuous,1m,14:24 high / 15:00 low (axis),~7533.5/~7522.0,7533.75/7522.00,0,match,read off axis
+30,SMC26-126 clG2IDpEcjE,t237.7,2026-03-09,MESH2026 (micro),1m,buyside liquidity label (09:31 high),6694.00,6693.75 (ES),-0.25,match,MES vs ES book differs by a tick
+31,SMC26-126 clG2IDpEcjE,t237.7,2026-03-09,MESH2026 (micro),1m,10:11 low label,6641.00,6641.00 (ES),0,match,
+32,SMC26-126 clG2IDpEcjE,t237.7,2026-03-09,MESH2026 (micro),1m,10:23 high label,6674.25,6674.75 (ES),+0.5,match,MES vs ES
+33,SMC26-005 kRShZKZlvJ4,t356.1,2026-09-30,NQZ2026,1m,10:38 bar OHLC (hovered),30796.25/30815.75/30784.00/30812.75,30796.25/30815.75/30784.00/30812.75,0,match,
+34,SMC26-056 2L88yH3LKcs,t1118.5,2026-07-20,NQU2026,1m,09:40 bar OHLC (hovered),29137.00?/29146.50/29121.25/29126.00,29127.00/29146.50/29121.25/29126.00,H/L/C 0,match,open digit unreadable in blurred frame
+35,mt23-001 XN8tuO4QIRw,caption 24:58,2022-12-30,ESH2023,-,"'note 3864 at relative equal highs' (Friday morning)",3864,3864.00 swing high 12-30 05:46,0,match,
+36,mt23-006 VKkn8uckkW0,caption 01:12,2023-01-06,ESH2023,-,'targeted 3814' sellside,3814,3814.50 (01-03 low),+0.5,match,spoken without the half point
+37,mt23-006 VKkn8uckkW0,caption 08:04,2023-01-06,ESH2023,-,'3804' old daily low,3804,3804.50 (12-28 low),+0.5,match,spoken without the half point
+38,mt23-006 VKkn8uckkW0,caption 41:11,2023-01-06,ESH2023,-,'3876 and a quarter' buy stops,3876.25,3876.25 relative equal highs 01-05 07:52-08:01,0,match,
+39,mt23-006 VKkn8uckkW0,caption 41:13,2023-01-06,ESH2023,-,'3896 and a quarter' next target,3896.25,3896.25 (01-04 high),0,match,
+40,mt23-006 VKkn8uckkW0,caption 41:13,2023-01-06,ESH2023,-,'38.85' target,3885,3885.50 (01-05 high),+0.5,match,spoken without the half point
+41,SMC26-078 18vX-vv2bsg,t563.5,2026-06-09,NQ continuous (B-ADJ; front NQM2026),1m,11:17 bar OHLC (hovered),29189.75/29200.75/29166.25/29174.25,29189.75/29200.75/29166.25/29174.25,0,match,
+42,SMC26-078 18vX-vv2bsg,t563.5,2026-06-09,NQ continuous,1m,'minor buyside' line (09:58 high),29719.00,29719.00,0,match,
+43,SMC26-078 18vX-vv2bsg,t563.5,2026-06-09,NQ continuous,1m,10:00 low line,29626.25,29626.25,0,match,
+44,L25-27 L6DHi1iXRW0,t484.1,2025-06-16,NQM2025,1m,04:16 bar OHLC (hovered),21766.50/21769.50/21765.50/21766.00,21766.50/21769.50/21765.50/21766.00,0,match,roll week (our roll 06-17 20:00) but ICT was still on June too
+45,L25-13 -g7vnzaRDv4,t300.1,2025-09-25,NQZ2025,1D,daily O/H/L,24746.00/24793.50/24422.50,24746.00/24793.50/24422.50,0,match,
+46,L25-13 -g7vnzaRDv4,t300.1,2025-09-25,NQZ2025,1D,'High' marker (contract high),25027.25,25027.25 (09-22 15:15),0,match,
+47,L25-13 -g7vnzaRDv4,t300.1,2025-09-25,NQZ2025,1m,16:19 bar O/L (forming),24616.25/24615.75,24616.25/24615.75,0,match,clock 16:19:12

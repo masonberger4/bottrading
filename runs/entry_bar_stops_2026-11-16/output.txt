@@ -1,0 +1,44 @@
+trades 2897 | stopped in entry bar 528 (18.2%)
+fills on the bar the order was armed on: 0
+                 n  same_bar       net  net_same_bar
+setup                                               
+lunch         1658     0.043 -53493.32     -23559.19
+am_mm          387     0.457 -12035.71     -34366.59
+pm_sb          355     0.301 -18794.03     -19867.91
+pm_last_hour   215     0.395  -1269.88     -14908.91
+pm              91     0.484  -1827.25      -7425.04
+pre7            78     0.192  -1634.07      -2476.47
+ndog_scalp      50     0.080   3921.68       -665.53
+venom           34     0.353  -2740.14      -3651.34
+release_ob      29     0.448  -1855.75      -4110.15
+{'ok': 489, 'price frame differs': 38, 'stop not reached': 1}
+minute of the entry bar the limit filled in: {0: 388, 1: 47, 2: 32, 3: 15, 4: 7}
+minutes from fill to stop: {0: 203, 1: 117, 2: 76, 3: 59, 4: 34}
+risk in ticks (median) by market: {'ES': 6.0, 'NQ': 30.0, 'YM': 16.0}
+pre-break order-block entries by stop size / typical 5m bar range (median range of the 12 bars before the entry)
+               n  same_bar  mean_R       net
+bucket                                      
+(0.0, 0.5]   409      0.66   -0.37 -22610.10
+(0.5, 0.75]  189      0.31   -0.15  -3870.90
+(0.75, 1.0]  135      0.26   -0.13    402.43
+(1.0, 1.5]   188      0.19   -0.22 -12252.80
+(1.5, 2.0]    90      0.06   -0.17  -5151.48
+(2.0, 99.0]   65      0.05    0.33   6312.91
+2019-22
+               n  same_bar  mean_R
+bucket                            
+(0.0, 0.5]   186      0.65   -0.46
+(0.5, 0.75]   94      0.29   -0.16
+(0.75, 1.0]   80      0.28   -0.27
+(1.0, 1.5]   100      0.17   -0.23
+(1.5, 2.0]    65      0.06   -0.13
+(2.0, 99.0]   43      0.05    0.14
+2023-26
+               n  same_bar  mean_R
+bucket                            
+(0.0, 0.5]   223      0.68   -0.30
+(0.5, 0.75]   95      0.34   -0.14
+(0.75, 1.0]   55      0.24    0.06
+(1.0, 1.5]    88      0.22   -0.20
+(1.5, 2.0]    25      0.04   -0.26
+(2.0, 99.0]   22      0.05    0.69

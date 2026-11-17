@@ -3628,9 +3628,32 @@ class Params:
     smt_partial_b_bars: int = 5          # [our interpretation] the bars the sister gets to break its earlier extreme once the trade is near the target
     smt_partial_b_near: float = 0.25     # [our interpretation] "near the target": within this share of the entry-to-T1 distance
 
+    # narrow morning engine (PR #82 option D, Mase 2026-11-16; narrow.py). With narrow="am" run_day runs ONLY this model: sweep -> shift -> gap -> entry on the reaction, in the morning window
+    narrow: str = "off"                  # "am" = the narrow morning engine replaces every rulebook setup; "off" = the engine as before
+    nar_win: tuple = (570, 690)          # entries 09:30-11:30 (no lunch)
+    nar_flat: int = 720                  # flat at 12:00
+    nar_pools: tuple = ("pd", "on", "lon")   # pools whose run starts the setup: pd (prior RTH day), on (00:00-09:30), lon (02:00-05:00), pre (08:30-09:30), sw (short-term swings since 08:30)
+    nar_sw_n: int = 3                    # candles each side of a "sw" pool swing
+    nar_shift_n: int = 2                 # candles each side of the swing the shift must close through
+    nar_swing_lookback: int = 30         # that swing is at most this many bars before the sweep extreme
+    nar_shift_within: int = 20           # bars from the sweep to the shift
+    nar_entry_within: int = 15           # bars from the shift to the entry
+    nar_gap_min: float = 1.0             # smallest entry gap, ES points
+    nar_entry: str = "react"             # "react" = market on the next open after price returns to the gap and closes back out of it; "limit" = resting limit at the gap (edge, or CE with entry="ce")
+    nar_stop: str = "ext"                # "ext" = beyond the sweep extreme; "gap" = beyond the gap's first candle
+    nar_target: object = 2.0             # R multiple, or "pool" = the nearest untouched opposing pool at least nar_min_rr away
+    nar_min_rr: float = 1.0
+    nar_be_at: float = 0.0               # > 0: stop to the entry once the trade has been this many R in front
+    nar_min_risk_pts: float = 1.0        # ES points
+    nar_max_risk_pts: float = 25.0       # ES points
+    nar_max_trades: int = 1              # trades a day
+    nar_bias: str = "none"               # direction filter: none / midnight / open830 (long below, short above that open) / prevday / anti_prevday
+
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
         _sb_check(self)
+        from .narrow import check_params as _nar_check    # narrow morning engine
+        _nar_check(self)
         if self.unicorn_sides not in ("both", "long", "short"):
             raise ValueError(f"unicorn_sides {self.unicorn_sides!r}")
         if int(self.session_trades) < 1:
@@ -6770,6 +6793,9 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         if skips is not None:                    # caption-gap OT-stocks-swing-only (cc10_018 ~00:33:36): individual stocks are swing-only - no intraday setups
             skips.append((df.index[0].date(), symbol, "stock", "swing_only"))
         return []
+    if p.narrow != "off":                       # PR #82 option D: the narrow morning engine runs alone (narrow.py)
+        from . import narrow as _NAR
+        return _NAR.run_day(df, hist, symbol, p, tf, equity=equity, skips=skips, live=live)
     if p.entry_discipline != "any":
         p = _SM6.apply_discipline(p)             # caption-gap M12-setup-selection-order: the discipline preset of the path switches
     if _ES2.sizing_on(p):

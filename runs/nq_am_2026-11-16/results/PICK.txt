@@ -1,0 +1,7 @@
+pick = {'nar_target': 3.0, 'nar_be_at': 1.0, 'nar_gap_min': 0.25, 'nar_flat': 960, 'nar_bias': 'open830'}
+chosen on NQ 2019-22, R a trade, one switch at a time:
+target=3R (+0.108 R vs base +0.069)
+be=be1R (+0.094 R vs base +0.069)
+gapmin=g0.25 (+0.095 R vs base +0.069)
+flat=1600 (+0.139 R vs base +0.069)
+bias=open830 (+0.145 R vs base +0.069)

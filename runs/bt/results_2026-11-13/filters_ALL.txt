@@ -1,0 +1,37 @@
+ALL: 2897 unfiltered trades, total -89728; trades each filter removes: {'week_rule': 1828, 'am_off': 416, 'pm_sb_off': 355, 'lunch_off': 1658, 'last_hour_off': 215, 'mon_off': 637, 'fri_off': 502, 'news0830_off': 665, 'news1000_off': 417}
+
+512 combinations, 397 with at least 100 trades in 2019-22.
+Positive in 2019-22: 5%; positive in 2023-26: 4%; positive in both: 1%
+Rank correlation of 2019-22 total with 2023-26 total across combinations: +0.72
+Best t-stat of any combination: 1.03; combinations a random filter beats less than 5% of the time: 3 of 397
+
+Top 10 chosen on 2019-22 (at least 3 of 4 years up), with their 2023-26 result:
+Empty DataFrame
+Columns: [combo, trades, total, h1, h2, h1_yrs_up, t, rand_as_good]
+Index: []
+
+For comparison, top 10 by 2023-26 (hindsight):
+                                          combo  trades   total       h1     h2  h1_yrs_up     t  rand_as_good
+                    week_rule+lunch_off+mon_off     224 -3063.0  -8371.0 5308.0          0 -0.37          0.32
+                     week_rule+am_off+lunch_off     225  3946.0   -617.0 4563.0          1  0.47          0.08
+                            week_rule+lunch_off     367 -8595.0 -11764.0 3170.0          0 -0.91          0.41
+               week_rule+lunch_off+news1000_off     315 -4190.0  -7356.0 3166.0          1 -0.46          0.29
+       week_rule+pm_sb_off+mon_off+news1000_off     430   503.0  -2617.0 3121.0          1  0.03          0.11
+                 week_rule+mon_off+news1000_off     469 -1397.0  -4502.0 3105.0          1 -0.09          0.13
+             am_off+pm_sb_off+lunch_off+mon_off     364  2680.0   -174.0 2854.0          2  0.29          0.09
+                    week_rule+pm_sb_off+mon_off     518 -3896.0  -6345.0 2449.0          1 -0.24          0.17
+am_off+pm_sb_off+lunch_off+mon_off+news1000_off     324  4991.0   2567.0 2424.0          2  0.55          0.06
+                              week_rule+mon_off     570 -7149.0  -9344.0 2194.0          1 -0.43          0.21
+
+Each filter alone:
+        combo  trades     total       h1       h2  h1_yrs_up     t  rand_as_good
+       (none)    2897  -89728.0 -53500.0 -36228.0          0 -2.74          0.99
+ news1000_off    2480  -66759.0 -35200.0 -31559.0          1 -2.19          0.24
+ news0830_off    2232  -81513.0 -42745.0 -38768.0          1 -2.94          0.84
+      fri_off    2395 -112649.0 -73341.0 -39309.0          0 -3.99          1.00
+      mon_off    2260  -73252.0 -45605.0 -27648.0          0 -2.49          0.64
+last_hour_off    2682  -88459.0 -50580.0 -37879.0          0 -2.78          0.76
+    lunch_off    1239  -36235.0 -21040.0 -15195.0          0 -2.45          0.47
+    pm_sb_off    2542  -70934.0 -41285.0 -29649.0          1 -2.20          0.28
+       am_off    2481  -75837.0 -47936.0 -27901.0          0 -2.41          0.53
+    week_rule    1069  -17631.0 -13971.0  -3660.0          1 -0.81          0.16

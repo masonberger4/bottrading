@@ -1,0 +1,45 @@
+ES: 899 unfiltered trades, total -2173; trades each filter removes: {'week_rule': 561, 'am_off': 136, 'pm_sb_off': 104, 'lunch_off': 515, 'last_hour_off': 68, 'mon_off': 195, 'fri_off': 164, 'news0830_off': 212, 'news1000_off': 138}
+
+512 combinations, 205 with at least 100 trades in 2019-22.
+Positive in 2019-22: 43%; positive in 2023-26: 48%; positive in both: 18%
+Rank correlation of 2019-22 total with 2023-26 total across combinations: -0.27
+Best t-stat of any combination: 1.17; combinations a random filter beats less than 5% of the time: 0 of 205
+
+Top 10 chosen on 2019-22 (at least 3 of 4 years up), with their 2023-26 result:
+                                combo  trades   total      h1       h2  h1_yrs_up     t  rand_as_good
+                    pm_sb_off+mon_off     617  8380.0 14571.0  -6191.0          3  0.53          0.12
+             am_off+pm_sb_off+mon_off     515  9026.0 12922.0  -3896.0          4  0.59          0.12
+       pm_sb_off+mon_off+news1000_off     528  9120.0 11553.0  -2434.0          3  0.60          0.13
+am_off+pm_sb_off+mon_off+news1000_off     437  9286.0 10521.0  -1235.0          4  0.64          0.12
+                              mon_off     704  -262.0 10503.0 -10765.0          3 -0.02          0.44
+               pm_sb_off+news1000_off     676  7704.0 10344.0  -2640.0          3  0.46          0.15
+        am_off+pm_sb_off+news1000_off     555 10168.0 10036.0    132.0          4  0.63          0.09
+                            pm_sb_off     795  6598.0  9712.0  -3114.0          4  0.37          0.06
+                     am_off+pm_sb_off     659 10715.0  9336.0   1379.0          4  0.62          0.06
+          pm_sb_off+lunch_off+mon_off     212  5064.0  8937.0  -3873.0          3  0.78          0.23
+
+For comparison, top 10 by 2023-26 (hindsight):
+                                                           combo  trades   total      h1     h2  h1_yrs_up     t  rand_as_good
+             am_off+pm_sb_off+last_hour_off+fri_off+news0830_off     392  2487.0 -3956.0 6443.0          1  0.19          0.38
+                          am_off+pm_sb_off+last_hour_off+fri_off     482  1811.0 -3876.0 5687.0          1  0.13          0.38
+                       am_off+last_hour_off+fri_off+news0830_off     455 -1380.0 -6840.0 5459.0          1 -0.10          0.53
+                           am_off+pm_sb_off+fri_off+news0830_off     440   476.0 -4616.0 5092.0          1  0.04          0.44
+                     am_off+pm_sb_off+last_hour_off+news0830_off     444  7075.0  2145.0 4930.0          3  0.50          0.18
+                week_rule+am_off+pm_sb_off+last_hour_off+fri_off     244   547.0 -4131.0 4678.0          1  0.05          0.41
+                        week_rule+am_off+pm_sb_off+last_hour_off     256  5203.0   803.0 4400.0          2  0.46          0.21
+                       week_rule+pm_sb_off+last_hour_off+fri_off     281  -760.0 -5062.0 4302.0          1 -0.07          0.48
+am_off+pm_sb_off+last_hour_off+fri_off+news0830_off+news1000_off     316  3151.0 -1023.0 4174.0          2  0.26          0.31
+                                     am_off+fri_off+news0830_off     503 -3392.0 -7499.0 4108.0          1 -0.26          0.60
+
+Each filter alone:
+        combo  trades    total      h1       h2  h1_yrs_up     t  rand_as_good
+       (none)     899  -2173.0  4871.0  -7043.0          3 -0.12          0.24
+ news1000_off     761    537.0  6335.0  -5798.0          3  0.03          0.41
+ news0830_off     687  -7884.0 -4260.0  -3624.0          2 -0.53          0.80
+      fri_off     735 -10381.0 -9523.0   -858.0          1 -0.68          0.88
+      mon_off     704   -262.0 10503.0 -10765.0          3 -0.02          0.44
+last_hour_off     831  -5251.0   177.0  -5427.0          3 -0.30          0.73
+    lunch_off     384  -7970.0  3174.0 -11145.0          2 -1.04          0.81
+    pm_sb_off     795   6598.0  9712.0  -3114.0          4  0.37          0.06
+       am_off     763   1944.0  4495.0  -2551.0          3  0.11          0.30
+    week_rule     338   4441.0  2099.0   2342.0          1  0.37          0.27
