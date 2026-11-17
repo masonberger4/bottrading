@@ -65,3 +65,6 @@ Laptop test-run lessons:
 ## cloud-engine-data (2026-11-16)
 - The fixed-roll engine parquets were not in the cloud shared folder; threads staged them read-only from the laptop on 2026-11-16. They are now at /mnt/project-files/mentorship/data/fixed_roll_2026-11-10/ (ES, NQ, YM: 1min_db, 1min_dbmeta, 1min_dbraw, 5min_db, 5min_dbmeta). The 1-minute study trades are at /mnt/project-files/mentorship/runs/bt_1m_2026-11-16/ (README.md, trades_and_skips.tgz). The cloud runner run.py takes --tf 1 for 1-minute bars (PR #80).
 - The cloud container needs `pip install pyarrow` before it can read the fixed-roll parquets (noted 2026-11-17).
+
+## smc-2026-note-dates (2026-11-17)
+- The 2026 SMC playlist is not in date order and many per-video notes carry inferred dates, some wrong. Pin a session's date by matching the prices ICT says out loud to the NQ 1-minute file (09:30 open, 16:14 settlement, session highs and lows). Dates corrected this way (PR #90, runs/ict_calls_2026-11-17/README.md): 006/007 = Tue Sep 29 (not Thanksgiving week); 018 = Thu Sep 3 (not NFP Friday Sep 4); 138 = Thu Jan 29 (not Jan 8); 089 = Wed May 13; 027 = Tue Aug 25; 055 = Tue Jul 21 (the same trade 054 reviews); 030 = Thu Aug 20; 067 = Wed Jul 8; 095 = Tue Apr 21 (the pre-market short 097 mentions).
