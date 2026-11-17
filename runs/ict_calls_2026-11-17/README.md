@@ -239,7 +239,7 @@ No-trade, no-call and no-data sessions: `nocall_2026.csv`.
 
 ## Set 3: 2023 Mentorship (added 2026-11-17)
 
-Same method, same scorer. 105 notes read (videos 001-105, Jan to Dec 2023). 32 dated videos carried a call made
+Same method, same scorer. 105 notes read (videos 001-105, Jan to Dec 2023). 34 dated videos carried a call made
 before the move, 20 days were stated no-trade days, 8 videos had no call that can be scored, and the rest are
 reviews and lectures recorded after the fact (not scored). Market is ES unless he was on NQ (7 calls, from July).
 
