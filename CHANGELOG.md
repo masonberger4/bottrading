@@ -159,3 +159,4 @@ One row per version. Roll back with `tools/memsave.py rollback FILE vN ...` (cre
 | v153 | 2026-11-17 00:41:35Z | Run memory curator, part 3 | INDEX.md | edit | sync INDEX.md to the live index (NOW line 2026-11-17 00:40) | coordinator relay 2026-11-17 00:41 | 957225b446 -> 6c4a74ba2c |
 | v154 | 2026-11-17 00:41:36Z | Run memory curator, part 3 | status.md | edit | replace the status paragraph to match the 2026-11-17 00:40 index NOW line | coordinator relay 2026-11-17 00:41; PRs #83-#93 | a72a9e5bd9 -> 93d78f1347 |
 | v155 | 2026-11-17 05:11:04Z | Run memory curator, part 3 | results.md | append | switch coverage audit (PR #95), numbers checked against the PR body | PR #95 | 341329ea8c -> aafa5477b7 |
+| v156 | 2026-11-17 05:12:25Z | Run memory curator, part 3 | results.md | edit | switch coverage audit: add the 11 runner settings so the counts sum to 2,616 (PR #95 body updated) | PR #95 | aafa5477b7 -> 44b26b2813 |
