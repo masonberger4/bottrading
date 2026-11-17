@@ -87,8 +87,7 @@ How much depends on the estimated call time (same-day calls, `sens.py`):
 | 2024-10-25 | 10:00 | up | Bullish, draw to smooth highs in the 20,600s | relative equal highs | to 12:00 | -0.14% | wrong | none |
 | 2024-12-01 | Sun 18:00 | up | Weekly outlook: favors higher | 21,580.25 | to Friday | +3.16% | right | none |
 
-No-trade and no-call days are in `nocall_2024.csv`. Three of the no-trade days were strong one-way days he passed on
-(Aug 13 PPI, Aug 15, Aug 29).
+No-trade and no-call days are in `nocall_2024.csv`. Aug 13 (PPI) was a strong one-way day he passed on.
 
 Losses and stop-outs he mentions in this set (not scored, he gives no prices in the captions): Aug 15 short (5 of 15
 off, rest stopped), Aug 21 (4 of 10 stopped), Aug 29 pre-session short (stopped, re-entered), Sep 17 "pretend" short
@@ -99,10 +98,10 @@ off, rest stopped), Aug 21 (4 of 10 stopped), Aug 29 pre-session short (stopped,
 
 1. Wrong calls cluster where he states a **day or week** direction from the higher timeframe (Sep 30, Oct 15, Oct 17,
    Oct 25). Right calls cluster in **the next 30 to 120 minutes** from a specific intraday picture.
-2. Six calls are the opening range gap rule (first 30 minutes trade toward the mid-gap). That rule is mechanical
-   and can be tested on every day 2019-26 without him. 5 of the 6 were right, and the mid-gap was reached by 10:00 on
-   3 of the 4 timed ones.
-3. He stood aside on 13 of 44 stream days and gave no call on 5. Day selection is a third of the record.
+2. Five calls are the opening range gap rule (trade toward the mid-gap after a gap open). That rule is mechanical
+   and can be tested on every day 2019-26 without him. 4 of the 5 were right at the horizon, and the mid-gap was
+   reached by 10:00 on 2 of the 3 that had that deadline.
+3. He stood aside on 13 of 41 live stream days and gave no call on 5. Day selection is a third of the record.
 
 ## Caveats (they matter)
 
