@@ -19,6 +19,8 @@ from . import me2 as _ME2
 from . import dwc2 as _DWC2
 from . import dwc3 as _DWC3
 from . import cards_rules as _CR
+from . import ict_read as _ict_read
+from . import narrow as _narrow
 from .entries import new_risk_state
 from .strategy import ROUND_STEP, SMT_PICKS, Params, resolve_session_close, run_day
 
@@ -454,7 +456,8 @@ def day_kwargs(pr: Prepared, k: int, equity: float | None = None, intermarket: d
                 meta=pr.meta, week=week, eve=(pr.eve or {}).get(d),
                 post_eve=_SM4.post_evening(pr.df, d) if p.asia_session else None,
                 ath=(pr.ath or {}).get(d), cards=(pr.cards or {}).get(d),
-                daily_all=pr.daily_all)
+                daily_all=pr.daily_all,
+                nar_past=_ict_read.past_bars(pr.df, d) if _narrow.needs_past(p) else None)
 
 
 def run(df: pd.DataFrame, tf: int, symbol: str = "SPY", p: Params | None = None,

@@ -3648,7 +3648,13 @@ class Params:
     nar_min_risk_pts: float = 1.0        # ES points
     nar_max_risk_pts: float = 25.0       # ES points
     nar_max_trades: int = 1              # trades a day
-    nar_bias: str = "none"               # direction filter: none / midnight / open830 (long below, short above that open) / prevday / anti_prevday
+    nar_bias: str = "none"               # direction filter: none / midnight / open830 (long below, short above that open) / prevday / anti_prevday / read (PR #101: only with the coded ICT direction read, ict_read.py)
+    nar_on_block: float = 0.0            # > 0 (0.67): no long with price above that share of the range since 18:00, no short below 1 - that share (a trade toward the overnight extreme price sits at); 0 = off
+    nar_open_stop_pct: float = 0.25      # nar_entry="open" (PR #103 option C: the read's side at the first open of nar_win): the stop, % of price
+    nar_day_skip: tuple = ()             # days ICT passes on (PR #103 option C): any of news / holiday_eve / prev_big / small_gap / friday; () = off
+    nar_skip_news: tuple = ("jobs", "cpi", "fomc", "ppi")   # the events of nar_day_skip "news"
+    nar_prev_big: float = 1.5            # "prev_big": yesterday's 09:30-16:00 range over this x the 20-day average
+    nar_small_gap: float = 0.10          # "small_gap": the 09:30 open within this x the average range of yesterday's settlement
 
     def __post_init__(self):
         from .sb_model import check_params as _sb_check   # SB package
@@ -6781,8 +6787,9 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
             eth: dict | None = None, risk_state: dict | None = None, week: dict | None = None,
             eve: tuple | None = None, prev_full: pd.DataFrame | None = None, objective: list | None = None,
             post_eve: pd.DataFrame | None = None, daily_all: dict | None = None, ath: float | None = None,
-            cards: dict | None = None) -> list[Trade]:
-    """Trades for one day (see `_run_day_once` for the arguments). The main loop runs BEFORE the Silver Bullet / Ma Deuce
+            cards: dict | None = None, nar_past: pd.DataFrame | None = None) -> list[Trade]:
+    """Trades for one day (see `_run_day_once` for the arguments; nar_past: the bars before today for the narrow engine's
+    direction read, ict_read.past_bars). The main loop runs BEFORE the Silver Bullet / Ma Deuce
     (they read its trades), so the session / day stops (X7c / X12 / X13a / X14b / X14d) would be one-way. With a stop
     switch on and an extra engine on, this wrapper makes them two-way by a fixed point: pass 1 as usual; its Silver Bullet
     / Ma Deuce trades are fed back to a second pass (the main loop reads them as of their exit time, Ma Deuce reads the
@@ -6796,7 +6803,7 @@ def run_day(df: pd.DataFrame, hist: list[pd.DataFrame], symbol: str, p: Params, 
         return []
     if p.narrow != "off":                       # PR #82 option D: the narrow morning engine runs alone (narrow.py)
         from . import narrow as _NAR
-        return _NAR.run_day(df, hist, symbol, p, tf, equity=equity, skips=skips, live=live)
+        return _NAR.run_day(df, hist, symbol, p, tf, equity=equity, skips=skips, live=live, past=nar_past)
     if p.entry_discipline != "any":
         p = _SM6.apply_discipline(p)             # caption-gap M12-setup-selection-order: the discipline preset of the path switches
     if _ES2.sizing_on(p):
