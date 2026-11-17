@@ -1,0 +1,216 @@
+R = average result a trade in units of its own risk (x $1,000 = $ a trade). t under about 2 cannot be told from zero.
+R_range = 95% range for R by resampling the trades. total and maxdd in $ at $1,000 risk a trade, no cap. med_risk = $ risked.
+his_side / opposite / no_side: the narrow morning engine allowed to trade only his side / only the other side / either.
+..._after_call: same, no entry before the call's time (and none after a later opposite call that morning).
+plain_same_stop: his side at the 09:30 open (or the call time if later), stop as far away as the engine's trade that day, 2R, flat 12:00 (only days the engine traded his side).
+plain_typical_stop / plain_opposite: the same plain entry on every call day, stop 0.25% (NQ) / 0.21% (ES) away, his side / the other side.
+plain_late15 / plain_late30: plain_typical_stop entered 15 / 30 minutes later (call times are estimates).
+plain_other_days: chance. The same side, time and stop on every other day within 60 days of the call (not a call day).
+plain_half_stop / double_stop / 1R / 3R: plain_typical_stop with one setting changed. plain_hold_to_noon: no stop or target, held to 12:00, in units of the typical stop.
+
+MAIN: morning calls that end by 12:00, clearly before the move: 63 calls on 60 market-days, 78% right at his horizon
+            variant  call_days  trades win     R      t        R_range  total  maxdd  med_risk
+           his_side         63       5 80%  1.00    1.8 -0.08 to +1.86   4849   -998     986.0
+            no_side         63      10 50%  0.23    0.5 -0.55 to +1.03   2154  -2012     986.0
+           opposite         63       5 20% -0.54   -1.1 -1.02 to +0.42  -2695  -2695     994.0
+his_side_after_call         63       3 67%  0.54    0.6 -1.01 to +1.99   1523   -998     957.0
+ no_side_after_call         63       6 33% -0.24   -0.5 -1.02 to +0.77  -1510  -3035     986.0
+opposite_after_call         63       3  0% -1.02 -202.1 -1.03 to -1.01  -3033  -3033     994.0
+    plain_same_stop         63       5 80%  1.06    1.9 -0.07 to +1.93   5318  -1005       NaN
+ plain_typical_stop         63      63 56%  0.46    2.7 +0.14 to +0.79  29032  -5022       NaN
+     plain_opposite         63      63 10% -0.72   -7.2 -0.90 to -0.51 -45311 -45311       NaN
+       plain_late15         63      63 52%  0.33    2.0 +0.00 to +0.65  20585  -5618       NaN
+       plain_late30         63      63 57%  0.47    2.9 +0.15 to +0.77  29348  -5078       NaN
+   plain_other_days         63    4265 37%  0.01    0.5 -0.03 to +0.05  45435 -92875       NaN
+    plain_half_stop         63      63 51%  0.51    2.7 +0.13 to +0.89  32343  -5048       NaN
+  plain_double_stop         63      63 75%  0.49    4.2 +0.26 to +0.70  30744  -3319       NaN
+           plain_1R         63      63 70%  0.38    3.3 +0.16 to +0.60  24066  -3038       NaN
+           plain_3R         63      63 49%  0.39    1.9 +0.02 to +0.80  24371  -5595       NaN
+ plain_hold_to_noon         63      63 76%  0.97    2.8 +0.26 to +1.64  61111 -10487       NaN
+  his side +5.0 R in total; a coin-flip side on the same days averages +1.2 R (95% range -3.0 to +5.3); 3% of coin-flip runs did at least as well
+
+morning calls that end by 12:00, all: 71 calls on 68 market-days, 79% right at his horizon
+            variant  call_days  trades win     R      t        R_range  total   maxdd  med_risk
+           his_side         71       5 80%  1.00    1.8 -0.05 to +1.86   4849    -998     986.0
+            no_side         71      10 50%  0.23    0.5 -0.55 to +1.07   2154   -2012     986.0
+           opposite         71       5 20% -0.54   -1.1 -1.02 to +0.42  -2695   -2695     994.0
+his_side_after_call         71       3 67%  0.54    0.6 -1.01 to +1.99   1523    -998     957.0
+ no_side_after_call         71       6 33% -0.24   -0.5 -1.02 to +0.77  -1510   -3035     986.0
+opposite_after_call         71       3  0% -1.02 -202.1 -1.03 to -1.01  -3033   -3033     994.0
+    plain_same_stop         71       5 80%  1.06    1.9 -0.07 to +1.93   5318   -1005       NaN
+ plain_typical_stop         71      71 55%  0.46    2.8 +0.13 to +0.78  32676   -5022       NaN
+     plain_opposite         71      71 10% -0.72   -7.6 -0.88 to -0.52 -51017  -51017       NaN
+       plain_late15         71      71 52%  0.34    2.2 +0.04 to +0.65  24406   -4019       NaN
+       plain_late30         71      71 56%  0.42    2.8 +0.12 to +0.70  30049   -6082       NaN
+   plain_other_days         71    4796 37%  0.00    0.1 -0.04 to +0.04   4895 -160393       NaN
+    plain_half_stop         71      71 52%  0.55    3.1 +0.21 to +0.89  39263   -7060       NaN
+  plain_double_stop         71      71 72%  0.43    4.0 +0.22 to +0.64  30641   -3807       NaN
+           plain_1R         71      71 70%  0.39    3.7 +0.17 to +0.60  28026   -3038       NaN
+           plain_3R         71      71 48%  0.37    2.0 +0.02 to +0.75  26245   -6288       NaN
+ plain_hold_to_noon         71      71 75%  0.96    3.0 +0.34 to +1.57  68081   -9642       NaN
+  his side +5.0 R in total; a coin-flip side on the same days averages +1.2 R (95% range -3.0 to +5.3); 3% of coin-flip runs did at least as well
+
+  of those, NQ: 55 calls on 53 market-days, 82% right at his horizon
+            variant  call_days  trades win     R      t        R_range  total   maxdd  med_risk
+           his_side         55       3 67%  0.54    0.6 -1.01 to +1.99   1523    -998     957.0
+            no_side         55       5 40% -0.08   -0.1 -1.01 to +1.12   -487   -2012     985.0
+           opposite         55       2  0% -1.01 -405.8 -1.02 to -1.01  -2011   -2011     991.0
+his_side_after_call         55       3 67%  0.54    0.6 -1.01 to +1.99   1523    -998     957.0
+ no_side_after_call         55       5 40% -0.08   -0.1 -1.01 to +1.12   -487   -2012     985.0
+opposite_after_call         55       2  0% -1.01 -405.8 -1.02 to -1.01  -2011   -2011     991.0
+    plain_same_stop         55       3 67%  0.55    0.6 -1.00 to +1.99   1661   -1005       NaN
+ plain_typical_stop         55      55 55%  0.42    2.3 +0.07 to +0.78  23364   -4034       NaN
+     plain_opposite         55      55  9% -0.74   -7.2 -0.91 to -0.52 -40786  -40786       NaN
+       plain_late15         55      55 55%  0.38    2.1 +0.03 to +0.72  20679   -4019       NaN
+       plain_late30         55      55 55%  0.42    2.4 +0.08 to +0.77  23339   -6082       NaN
+   plain_other_days         55    3632 36%  0.00    0.1 -0.04 to +0.05  10700 -157893       NaN
+    plain_half_stop         55      55 49%  0.46    2.3 +0.08 to +0.85  25564   -6046       NaN
+  plain_double_stop         55      55 73%  0.44    3.4 +0.19 to +0.69  24348   -3807       NaN
+           plain_1R         55      55 69%  0.38    3.1 +0.15 to +0.61  20762   -3034       NaN
+           plain_3R         55      55 45%  0.33    1.5 -0.09 to +0.76  18044   -7034       NaN
+ plain_hold_to_noon         55      55 76%  1.01    2.6 +0.23 to +1.81  55774   -9642       NaN
+  his side +1.6 R in total; a coin-flip side on the same days averages -0.2 R (95% range -3.0 to +2.6); 13% of coin-flip runs did at least as well
+
+  of those, ES: 16 calls on 15 market-days, 69% right at his horizon
+            variant  call_days  trades  win     R    t        R_range    total    maxdd  med_risk
+           his_side         16       2 100%  1.68  5.6 +1.38 to +1.98   3325.0      0.0     988.0
+            no_side         16       5  60%  0.54  0.8 -0.55 to +1.62   2641.0  -1025.0     990.0
+           opposite         16       3  33% -0.22 -0.3 -1.03 to +1.38   -684.0  -2047.0     994.0
+his_side_after_call         16       0  NaN   NaN  NaN            NaN      NaN      NaN       NaN
+ no_side_after_call         16       1   0% -1.03  0.0 -1.03 to -1.03  -1022.0  -1022.0     994.0
+opposite_after_call         16       1   0% -1.03  0.0 -1.03 to -1.03  -1022.0  -1022.0     994.0
+    plain_same_stop         16       2 100%  1.83 11.3 +1.67 to +1.99   3656.0      0.0       NaN
+ plain_typical_stop         16      16  56%  0.58  1.6 -0.08 to +1.27   9312.0  -1638.0       NaN
+     plain_opposite         16      16  12% -0.64 -2.8 -1.01 to -0.15 -10232.0 -10232.0       NaN
+       plain_late15         16      16  44%  0.23  0.7 -0.38 to +0.86   3726.0  -3029.0       NaN
+       plain_late30         16      16  62%  0.42  1.5 -0.12 to +0.95   6710.0  -3029.0       NaN
+   plain_other_days         16    1164  40% -0.01 -0.1 -0.07 to +0.07  -5806.0 -57071.0       NaN
+    plain_half_stop         16      16  62%  0.86  2.3 +0.11 to +1.61  13699.0  -2039.0       NaN
+  plain_double_stop         16      16  69%  0.39  2.1 +0.04 to +0.75   6293.0  -1319.0       NaN
+           plain_1R         16      16  75%  0.45  2.1 -0.01 to +0.83   7264.0  -1029.0       NaN
+           plain_3R         16      16  56%  0.51  1.3 -0.18 to +1.27   8201.0  -1663.0       NaN
+ plain_hold_to_noon         16      16  69%  0.77  2.0 +0.01 to +1.49  12307.0  -2917.0       NaN
+  his side +3.4 R in total; a coin-flip side on the same days averages +1.3 R (95% range -2.1 to +4.7); 16% of coin-flip runs did at least as well
+
+  of those, the call was right at his horizon: 56 calls on 56 market-days, 100% right at his horizon
+            variant  call_days  trades  win     R      t        R_range  total   maxdd  med_risk
+           his_side         56       4  75%  0.75    1.2 -0.41 to +1.68   2945    -998     986.0
+            no_side         56       7  43% -0.01   -0.0 -0.78 to +0.95    -88   -2391     986.0
+           opposite         56       3   0% -1.02 -202.1 -1.03 to -1.01  -3033   -3033     994.0
+his_side_after_call         56       2  50% -0.18   -0.2 -1.01 to +0.65   -380    -998     966.0
+ no_side_after_call         56       5  20% -0.68   -2.0 -1.02 to -0.01  -3414   -3414     986.0
+opposite_after_call         56       3   0% -1.02 -202.1 -1.03 to -1.01  -3033   -3033     994.0
+    plain_same_stop         56       4 100%  1.58    5.1 +1.00 to +1.99   6323       0       NaN
+ plain_typical_stop         56      56  64%  0.74    4.1 +0.38 to +1.08  41232   -4018       NaN
+     plain_opposite         56      56   7% -0.82   -9.4 -0.97 to -0.64 -45929  -46243       NaN
+       plain_late15         56      56  61%  0.56    3.1 +0.21 to +0.92  31512   -4019       NaN
+       plain_late30         56      56  68%  0.72    4.4 +0.39 to +1.04  40478   -5078       NaN
+   plain_other_days         56    3781  36% -0.01   -0.6 -0.05 to +0.03 -46090 -164524       NaN
+    plain_half_stop         56      56  54%  0.60    3.0 +0.17 to +0.97  33435   -6052       NaN
+  plain_double_stop         56      56  84%  0.66    5.7 +0.43 to +0.88  36857   -3550       NaN
+           plain_1R         56      56  71%  0.44    3.6 +0.20 to +0.66  24448   -2043       NaN
+           plain_3R         56      56  57%  0.67    3.1 +0.27 to +1.10  37801   -6288       NaN
+ plain_hold_to_noon         56      56  88%  1.56    4.6 +0.92 to +2.23  87336   -9642       NaN
+  his side +3.0 R in total; a coin-flip side on the same days averages -0.0 R (95% range -3.1 to +3.0); 3% of coin-flip runs did at least as well
+
+  of those, the call was wrong: 15 calls on 15 market-days, 0% right at his horizon
+            variant  call_days  trades  win     R    t        R_range    total    maxdd  med_risk
+           his_side         15       1 100%  1.99  0.0 +1.99 to +1.99   1904.0      0.0     957.0
+            no_side         15       3  67%  0.78  0.8 -1.02 to +1.99   2242.0  -1025.0     986.0
+           opposite         15       2  50%  0.18  0.1 -1.02 to +1.38    338.0  -1025.0     993.0
+his_side_after_call         15       1 100%  1.99  0.0 +1.99 to +1.99   1904.0      0.0     957.0
+ no_side_after_call         15       1 100%  1.99  0.0 +1.99 to +1.99   1904.0      0.0     957.0
+opposite_after_call         15       0  NaN   NaN  NaN            NaN      NaN      NaN       NaN
+    plain_same_stop         15       1   0% -1.00  0.0 -1.00 to -1.00  -1005.0  -1005.0       NaN
+ plain_typical_stop         15      15  20% -0.57 -2.6 -0.92 to -0.09  -8556.0  -9549.0       NaN
+     plain_opposite         15      15  20% -0.34 -1.2 -0.84 to +0.23  -5088.0  -5088.0       NaN
+       plain_late15         15      15  20% -0.47 -1.9 -0.88 to +0.03  -7106.0  -7106.0       NaN
+       plain_late30         15      15  13% -0.70 -4.6 -0.97 to -0.37 -10429.0 -10429.0       NaN
+   plain_other_days         15    1015  39%  0.05  1.2 -0.03 to +0.13  50985.0 -27439.0       NaN
+    plain_half_stop         15      15  47%  0.39  1.0 -0.41 to +1.19   5828.0  -5035.0       NaN
+  plain_double_stop         15      15  27% -0.41 -3.2 -0.67 to -0.18  -6216.0  -6216.0       NaN
+           plain_1R         15      15  67%  0.24  1.0 -0.24 to +0.68   3579.0  -3017.0       NaN
+           plain_3R         15      15  13% -0.77 -6.3 -0.97 to -0.52 -11556.0 -11556.0       NaN
+ plain_hold_to_noon         15      15  27% -1.28 -2.6 -2.31 to -0.41 -19255.0 -19255.0       NaN
+  his side +2.0 R in total; a coin-flip side on the same days averages +1.2 R (95% range -1.0 to +3.4); 37% of coin-flip runs did at least as well
+
+morning calls with a longer horizon (to 16:00 or beyond): 12 calls on 12 market-days, 42% right at his horizon
+            variant  call_days  trades  win     R    t        R_range    total    maxdd  med_risk
+           his_side         12       1 100%  1.99  0.0 +1.99 to +1.99   1948.0      0.0     981.0
+            no_side         12       2  50%  0.76  0.6 -0.47 to +1.99   1497.0   -451.0     969.0
+           opposite         12       1   0% -0.47  0.0 -0.47 to -0.47   -451.0   -451.0     956.0
+his_side_after_call         12       0  NaN   NaN  NaN            NaN      NaN      NaN       NaN
+ no_side_after_call         12       1   0% -0.47  0.0 -0.47 to -0.47   -451.0   -451.0     956.0
+opposite_after_call         12       1   0% -0.47  0.0 -0.47 to -0.47   -451.0   -451.0     956.0
+    plain_same_stop         12       1 100%  1.99  0.0 +1.99 to +1.99   1993.0      0.0       NaN
+ plain_typical_stop         12      12  25% -0.26 -0.7 -0.84 to +0.48  -3126.0  -4081.0       NaN
+     plain_opposite         12      12  50%  0.41  0.9 -0.34 to +1.25   4881.0  -3013.0       NaN
+       plain_late15         12      12  17% -0.56 -2.0 -1.00 to -0.00  -6688.0  -7508.0       NaN
+       plain_late30         12      12  17% -0.45 -1.4 -1.00 to +0.25  -5450.0  -5450.0       NaN
+   plain_other_days         12     825  36%  0.03  0.7 -0.06 to +0.12  26498.0 -38437.0       NaN
+    plain_half_stop         12      12   8% -0.76 -3.0 -1.01 to -0.26  -9101.0  -9101.0       NaN
+  plain_double_stop         12      12  25% -0.35 -1.2 -0.83 to +0.23  -4209.0  -4687.0       NaN
+           plain_1R         12      12  50% -0.00 -0.0 -0.50 to +0.50    -51.0  -2018.0       NaN
+           plain_3R         12      12  25% -0.21 -0.5 -0.84 to +0.62  -2487.0  -4059.0       NaN
+ plain_hold_to_noon         12      12  25% -1.14 -1.3 -2.84 to +0.38 -13735.0 -14690.0       NaN
+  his side +2.0 R in total; a coin-flip side on the same days averages +0.8 R (95% range -0.5 to +2.0); 25% of coin-flip runs did at least as well
+
+evening calls and outlooks, traded the next morning: 24 calls on 24 market-days, 46% right at his horizon
+            variant  call_days  trades win     R    t        R_range    total    maxdd  med_risk
+           his_side         24       0 NaN   NaN  NaN            NaN      NaN      NaN       NaN
+            no_side         24       1  0% -1.02  0.0 -1.02 to -1.02  -1025.0  -1025.0    1000.0
+           opposite         24       1  0% -1.02  0.0 -1.02 to -1.02  -1025.0  -1025.0    1000.0
+his_side_after_call         24       0 NaN   NaN  NaN            NaN      NaN      NaN       NaN
+ no_side_after_call         24       1  0% -1.02  0.0 -1.02 to -1.02  -1025.0  -1025.0    1000.0
+opposite_after_call         24       1  0% -1.02  0.0 -1.02 to -1.02  -1025.0  -1025.0    1000.0
+    plain_same_stop         24       0 NaN   NaN  NaN            NaN      NaN      NaN       NaN
+ plain_typical_stop         24      24 33% -0.11 -0.4 -0.61 to +0.43  -2655.0  -4651.0       NaN
+     plain_opposite         24      24 33% -0.09 -0.3 -0.63 to +0.45  -2198.0  -4783.0       NaN
+       plain_late15         24      24 29% -0.23 -0.9 -0.67 to +0.26  -5457.0  -6887.0       NaN
+       plain_late30         24      24 38% -0.10 -0.4 -0.54 to +0.38  -2399.0  -5808.0       NaN
+   plain_other_days         24       0 NaN   NaN  NaN            NaN      NaN      NaN       NaN
+    plain_half_stop         24      24 38%  0.11  0.4 -0.39 to +0.74   2691.0  -4079.0       NaN
+  plain_double_stop         24      24 42% -0.02 -0.1 -0.44 to +0.42   -423.0  -2170.0       NaN
+           plain_1R         24      24 46% -0.09 -0.4 -0.51 to +0.33  -2155.0  -3151.0       NaN
+           plain_3R         24      24 33%  0.11  0.3 -0.53 to +0.82   2681.0  -4039.0       NaN
+ plain_hold_to_noon         24      24 42% -0.69 -1.1 -1.96 to +0.43 -16658.0 -21300.0       NaN
+  his side +0.0 R in total; a coin-flip side on the same days averages -0.5 R (95% range -1.0 to +0.0); 50% of coin-flip runs did at least as well
+
+every call that has a morning to trade: 107 calls on 101 market-days, 67% right at his horizon
+            variant  call_days  trades win     R    t        R_range  total   maxdd  med_risk
+           his_side        107       6 83%  1.16  2.4 +0.22 to +1.89   6797    -998     983.0
+            no_side        107      13 46%  0.21  0.6 -0.48 to +0.92   2626   -2050     986.0
+           opposite        107       7 14% -0.60 -1.8 -1.02 to +0.09  -4171   -4171     994.0
+his_side_after_call        107       3 67%  0.54  0.6 -1.01 to +1.99   1523    -998     957.0
+ no_side_after_call        107       8 25% -0.37 -0.9 -1.02 to +0.39  -2986   -4511     986.0
+opposite_after_call        107       5  0% -0.91 -8.3 -1.02 to -0.69  -4509   -4509     994.0
+    plain_same_stop        107       6 83%  1.22  2.5 +0.27 to +1.94   7311   -1005       NaN
+ plain_typical_stop        107     107 47%  0.25  1.9 -0.00 to +0.51  26895   -8034       NaN
+     plain_opposite        107     107 20% -0.45 -4.2 -0.65 to -0.24 -48335  -50325       NaN
+       plain_late15        107     107 43%  0.11  0.9 -0.12 to +0.37  12260   -7742       NaN
+       plain_late30        107     107 48%  0.21  1.7 -0.02 to +0.46  22201  -11752       NaN
+   plain_other_days        107    5621 37%  0.01  0.3 -0.03 to +0.04  31393 -188588       NaN
+    plain_half_stop        107     107 44%  0.31  2.1 +0.03 to +0.59  32853  -10083       NaN
+  plain_double_stop        107     107 60%  0.24  2.5 +0.06 to +0.43  26008   -5277       NaN
+           plain_1R        107     107 63%  0.24  2.6 +0.06 to +0.43  25821   -6049       NaN
+           plain_3R        107     107 42%  0.25  1.6 -0.04 to +0.56  26439   -9303       NaN
+ plain_hold_to_noon        107     107 62%  0.35  1.2 -0.20 to +0.91  37688  -22678       NaN
+  his side +7.0 R in total; a coin-flip side on the same days averages +1.4 R (95% range -3.2 to +5.9); 1% of coin-flip runs did at least as well
+
+Every day 2019-26 (reference). hindsight = the engine allowed only the side of the 09:30 -> 12:00 move, which is known only afterwards.
+market              variant  period  days_traded  trades win     R     t        R_range  total  maxdd  med_risk
+    NQ              no_side 2019-26          229     229 46%  0.09   1.1 -0.06 to +0.25  20163 -11140       981
+    NQ              no_side 2023-26          101     101 47%  0.12   1.0 -0.11 to +0.35  11286 -11140       980
+    NQ       hindsight side 2019-26          113     113 74%  0.73   7.0 +0.52 to +0.94  80928  -3474       979
+    NQ       hindsight side 2023-26           49      49 78%  0.73   5.0 +0.44 to +1.01  34622  -1993       976
+    NQ hindsight wrong side 2019-26          120     120 20% -0.53  -6.4 -0.69 to -0.37 -62333 -62333       982
+    NQ hindsight wrong side 2023-26           54      54 19% -0.46  -3.1 -0.72 to -0.15 -24170 -26404       983
+    ES              no_side 2019-26          239     239 42% -0.00  -0.0 -0.15 to +0.15     79 -21662       994
+    ES              no_side 2023-26          131     131 39% -0.07  -0.7 -0.27 to +0.14  -8916 -19487       994
+    ES       hindsight side 2019-26          112     112 74%  0.75   6.8 +0.53 to +0.96  83824  -3052       994
+    ES       hindsight side 2023-26           54      54 74%  0.84   5.0 +0.50 to +1.15  44816  -3052       994
+    ES hindsight wrong side 2019-26          133     133 15% -0.64 -10.1 -0.75 to -0.51 -84199 -86108       995
+    ES hindsight wrong side 2023-26           80      80 15% -0.68  -9.0 -0.82 to -0.53 -54372 -56281       994
+
+Morning calls ending by 12:00, his side, by exit: stop 1 trades -1.01 R; target 2 trades +1.99 R; time 2 trades +1.02 R
+By year: 2023 2 trades +3,325 $; 2024 1 trades -998 $; 2026 2 trades +2,521 $
