@@ -142,4 +142,5 @@ def past_bars(df, d):
     """The bars the read needs before day d: from 18:00 PAST_DAYS calendar days back up to midnight of d."""
     import pandas as pd
     a = pd.Timestamp(d, tz=df.index.tz)
-    return df[(df.index >= a - pd.Timedelta(days=PAST_DAYS, hours=6)) & (df.index < a)]
+    i0, i1 = df.index.searchsorted(a - pd.Timedelta(days=PAST_DAYS, hours=6)), df.index.searchsorted(a)
+    return df.iloc[i0:i1]
