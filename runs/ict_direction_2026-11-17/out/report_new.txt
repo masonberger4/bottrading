@@ -1,20 +1,97 @@
-== NEW calls: 14 logged, 11 same-day 07:00-15:00 with data; right 8 of 11
-   read agrees: right 1 of 3 | read disagrees: right 7 of 8
-   plain entry, $1k risk  agrees:   2 trades +1.41R  $  2,812  maxDD $      0 | disagrees:   8 trades +0.16R  $  1,266  maxDD $ -2,017
-   back across the overnight range : right 0 of 2 | plain entry   1 trades +0.82R  $    824  maxDD $      0
-   from the middle third           : right 3 of 3 | plain entry   3 trades +1.53R  $  4,593  maxDD $      0
-   toward the extreme price is at  : right 5 of 6 | plain entry   6 trades -0.22R  $ -1,339  maxDD $ -3,326
+== NEW silent-video calls (CTS): 38 logged, 35 same-day 07:00-15:00 with data; right 23 of 35
+   read agrees: right 14 of 20 | read disagrees: right 9 of 15
+   plain entry, $1k risk  agrees:  15 trades +0.52R  $  7,820  maxDD $ -3,735 | disagrees:  11 trades +0.14R  $  1,571  maxDD $ -2,164
+   back across the overnight range : right 11 of 18 | plain entry  13 trades +0.25R  $  3,282  maxDD $ -3,277
+   from the middle third           : right 8 of 9 | plain entry   7 trades +0.68R  $  4,778  maxDD $ -2,164
+   toward the extreme price is at  : right 4 of 8 | plain entry   6 trades +0.22R  $  1,331  maxDD $ -1,649
+    id       date sym   ref  side  win  vote    ag  ext  R_his
+CTS-01 2023-12-01  ES 09:34     1    1   1.0  True 0.10   1.99
+CTS-02 2023-12-04  NQ 10:16    -1    1   3.0 False 1.00   1.99
+CTS-03 2023-12-06  NQ 10:03     1    0  -2.0 False 0.23  -1.01
+CTS-04 2023-12-13  NQ 08:48     1    0  -4.0 False 0.99  -0.19
+CTS-05 2023-12-13  NQ 13:58     1    1  -1.0 False 0.31    NaN
+CTS-07 2023-12-14  NQ 09:58    -1    1  -2.0  True 0.16   1.99
+CTS-08 2023-12-15  NQ 08:32    -1    1  -2.0  True 0.03  -1.01
+CTS-09 2023-12-15  ES 10:11     1    1   2.0  True 0.16   0.81
+CTS-11 2023-12-26  NQ 08:41     1    1  -2.0 False 0.48   0.96
+CTS-12 2023-12-27  NQ 10:01    -1    1  -4.0  True 0.04   0.79
+CTS-13 2024-01-05  ES 08:47     1    1   4.0  True 0.23   1.99
+CTS-14 2024-01-09  NQ 11:01     1    1   3.0  True 0.63   1.99
+CTS-15 2024-01-16  NQ 09:37    -1    0   4.0 False 0.17  -1.01
+CTS-16 2024-01-22  NQ 10:29    -1    0  -2.0  True 0.79  -0.46
+CTS-17 2024-01-23  NQ 14:51     1    1  -2.0 False 0.65    NaN
+CTS-28 2024-01-29  NQ 09:51    -1    1  -4.0  True 0.16  -0.26
+CTS-18 2024-01-31  ES 09:36    -1    1   0.0 False 0.49   1.99
+CTS-19 2024-02-01  NQ 09:10    -1    1  -1.0  True 0.31  -1.01
+CTS-20 2024-02-02  NQ 08:19    -1    1  -4.0  True 0.38  -1.01
+CTS-21 2024-02-07  ES 09:43    -1    0  -4.0  True 0.18  -1.01
+CTS-22 2024-02-23  NQ 08:03     1    0  -2.0 False 0.65  -1.01
+CTS-23 2024-03-06  NQ 09:53    -1    0  -4.0  True 0.29   1.99
+CTS-24 2024-04-08  NQ 10:21     1    1   0.0 False 0.53  -0.15
+CTS-25 2024-05-06  ES 12:10    -1    0  -2.0  True 0.15    NaN
+CTS-26 2024-05-08  NQ 07:05    -1    1   4.0 False 0.86  -1.01
+CTS-27 2024-05-14  NQ 09:03     1    1   2.0  True 0.63   1.99
+CTS-29 2024-05-24  NQ 09:03    -1    0  -4.0  True 0.12  -1.01
+CTS-30 2024-08-15  NQ 12:24    -1    0  -2.0  True 0.00    NaN
+CTS-31 2024-08-21  NQ 10:35     1    0  -2.0 False 0.69   1.99
+CTS-32 2024-08-26  NQ 14:17     1    1   4.0  True 0.10    NaN
+CTS-33 2024-08-27  ES 08:42    -1    1   2.0 False 0.89  -1.01
+CTS-35 2024-09-03  NQ 13:40    -1    1   3.0 False 0.93    NaN
+CTS-36 2024-10-18  NQ 11:36    -1    1  -4.0  True 0.14    NaN
+CTS-37 2024-10-24  NQ 12:11    -1    0   0.0 False 0.89    NaN
+CTS-38 2024-10-24  NQ 12:38     1    1   2.0  True 0.48    NaN
+== NEW calls: 52 logged, 46 same-day 07:00-15:00 with data; right 31 of 46
+   read agrees: right 15 of 23 | read disagrees: right 16 of 23
+   plain entry, $1k risk  agrees:  17 trades +0.63R  $ 10,632  maxDD $ -3,735 | disagrees:  19 trades +0.15R  $  2,837  maxDD $ -3,188
+   back across the overnight range : right 11 of 20 | plain entry  14 trades +0.29R  $  4,106  maxDD $ -3,277
+   from the middle third           : right 11 of 12 | plain entry  10 trades +0.94R  $  9,371  maxDD $ -2,164
+   toward the extreme price is at  : right 9 of 14 | plain entry  12 trades -0.00R  $     -8  maxDD $ -2,978
     id       date sym   ref  side  win  vote    ag  ext  R_his
  CX-01 2023-01-06  ES 10:08     1    1  -1.0 False 0.69   1.99
  CX-03 2023-01-26  ES 10:43    -1    1  -4.0  True 0.51   1.99
  CX-04 2023-06-23  ES 09:00    -1    0   3.0 False 0.94  -1.01
+CTS-01 2023-12-01  ES 09:34     1    1   1.0  True 0.10   1.99
+CTS-02 2023-12-04  NQ 10:16    -1    1   3.0 False 1.00   1.99
+CTS-03 2023-12-06  NQ 10:03     1    0  -2.0 False 0.23  -1.01
 CTE-01 2023-12-07  NQ 08:32     1    1  -2.0 False 0.80  -1.01
+CTS-04 2023-12-13  NQ 08:48     1    0  -4.0 False 0.99  -0.19
+CTS-05 2023-12-13  NQ 13:58     1    1  -1.0 False 0.31    NaN
+CTS-07 2023-12-14  NQ 09:58    -1    1  -2.0  True 0.16   1.99
+CTS-08 2023-12-15  NQ 08:32    -1    1  -2.0  True 0.03  -1.01
+CTS-09 2023-12-15  ES 10:11     1    1   2.0  True 0.16   0.81
+CTS-11 2023-12-26  NQ 08:41     1    1  -2.0 False 0.48   0.96
+CTS-12 2023-12-27  NQ 10:01    -1    1  -4.0  True 0.04   0.79
 CTE-02 2023-12-29  NQ 09:56    -1    1   0.0 False 0.40   1.99
+CTS-13 2024-01-05  ES 08:47     1    1   4.0  True 0.23   1.99
+CTS-14 2024-01-09  NQ 11:01     1    1   3.0  True 0.63   1.99
 CTE-03 2024-01-10  ES 10:25     1    1  -3.0 False 0.51   0.61
+CTS-15 2024-01-16  NQ 09:37    -1    0   4.0 False 0.17  -1.01
+CTS-16 2024-01-22  NQ 10:29    -1    0  -2.0  True 0.79  -0.46
+CTS-17 2024-01-23  NQ 14:51     1    1  -2.0 False 0.65    NaN
 CTE-05 2024-01-25  NQ 10:55     1    1  -4.0 False 0.70   0.70
+CTS-28 2024-01-29  NQ 09:51    -1    1  -4.0  True 0.16  -0.26
+CTS-18 2024-01-31  ES 09:36    -1    1   0.0 False 0.49   1.99
+CTS-19 2024-02-01  NQ 09:10    -1    1  -1.0  True 0.31  -1.01
+CTS-20 2024-02-02  NQ 08:19    -1    1  -4.0  True 0.38  -1.01
+CTS-21 2024-02-07  ES 09:43    -1    0  -4.0  True 0.18  -1.01
+CTS-22 2024-02-23  NQ 08:03     1    0  -2.0 False 0.65  -1.01
+CTS-23 2024-03-06  NQ 09:53    -1    0  -4.0  True 0.29   1.99
+CTS-24 2024-04-08  NQ 10:21     1    1   0.0 False 0.53  -0.15
+CTS-25 2024-05-06  ES 12:10    -1    0  -2.0  True 0.15    NaN
+CTS-26 2024-05-08  NQ 07:05    -1    1   4.0 False 0.86  -1.01
 CTE-06 2024-05-13  NQ 08:05    -1    0  -4.0  True 0.04   0.82
+CTS-27 2024-05-14  NQ 09:03     1    1   2.0  True 0.63   1.99
+CTS-29 2024-05-24  NQ 09:03    -1    0  -4.0  True 0.12  -1.01
 CTE-07 2024-06-10  NQ 13:20    -1    0  -4.0  True 0.23    NaN
 CTE-08 2024-06-24  NQ 08:50    -1    1   4.0 False 0.83  -1.01
+CTS-30 2024-08-15  NQ 12:24    -1    0  -2.0  True 0.00    NaN
+CTS-31 2024-08-21  NQ 10:35     1    0  -2.0 False 0.69   1.99
+CTS-32 2024-08-26  NQ 14:17     1    1   4.0  True 0.10    NaN
+CTS-33 2024-08-27  ES 08:42    -1    1   2.0 False 0.89  -1.01
+CTS-35 2024-09-03  NQ 13:40    -1    1   3.0 False 0.93    NaN
+CTS-36 2024-10-18  NQ 11:36    -1    1  -4.0  True 0.14    NaN
+CTS-37 2024-10-24  NQ 12:11    -1    0   0.0 False 0.89    NaN
+CTS-38 2024-10-24  NQ 12:38     1    1   2.0  True 0.48    NaN
  CX-05 2025-05-01  NQ 09:47     1    1  -2.0 False 0.69  -1.01
 == OLD calls (for comparison): 114 logged, 83 same-day 07:00-15:00 with data; right 62 of 83
    read agrees: right 43 of 52 | read disagrees: right 19 of 31
@@ -22,9 +99,9 @@ CTE-08 2024-06-24  NQ 08:50    -1    1   4.0 False 0.83  -1.01
    back across the overnight range : right 30 of 37 | plain entry  36 trades +0.68R  $ 24,407  maxDD $ -2,017
    from the middle third           : right 14 of 20 | plain entry  18 trades +0.51R  $  9,194  maxDD $ -3,769
    toward the extreme price is at  : right 18 of 26 | plain entry  25 trades +0.07R  $  1,791  maxDD $ -5,251
-== ALL calls: 128 logged, 94 same-day 07:00-15:00 with data; right 70 of 94
-   read agrees: right 44 of 55 | read disagrees: right 26 of 39
-   plain entry, $1k risk  agrees:  51 trades +0.59R  $ 30,254  maxDD $ -4,019 | disagrees:  38 trades +0.24R  $  9,216  maxDD $ -5,017
-   back across the overnight range : right 30 of 39 | plain entry  37 trades +0.68R  $ 25,231  maxDD $ -2,017
-   from the middle third           : right 17 of 23 | plain entry  21 trades +0.66R  $ 13,787  maxDD $ -2,010
-   toward the extreme price is at  : right 23 of 32 | plain entry  31 trades +0.01R  $    453  maxDD $ -8,577
+== ALL calls: 166 logged, 129 same-day 07:00-15:00 with data; right 93 of 129
+   read agrees: right 58 of 75 | read disagrees: right 35 of 54
+   plain entry, $1k risk  agrees:  66 trades +0.58R  $ 38,074  maxDD $ -4,037 | disagrees:  49 trades +0.22R  $ 10,787  maxDD $ -5,017
+   back across the overnight range : right 41 of 57 | plain entry  50 trades +0.57R  $ 28,514  maxDD $ -3,277
+   from the middle third           : right 25 of 32 | plain entry  28 trades +0.66R  $ 18,564  maxDD $ -2,180
+   toward the extreme price is at  : right 27 of 40 | plain entry  37 trades +0.05R  $  1,783  maxDD $ -7,246

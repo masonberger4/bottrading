@@ -443,3 +443,66 @@ Asked by Mase ("Do A B C"). Files: `calls_te.csv`, `calls_x.csv`, `nocall_te.csv
 | CX-05 | 2025-05-01 | 09:47 | up | NQ to the buy-side at 19,996.25 | 11:30 | +0.57% | right |
 
 All five sets: 128 calls, 90 right (70%). The shared `calls.csv` and `calls_for_option_c.csv` now have 171 rows (128 calls, 43 no-trade days).
+
+## Set 6: the silent Trade Executions videos (2026-11-17)
+
+Asked by Mase ("continue the work with logging calls"). Files: `calls_te2.csv`, `nocall_te2.csv`, `calls_te2_scored.csv`.
+
+- **38 live trades from 37 silent videos (numbers 6 to 56 of the playlist), 24 right at the horizon end (63%; the
+  same guess on nearby days wins 48%).** 32 of the 38 drawn targets traded by their deadline (84%).
+- **How they were read.** No download was needed: frames for 39 of the 44 silent videos were already on the laptop
+  (`data\ict_frames\PLVgHx4Z63paYhYt0DTyeBBxQomkeCEIq1`). 4 to 7 frames per video were copied to the cloud, read only.
+  Each frame shows the contract, the date on the time axis, the chart clock, his fills ("Buy 5 @ 4563.50") and his
+  resting limit orders and drawn levels. `ref` is the 1-minute bar in which his first fill price trades, between the
+  last frame where he is flat and the first where he is in.
+- **These are trades, not spoken calls.** `before` = partly on every row: a silent video has no stated call, only an
+  entry and a drawn target. They are also trades he chose to publish. Keep them apart from sets 1 to 5 when quoting a
+  hit rate.
+- **Weaker rows.** CTS-22 (66-second video, date found from the price, entry minute estimated) and CTS-36 (entry minute
+  estimated from the average price). CTS-26 and CTS-33: the exit is not in the frames read. CTS-06 is Dow futures (YM)
+  and CTS-10, CTS-22, CTS-23 are micro contracts scored on NQ. CTS-05 traded the December contract on FOMC day while
+  the data is March (210.5 points higher); the target is converted.
+- **Not logged.** Video 31 is crude oil (no data), video 36 is a no-trade day (`nocall_te2.csv`). Videos 1 to 5
+  (November 20 to 30, 2023) have no frames on the laptop; a free download and frame cut would add up to 5 more.
+- The split by where price sits in the overnight range is in `../ict_direction_2026-11-17/README.md`.
+
+| id | date | ref | mkt | side | drawn target | horizon | move his way | result | target hit |
+|---|---|---|---|---|---|---|---|---|---|
+| CTS-01 | 2023-12-01 | 09:34 | ES | up | buy-side liquidity above the overnight high, sell limit 4584.50 | 11:30 | +0.45% | right | yes |
+| CTS-02 | 2023-12-04 | 10:16 | NQ | down | mid point of the shaded daily range, buy limit 15,692 | 11:30 | +0.29% | right | no |
+| CTS-03 | 2023-12-06 | 10:03 | NQ | up | buy-side at 15,972 then sell limits 16,037.75 and 16,051.50 | 11:30 | -0.10% | wrong | no |
+| CTS-04 | 2023-12-13 | 08:48 | NQ | up | sell limit 16,644.75 above the 08:30 high | 09:30 | -0.09% | wrong | no |
+| CTS-05 | 2023-12-13 | 13:58 | NQ | up | buy-side above the morning high, line 16,446.50 on the December contract (about 16,657 on March) | 16:00 | +1.08% | right | yes |
+| CTS-06 | 2023-12-14 | 08:35 | YM | up | sell limits above the overnight high: 37,617, 37,639, 37,660, 37,675 | 09:30 | -0.01% | wrong | yes |
+| CTS-07 | 2023-12-14 | 09:58 | NQ | down | sell-side liquidity 16,807, then 16,783.25 | 11:30 | +0.60% | right | yes |
+| CTS-08 | 2023-12-15 | 08:32 | NQ | down | buy limits 16,785 and 16,780.25 below the marked sell-side liquidity 16,793.25, last 16,749.50 | 09:30 | +0.14% | right | yes |
+| CTS-09 | 2023-12-15 | 10:11 | ES | up | buy-side liquidity 4,779.75 | 11:30 | +0.23% | right | no |
+| CTS-10 | 2023-12-19 | 06:27 | NQ | up | breaker swing projection target 16,958.50 | 09:30 | +0.01% | right | yes |
+| CTS-11 | 2023-12-26 | 08:41 | NQ | up | minor buy-side liquidity 17,016.50 to 17,017 | 11:30 | +0.22% | right | yes |
+| CTS-12 | 2023-12-27 | 10:01 | NQ | down | sell-side liquidity 17,074.75, then 17,055.50 | 11:30 | +0.26% | right | yes |
+| CTS-13 | 2024-01-05 | 08:47 | ES | up | buy-side liquidity 4,724, sell limits 4,724.75 and 4,728.50 | 09:30 | +0.44% | right | yes |
+| CTS-14 | 2024-01-09 | 11:01 | NQ | up | previous day high, buy-side liquidity 16,811.25 | 11:30 | +0.20% | right | yes |
+| CTS-15 | 2024-01-16 | 09:37 | NQ | down | sell-side liquidity 16,871.75 | 11:30 | -0.34% | wrong | yes |
+| CTS-16 | 2024-01-22 | 10:29 | NQ | down | buy limit 17,450.50 below the morning low | 11:30 | -0.02% | wrong | yes |
+| CTS-17 | 2024-01-23 | 14:51 | NQ | up | buy-side liquidity 17,513.75 "mentioned during this morning's livestream" | 16:00 | +0.25% | right | yes |
+| CTS-18 | 2024-01-31 | 09:36 | ES | down | buy limit 4,912.50 below the morning lows | 11:30 | +0.40% | right | yes |
+| CTS-19 | 2024-02-01 | 09:10 | NQ | down | minor sell-side liquidity 17,302.25, buy limit 17,260.50 | 11:30 | +0.30% | right | yes |
+| CTS-20 | 2024-02-02 | 08:19 | NQ | down | sell-side liquidity 17,599, buy limit 17,596 to 17,597.25 | 09:30 | +0.63% | right | yes |
+| CTS-21 | 2024-02-07 | 09:43 | ES | down | sell-side liquidity 4,989 | 11:30 | -0.24% | wrong | yes |
+| CTS-22 | 2024-02-23 | 08:03 | NQ | up | all-time high line 18,121.50 | 11:30 | -0.16% | wrong | yes |
+| CTS-23 | 2024-03-06 | 09:53 | NQ | down | sell-side liquidity 17,967.75 | 11:30 | -0.14% | wrong | yes |
+| CTS-24 | 2024-04-08 | 10:21 | NQ | up | Buyside Liquidity = Target 18,367.25 | 11:30 | +0.15% | right | yes |
+| CTS-25 | 2024-05-06 | 12:10 | ES | down | sell-side liquidity 5,179.75 | 16:00 | -0.46% | wrong | yes |
+| CTS-26 | 2024-05-08 | 07:05 | NQ | down | buy limit 18,122.25 | 09:30 | +0.53% | right | yes |
+| CTS-27 | 2024-05-14 | 09:03 | NQ | up | Opening Range Initial Draw \ Buyside Liquidity 18,303 | 11:30 | +0.57% | right | yes |
+| CTS-28 | 2024-01-29 | 09:51 | NQ | down | minor sell-side at the opening range gap, about 17,528 | 11:30 | +0.06% | right | yes |
+| CTS-29 | 2024-05-24 | 09:03 | NQ | down | Focus Down Here 18,722.75, buy limit 18,720.75 | 11:30 | -0.74% | wrong | no |
+| CTS-30 | 2024-08-15 | 12:24 | NQ | down | minor sell-side liquidity 19,513.25, buy limit 19,492 | 16:00 | -0.09% | wrong | yes |
+| CTS-31 | 2024-08-21 | 10:35 | NQ | up | daily volume imbalance, sell limit 19,945.75 | 11:30 | -0.02% | wrong | yes |
+| CTS-32 | 2024-08-26 | 14:17 | NQ | up | minor buy-side liquidity 19,573.75 | 16:00 | +0.27% | right | yes |
+| CTS-33 | 2024-08-27 | 08:42 | ES | down | Monday's daily low sell-side liquidity 5,619.75, buy limit 5,617 | 09:30 | +0.04% | right | yes |
+| CTS-34 | 2024-08-29 | 06:15 | NQ | down | Tuesday's daily low 19,441.50 | 09:30 | -0.02% | wrong | yes |
+| CTS-35 | 2024-09-03 | 13:40 | NQ | down | buy limit 19,097.50 below the 19,100.50 line | 16:00 | +0.78% | right | yes |
+| CTS-36 | 2024-10-18 | 11:36 | NQ | down | Minor Sellside Liquidity Next Draw 20,452, buy limit 20,429 | 16:00 | +0.09% | right | yes |
+| CTS-37 | 2024-10-24 | 12:11 | NQ | down | buy limit 20,259.50 | 16:00 | -0.48% | wrong | no |
+| CTS-38 | 2024-10-24 | 12:38 | NQ | up | minor buy-side liquidity 20,379.25 | 16:00 | +0.19% | right | yes |

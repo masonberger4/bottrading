@@ -165,3 +165,42 @@ entry** (31 trades, about zero). The stronger claim, that a coded read tells his
 supported by the new calls. The new set is small, is all 2023-25, and is made of trades he chose to publish, so it
 cannot settle it; about 40 more same-day calls would. The cheapest source is the 43 silent Trade Executions videos
 (date and often side in the title; the minute needs the frames on the laptop).
+
+## Update 2026-11-17 (later): the split on 38 more calls from the silent Trade Executions videos
+
+38 live trades were logged from the silent videos (`../ict_calls_2026-11-17/README.md`, Set 6; ids CTS-*). 35 are
+same-day between 07:00 and 15:00 on NQ or ES. `python build.py; python analyze_new.py` (first block of
+`out/report_new.txt`). Plain entry = 2R target, flat at noon, entered at his time or at 09:30 if he was earlier,
+$1k risk, no sizing cap; only calls before 11:30 get a plain-entry trade.
+
+| | silent videos (35) | all new calls, sets 5+6 (46) | old (83) |
+|---|---|---|---|
+| the read picks his side | 20 of 35 (57%) | 23 of 46 (50%) | 52 of 83 (63%) |
+| right when the read agrees | 14 of 20; 15 trades +0.52R, +$7.8k, DD -$3.7k | 15 of 23; 17 trades +0.63R, +$10.6k, DD -$3.7k | 43 of 52; 49 trades +0.56R, +$27.4k, DD -$4.0k |
+| right when it disagrees | 9 of 15; 11 trades +0.14R, +$1.6k, DD -$2.2k | 16 of 23; 19 trades +0.15R, +$2.8k, DD -$3.2k | 19 of 31; 30 trades +0.27R, +$8.0k, DD -$5.0k |
+| back across the overnight range | 11 of 18; 13 trades +0.25R, +$3.3k, DD -$3.3k | 11 of 20; 14 trades +0.29R, +$4.1k, DD -$3.3k | 30 of 37; 36 trades +0.68R, +$24.4k, DD -$2.0k |
+| from the middle third | 8 of 9; 7 trades +0.68R, +$4.8k, DD -$2.2k | 11 of 12; 10 trades +0.94R, +$9.4k, DD -$2.2k | 14 of 20; 18 trades +0.51R, +$9.2k, DD -$3.8k |
+| toward the extreme price already sits at | 4 of 8; 6 trades +0.22R, +$1.3k, DD -$1.6k | 9 of 14; 12 trades -0.00R, -$0.0k, DD -$3.0k | 18 of 26; 25 trades +0.07R, +$1.8k, DD -$5.3k |
+
+What the new calls say:
+
+- **"Back across the overnight range pays" is not confirmed.** On the silent-video trades that kind was right 11 of 18
+  and made +0.25R a trade, the same as the trades toward the extreme (+0.22R) and well under the old +0.68R. On all 46
+  new calls it is +0.29R over 14 trades. It still makes money, but it is no longer the kind that stands out.
+- **"Toward the extreme does not pay" still holds, weakly.** On the silent videos alone those 6 trades made +0.22R; on
+  all 12 new ones the total is zero, as on the old calls. He was right on only 4 of 8 of these in the silent set.
+- **The middle third did best on new calls** (11 of 12 right, +0.94R over 10 trades). That was not predicted, so treat
+  it as noise until it repeats.
+- **The read as a filter on his calls leans the right way on money, not on hit rate.** New calls: +0.63R when the read
+  agrees, +0.15R when it disagrees (17 and 19 trades); he was right 15 of 23 and 16 of 23. The read picks his side on
+  50% of new calls, so it does not reproduce how he chooses.
+- All 129 same-day calls together: back across 50 trades +0.57R, +$28.5k, DD -$3.3k; middle 28 trades +0.66R, +$18.6k,
+  DD -$2.2k; toward the extreme 37 trades +0.05R, +$1.8k, DD -$7.2k.
+
+Caveats: counts per cell are 6 to 14 trades; 11 of the 35 silent-video trades were before 09:30, where the plain entry
+at 09:30 is not his trade (after 09:30 only: back across 9 trades +0.48R, middle 3 trades +1.28R, toward the extreme
+3 trades +1.18R); these are trades he chose to publish; all are 2023-12 to 2024-10.
+
+**Bottom line.** The only part that repeats across old and new calls is the negative one: skip his calls that point
+toward the extreme price already sits at (37 trades, +0.05R). Calls from the lower two thirds pay about +0.6R a
+trade with the plain entry (78 trades), and splitting those further into "back across" and "middle" is not supported.
